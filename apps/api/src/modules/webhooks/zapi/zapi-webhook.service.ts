@@ -13,6 +13,7 @@ import type { ZapiInboundPayload } from '../../../common/channels/providers/zapi
 import { ContactsService } from '../../contacts/contacts.service';
 import { ConversationsService } from '../../conversations/conversations.service';
 import { EventsGateway } from '../../../gateways/events.gateway';
+import { AiService } from '../../ai/ai.service';
 
 export interface WebhookHandleResult {
   accepted: boolean;
@@ -38,6 +39,7 @@ export class ZapiWebhookService {
     private readonly contacts: ContactsService,
     private readonly conversations: ConversationsService,
     private readonly events: EventsGateway,
+    private readonly ai: AiService,
   ) {}
 
   async handle(payload: ZapiInboundPayload): Promise<WebhookHandleResult> {
@@ -140,6 +142,17 @@ export class ZapiWebhookService {
         `Event emit failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`,
       );
     }
+
+    // 8. Fire-and-forget: classifica + sugere resposta. NÃO awaiteamos —
+    //    o webhook precisa retornar 200 em <5s. AiService.processInbound
+    //    tem catch interno e emite ai:suggestion via WebSocket quando pronto.
+    void this.ai
+      .processInbound(channel.org_id, conversation.id, result.message.id)
+      .catch((err) => {
+        this.logger.warn(
+          `AI processing failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
 
     return { accepted: true };
   }
