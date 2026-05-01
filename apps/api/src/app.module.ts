@@ -14,6 +14,7 @@ import { DealsModule } from './modules/deals/deals.module';
 import { KnowledgeModule } from './modules/knowledge/knowledge.module';
 import { MessagesModule } from './modules/messages/messages.module';
 import { PipelinesModule } from './modules/pipelines/pipelines.module';
+import { ReportsModule } from './modules/reports/reports.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { TeamModule } from './modules/team/team.module';
@@ -40,6 +41,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     ChannelsModule,
     SettingsModule,
     TeamModule,
+    ReportsModule,
     WebhooksModule,
   ],
   controllers: [AppController],

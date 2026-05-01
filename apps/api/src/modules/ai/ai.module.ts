@@ -8,6 +8,6 @@ import { AnthropicClient } from './anthropic.client';
   imports: [KnowledgeModule],
   controllers: [AiController],
   providers: [AnthropicClient, AiService],
-  exports: [AiService],
+  exports: [AiService, AnthropicClient],
 })
 export class AiModule {}
