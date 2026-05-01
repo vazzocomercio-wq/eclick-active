@@ -1,0 +1,49 @@
+import { api } from './client';
+
+export type CopilotToolName =
+  | 'search_contacts'
+  | 'list_deals'
+  | 'get_pipeline_summary'
+  | 'list_conversations'
+  | 'list_tasks'
+  | 'get_agent_stats'
+  | 'create_task'
+  | 'create_deal';
+
+export interface ToolCallRecord {
+  tool: CopilotToolName;
+  summary: string;
+  resource_id?: string;
+  resource_kind?: 'task' | 'deal';
+  result_count?: number;
+}
+
+export interface CopilotMessageRecord {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  tool_calls: ToolCallRecord[];
+  metadata: Record<string, unknown>;
+  cost_usd: number;
+  created_at: string;
+}
+
+export interface ProcessQueryResult {
+  reply: string;
+  tool_calls: ToolCallRecord[];
+  cost_usd: number;
+  latency_ms: number;
+  assistant_message_id: string;
+}
+
+export const copilotApi = {
+  send(message: string): Promise<ProcessQueryResult> {
+    return api.post<ProcessQueryResult>('/copilot/message', { message });
+  },
+  history(signal?: AbortSignal): Promise<CopilotMessageRecord[]> {
+    return api.get<CopilotMessageRecord[]>('/copilot/history', { signal });
+  },
+  clear(): Promise<void> {
+    return api.delete<void>('/copilot/history');
+  },
+};

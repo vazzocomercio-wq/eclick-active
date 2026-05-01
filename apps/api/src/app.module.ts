@@ -7,6 +7,7 @@ import { EventsModule } from './gateways/events.module';
 import { AiModule } from './modules/ai/ai.module';
 import { ContactsModule } from './modules/contacts/contacts.module';
 import { ConversationsModule } from './modules/conversations/conversations.module';
+import { CopilotModule } from './modules/copilot/copilot.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { DealsModule } from './modules/deals/deals.module';
 import { MessagesModule } from './modules/messages/messages.module';
@@ -30,6 +31,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     DashboardModule,
     TasksModule,
     AiModule,
+    CopilotModule,
     WebhooksModule,
   ],
   controllers: [AppController],
