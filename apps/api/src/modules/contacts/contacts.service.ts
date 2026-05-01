@@ -189,29 +189,20 @@ export class ContactsService {
   }
 
   // ──────────────────────────────────────────────────────────
-  // SEARCH
+  // SEARCH (full-text via RPC)
   // ──────────────────────────────────────────────────────────
 
   /**
-   * Busca por substring em name/phone/email.
-   *
-   * **Nota**: o índice GIN com `to_tsvector('portuguese', ...)` na migration
-   * só é aproveitado por queries com a expressão tsvector exata. Como o
-   * supabase-js não expressa isso, esta implementação usa `ilike` (sem o
-   * índice). Pra usar o índice de fato, criar uma RPC PL/pgSQL e chamar
-   * via `.rpc('search_contacts', { p_org_id, p_query, p_limit })`.
+   * Full-text search em name/phone/email via RPC `active.search_contacts`
+   * (definida em supabase/migrations/002_contacts_search_rpc.sql). Usa o
+   * índice GIN idx_contacts_search e ordena por `ts_rank`.
    */
   async search(orgId: string, query: string, limit = 20): Promise<Contact[]> {
-    const escaped = this.escapeIlike(query);
-
-    const { data, error } = await this.supabase.adminClient
-      .from('contacts')
-      .select('*')
-      .eq('org_id', orgId)
-      .or(
-        `name.ilike.%${escaped}%,phone.ilike.%${escaped}%,email.ilike.%${escaped}%`,
-      )
-      .limit(limit);
+    const { data, error } = await this.supabase.adminClient.rpc('search_contacts', {
+      p_org_id: orgId,
+      p_query: query,
+      p_limit: limit,
+    });
 
     if (error) {
       this.logger.error(`search failed: ${error.message}`);
