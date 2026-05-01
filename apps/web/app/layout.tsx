@@ -6,13 +6,31 @@ export const metadata: Metadata = {
   description: 'CRM de Inteligência Comercial Ativa',
 };
 
+// Aplica o tema ANTES do React hidratar — evita flash light→dark.
+const themeInitScript = `
+(function() {
+  try {
+    var t = localStorage.getItem('theme');
+    var root = document.documentElement;
+    if (t === 'light') {
+      root.classList.remove('dark');
+    } else {
+      root.classList.add('dark');
+    }
+  } catch (e) {}
+})();
+`;
+
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    <html lang="pt-BR" className="dark" suppressHydrationWarning>
+    <html lang="pt-BR" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="min-h-screen bg-background font-sans antialiased">
         {children}
       </body>
