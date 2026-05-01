@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import type {
   Channel,
   Json,
+  Message,
   MessageContent,
   MessageContentType,
 } from '@eclick-active/shared';
@@ -11,6 +12,7 @@ import { ZapiProvider } from '../../../common/channels/providers/zapi/zapi.provi
 import type { ZapiInboundPayload } from '../../../common/channels/providers/zapi/zapi.types';
 import { ContactsService } from '../../contacts/contacts.service';
 import { ConversationsService } from '../../conversations/conversations.service';
+import { EventsGateway } from '../../../gateways/events.gateway';
 
 export interface WebhookHandleResult {
   accepted: boolean;
@@ -35,6 +37,7 @@ export class ZapiWebhookService {
     private readonly zapi: ZapiProvider,
     private readonly contacts: ContactsService,
     private readonly conversations: ConversationsService,
+    private readonly events: EventsGateway,
   ) {}
 
   async handle(payload: ZapiInboundPayload): Promise<WebhookHandleResult> {
@@ -110,9 +113,34 @@ export class ZapiWebhookService {
       occurredAt: inbound.occurred_at,
     });
 
-    if (result.duplicate) {
+    if (result.duplicate || !result.message) {
       return { accepted: false, reason: 'duplicate' };
     }
+
+    // 7. Emite eventos pro frontend conectado via WebSocket. Falhas aqui
+    //    não derrubam o webhook — o evento é "best-effort" e o frontend
+    //    pode reconciliar via fetch quando voltar a se conectar.
+    try {
+      this.events.emitToOrg(channel.org_id, 'message:new', {
+        conversation_id: conversation.id,
+        message: result.message,
+      });
+
+      // Re-fetch conversation pra pegar counters atualizados pelo trigger
+      // trg_message_insert (message_count, last_message_at, unread_count).
+      const updatedConv = await this.conversations.findByIdRaw(
+        channel.org_id,
+        conversation.id,
+      );
+      this.events.emitToOrg(channel.org_id, 'conversation:updated', {
+        conversation: updatedConv,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Event emit failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
     return { accepted: true };
   }
 
@@ -123,26 +151,30 @@ export class ZapiWebhookService {
     content: MessageContent;
     channelMessageId?: string;
     occurredAt: string;
-  }): Promise<{ duplicate: boolean }> {
+  }): Promise<{ duplicate: boolean; message: Message | null }> {
     const plainText = this.extractPlainText(input.contentType, input.content);
 
-    const { error } = await this.supabase.adminClient.from('messages').insert({
-      org_id: input.channel.org_id,
-      conversation_id: input.conversationId,
-      direction: 'inbound',
-      sender_type: 'contact',
-      sender_id: null,
-      content_type: input.contentType,
-      content: input.content as unknown as Json,
-      plain_text: plainText,
-      channel_message_id: input.channelMessageId ?? null,
-      status: 'delivered',
-      is_internal_note: false,
-      metadata: {},
-      // created_at default is now() — não passamos occurred_at aqui pra
-      // não bagunçar o particionamento; mantemos a info em metadata se
-      // quiser auditar discrepância depois.
-    });
+    const { data, error } = await this.supabase.adminClient
+      .from('messages')
+      .insert({
+        org_id: input.channel.org_id,
+        conversation_id: input.conversationId,
+        direction: 'inbound',
+        sender_type: 'contact',
+        sender_id: null,
+        content_type: input.contentType,
+        content: input.content as unknown as Json,
+        plain_text: plainText,
+        channel_message_id: input.channelMessageId ?? null,
+        status: 'delivered',
+        is_internal_note: false,
+        metadata: {},
+        // created_at default is now() — não passamos occurred_at aqui pra
+        // não bagunçar o particionamento; mantemos a info em metadata se
+        // quiser auditar discrepância depois.
+      })
+      .select('*')
+      .single();
 
     if (error) {
       // 23505 = unique_violation — duplicata pelo índice idx_messages_*_dedup
@@ -152,12 +184,12 @@ export class ZapiWebhookService {
         this.logger.debug(
           `Duplicate inbound ignored (channel_message_id=${input.channelMessageId})`,
         );
-        return { duplicate: true };
+        return { duplicate: true, message: null };
       }
       this.logger.error(`persistInbound failed: ${error.message}`);
       throw new Error(`Failed to persist inbound message: ${error.message}`);
     }
-    return { duplicate: false };
+    return { duplicate: false, message: (data ?? null) as Message | null };
   }
 
   private extractPlainText(
