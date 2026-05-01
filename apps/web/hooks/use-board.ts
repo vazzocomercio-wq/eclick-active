@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   BoardResponse,
   BoardDealItem,
+  type BoardFilters,
   pipelinesApi,
 } from '@/lib/api/pipelines';
 import { ApiError } from '@/lib/api/client';
@@ -37,18 +38,22 @@ const REFRESH_DEBOUNCE_MS = 200;
  * com debounce 200ms. Mais simples que diff manual; o board é uma única
  * chamada barata.
  */
-export function useBoard(pipelineId: string | null): UseBoardResult {
+export function useBoard(
+  pipelineId: string | null,
+  filters: BoardFilters = {},
+): UseBoardResult {
   const [board, setBoard] = useState<BoardResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<UseBoardResult['error']>(null);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const filtersKey = JSON.stringify(filters);
 
   const refetch = useCallback(async () => {
     if (!pipelineId) return;
     setLoading(true);
     setError(null);
     try {
-      const data = await pipelinesApi.getBoard(pipelineId);
+      const data = await pipelinesApi.getBoard(pipelineId, filters);
       setBoard(data);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -62,9 +67,10 @@ export function useBoard(pipelineId: string | null): UseBoardResult {
     } finally {
       setLoading(false);
     }
-  }, [pipelineId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pipelineId, filtersKey]);
 
-  // Initial load + on pipeline change
+  // Initial load + on pipeline/filters change
   useEffect(() => {
     if (!pipelineId) {
       setBoard(null);

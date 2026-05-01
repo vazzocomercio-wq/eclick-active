@@ -14,6 +14,7 @@ import { CreateDealDto } from './dto/create-deal.dto';
 import { UpdateDealDto } from './dto/update-deal.dto';
 import { MoveDealDto } from './dto/move-deal.dto';
 import { ListDealsQueryDto } from './dto/list-deals.query.dto';
+import { BoardFiltersDto } from './dto/board-filters.query.dto';
 
 // ──────────────────────────────────────────────────────────
 // Tipos do board
@@ -223,7 +224,11 @@ export class DealsService {
   // GET BOARD — view v_deal_board agrupada por stage
   // ──────────────────────────────────────────────────────────
 
-  async getBoard(orgId: string, pipelineId: string): Promise<BoardResponse> {
+  async getBoard(
+    orgId: string,
+    pipelineId: string,
+    filters: BoardFiltersDto = {},
+  ): Promise<BoardResponse> {
     // 1. Pipeline + nome
     const pipeline = await this.assertPipelineInOrg(orgId, pipelineId);
 
@@ -246,13 +251,31 @@ export class DealsService {
       is_lost: boolean;
     }>;
 
-    // 3. Deals ativos via view (já tem sla_breached + joins)
-    const { data: dealsRaw, error: dealsErr } = await this.supabase.adminClient
+    // 3. Deals ativos via view (já tem sla_breached + joins) + filtros
+    let dealsQuery = this.supabase.adminClient
       .from('v_deal_board')
       .select('*')
       .eq('org_id', orgId)
       .eq('pipeline_id', pipelineId)
       .order('position', { ascending: true });
+
+    if (filters.assigned_to) {
+      dealsQuery = dealsQuery.eq('assigned_to', filters.assigned_to);
+    }
+    if (filters.tags && filters.tags.length > 0) {
+      dealsQuery = dealsQuery.contains('tags', filters.tags);
+    }
+    if (typeof filters.min_value === 'number') {
+      dealsQuery = dealsQuery.gte('value', filters.min_value);
+    }
+    if (typeof filters.max_value === 'number') {
+      dealsQuery = dealsQuery.lte('value', filters.max_value);
+    }
+    if (filters.risk) {
+      dealsQuery = dealsQuery.eq('ai_risk', filters.risk);
+    }
+
+    const { data: dealsRaw, error: dealsErr } = await dealsQuery;
 
     if (dealsErr) throw new InternalServerErrorException(dealsErr.message);
     const deals = (dealsRaw ?? []) as BoardDealItem[];

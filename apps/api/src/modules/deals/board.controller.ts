@@ -1,8 +1,16 @@
-import { Controller, Get, Param, ParseUUIDPipe, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthGuard } from '../../common/auth/auth.guard';
 import { CurrentUser } from '../../common/auth/current-user.decorator';
 import type { AuthUser } from '../../common/auth/auth.types';
 import { BoardResponse, DealsService } from './deals.service';
+import { BoardFiltersDto } from './dto/board-filters.query.dto';
 
 /**
  * Controller separado pra rota `/pipelines/:pipelineId/board` — fica no
@@ -18,7 +26,8 @@ export class BoardController {
   board(
     @CurrentUser() user: AuthUser,
     @Param('pipelineId', ParseUUIDPipe) pipelineId: string,
+    @Query() filters: BoardFiltersDto,
   ): Promise<BoardResponse> {
-    return this.service.getBoard(user.org_id, pipelineId);
+    return this.service.getBoard(user.org_id, pipelineId, filters);
   }
 }

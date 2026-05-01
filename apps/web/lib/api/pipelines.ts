@@ -1,4 +1,4 @@
-import type { Pipeline, PipelineStage } from '@eclick-active/shared';
+import type { DealRisk, Pipeline, PipelineStage } from '@eclick-active/shared';
 import { api } from './client';
 
 export interface PipelineStageWithCount extends PipelineStage {
@@ -69,15 +69,87 @@ export interface BoardResponse {
   stages: BoardStageGroup[];
 }
 
+export interface BoardFilters {
+  assigned_to?: string;
+  tags?: string[];
+  min_value?: number;
+  max_value?: number;
+  risk?: DealRisk;
+}
+
+export interface CreatePipelineInput {
+  name: string;
+  is_default?: boolean;
+}
+
+export interface UpdatePipelineInput {
+  name?: string;
+  is_default?: boolean;
+}
+
+export interface CreateStageInput {
+  name: string;
+  color?: string;
+  probability?: number;
+  sla_hours?: number;
+}
+
+export interface UpdateStageInput {
+  name?: string;
+  color?: string;
+  probability?: number;
+  sla_hours?: number | null;
+}
+
+function filtersToQuery(f: BoardFilters): Record<string, string | number | string[] | undefined> {
+  return {
+    assigned_to: f.assigned_to,
+    tags: f.tags && f.tags.length > 0 ? f.tags : undefined,
+    min_value: f.min_value,
+    max_value: f.max_value,
+    risk: f.risk,
+  };
+}
+
 export const pipelinesApi = {
-  list(signal?: AbortSignal) {
+  list(signal?: AbortSignal): Promise<PipelineWithStages[]> {
     return api.get<PipelineWithStages[]>('/pipelines', { signal });
   },
-  get(id: string, signal?: AbortSignal) {
+  get(id: string, signal?: AbortSignal): Promise<PipelineWithStages> {
     return api.get<PipelineWithStages>(`/pipelines/${id}`, { signal });
   },
-  getBoard(pipelineId: string, signal?: AbortSignal) {
-    return api.get<BoardResponse>(`/pipelines/${pipelineId}/board`, { signal });
+  getBoard(pipelineId: string, filters: BoardFilters = {}, signal?: AbortSignal): Promise<BoardResponse> {
+    return api.get<BoardResponse>(`/pipelines/${pipelineId}/board`, {
+      query: filtersToQuery(filters),
+      signal,
+    });
+  },
+  create(input: CreatePipelineInput): Promise<Pipeline> {
+    return api.post<Pipeline>('/pipelines', input);
+  },
+  update(id: string, input: UpdatePipelineInput): Promise<Pipeline> {
+    return api.patch<Pipeline>(`/pipelines/${id}`, input);
+  },
+  remove(id: string): Promise<void> {
+    return api.delete<void>(`/pipelines/${id}`);
+  },
+  createStage(pipelineId: string, input: CreateStageInput): Promise<PipelineStage> {
+    return api.post<PipelineStage>(`/pipelines/${pipelineId}/stages`, input);
+  },
+  updateStage(
+    pipelineId: string,
+    stageId: string,
+    input: UpdateStageInput,
+  ): Promise<PipelineStage> {
+    return api.patch<PipelineStage>(`/pipelines/${pipelineId}/stages/${stageId}`, input);
+  },
+  removeStage(pipelineId: string, stageId: string): Promise<void> {
+    return api.delete<void>(`/pipelines/${pipelineId}/stages/${stageId}`);
+  },
+  reorderStages(pipelineId: string, stageIds: string[]): Promise<PipelineStage[]> {
+    return api.put<PipelineStage[]>(`/pipelines/${pipelineId}/stages/reorder`, {
+      stage_ids: stageIds,
+    });
   },
 };
 

@@ -16,6 +16,7 @@ import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { AlertTriangle, Inbox } from 'lucide-react';
 import type {
   BoardDealItem,
+  BoardFilters,
   BoardStageGroup,
   PipelineWithStages,
 } from '@/lib/api/pipelines';
@@ -25,6 +26,8 @@ import { ApiError } from '@/lib/api/client';
 import { useBoard } from '@/hooks/use-board';
 import { BoardHeader } from '@/components/funis/board-header';
 import { BoardColumn } from '@/components/funis/board-column';
+import { BoardFiltersBar } from '@/components/funis/board-filters';
+import { BoardSearchPalette } from '@/components/funis/board-search-palette';
 import { DealCardVisual } from '@/components/funis/deal-card';
 import { NewDealDialog } from '@/components/funis/new-deal-dialog';
 import { LostReasonDialog } from '@/components/funis/lost-reason-dialog';
@@ -81,6 +84,9 @@ export default function FunisPage() {
     [pipelines, selectedId],
   );
 
+  // ── Filtros do board ──
+  const [filters, setFilters] = useState<BoardFilters>({});
+
   // ── Board ──
   const {
     board,
@@ -89,7 +95,7 @@ export default function FunisPage() {
     moveDealLocal,
     reorderInStageLocal,
     refetch,
-  } = useBoard(selectedId);
+  } = useBoard(selectedId, filters);
 
   // ── DnD state ──
   const [activeDealId, setActiveDealId] = useState<string | null>(null);
@@ -115,6 +121,19 @@ export default function FunisPage() {
   const [analyzeOpen, setAnalyzeOpen] = useState(false);
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  // ── Atalho Ctrl+K / Cmd+K para abrir busca ──
+  useEffect(() => {
+    function handler(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    }
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   function openCreate(stageId?: string) {
     setNewDealStageId(stageId);
@@ -253,6 +272,14 @@ export default function FunisPage() {
         onAnalyze={() => setAnalyzeOpen(true)}
       />
 
+      {selectedId && pipelines.length > 0 && (
+        <BoardFiltersBar
+          filters={filters}
+          onChange={setFilters}
+          onOpenSearch={() => setSearchOpen(true)}
+        />
+      )}
+
       {/* Estados */}
       {pipelinesLoading ? (
         <BoardSkeleton />
@@ -318,6 +345,16 @@ export default function FunisPage() {
           if (!o) setSelectedDealId(null);
         }}
         onChanged={() => void refetch()}
+      />
+
+      <BoardSearchPalette
+        open={searchOpen}
+        onOpenChange={setSearchOpen}
+        deals={allDeals}
+        onSelect={(dealId) => {
+          const d = allDeals.find((x) => x.id === dealId);
+          if (d) openDeal(d);
+        }}
       />
     </div>
   );

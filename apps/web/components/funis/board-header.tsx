@@ -1,6 +1,7 @@
 'use client';
 
-import { Plus, RefreshCw, Sparkles } from 'lucide-react';
+import Link from 'next/link';
+import { Plus, RefreshCw, Settings, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { BoardResponse } from '@/lib/api/pipelines';
 import type { Pipeline } from '@eclick-active/shared';
@@ -80,6 +81,11 @@ export function BoardHeader({
           title="Recarregar"
         >
           <RefreshCw className={loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
+        </Button>
+        <Button asChild variant="outline" size="icon" aria-label="Configurações">
+          <Link href="/funis/configuracoes" title="Configurações de pipeline">
+            <Settings className="h-4 w-4" />
+          </Link>
         </Button>
         <Button variant="outline" onClick={onAnalyze} disabled={!summary}>
           <Sparkles className="mr-1.5 h-4 w-4" />
