@@ -9,6 +9,7 @@ import {
 import type { Deal, DealActivity, Pipeline } from '@eclick-active/shared';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { EventsGateway } from '../../gateways/events.gateway';
+import { AiService } from '../ai/ai.service';
 import { CreateDealDto } from './dto/create-deal.dto';
 import { UpdateDealDto } from './dto/update-deal.dto';
 import { MoveDealDto } from './dto/move-deal.dto';
@@ -93,6 +94,7 @@ export class DealsService {
   constructor(
     private readonly supabase: SupabaseService,
     private readonly events: EventsGateway,
+    private readonly ai: AiService,
   ) {}
 
   // ──────────────────────────────────────────────────────────
@@ -429,6 +431,18 @@ export class DealsService {
     // deal_activities row com activity_type='stage_changed'. Não duplicar.
     if (isSameStage) {
       this.logger.debug(`Deal ${dealId} re-positioned within same stage`);
+    }
+
+    // Fire-and-forget: re-pontua o deal após mudança de stage. A IA usa
+    // o novo contexto (tempo no stage = 0, novo probability) pra recalcular
+    // score/risk/close_probability/next_action. Catch interno; não bloqueia
+    // o response do move endpoint.
+    if (!isSameStage) {
+      void this.ai.scoreDeal(orgId, deal.id).catch((err) => {
+        this.logger.warn(
+          `auto-score após move falhou: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
     }
 
     return deal;

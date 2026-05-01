@@ -4,7 +4,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import type { Json, Message } from '@eclick-active/shared';
+import type { Deal, DealActivity, Json, Message } from '@eclick-active/shared';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { EventsGateway } from '../../gateways/events.gateway';
 import { AnthropicClient } from './anthropic.client';
@@ -12,6 +12,12 @@ import {
   CLASSIFY_SCHEMA,
   CLASSIFY_SYSTEM_PROMPT,
   ClassificationResult,
+  DEAL_SCORE_SCHEMA,
+  DEAL_SCORE_SYSTEM_PROMPT,
+  DealScoreResult,
+  FUNNEL_ANALYSIS_SCHEMA,
+  FUNNEL_ANALYSIS_SYSTEM_PROMPT,
+  FunnelAnalysisResult,
   SUGGEST_SCHEMA,
   SUGGEST_SYSTEM_PROMPT,
   SUMMARIZE_SYSTEM_PROMPT,
@@ -240,6 +246,319 @@ export class AiService {
     }
   }
 
+  // ══════════════════════════════════════════════════════════
+  // DEAL SCORING & FUNNEL ANALYSIS
+  // ══════════════════════════════════════════════════════════
+
+  // ──────────────────────────────────────────────────────────
+  // d) scoreDeal — pontua um deal e atualiza ai_score / lead_scores
+  // ──────────────────────────────────────────────────────────
+
+  async scoreDeal(orgId: string, dealId: string): Promise<DealScoreResult> {
+    const deal = await this.fetchDeal(orgId, dealId);
+
+    // Conversa vinculada (se houver) → últimas 20 mensagens
+    const messages = deal.conversation_id
+      ? await this.fetchRecentMessages(orgId, deal.conversation_id, 20)
+      : [];
+
+    // Atividades recentes do deal
+    const activities = await this.fetchDealActivities(orgId, dealId, 10);
+
+    // Tempo no stage atual
+    const hoursInStage = this.hoursSince(deal.stage_entered_at);
+
+    // Contato (perfil)
+    const contact = deal.contact_id
+      ? await this.fetchContactSummary(orgId, deal.contact_id)
+      : null;
+
+    const userPrompt = this.buildScoreDealPrompt(
+      deal,
+      contact,
+      messages,
+      activities,
+      hoursInStage,
+    );
+
+    const { data: scoring } = await this.anthropic.complete<DealScoreResult>({
+      interaction_type: 'lead_score',
+      org_id: orgId,
+      system: DEAL_SCORE_SYSTEM_PROMPT,
+      user: userPrompt,
+      schema: DEAL_SCORE_SCHEMA,
+      max_tokens: 1024,
+      context: {
+        conversation_id: deal.conversation_id ?? undefined,
+        contact_id: deal.contact_id ?? undefined,
+        deal_id: dealId,
+      },
+    });
+
+    // Clamp valores (schema não tem minimum/maximum)
+    const score = clamp(Math.round(Number(scoring.score) || 0), 0, 100);
+    const closeProb = clamp(Math.round(Number(scoring.close_probability) || 0), 0, 100);
+    const factors: DealScoreResult['factors'] = {
+      engagement: clamp(Math.round(Number(scoring.factors?.engagement) || 0), 0, 25),
+      recency: clamp(Math.round(Number(scoring.factors?.recency) || 0), 0, 25),
+      fit: clamp(Math.round(Number(scoring.factors?.fit) || 0), 0, 25),
+      intent: clamp(Math.round(Number(scoring.factors?.intent) || 0), 0, 25),
+      details: Array.isArray(scoring.factors?.details) ? scoring.factors.details : [],
+    };
+    const nextAction = (scoring.next_action ?? '').slice(0, 200);
+
+    const finalResult: DealScoreResult = {
+      score,
+      risk: scoring.risk,
+      close_probability: closeProb,
+      next_action: nextAction,
+      factors,
+    };
+
+    await this.persistDealScore(orgId, deal, finalResult);
+
+    return finalResult;
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // e) analyzeFunnel — métricas determinísticas + insights da IA
+  // ──────────────────────────────────────────────────────────
+
+  async analyzeFunnel(orgId: string, pipelineId: string): Promise<FunnelAnalysisResult> {
+    const pipeline = await this.fetchPipeline(orgId, pipelineId);
+
+    // Stages + active deals via view + closed deals dos últimos 30 dias
+    const [stages, activeDeals, closedDeals] = await Promise.all([
+      this.fetchPipelineStages(pipelineId),
+      this.fetchActiveBoardDeals(orgId, pipelineId),
+      this.fetchClosedDealsSince(orgId, pipelineId, 30),
+    ]);
+
+    // Métricas determinísticas
+    const totalValue = round2(activeDeals.reduce((sum, d) => sum + Number(d.value || 0), 0));
+    const weightedValue = round2(
+      activeDeals.reduce(
+        (sum, d) => sum + (Number(d.value || 0) * Number(d.stage_probability || 0)) / 100,
+        0,
+      ),
+    );
+
+    const wonRecent = closedDeals.filter((d) => d.won_at !== null);
+    const lostRecent = closedDeals.filter((d) => d.lost_at !== null);
+    const totalClosed = wonRecent.length + lostRecent.length;
+    const conversionRate = totalClosed > 0 ? wonRecent.length / totalClosed : 0;
+
+    const cycleDaysWon = wonRecent
+      .map((d) =>
+        d.won_at && d.created_at
+          ? (new Date(d.won_at).getTime() - new Date(d.created_at).getTime()) / 86_400_000
+          : null,
+      )
+      .filter((n): n is number => n !== null && Number.isFinite(n));
+    const avgCycleDays =
+      cycleDaysWon.length > 0
+        ? round2(cycleDaysWon.reduce((s, n) => s + n, 0) / cycleDaysWon.length)
+        : 0;
+
+    // Snapshot do board pra prompt do modelo
+    const userPrompt = this.buildFunnelPrompt({
+      pipelineName: pipeline.name,
+      stages,
+      activeDeals,
+      closedRecent: { won: wonRecent.length, lost: lostRecent.length },
+      metrics: { totalValue, weightedValue, avgCycleDays, conversionRate },
+    });
+
+    const { data: aiResult } = await this.anthropic.complete<FunnelAnalysisResult>({
+      interaction_type: 'diagnose',
+      org_id: orgId,
+      system: FUNNEL_ANALYSIS_SYSTEM_PROMPT,
+      user: userPrompt,
+      schema: FUNNEL_ANALYSIS_SCHEMA,
+      max_tokens: 1500,
+    });
+
+    // Sobrescreve métricas determinísticas (modelo pode errar somas)
+    const finalResult: FunnelAnalysisResult = {
+      total_pipeline_value: totalValue,
+      weighted_value: weightedValue,
+      avg_cycle_days: avgCycleDays,
+      conversion_rate: round2(conversionRate),
+      bottleneck_stage: aiResult.bottleneck_stage ?? null,
+      bottleneck_reason: aiResult.bottleneck_reason ?? null,
+      insights: Array.isArray(aiResult.insights) ? aiResult.insights : [],
+      recommendations: Array.isArray(aiResult.recommendations) ? aiResult.recommendations : [],
+    };
+
+    await this.persistFunnelAnalysis(orgId, pipeline.id, finalResult);
+    return finalResult;
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // f) scoreAllDeals — batch com concurrency limit
+  // ──────────────────────────────────────────────────────────
+
+  /**
+   * Reavalia score de todos os deals ativos da org (opcionalmente filtrado
+   * por pipeline). Usa workers pool com 3 chamadas concorrentes — não
+   * estoura rate limit do Anthropic e não fica refém do deal mais lento.
+   */
+  async scoreAllDeals(
+    orgId: string,
+    pipelineId?: string,
+  ): Promise<{ scored: number; failed: number; total: number }> {
+    let q = this.supabase.adminClient
+      .from('deals')
+      .select('id')
+      .eq('org_id', orgId)
+      .is('won_at', null)
+      .is('lost_at', null);
+    if (pipelineId) q = q.eq('pipeline_id', pipelineId);
+
+    const { data, error } = await q;
+    if (error) throw new InternalServerErrorException(error.message);
+
+    const ids = ((data ?? []) as Array<{ id: string }>).map((r) => r.id);
+    if (ids.length === 0) return { scored: 0, failed: 0, total: 0 };
+
+    let scored = 0;
+    let failed = 0;
+    let cursor = 0;
+    const concurrency = 3;
+
+    const worker = async (): Promise<void> => {
+      while (cursor < ids.length) {
+        const i = cursor++;
+        const dealId = ids[i]!;
+        try {
+          await this.scoreDeal(orgId, dealId);
+          scored++;
+        } catch (err) {
+          failed++;
+          this.logger.warn(
+            `scoreDeal(${dealId}) failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
+    };
+
+    await Promise.all(Array.from({ length: concurrency }, () => worker()));
+    return { scored, failed, total: ids.length };
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // GET /ai/funnel-insights/:pipelineId — leitura do cache
+  // ──────────────────────────────────────────────────────────
+
+  async getCachedFunnelAnalysis(
+    orgId: string,
+    pipelineId: string,
+  ): Promise<{
+    pipeline_id: string;
+    analysis: FunnelAnalysisResult | null;
+    generated_at: string | null;
+  }> {
+    const pipeline = await this.fetchPipeline(orgId, pipelineId);
+    const settings = (pipeline.settings ?? {}) as Record<string, unknown>;
+    const cached = settings.ai_funnel_analysis as
+      | (FunnelAnalysisResult & { generated_at: string })
+      | undefined;
+
+    if (!cached) {
+      return { pipeline_id: pipeline.id, analysis: null, generated_at: null };
+    }
+
+    const { generated_at, ...analysis } = cached;
+    return { pipeline_id: pipeline.id, analysis, generated_at };
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // Persistência: deal score + lead_scores
+  // ──────────────────────────────────────────────────────────
+
+  private async persistDealScore(
+    orgId: string,
+    deal: Deal,
+    result: DealScoreResult,
+  ): Promise<void> {
+    // Atualiza deal
+    await this.supabase.adminClient
+      .from('deals')
+      .update({
+        ai_score: result.score,
+        ai_risk: result.risk,
+        ai_close_probability: result.close_probability,
+        ai_next_action: result.next_action,
+      })
+      .eq('org_id', orgId)
+      .eq('id', deal.id);
+
+    // Upsert em lead_scores se houver contact_id
+    if (deal.contact_id) {
+      // Pega score anterior pra preencher previous_score
+      const { data: prev } = await this.supabase.adminClient
+        .from('lead_scores')
+        .select('score')
+        .eq('org_id', orgId)
+        .eq('contact_id', deal.contact_id)
+        .maybeSingle();
+
+      await this.supabase.adminClient.from('lead_scores').upsert(
+        {
+          org_id: orgId,
+          contact_id: deal.contact_id,
+          score: result.score,
+          factors: result.factors as unknown as Json,
+          previous_score: (prev?.score as number | null | undefined) ?? null,
+          calculated_at: new Date().toISOString(),
+        },
+        { onConflict: 'org_id,contact_id' },
+      );
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // Persistência: cache de funnel analysis em pipelines.settings
+  // ──────────────────────────────────────────────────────────
+
+  private async persistFunnelAnalysis(
+    orgId: string,
+    pipelineId: string,
+    result: FunnelAnalysisResult,
+  ): Promise<void> {
+    // Read-modify-write em settings (jsonb merge não é atômico — janela mínima)
+    const { data, error } = await this.supabase.adminClient
+      .from('pipelines')
+      .select('settings')
+      .eq('org_id', orgId)
+      .eq('id', pipelineId)
+      .maybeSingle();
+
+    if (error || !data) {
+      this.logger.warn(`persistFunnelAnalysis lookup failed: ${error?.message}`);
+      return;
+    }
+
+    const settings = (data.settings as Record<string, unknown> | null) ?? {};
+    const next = {
+      ...settings,
+      ai_funnel_analysis: {
+        ...result,
+        generated_at: new Date().toISOString(),
+      },
+    };
+
+    const { error: updErr } = await this.supabase.adminClient
+      .from('pipelines')
+      .update({ settings: next })
+      .eq('org_id', orgId)
+      .eq('id', pipelineId);
+
+    if (updErr) {
+      this.logger.warn(`persistFunnelAnalysis update failed: ${updErr.message}`);
+    }
+  }
+
   // ──────────────────────────────────────────────────────────
   // Persistência da classificação
   // ──────────────────────────────────────────────────────────
@@ -416,6 +735,235 @@ export class AiService {
       ...recent.map((m, i) => `${i + 1}. ${formatMessageLine(m)}`),
     ].join('\n');
   }
+
+  // ──────────────────────────────────────────────────────────
+  // Fetchers / builders pra deal scoring + funnel analysis
+  // ──────────────────────────────────────────────────────────
+
+  private async fetchDeal(orgId: string, dealId: string): Promise<Deal> {
+    const { data, error } = await this.supabase.adminClient
+      .from('deals')
+      .select('*')
+      .eq('org_id', orgId)
+      .eq('id', dealId)
+      .maybeSingle();
+    if (error) throw new InternalServerErrorException(error.message);
+    if (!data) throw new NotFoundException(`Deal ${dealId} not found`);
+    return data as Deal;
+  }
+
+  private async fetchPipeline(
+    orgId: string,
+    pipelineId: string,
+  ): Promise<{ id: string; name: string; settings: Record<string, unknown> }> {
+    const { data, error } = await this.supabase.adminClient
+      .from('pipelines')
+      .select('id, name, settings')
+      .eq('org_id', orgId)
+      .eq('id', pipelineId)
+      .maybeSingle();
+    if (error) throw new InternalServerErrorException(error.message);
+    if (!data) throw new NotFoundException(`Pipeline ${pipelineId} not found`);
+    return {
+      id: data.id as string,
+      name: data.name as string,
+      settings: (data.settings as Record<string, unknown> | null) ?? {},
+    };
+  }
+
+  private async fetchPipelineStages(
+    pipelineId: string,
+  ): Promise<Array<{ id: string; name: string; position: number; probability: number; sla_hours: number | null; is_won: boolean; is_lost: boolean }>> {
+    const { data, error } = await this.supabase.adminClient
+      .from('pipeline_stages')
+      .select('id, name, position, probability, sla_hours, is_won, is_lost')
+      .eq('pipeline_id', pipelineId)
+      .order('position', { ascending: true });
+    if (error) throw new InternalServerErrorException(error.message);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (data ?? []) as any[];
+  }
+
+  /**
+   * Active deals via v_deal_board (já tem stage_probability + hours_in_stage
+   * + sla_breached pre-computados pela view).
+   */
+  private async fetchActiveBoardDeals(
+    orgId: string,
+    pipelineId: string,
+  ): Promise<Array<{
+    id: string;
+    stage_id: string;
+    stage_name: string;
+    title: string;
+    value: number;
+    stage_probability: number;
+    hours_in_stage: number;
+    sla_breached: boolean;
+    sla_hours: number | null;
+  }>> {
+    const { data, error } = await this.supabase.adminClient
+      .from('v_deal_board')
+      .select(
+        'id, stage_id, stage_name, title, value, stage_probability, hours_in_stage, sla_breached, sla_hours',
+      )
+      .eq('org_id', orgId)
+      .eq('pipeline_id', pipelineId);
+    if (error) throw new InternalServerErrorException(error.message);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (data ?? []) as any[];
+  }
+
+  /** Deals fechados (won OU lost) nos últimos N dias. */
+  private async fetchClosedDealsSince(
+    orgId: string,
+    pipelineId: string,
+    days: number,
+  ): Promise<Array<Pick<Deal, 'id' | 'value' | 'won_at' | 'lost_at' | 'created_at'>>> {
+    const since = new Date(Date.now() - days * 86_400_000).toISOString();
+    const { data, error } = await this.supabase.adminClient
+      .from('deals')
+      .select('id, value, won_at, lost_at, created_at')
+      .eq('org_id', orgId)
+      .eq('pipeline_id', pipelineId)
+      .or(`won_at.gte.${since},lost_at.gte.${since}`);
+    if (error) throw new InternalServerErrorException(error.message);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (data ?? []) as any[];
+  }
+
+  private async fetchDealActivities(
+    orgId: string,
+    dealId: string,
+    limit: number,
+  ): Promise<DealActivity[]> {
+    const { data, error } = await this.supabase.adminClient
+      .from('deal_activities')
+      .select('*')
+      .eq('org_id', orgId)
+      .eq('deal_id', dealId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) throw new InternalServerErrorException(error.message);
+    return (data ?? []) as DealActivity[];
+  }
+
+  private hoursSince(iso: string | null): number {
+    if (!iso) return 0;
+    const ms = Date.now() - new Date(iso).getTime();
+    return Number.isFinite(ms) ? Math.max(0, ms / 3_600_000) : 0;
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // Prompt builders pra scoreDeal e analyzeFunnel
+  // ──────────────────────────────────────────────────────────
+
+  private buildScoreDealPrompt(
+    deal: Deal,
+    contact: ContactSummary | null,
+    messages: Message[],
+    activities: DealActivity[],
+    hoursInStage: number,
+  ): string {
+    const lines: string[] = [];
+
+    lines.push('# Deal');
+    lines.push(`- Título: ${deal.title}`);
+    lines.push(`- Valor: ${deal.currency} ${Number(deal.value).toFixed(2)}`);
+    if (deal.expected_close_date) {
+      lines.push(`- Data esperada de fechamento: ${deal.expected_close_date}`);
+    }
+    if (deal.tags?.length) lines.push(`- Tags: ${deal.tags.join(', ')}`);
+    lines.push(`- Tempo no stage atual: ${hoursInStage.toFixed(1)} horas`);
+    if (deal.lost_reason) lines.push(`- Motivo de perda anterior: ${deal.lost_reason}`);
+    lines.push('');
+
+    if (contact) {
+      lines.push('# Contato');
+      if (contact.name) lines.push(`- Nome: ${contact.name}`);
+      if (contact.phone) lines.push(`- Telefone: ${contact.phone}`);
+      if (contact.temperature) lines.push(`- Temperatura: ${contact.temperature}`);
+      if (contact.score !== null) lines.push(`- Score atual: ${contact.score}/100`);
+      if (contact.tags?.length) lines.push(`- Tags: ${contact.tags.join(', ')}`);
+      if (contact.ai_summary) lines.push(`- Resumo IA: ${contact.ai_summary}`);
+      lines.push('');
+    }
+
+    lines.push(`# Conversa (últimas ${messages.length} mensagens)`);
+    if (messages.length === 0) {
+      lines.push('(deal sem conversa vinculada)');
+    } else {
+      messages.forEach((m, i) => lines.push(`${i + 1}. ${formatMessageLine(m)}`));
+    }
+    lines.push('');
+
+    lines.push('# Atividades recentes do deal');
+    if (activities.length === 0) {
+      lines.push('(sem atividades registradas)');
+    } else {
+      activities.forEach((a, i) => {
+        const when = new Date(a.created_at).toISOString().slice(0, 16).replace('T', ' ');
+        lines.push(`${i + 1}. [${when}] ${a.activity_type}: ${a.title ?? '—'}`);
+      });
+    }
+
+    return lines.join('\n');
+  }
+
+  private buildFunnelPrompt(input: {
+    pipelineName: string;
+    stages: Array<{ id: string; name: string; position: number; sla_hours: number | null }>;
+    activeDeals: Array<{
+      stage_id: string;
+      stage_name: string;
+      value: number;
+      hours_in_stage: number;
+      sla_breached: boolean;
+      sla_hours: number | null;
+    }>;
+    closedRecent: { won: number; lost: number };
+    metrics: {
+      totalValue: number;
+      weightedValue: number;
+      avgCycleDays: number;
+      conversionRate: number;
+    };
+  }): string {
+    const { pipelineName, stages, activeDeals, closedRecent, metrics } = input;
+    const lines: string[] = [];
+
+    lines.push(`# Pipeline: ${pipelineName}`);
+    lines.push('');
+
+    lines.push('# Métricas determinísticas (já calculadas — copie no JSON)');
+    lines.push(`- total_pipeline_value: ${metrics.totalValue}`);
+    lines.push(`- weighted_value: ${metrics.weightedValue}`);
+    lines.push(`- avg_cycle_days: ${metrics.avgCycleDays}`);
+    lines.push(`- conversion_rate: ${metrics.conversionRate.toFixed(4)} (0..1)`);
+    lines.push('');
+
+    lines.push('# Fechamentos nos últimos 30 dias');
+    lines.push(`- Ganhos: ${closedRecent.won}`);
+    lines.push(`- Perdidos: ${closedRecent.lost}`);
+    lines.push('');
+
+    lines.push('# Stages do funil');
+    for (const s of stages) {
+      const stageDeals = activeDeals.filter((d) => d.stage_id === s.id);
+      const stageValue = stageDeals.reduce((sum, d) => sum + Number(d.value || 0), 0);
+      const breached = stageDeals.filter((d) => d.sla_breached).length;
+      const avgHours =
+        stageDeals.length > 0
+          ? stageDeals.reduce((s2, d) => s2 + Number(d.hours_in_stage || 0), 0) /
+            stageDeals.length
+          : 0;
+      lines.push(
+        `- "${s.name}" (pos ${s.position}, SLA ${s.sla_hours ?? '—'}h): ${stageDeals.length} deals, R$ ${stageValue.toFixed(2)}, ${breached} fora do SLA, tempo médio ${avgHours.toFixed(1)}h`,
+      );
+    }
+
+    return lines.join('\n');
+  }
 }
 
 // ──────────────────────────────────────────────────────────
@@ -456,4 +1004,13 @@ function extractInlineText(m: Message): string | null {
 
 function truncate(s: string, max: number): string {
   return s.length > max ? `${s.slice(0, max)}…` : s;
+}
+
+function clamp(n: number, min: number, max: number): number {
+  if (!Number.isFinite(n)) return min;
+  return Math.max(min, Math.min(max, n));
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
 }
