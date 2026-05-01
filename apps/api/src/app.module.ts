@@ -8,6 +8,7 @@ import { AiModule } from './modules/ai/ai.module';
 import { ContactsModule } from './modules/contacts/contacts.module';
 import { ConversationsModule } from './modules/conversations/conversations.module';
 import { MessagesModule } from './modules/messages/messages.module';
+import { PipelinesModule } from './modules/pipelines/pipelines.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
 
 @Module({
@@ -21,6 +22,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     ContactsModule,
     ConversationsModule,
     MessagesModule,
+    PipelinesModule,
     AiModule,
     WebhooksModule,
   ],
