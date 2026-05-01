@@ -92,7 +92,12 @@ export interface ChannelWebhookEvent {
 // ──────────────────────────────────────────────────────────────
 
 export interface SendMessageInput {
-  channel_id: UUID;
+  /**
+   * Canal completo com credenciais já resolvidas. O dispatcher (no api)
+   * busca a row de `active.channels` e passa pra cá — provider fica
+   * stateless (sem dependência de DB, só HTTP).
+   */
+  channel: Channel;
   /** ID externo do destinatário (wa_id, psid, etc) */
   to: string;
   content_type: MessageContentType;
@@ -102,7 +107,7 @@ export interface SendMessageInput {
 }
 
 export interface SendMessageResult {
-  /** ID retornado pelo provedor (wamid, mid, etc) */
+  /** ID retornado pelo provedor (wamid, zaapId, mid, etc) */
   channel_message_id: string;
   status: MessageDeliveryStatus;
   /** Custo em USD se o canal cobrar por mensagem */
