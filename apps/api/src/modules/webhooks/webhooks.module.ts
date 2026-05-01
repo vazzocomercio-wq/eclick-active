@@ -4,9 +4,10 @@ import { ZapiWebhookService } from './zapi/zapi-webhook.service';
 import { ContactsModule } from '../contacts/contacts.module';
 import { ConversationsModule } from '../conversations/conversations.module';
 import { AiModule } from '../ai/ai.module';
+import { AutomationsModule } from '../automations/automations.module';
 
 @Module({
-  imports: [ContactsModule, ConversationsModule, AiModule],
+  imports: [ContactsModule, ConversationsModule, AiModule, AutomationsModule],
   controllers: [ZapiWebhookController],
   providers: [ZapiWebhookService],
 })

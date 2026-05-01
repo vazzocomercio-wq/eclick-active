@@ -15,6 +15,7 @@ import { UpdateDealDto } from './dto/update-deal.dto';
 import { MoveDealDto } from './dto/move-deal.dto';
 import { ListDealsQueryDto } from './dto/list-deals.query.dto';
 import { BoardFiltersDto } from './dto/board-filters.query.dto';
+import { AutomationsService } from '../automations/automations.service';
 
 // ──────────────────────────────────────────────────────────
 // Tipos do board
@@ -96,6 +97,7 @@ export class DealsService {
     private readonly supabase: SupabaseService,
     private readonly events: EventsGateway,
     private readonly ai: AiService,
+    private readonly automations: AutomationsService,
   ) {}
 
   // ──────────────────────────────────────────────────────────
@@ -466,6 +468,23 @@ export class DealsService {
           `auto-score após move falhou: ${err instanceof Error ? err.message : String(err)}`,
         );
       });
+
+      // Fire-and-forget: dispara automações de deal_stage_changed
+      void this.automations
+        .checkTriggers({
+          event: 'deal_stage_changed',
+          org_id: orgId,
+          deal_id: deal.id,
+          pipeline_id: deal.pipeline_id,
+          from_stage_id: fromStageId,
+          to_stage_id: deal.stage_id,
+          contact_id: deal.contact_id ?? null,
+        })
+        .catch((err) => {
+          this.logger.warn(
+            `automations checkTriggers falhou: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        });
     }
 
     return deal;

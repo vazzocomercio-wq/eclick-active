@@ -14,6 +14,7 @@ import { ContactsService } from '../../contacts/contacts.service';
 import { ConversationsService } from '../../conversations/conversations.service';
 import { EventsGateway } from '../../../gateways/events.gateway';
 import { AiService } from '../../ai/ai.service';
+import { AutomationsService } from '../../automations/automations.service';
 
 export interface WebhookHandleResult {
   accepted: boolean;
@@ -40,6 +41,7 @@ export class ZapiWebhookService {
     private readonly conversations: ConversationsService,
     private readonly events: EventsGateway,
     private readonly ai: AiService,
+    private readonly automations: AutomationsService,
   ) {}
 
   async handle(payload: ZapiInboundPayload): Promise<WebhookHandleResult> {
@@ -151,6 +153,28 @@ export class ZapiWebhookService {
       .catch((err) => {
         this.logger.warn(
           `AI processing failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+
+    // 9. Fire-and-forget: dispara automações com trigger=message_received.
+    //    Não bloqueia o webhook (tem 5s de SLA). ai_intent pode estar null
+    //    nesse momento (a IA classifica em paralelo); automações que
+    //    filtram por intent simplesmente não vão casar até o reprocesso.
+    void this.automations
+      .checkTriggers({
+        event: 'message_received',
+        org_id: channel.org_id,
+        conversation_id: conversation.id,
+        contact_id: contact.id,
+        channel_id: channel.id,
+        channel_type: channel.channel_type,
+        message_id: result.message.id,
+        message_text: result.message.plain_text ?? '',
+        ai_intent: result.message.ai_intent ?? null,
+      })
+      .catch((err) => {
+        this.logger.warn(
+          `automations checkTriggers failed: ${err instanceof Error ? err.message : String(err)}`,
         );
       });
 
