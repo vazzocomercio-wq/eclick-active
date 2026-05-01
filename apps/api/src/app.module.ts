@@ -2,9 +2,10 @@ import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { SupabaseModule } from './common/supabase/supabase.module';
 import { AuthModule } from './common/auth/auth.module';
-import { ChannelsModule } from './common/channels/channels.module';
+import { ChannelsModule as ChannelDispatcherModule } from './common/channels/channels.module';
 import { EventsModule } from './gateways/events.module';
 import { AiModule } from './modules/ai/ai.module';
+import { ChannelsModule } from './modules/channels/channels.module';
 import { ContactsModule } from './modules/contacts/contacts.module';
 import { ConversationsModule } from './modules/conversations/conversations.module';
 import { CopilotModule } from './modules/copilot/copilot.module';
@@ -13,7 +14,9 @@ import { DealsModule } from './modules/deals/deals.module';
 import { KnowledgeModule } from './modules/knowledge/knowledge.module';
 import { MessagesModule } from './modules/messages/messages.module';
 import { PipelinesModule } from './modules/pipelines/pipelines.module';
+import { SettingsModule } from './modules/settings/settings.module';
 import { TasksModule } from './modules/tasks/tasks.module';
+import { TeamModule } from './modules/team/team.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
 
 @Module({
@@ -21,7 +24,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     // @Global infra
     SupabaseModule,
     AuthModule,
-    ChannelsModule,
+    ChannelDispatcherModule,
     EventsModule,
     // Feature modules
     ContactsModule,
@@ -34,6 +37,9 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     KnowledgeModule,
     AiModule,
     CopilotModule,
+    ChannelsModule,
+    SettingsModule,
+    TeamModule,
     WebhooksModule,
   ],
   controllers: [AppController],
