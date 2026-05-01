@@ -100,8 +100,8 @@ export class ZapiWebhookService {
       'whatsapp',
     );
 
-    // 6. Persiste mensagem inbound
-    await this.persistInbound({
+    // 6. Persiste mensagem inbound (idempotente — duplicatas são ignoradas)
+    const result = await this.persistInbound({
       channel,
       conversationId: conversation.id,
       contentType: data.content_type,
@@ -110,6 +110,9 @@ export class ZapiWebhookService {
       occurredAt: inbound.occurred_at,
     });
 
+    if (result.duplicate) {
+      return { accepted: false, reason: 'duplicate' };
+    }
     return { accepted: true };
   }
 
@@ -120,7 +123,7 @@ export class ZapiWebhookService {
     content: MessageContent;
     channelMessageId?: string;
     occurredAt: string;
-  }): Promise<void> {
+  }): Promise<{ duplicate: boolean }> {
     const plainText = this.extractPlainText(input.contentType, input.content);
 
     const { error } = await this.supabase.adminClient.from('messages').insert({
@@ -142,9 +145,19 @@ export class ZapiWebhookService {
     });
 
     if (error) {
+      // 23505 = unique_violation — duplicata pelo índice idx_messages_*_dedup
+      // (definido em supabase/migrations/003_messages_dedup_index.sql).
+      // Webhook idempotente: ignoramos sem erro.
+      if ((error as { code?: string }).code === '23505') {
+        this.logger.debug(
+          `Duplicate inbound ignored (channel_message_id=${input.channelMessageId})`,
+        );
+        return { duplicate: true };
+      }
       this.logger.error(`persistInbound failed: ${error.message}`);
       throw new Error(`Failed to persist inbound message: ${error.message}`);
     }
+    return { duplicate: false };
   }
 
   private extractPlainText(
