@@ -1,6 +1,25 @@
 import type { Deal, DealActivity } from '@eclick-active/shared';
 import { api } from './client';
 
+export interface ListDealsParams {
+  page?: number;
+  limit?: number;
+  pipeline_id?: string;
+  stage_id?: string;
+  assigned_to?: string;
+  tags?: string[];
+  min_value?: number;
+  max_value?: number;
+  include_closed?: boolean;
+}
+
+export interface PaginatedDeals {
+  data: Deal[];
+  page: number;
+  limit: number;
+  total: number;
+}
+
 export interface CreateDealInput {
   title: string;
   pipeline_id: string;
@@ -35,6 +54,22 @@ export interface ReorderDealsInput {
 }
 
 export const dealsApi = {
+  list(params: ListDealsParams = {}, signal?: AbortSignal): Promise<PaginatedDeals> {
+    return api.get<PaginatedDeals>('/deals', {
+      query: {
+        page: params.page,
+        limit: params.limit,
+        pipeline_id: params.pipeline_id,
+        stage_id: params.stage_id,
+        assigned_to: params.assigned_to,
+        tags: params.tags,
+        min_value: params.min_value,
+        max_value: params.max_value,
+        include_closed: params.include_closed ? 'true' : undefined,
+      },
+      signal,
+    });
+  },
   create(input: CreateDealInput) {
     return api.post<Deal>('/deals', input);
   },

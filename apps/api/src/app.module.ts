@@ -11,6 +11,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { DealsModule } from './modules/deals/deals.module';
 import { MessagesModule } from './modules/messages/messages.module';
 import { PipelinesModule } from './modules/pipelines/pipelines.module';
+import { TasksModule } from './modules/tasks/tasks.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
 
 @Module({
@@ -27,6 +28,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     PipelinesModule,
     DealsModule,
     DashboardModule,
+    TasksModule,
     AiModule,
     WebhooksModule,
   ],
