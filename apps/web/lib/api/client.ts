@@ -1,4 +1,4 @@
-import { getSupabase } from '../supabase';
+import { createClient } from '../supabase/client';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
@@ -25,11 +25,14 @@ async function buildHeaders(): Promise<HeadersInit> {
     'Content-Type': 'application/json',
   };
   try {
-    const { data } = await getSupabase().auth.getSession();
+    const supabase = createClient();
+    const { data } = await supabase.auth.getSession();
     const token = data.session?.access_token;
     if (token) headers.Authorization = `Bearer ${token}`;
   } catch {
-    // Sem env Supabase ainda — segue sem header (api retorna 401)
+    // Sem env Supabase configurada — segue sem header (api retorna 401).
+    // Quando rodar com auth completa, o middleware redireciona pro /login
+    // antes mesmo de chegar aqui.
   }
   return headers;
 }
