@@ -7,6 +7,7 @@ import {
 import type { Deal, DealActivity, Json, Message } from '@eclick-active/shared';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { EventsGateway } from '../../gateways/events.gateway';
+import { KnowledgeService } from '../knowledge/knowledge.service';
 import { AnthropicClient } from './anthropic.client';
 import {
   CLASSIFY_SCHEMA,
@@ -32,6 +33,7 @@ export class AiService {
     private readonly anthropic: AnthropicClient,
     private readonly supabase: SupabaseService,
     private readonly events: EventsGateway,
+    private readonly knowledge: KnowledgeService,
   ) {}
 
   // ──────────────────────────────────────────────────────────
@@ -92,7 +94,21 @@ export class AiService {
       : null;
     const recent = await this.fetchRecentMessages(orgId, conversationId, 15);
 
-    const userPrompt = this.buildSuggestPrompt(contact, recent);
+    // Busca contexto relevante na base de conhecimento usando as últimas
+    // 3 mensagens do cliente como query. Falha graciosamente se OPENAI_API_KEY
+    // não estiver configurada — searchSemantic retorna [].
+    const knowledgeQuery = recent
+      .filter((m) => m.direction === 'inbound')
+      .slice(-3)
+      .map((m) => m.plain_text ?? '')
+      .filter(Boolean)
+      .join(' ')
+      .slice(0, 500);
+    const knowledgeHits = knowledgeQuery
+      ? await this.knowledge.searchSemantic(orgId, knowledgeQuery, 3)
+      : [];
+
+    const userPrompt = this.buildSuggestPrompt(contact, recent, knowledgeHits);
 
     const { data: suggestion } = await this.anthropic.complete<SuggestionResult>({
       interaction_type: 'suggest_response',
@@ -708,7 +724,11 @@ export class AiService {
     ].join('\n');
   }
 
-  private buildSuggestPrompt(contact: ContactSummary | null, recent: Message[]): string {
+  private buildSuggestPrompt(
+    contact: ContactSummary | null,
+    recent: Message[],
+    knowledgeHits: Array<{ title: string; category: string; content: string }> = [],
+  ): string {
     const lines: string[] = [];
     if (contact) {
       lines.push('Perfil do contato:');
@@ -720,6 +740,17 @@ export class AiService {
       if (contact.ai_summary) lines.push(`- Resumo: ${contact.ai_summary}`);
       lines.push('');
     }
+
+    if (knowledgeHits.length > 0) {
+      lines.push('Contexto da base de conhecimento (use SOMENTE essas informações como verdade):');
+      knowledgeHits.forEach((h, i) => {
+        const snippet = h.content.length > 600 ? `${h.content.slice(0, 600)}…` : h.content;
+        lines.push(`[${i + 1}] ${h.title} (${h.category}):`);
+        lines.push(snippet);
+        lines.push('');
+      });
+    }
+
     lines.push('Conversa recente (cronológica):');
     if (recent.length === 0) {
       lines.push('(sem mensagens)');

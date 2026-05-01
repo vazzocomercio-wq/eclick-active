@@ -7,6 +7,7 @@ import {
 import { performance } from 'node:perf_hooks';
 import Anthropic from '@anthropic-ai/sdk';
 import { SupabaseService } from '../../common/supabase/supabase.service';
+import { KnowledgeService } from '../knowledge/knowledge.service';
 import {
   COPILOT_SYSTEM_PROMPT,
   MAX_HISTORY_MESSAGES,
@@ -64,7 +65,10 @@ export class CopilotService implements OnModuleInit {
   private readonly logger = new Logger(CopilotService.name);
   private _client?: Anthropic;
 
-  constructor(private readonly supabase: SupabaseService) {}
+  constructor(
+    private readonly supabase: SupabaseService,
+    private readonly knowledge: KnowledgeService,
+  ) {}
 
   onModuleInit(): void {
     if (!process.env.ANTHROPIC_API_KEY) {
@@ -320,6 +324,8 @@ export class CopilotService implements OnModuleInit {
         return this.toolCreateTask(input, ctx);
       case 'create_deal':
         return this.toolCreateDeal(input, ctx);
+      case 'search_knowledge':
+        return this.toolSearchKnowledge(input, ctx);
       default:
         throw new Error(`Tool desconhecida: ${name}`);
     }
@@ -819,6 +825,33 @@ export class CopilotService implements OnModuleInit {
         summary: `Negócio criado: ${created.title}`,
         resource_id: created.id,
         resource_kind: 'deal',
+      },
+    };
+  }
+
+  private async toolSearchKnowledge(
+    input: Record<string, unknown>,
+    ctx: ToolContext,
+  ): Promise<{ result: unknown; record: ToolCallRecord }> {
+    const query = String(input.query ?? '').trim();
+    if (!query) throw new Error('query é obrigatório');
+    const limit = clampLimit(Number(input.limit), 5, 10);
+
+    const hits = await this.knowledge.searchSemantic(ctx.orgId, query, limit);
+
+    return {
+      result: hits.map((h) => ({
+        id: h.id,
+        title: h.title,
+        category: h.category,
+        // Trunca content para não estourar o contexto do modelo
+        content: h.content.length > 1500 ? `${h.content.slice(0, 1500)}…` : h.content,
+        similarity: Math.round(h.similarity * 100) / 100,
+      })),
+      record: {
+        tool: 'search_knowledge',
+        summary: `${hits.length} documento${hits.length === 1 ? '' : 's'} relevante${hits.length === 1 ? '' : 's'}`,
+        result_count: hits.length,
       },
     };
   }

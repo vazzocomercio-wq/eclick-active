@@ -177,6 +177,26 @@ export const COPILOT_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: 'search_knowledge',
+    description:
+      'Busca semântica na base de conhecimento da empresa (produtos, preços, políticas, FAQ, scripts de venda, objeções, procedimentos). Use SEMPRE que precisar de informação sobre como a empresa opera, o que vende, ou como responder a perguntas específicas do cliente.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description:
+            'Termo ou pergunta em linguagem natural (português). Quanto mais específico, melhor.',
+        },
+        limit: {
+          type: 'number',
+          description: 'Máximo de documentos retornados (default 5, máx 10).',
+        },
+      },
+      required: ['query'],
+    },
+  },
+  {
     name: 'create_deal',
     description:
       'Cria um novo negócio (deal) no funil. Use quando o usuário pedir para criar oportunidade ou registrar venda em andamento.',
@@ -204,4 +224,5 @@ export type CopilotToolName =
   | 'list_tasks'
   | 'get_agent_stats'
   | 'create_task'
-  | 'create_deal';
+  | 'create_deal'
+  | 'search_knowledge';

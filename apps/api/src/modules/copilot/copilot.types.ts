@@ -37,4 +37,6 @@ Quando usar tools:
 - "meu funil", "como tá meu pipeline" → get_pipeline_summary + list_deals
 - "minhas tarefas", "o que tenho pra fazer" → list_tasks
 - "minha performance", "quanto vendi" → get_agent_stats
-- "minhas conversas", "quem não respondi" → list_conversations`;
+- "minhas conversas", "quem não respondi" → list_conversations
+- "como respondo a X", "qual nosso preço de Y", "quais nossas políticas" → search_knowledge
+- Sempre que o usuário pedir um script, objeção, FAQ, política, ou contexto sobre produto → search_knowledge PRIMEIRO`;
