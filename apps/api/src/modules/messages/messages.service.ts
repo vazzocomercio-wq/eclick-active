@@ -6,6 +6,7 @@ import {
 import type { Message, MessageDeliveryStatus } from '@eclick-active/shared';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { ChannelDispatcherService } from '../../common/channels/channel-dispatcher.service';
+import { EventsGateway } from '../../gateways/events.gateway';
 import { ConversationsService } from '../conversations/conversations.service';
 import { SendMessageDto } from './dto/send-message.dto';
 
@@ -23,6 +24,7 @@ export class MessagesService {
     private readonly supabase: SupabaseService,
     private readonly conversations: ConversationsService,
     private readonly dispatcher: ChannelDispatcherService,
+    private readonly events: EventsGateway,
   ) {}
 
   // ──────────────────────────────────────────────────────────
@@ -53,7 +55,7 @@ export class MessagesService {
     const isInternalNote = dto.is_internal_note ?? false;
     const initialStatus: MessageDeliveryStatus = isInternalNote ? 'sent' : 'pending';
 
-    const persisted = await this.persist({
+    let persisted = await this.persist({
       org_id: orgId,
       conversation_id: conversationId,
       direction: 'outbound',
@@ -67,36 +69,60 @@ export class MessagesService {
       metadata: this.buildMetadata(dto),
     });
 
-    // Notas internas não vão pro contato — encerra aqui.
-    if (isInternalNote) {
-      return persisted;
+    // Notas internas não vão pro provider — pulam direto pro emit.
+    if (!isInternalNote) {
+      if (!conv.channel_id) {
+        // Conversa sem channel_id é inválida pra outbound (rota interna
+        // não-canal ainda não existe).
+        persisted = await this.markFailed(
+          persisted,
+          'no_channel',
+          'Conversa não tem channel_id atribuído',
+        );
+      } else {
+        try {
+          const result = await this.dispatcher.send({
+            org_id: orgId,
+            channel_id: conv.channel_id,
+            contact_id: conv.contact_id,
+            content_type: dto.content_type,
+            content: dto.content,
+            reply_to_channel_message_id: dto.reply_to_channel_message_id,
+          });
+          persisted = await this.markSent(persisted, result.channel_message_id);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          this.logger.error(`dispatch failed: ${message}`);
+          persisted = await this.markFailed(persisted, 'dispatch_error', message);
+        }
+      }
     }
 
-    // Conversa sem channel_id é inválida pra outbound (rota interna não-canal
-    // ainda não existe). Marca como failed.
-    if (!conv.channel_id) {
-      return this.markFailed(
-        persisted,
-        'no_channel',
-        'Conversa não tem channel_id atribuído',
-      );
-    }
+    // Emit pra outros agentes vendo a mesma conversa em tempo real.
+    // Cobre todos os finais de fluxo: nota interna ('sent'), no-channel
+    // ('failed'), dispatch ok ('sent') ou dispatch erro ('failed').
+    await this.emitMessageEvents(orgId, conversationId, persisted);
 
-    // Dispatch via ChannelDispatcher
+    return persisted;
+  }
+
+  private async emitMessageEvents(
+    orgId: string,
+    conversationId: string,
+    message: Message,
+  ): Promise<void> {
     try {
-      const result = await this.dispatcher.send({
-        org_id: orgId,
-        channel_id: conv.channel_id,
-        contact_id: conv.contact_id,
-        content_type: dto.content_type,
-        content: dto.content,
-        reply_to_channel_message_id: dto.reply_to_channel_message_id,
+      this.events.emitToOrg(orgId, 'message:new', {
+        conversation_id: conversationId,
+        message,
       });
-      return this.markSent(persisted, result.channel_message_id);
+      // Re-fetch pra capturar counters atualizados pelo trg_message_insert
+      const conversation = await this.conversations.findByIdRaw(orgId, conversationId);
+      this.events.emitToOrg(orgId, 'conversation:updated', { conversation });
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      this.logger.error(`dispatch failed: ${message}`);
-      return this.markFailed(persisted, 'dispatch_error', message);
+      this.logger.warn(
+        `Event emit failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
