@@ -4,26 +4,26 @@
 
 @layer base {
   :root {
-    /* Light theme */
+    /* Light theme — brand cyan/verde escurecidos pra contraste em fundo claro */
     --background: 0 0% 100%;
     --foreground: 240 10% 4%;
     --card: 0 0% 100%;
     --card-foreground: 240 10% 4%;
     --popover: 0 0% 100%;
     --popover-foreground: 240 10% 4%;
-    --primary: 187 100% 50%;       /* #00E5FF cyan */
-    --primary-foreground: 240 10% 4%;
+    --primary: 200 100% 40%;        /* #0088CC cyan ajustado */
+    --primary-foreground: 0 0% 100%;
     --secondary: 240 5% 96%;
     --secondary-foreground: 240 6% 10%;
     --muted: 240 5% 96%;
     --muted-foreground: 240 4% 46%;
-    --accent: 124 65% 58%;          /* #4ADE50 green */
-    --accent-foreground: 240 10% 4%;
+    --accent: 142 71% 45%;          /* #22C55E verde ajustado */
+    --accent-foreground: 0 0% 100%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
     --border: 240 6% 90%;
     --input: 240 6% 90%;
-    --ring: 187 100% 50%;
+    --ring: 200 100% 40%;
     --radius: 0.5rem;
   }
 

@@ -92,11 +92,21 @@ export const DEFAULT_AI_FEATURE_SETTINGS: Array<{
   { feature_name: 'follow_up_agent', provider: 'anthropic', model: 'claude-haiku-4-5-20251001', enabled: false },
 ];
 
-/** Cores da brand (centralizadas pra reutilização em CSS-in-JS, charts, etc.) */
+/**
+ * Cores da brand pra reutilização em CSS-in-JS, charts, etc.
+ *
+ * **Importante**: as cores cyan/green têm contraste péssimo em fundo claro —
+ * use as variantes `*_light` no light theme. CSS vars do Tailwind já fazem
+ * essa troca automática via `:root` vs `.dark`.
+ */
 export const BRAND_COLORS = {
+  // Dark theme (brand canônica)
   cyan: '#00E5FF',
   green: '#4ADE50',
   bg_dark: '#09090B',
   surface: '#111115',
   border: '#2A2A2E',
+  // Light theme (ajustadas pra contraste)
+  cyan_light: '#0088CC',
+  green_light: '#22C55E',
 } as const;

@@ -1,0 +1,98 @@
+import { getSupabase } from '../supabase';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+
+export class ApiError extends Error {
+  readonly status: number;
+  readonly body: unknown;
+
+  constructor(status: number, message: string, body: unknown) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.body = body;
+  }
+}
+
+interface RequestOptions {
+  query?: Record<string, string | number | string[] | undefined>;
+  body?: unknown;
+  signal?: AbortSignal;
+}
+
+async function buildHeaders(): Promise<HeadersInit> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  try {
+    const { data } = await getSupabase().auth.getSession();
+    const token = data.session?.access_token;
+    if (token) headers.Authorization = `Bearer ${token}`;
+  } catch {
+    // Sem env Supabase ainda — segue sem header (api retorna 401)
+  }
+  return headers;
+}
+
+function buildUrl(path: string, query?: RequestOptions['query']): string {
+  const url = new URL(path, API_URL);
+  if (query) {
+    for (const [key, value] of Object.entries(query)) {
+      if (value === undefined || value === '') continue;
+      if (Array.isArray(value)) {
+        for (const v of value) url.searchParams.append(key, v);
+      } else {
+        url.searchParams.set(key, String(value));
+      }
+    }
+  }
+  return url.toString();
+}
+
+async function request<T>(
+  method: string,
+  path: string,
+  options: RequestOptions = {},
+): Promise<T> {
+  const url = buildUrl(path, options.query);
+  const headers = await buildHeaders();
+
+  const res = await fetch(url, {
+    method,
+    headers,
+    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    signal: options.signal,
+  });
+
+  let body: unknown = null;
+  if (res.status !== 204) {
+    const text = await res.text();
+    if (text) {
+      try {
+        body = JSON.parse(text);
+      } catch {
+        body = text;
+      }
+    }
+  }
+
+  if (!res.ok) {
+    const message =
+      typeof body === 'object' && body && 'message' in body
+        ? String((body as { message: unknown }).message)
+        : `HTTP ${res.status}`;
+    throw new ApiError(res.status, message, body);
+  }
+
+  return body as T;
+}
+
+export const api = {
+  get: <T>(path: string, options?: RequestOptions) => request<T>('GET', path, options),
+  post: <T>(path: string, body?: unknown, options?: RequestOptions) =>
+    request<T>('POST', path, { ...options, body }),
+  patch: <T>(path: string, body?: unknown, options?: RequestOptions) =>
+    request<T>('PATCH', path, { ...options, body }),
+  delete: <T>(path: string, options?: RequestOptions) =>
+    request<T>('DELETE', path, options),
+};
