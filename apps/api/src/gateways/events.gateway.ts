@@ -8,6 +8,7 @@ import {
 import type { Server, Socket } from 'socket.io';
 import type {
   Conversation,
+  Deal,
   Message,
   Notification,
   UUID,
@@ -35,17 +36,40 @@ export interface AISuggestionPayload {
   confidence?: number;
 }
 
+export interface DealCreatedPayload {
+  deal: Deal;
+}
+
+export interface DealMovedPayload {
+  deal_id: UUID;
+  from_stage_id: UUID;
+  to_stage_id: UUID;
+  position: number;
+  /** Setado quando o destino é stage is_won/is_lost */
+  closed_state?: 'won' | 'lost' | null;
+}
+
+export interface DealUpdatedPayload {
+  deal: Deal;
+}
+
 export type EventName =
   | 'message:new'
   | 'conversation:updated'
   | 'ai:suggestion'
-  | 'notification';
+  | 'notification'
+  | 'deal:created'
+  | 'deal:moved'
+  | 'deal:updated';
 
 export interface EventPayloadMap {
   'message:new': MessageNewPayload;
   'conversation:updated': ConversationUpdatedPayload;
   'ai:suggestion': AISuggestionPayload;
   notification: Notification;
+  'deal:created': DealCreatedPayload;
+  'deal:moved': DealMovedPayload;
+  'deal:updated': DealUpdatedPayload;
 }
 
 const ROOM_PREFIX = 'org';

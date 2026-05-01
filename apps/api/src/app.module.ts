@@ -7,6 +7,7 @@ import { EventsModule } from './gateways/events.module';
 import { AiModule } from './modules/ai/ai.module';
 import { ContactsModule } from './modules/contacts/contacts.module';
 import { ConversationsModule } from './modules/conversations/conversations.module';
+import { DealsModule } from './modules/deals/deals.module';
 import { MessagesModule } from './modules/messages/messages.module';
 import { PipelinesModule } from './modules/pipelines/pipelines.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
@@ -23,6 +24,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     ConversationsModule,
     MessagesModule,
     PipelinesModule,
+    DealsModule,
     AiModule,
     WebhooksModule,
   ],
