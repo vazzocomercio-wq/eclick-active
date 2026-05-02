@@ -23,12 +23,32 @@ import { ConversationsService } from './conversations.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { UpdateConversationDto } from './dto/update-conversation.dto';
 import { ListConversationsQueryDto } from './dto/list-conversations.query.dto';
+import { InitiateTransferDto } from './dto/transfer.dto';
 import type { PaginatedResult } from '../contacts/contacts.service';
+import { TransferService, type TransferBriefing } from '../ai/transfer.service';
 
 @UseGuards(AuthGuard)
 @Controller('conversations')
 export class ConversationsController {
-  constructor(private readonly service: ConversationsService) {}
+  constructor(
+    private readonly service: ConversationsService,
+    private readonly transfer: TransferService,
+  ) {}
+
+  // POST /conversations/:id/transfer — escalação inteligente com briefing
+  @Post(':id/transfer')
+  @HttpCode(HttpStatus.OK)
+  initiateTransfer(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: InitiateTransferDto,
+  ): Promise<{ status: 'pending_permission' | 'transferred'; briefing?: TransferBriefing }> {
+    return this.transfer.initiateTransfer(user.org_id, id, {
+      reason: dto.reason,
+      ...(dto.target_user_id ? { target_user_id: dto.target_user_id } : {}),
+      ...(dto.ask_permission !== undefined ? { ask_permission: dto.ask_permission } : {}),
+    });
+  }
 
   // GET /conversations?page=&limit=&status=&priority=&assigned_to=&channel_type=&mine=&contact_id=
   @Get()

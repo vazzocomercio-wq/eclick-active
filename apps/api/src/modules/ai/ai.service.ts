@@ -174,10 +174,154 @@ export class AiService {
       void this.skills.recordExecution(activeSkill.id, conf).catch(() => {});
     }
 
+    // Auto-escalation: se confidence baixa, cria tarefa pra humano (Bloco G PARTE 3)
+    const confidence0to1 = Math.max(0, Math.min(1, Number(suggestion.confidence) || 0));
+    void this.maybeEscalate(orgId, conversationId, {
+      confidence: confidence0to1,
+      intent: lastInbound?.ai_intent ?? null,
+      contactName: contact?.name ?? null,
+      messageText: lastInbound?.plain_text ?? '',
+      suggestedResponse: suggestion.suggested_response,
+      knowledgeSourcesCount: skillKnowledgeHits.length,
+    }).catch((err) => {
+      this.logger.warn(
+        `auto-escalation failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    });
+
     // Clamp confidence em [0, 1] — schema não permite minimum/maximum
     const confidence = Math.max(0, Math.min(1, Number(suggestion.confidence) || 0));
 
     return { ...suggestion, confidence, ai_interaction_id: interaction_id };
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // Auto-escalation (Bloco G PARTE 3)
+  // ──────────────────────────────────────────────────────────
+
+  /**
+   * Quando a confiança da IA é baixa, cria tarefa urgente pro responsável
+   * humano revisar a conversa antes de qualquer resposta automática.
+   *
+   * Settings em ai_feature_settings.feature_name='auto_escalation':
+   *   - confidence_threshold (default 60 — em %)
+   *   - create_task (default true)
+   *   - notify_agent (default true)
+   *   - block_auto_respond (default true — usado pelo webhook)
+   */
+  private async maybeEscalate(
+    orgId: string,
+    conversationId: string,
+    args: {
+      confidence: number;
+      intent: string | null;
+      contactName: string | null;
+      messageText: string;
+      suggestedResponse: string;
+      knowledgeSourcesCount: number;
+    },
+  ): Promise<void> {
+    // Carrega config
+    const { data: setting } = await this.supabase.adminClient
+      .from('ai_feature_settings')
+      .select('is_enabled, config')
+      .eq('org_id', orgId)
+      .eq('feature_name', 'auto_escalation')
+      .maybeSingle();
+    if (!setting || !(setting as { is_enabled: boolean }).is_enabled) return;
+
+    const config = (((setting as { config: Record<string, unknown> }).config) ?? {}) as {
+      confidence_threshold?: number;
+      create_task?: boolean;
+      notify_agent?: boolean;
+      block_auto_respond?: boolean;
+    };
+    const threshold = (config.confidence_threshold ?? 60) / 100;
+    if (args.confidence >= threshold) return;
+
+    // Resolve assigned_to (conversation > deal > round-robin)
+    const { data: convData } = await this.supabase.adminClient
+      .from('conversations')
+      .select('assigned_to, contact_id')
+      .eq('org_id', orgId)
+      .eq('id', conversationId)
+      .maybeSingle();
+    let assignedTo = (convData as { assigned_to: string | null } | null)?.assigned_to ?? null;
+    const contactId = (convData as { contact_id: string | null } | null)?.contact_id ?? null;
+
+    if (!assignedTo && contactId) {
+      const { data: dealData } = await this.supabase.adminClient
+        .from('deals')
+        .select('assigned_to')
+        .eq('org_id', orgId)
+        .eq('contact_id', contactId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      assignedTo = (dealData as { assigned_to: string | null } | null)?.assigned_to ?? null;
+    }
+
+    if (!assignedTo) {
+      // Round-robin simples — pega primeiro agente ativo
+      const { data: members } = await this.supabase.adminClient
+        .from('org_members')
+        .select('user_id')
+        .eq('org_id', orgId)
+        .eq('status', 'active')
+        .in('role', ['owner', 'admin', 'agent'])
+        .limit(1);
+      assignedTo = ((members ?? [])[0] as { user_id: string } | undefined)?.user_id ?? null;
+    }
+
+    if (!assignedTo) return;
+
+    const confidencePct = Math.round(args.confidence * 100);
+    const truncatedQuestion = args.messageText.slice(0, 100) + (args.messageText.length > 100 ? '…' : '');
+
+    if (config.create_task !== false) {
+      const dueDate = new Date(Date.now() + 30 * 60_000).toISOString();
+      const priority = args.confidence < 0.3 ? 'urgent' : 'high';
+
+      await this.supabase.adminClient
+        .from('tasks')
+        .insert({
+          org_id: orgId,
+          title: `IA precisa de ajuda: ${args.contactName ?? 'cliente'}`,
+          description: `Cliente perguntou: "${truncatedQuestion}"\n\nA IA não tem certeza da resposta (confiança: ${confidencePct}%). Revise antes de enviar.\n\nResposta que a IA geraria:\n${args.suggestedResponse}`,
+          task_type: 'follow_up',
+          priority,
+          status: 'pending',
+          assigned_to: assignedTo,
+          conversation_id: conversationId,
+          contact_id: contactId,
+          created_by_ai: true,
+          ai_context: `Confidence: ${confidencePct}%. Intent: ${args.intent ?? 'unknown'}. Knowledge sources: ${args.knowledgeSourcesCount}`,
+          due_date: dueDate,
+        })
+        .then(() => {})
+        .then(undefined, () => {});
+    }
+
+    if (config.notify_agent !== false) {
+      await this.supabase.adminClient
+        .from('notifications')
+        .insert({
+          org_id: orgId,
+          user_id: assignedTo,
+          type: 'ai_low_confidence',
+          severity: args.confidence < 0.3 ? 'urgent' : 'warning',
+          title: 'IA precisa de ajuda',
+          body: `${args.contactName ?? 'Cliente'} fez uma pergunta com baixa confiança da IA (${confidencePct}%)`,
+          link: `/conversas?id=${conversationId}`,
+          metadata: {
+            conversation_id: conversationId,
+            confidence: confidencePct,
+            intent: args.intent,
+          },
+        })
+        .then(() => {})
+        .then(undefined, () => {});
+    }
   }
 
   // ──────────────────────────────────────────────────────────
