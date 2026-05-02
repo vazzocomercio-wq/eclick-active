@@ -151,107 +151,111 @@ export function TestModeTab() {
   const persona = personas.find((p) => p.id === selectedPersonaId) ?? personas[0]!;
 
   return (
-    <div className="flex h-[calc(100vh-220px)] flex-col gap-3">
-      {/* Header com select de persona + ações */}
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3">
-        <span className="text-xs text-muted-foreground">Testar com:</span>
-        <select
-          value={selectedPersonaId ?? ''}
-          onChange={(e) => void handleSwitchPersona(e.target.value)}
-          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
-        >
-          {personas.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name} {p.is_default ? '(default)' : ''}
-            </option>
-          ))}
-        </select>
+    <div className="flex h-[calc(100vh-220px)] flex-col gap-3 lg:flex-row lg:gap-4">
+      {/* CHAT — coluna principal vertical, full height */}
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4">
+          {session && session.messages.length === 0 ? (
+            <div className="flex h-full items-center justify-center text-center text-sm text-muted-foreground">
+              <div>
+                <Sparkles className="mx-auto mb-2 h-6 w-6 text-primary" />
+                <p>Mande uma mensagem pra começar a testar</p>
+                <p className="mt-1 text-[11px]">
+                  A IA responde como <strong>{persona.name}</strong> usando a persona configurada.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <ul className="flex flex-col gap-3">
+              {session?.messages.map((m, i) => (
+                <li key={i}>
+                  <MessageBubble message={m} personaName={persona.name} />
+                </li>
+              ))}
+              {sending && (
+                <li className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  {persona.name} está digitando…
+                </li>
+              )}
+            </ul>
+          )}
+        </div>
 
-        <div className="ml-auto flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={handleClear}>
-            <RefreshCw className="mr-1 h-3 w-3" /> Limpar conversa
+        {/* Input */}
+        <div className="flex items-center gap-2 border-t border-border p-3">
+          <Input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                void handleSend();
+              }
+            }}
+            placeholder="Simule uma mensagem do cliente…"
+            disabled={sending}
+          />
+          <Button onClick={() => void handleSend()} disabled={sending || !draft.trim()}>
+            {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </Button>
         </div>
       </div>
 
-      {/* Toggles de fontes — pra calibrar qual alimentação funciona melhor */}
-      <SourcesPanel
-        sources={sources}
-        onToggle={toggleSource}
-        onPreset={applyPreset}
-      />
-
-      {/* Sugestões */}
-      <div className="flex flex-wrap gap-1.5">
-        {SUGGESTIONS.map((s) => (
-          <button
-            key={s.label}
-            type="button"
-            onClick={() => void handleSend(s.text)}
-            disabled={sending}
-            className="rounded-full border border-border bg-card px-3 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground disabled:opacity-50"
-          >
-            Simular: {s.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Chat */}
-      <div className="flex flex-1 gap-3 overflow-hidden">
-        <div className="flex flex-1 flex-col gap-3 overflow-hidden rounded-xl border border-border bg-card">
-          <div ref={scrollRef} className="flex-1 overflow-y-auto p-4">
-            {session && session.messages.length === 0 ? (
-              <div className="flex h-full items-center justify-center text-center text-sm text-muted-foreground">
-                <div>
-                  <Sparkles className="mx-auto mb-2 h-6 w-6 text-primary" />
-                  <p>Mande uma mensagem pra começar a testar</p>
-                  <p className="mt-1 text-[11px]">
-                    A IA responde como <strong>{persona.name}</strong> usando a persona configurada.
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <ul className="flex flex-col gap-3">
-                {session?.messages.map((m, i) => (
-                  <li key={i}>
-                    <MessageBubble message={m} personaName={persona.name} />
-                  </li>
-                ))}
-                {sending && (
-                  <li className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    {persona.name} está digitando…
-                  </li>
-                )}
-              </ul>
-            )}
+      {/* SIDEBAR — todos os controles e configurações */}
+      <aside className="flex shrink-0 flex-col gap-3 overflow-y-auto lg:w-96">
+        {/* Persona + Limpar */}
+        <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Testar com:</span>
+            <select
+              value={selectedPersonaId ?? ''}
+              onChange={(e) => void handleSwitchPersona(e.target.value)}
+              className="h-8 flex-1 rounded-md border border-input bg-background px-2 text-xs"
+            >
+              {personas.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} {p.is_default ? '(default)' : ''}
+                </option>
+              ))}
+            </select>
           </div>
+          <Button variant="outline" size="sm" onClick={handleClear}>
+            <RefreshCw className="mr-1 h-3 w-3" /> Limpar conversa
+          </Button>
+        </div>
 
-          {/* Input */}
-          <div className="flex items-center gap-2 border-t border-border p-3">
-            <Input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  void handleSend();
-                }
-              }}
-              placeholder="Simule uma mensagem do cliente…"
-              disabled={sending}
-            />
-            <Button onClick={() => void handleSend()} disabled={sending || !draft.trim()}>
-              {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            </Button>
+        {/* Toggles de fontes — calibração */}
+        <SourcesPanel
+          sources={sources}
+          onToggle={toggleSource}
+          onPreset={applyPreset}
+        />
+
+        {/* Sugestões */}
+        <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-3">
+          <span className="text-xs font-medium">Sugestões rápidas</span>
+          <div className="flex flex-wrap gap-1.5">
+            {SUGGESTIONS.map((s) => (
+              <button
+                key={s.label}
+                type="button"
+                onClick={() => void handleSend(s.text)}
+                disabled={sending}
+                className="rounded-full border border-border bg-background px-3 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground disabled:opacity-50"
+              >
+                {s.label}
+              </button>
+            ))}
           </div>
         </div>
-      </div>
 
-      <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-[11px] text-amber-700 dark:text-amber-300">
-        💡 Modo teste — nada do que aparece aqui afeta contatos, deals ou automações reais.
-        Use os toggles acima pra isolar quais fontes calibram melhor a IA.
-      </div>
+        {/* Aviso modo teste */}
+        <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-[11px] text-amber-700 dark:text-amber-300">
+          💡 Modo teste — nada do que aparece aqui afeta contatos, deals ou automações reais.
+          Use os toggles acima pra isolar quais fontes calibram melhor a IA.
+        </div>
+      </aside>
     </div>
   );
 }
@@ -288,7 +292,7 @@ function SourcesPanel({
 
       {open && (
         <>
-          <div className="grid gap-2 md:grid-cols-3">
+          <div className="flex flex-col gap-2">
             <SourceToggle
               icon={BookOpen}
               label="Knowledge Base"
@@ -312,14 +316,16 @@ function SourcesPanel({
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+          <div className="flex flex-col gap-1.5 pt-1">
             <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
               Presets:
             </span>
-            <PresetButton onClick={() => onPreset('persona_only')}>Só persona</PresetButton>
-            <PresetButton onClick={() => onPreset('kb_only')}>Persona + KB</PresetButton>
-            <PresetButton onClick={() => onPreset('kb_skills')}>+ Skills</PresetButton>
-            <PresetButton onClick={() => onPreset('all')}>Tudo (produção)</PresetButton>
+            <div className="flex flex-wrap gap-1.5">
+              <PresetButton onClick={() => onPreset('persona_only')}>Só persona</PresetButton>
+              <PresetButton onClick={() => onPreset('kb_only')}>Persona + KB</PresetButton>
+              <PresetButton onClick={() => onPreset('kb_skills')}>+ Skills</PresetButton>
+              <PresetButton onClick={() => onPreset('all')}>Tudo (produção)</PresetButton>
+            </div>
           </div>
         </>
       )}
