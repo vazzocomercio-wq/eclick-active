@@ -105,6 +105,14 @@ export function BaileysConnectDialog({
       };
       const onDisc = (payload: BaileysDisconnectedPayload) => {
         if (payload.channel_id !== channel.id) return;
+        if (!payload.needs_reauth) {
+          // Disconnect transient (restartRequired etc.) — worker já vai
+          // reabrir o socket sozinho. Mantém o usuário em "awaiting-qr" e
+          // limpa o QR antigo pra UX mostrar o spinner novamente.
+          setQr(null);
+          setStage('awaiting-qr');
+          return;
+        }
         setError(`Desconectado: ${payload.reason}`);
         setStage('error');
       };

@@ -10,6 +10,7 @@ import type { ChannelStatus, ChannelType } from '@eclick-active/shared';
 
 const CHANNEL_TYPES: ChannelType[] = [
   'whatsapp',
+  'whatsapp_free',
   'instagram',
   'messenger',
   'telegram',

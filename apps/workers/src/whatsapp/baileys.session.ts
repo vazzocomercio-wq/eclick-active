@@ -152,31 +152,52 @@ export class BaileysSession {
         ? 'logged_out'
         : (lastDisconnect?.error?.message ?? `code:${code ?? 'unknown'}`);
 
+      this.sock = null;
+
       // eslint-disable-next-line no-console
       console.log(
         `[baileys ${this.ctx.channelId}] disconnected (code=${code} reason=${reason})`,
       );
 
       if (isLoggedOut) {
+        // Terminal: usuário deslogou no celular ou WA invalidou a sessão.
+        // Limpa auth + marca canal disconnected + avisa frontend pra
+        // reescanear o QR.
         await this.auth?.clear();
         await this.markChannelDisconnected(reason);
-      } else {
-        // Pra outros disconnects, deixa marcado como 'error' temporário —
-        // o BaileysManager vai tentar reconectar no próximo poll cycle.
-        await this.markChannelError(reason);
+        void broadcastRealtime({
+          org_id: this.ctx.orgId,
+          event: 'whatsapp:disconnected',
+          payload: {
+            channel_id: this.ctx.channelId,
+            reason,
+            needs_reauth: true,
+          },
+        });
+        return;
       }
 
-      void broadcastRealtime({
-        org_id: this.ctx.orgId,
-        event: 'whatsapp:disconnected',
-        payload: {
-          channel_id: this.ctx.channelId,
-          reason,
-          needs_reauth: isLoggedOut,
-        },
-      });
-
-      this.sock = null;
+      // Transient (restartRequired=515 é o caso mais comum no primeiro
+      // pareamento; também: connectionLost, connectionClosed, timedOut).
+      // Baileys orienta a simplesmente reabrir o socket com o mesmo auth
+      // state. Não marcamos erro no DB nem notificamos frontend — pro
+      // usuário é reconexão silenciosa, o QR continua válido e/ou avança
+      // pra "open" na sequência.
+      if (this.terminated) return;
+      // eslint-disable-next-line no-console
+      console.log(
+        `[baileys ${this.ctx.channelId}] auto-restart em 1s (transient disconnect)`,
+      );
+      setTimeout(() => {
+        if (this.terminated) return;
+        void this.start().catch((err) => {
+          // eslint-disable-next-line no-console
+          console.error(
+            `[baileys ${this.ctx.channelId}] auto-restart falhou:`,
+            err instanceof Error ? err.message : err,
+          );
+        });
+      }, 1000);
     }
   }
 
