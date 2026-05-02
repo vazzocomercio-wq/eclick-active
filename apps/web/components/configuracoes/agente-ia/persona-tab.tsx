@@ -434,6 +434,14 @@ function ListEditor({
   onChange: (v: string[]) => void;
 }) {
   const [draft, setDraft] = useState('');
+
+  function commitDraft() {
+    const trimmed = draft.trim();
+    if (!trimmed) return;
+    onChange([...values, trimmed]);
+    setDraft('');
+  }
+
   return (
     <div className="flex flex-col gap-1.5">
       <Label>{label}</Label>
@@ -445,25 +453,21 @@ function ListEditor({
           onKeyDown={(e) => {
             if (e.key === 'Enter' && draft.trim()) {
               e.preventDefault();
-              onChange([...values, draft.trim()]);
-              setDraft('');
+              commitDraft();
             }
           }}
+          // Commit auto quando o input perde foco (ex: usuário clica em Salvar
+          // sem pressionar Enter primeiro). Sem isso, o texto digitado fica
+          // só no state local e o save vai com array vazio.
+          onBlur={commitDraft}
         />
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            if (draft.trim()) {
-              onChange([...values, draft.trim()]);
-              setDraft('');
-            }
-          }}
-        >
+        <Button type="button" variant="outline" size="sm" onClick={commitDraft}>
           <Plus className="h-3.5 w-3.5" />
         </Button>
       </div>
+      <span className="text-[10px] text-muted-foreground">
+        Pressione Enter ou clique em + para adicionar (também adiciona ao salvar).
+      </span>
       <div className="flex flex-wrap gap-1.5">
         {values.map((v, i) => (
           <span
