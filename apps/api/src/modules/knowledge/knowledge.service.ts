@@ -246,6 +246,62 @@ export class KnowledgeService {
   }
 
   // ────────────────────────────────────────────
+  // SEARCH WITH PRIORITY (skill-aware + intent boost) — Bloco F
+  // ────────────────────────────────────────────
+
+  async searchSemanticForSkill(
+    orgId: string,
+    query: string,
+    args: {
+      source_ids?: string[];
+      categories?: string[];
+      intent?: string | null;
+    },
+    limit = 5,
+  ): Promise<SemanticSearchHit[]> {
+    const hasSourceFilter = (args.source_ids?.length ?? 0) > 0;
+    const hasCategoryFilter = (args.categories?.length ?? 0) > 0;
+    const hasIntent = !!args.intent;
+
+    if (!hasSourceFilter && !hasCategoryFilter && !hasIntent) {
+      return this.searchSemantic(orgId, query, limit);
+    }
+
+    const candidates = await this.searchSemantic(orgId, query, Math.max(limit * 4, 20));
+    if (candidates.length === 0) return [];
+
+    let filtered = candidates;
+    if (hasSourceFilter || hasCategoryFilter) {
+      filtered = candidates.filter(
+        (h) =>
+          (args.source_ids?.includes(h.id) ?? false) ||
+          (args.categories?.includes(h.category) ?? false),
+      );
+    }
+
+    if (hasIntent && args.intent && filtered.length > 0) {
+      const docIds = filtered.map((h) => h.id);
+      const { data } = await this.supabase.adminClient
+        .from('knowledge_documents')
+        .select('id, priority_intents')
+        .eq('org_id', orgId)
+        .in('id', docIds);
+      const priorityMap = new Map<string, string[]>();
+      for (const row of (data ?? []) as Array<{ id: string; priority_intents: string[] }>) {
+        priorityMap.set(row.id, row.priority_intents ?? []);
+      }
+      filtered.sort((a, b) => {
+        const aPri = (priorityMap.get(a.id) ?? []).includes(args.intent!) ? 1 : 0;
+        const bPri = (priorityMap.get(b.id) ?? []).includes(args.intent!) ? 1 : 0;
+        if (aPri !== bPri) return bPri - aPri;
+        return b.similarity - a.similarity;
+      });
+    }
+
+    return filtered.slice(0, limit);
+  }
+
+  // ────────────────────────────────────────────
   // helpers
   // ────────────────────────────────────────────
 

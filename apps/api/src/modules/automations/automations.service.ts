@@ -441,9 +441,142 @@ Gere o JSON da automação seguindo o schema. Use textos PT-BR claros e específ
         return this.actionNotifyAgent(action, ctx);
       case 'wait':
         return this.actionWait(action);
+      case 'condition':
+        return this.actionCondition(action, ctx);
       default:
         throw new Error(`Action type desconhecido: ${(action as { type: string }).type}`);
     }
+  }
+
+  // ────────────────────────────────────────────
+  // ACTION: condition (Bloco F — if/else)
+  // ────────────────────────────────────────────
+
+  private async actionCondition(
+    action: Extract<AutomationAction, { type: 'condition' }>,
+    ctx: ExecuteContext,
+  ): Promise<Record<string, unknown>> {
+    const result = await this.evaluateCondition(action, ctx);
+    const branch = result ? action.then_actions : action.else_actions ?? [];
+    const branchLogs: Array<{ type: string; status: string; error?: string }> = [];
+
+    for (const sub of branch) {
+      try {
+        await this.runAction(sub, ctx);
+        branchLogs.push({ type: sub.type, status: 'ok' });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        branchLogs.push({ type: sub.type, status: 'failed', error: msg });
+      }
+    }
+
+    return {
+      check: action.check,
+      result,
+      branch: result ? 'then' : 'else',
+      sub_actions: branchLogs,
+    };
+  }
+
+  private async evaluateCondition(
+    action: Extract<AutomationAction, { type: 'condition' }>,
+    ctx: ExecuteContext,
+  ): Promise<boolean> {
+    switch (action.check) {
+      case 'contact_has_email': {
+        if (!ctx.contactId) return false;
+        const { data } = await this.supabase.adminClient
+          .from('contacts')
+          .select('email')
+          .eq('org_id', ctx.orgId)
+          .eq('id', ctx.contactId)
+          .maybeSingle();
+        return !!(data as { email: string | null } | null)?.email;
+      }
+      case 'deal_value_above': {
+        if (!ctx.dealId) return false;
+        const threshold = Number(action.value) || 0;
+        const { data } = await this.supabase.adminClient
+          .from('deals')
+          .select('value')
+          .eq('org_id', ctx.orgId)
+          .eq('id', ctx.dealId)
+          .maybeSingle();
+        const v = Number((data as { value: number | null } | null)?.value ?? 0);
+        return v > threshold;
+      }
+      case 'field_equals': {
+        if (!action.field) return false;
+        const value = await this.resolveFieldValue(action.field, ctx);
+        return String(value ?? '') === String(action.value ?? '');
+      }
+      case 'field_empty': {
+        if (!action.field) return false;
+        const value = await this.resolveFieldValue(action.field, ctx);
+        return value === null || value === undefined || value === '';
+      }
+      case 'time_elapsed_min': {
+        // Tempo desde a última mensagem da conversa em minutos
+        if (!ctx.conversationId) return false;
+        const minutes = Number(action.value) || 0;
+        const { data } = await this.supabase.adminClient
+          .from('conversations')
+          .select('last_message_at')
+          .eq('org_id', ctx.orgId)
+          .eq('id', ctx.conversationId)
+          .maybeSingle();
+        const last = (data as { last_message_at: string | null } | null)?.last_message_at ?? null;
+        if (!last) return false;
+        const elapsedMin = (Date.now() - new Date(last).getTime()) / 60_000;
+        return elapsedMin > minutes;
+      }
+      case 'ai_confidence_above':
+        // Sem ai_confidence no contexto atual; default false (TODO: passar via ctx)
+        return false;
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * Resolve um caminho como "contact.temperature", "deal.value", "conversation.status"
+   * lendo do banco. Retorna string|null|number etc. ou undefined se não resolveu.
+   */
+  private async resolveFieldValue(
+    path: string,
+    ctx: ExecuteContext,
+  ): Promise<unknown> {
+    const [entity, field] = path.split('.');
+    if (!entity || !field) return undefined;
+
+    if (entity === 'contact' && ctx.contactId) {
+      const { data } = await this.supabase.adminClient
+        .from('contacts')
+        .select(field)
+        .eq('org_id', ctx.orgId)
+        .eq('id', ctx.contactId)
+        .maybeSingle();
+      return (data as Record<string, unknown> | null)?.[field];
+    }
+    if (entity === 'deal' && ctx.dealId) {
+      const { data } = await this.supabase.adminClient
+        .from('deals')
+        .select(field)
+        .eq('org_id', ctx.orgId)
+        .eq('id', ctx.dealId)
+        .maybeSingle();
+      return (data as Record<string, unknown> | null)?.[field];
+    }
+    if (entity === 'conversation' && ctx.conversationId) {
+      const { data } = await this.supabase.adminClient
+        .from('conversations')
+        .select(field)
+        .eq('org_id', ctx.orgId)
+        .eq('id', ctx.conversationId)
+        .maybeSingle();
+      return (data as Record<string, unknown> | null)?.[field];
+    }
+    return undefined;
   }
 
   // ────────────────────────────────────────────

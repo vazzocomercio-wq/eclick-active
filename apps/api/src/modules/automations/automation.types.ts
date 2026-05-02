@@ -54,7 +54,8 @@ export type AutomationActionType =
   | 'update_contact'
   | 'assign_conversation'
   | 'notify_agent'
-  | 'wait';
+  | 'wait'
+  | 'condition';
 
 export type AutomationAction =
   | SendMessageAction
@@ -63,7 +64,34 @@ export type AutomationAction =
   | UpdateContactAction
   | AssignConversationAction
   | NotifyAgentAction
-  | WaitAction;
+  | WaitAction
+  | ConditionAction;
+
+// ──────────────────────────────────────────────────────────
+// Condition action (Bloco F — ramificação if/else)
+// ──────────────────────────────────────────────────────────
+
+export type ConditionCheck =
+  | 'field_equals'
+  | 'field_empty'
+  | 'time_elapsed_min'
+  | 'ai_confidence_above'
+  | 'contact_has_email'
+  | 'deal_value_above';
+
+export interface ConditionAction {
+  type: 'condition';
+  /** Tipo da check */
+  check: ConditionCheck;
+  /** Valor de comparação (depende do check) */
+  value?: string | number | boolean;
+  /** Pra `field_equals` / `field_empty` — caminho do campo (ex: "contact.temperature") */
+  field?: string;
+  /** Ações se a condição for verdadeira */
+  then_actions: AutomationAction[];
+  /** Ações se a condição for falsa */
+  else_actions?: AutomationAction[];
+}
 
 export interface SendMessageAction {
   type: 'send_message';

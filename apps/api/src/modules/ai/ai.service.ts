@@ -9,7 +9,9 @@ import { SupabaseService } from '../../common/supabase/supabase.service';
 import { EventsGateway } from '../../gateways/events.gateway';
 import { KnowledgeService } from '../knowledge/knowledge.service';
 import { AiPersonaService } from '../ai-persona/ai-persona.service';
+import { AiSkillsService } from '../ai-skills/ai-skills.service';
 import { AnthropicClient } from './anthropic.client';
+import type { AiSkill } from '@eclick-active/shared';
 import {
   CLASSIFY_SCHEMA,
   CLASSIFY_SYSTEM_PROMPT,
@@ -36,6 +38,7 @@ export class AiService {
     private readonly events: EventsGateway,
     private readonly knowledge: KnowledgeService,
     private readonly persona: AiPersonaService,
+    private readonly skills: AiSkillsService,
   ) {}
 
   // ──────────────────────────────────────────────────────────
@@ -110,15 +113,47 @@ export class AiService {
       ? await this.knowledge.searchSemantic(orgId, knowledgeQuery, 3)
       : [];
 
-    const userPrompt = this.buildSuggestPrompt(contact, recent, knowledgeHits);
-
-    // Persona da org (default) — prepended ao system prompt pra dar identidade.
-    // SUGGEST_SYSTEM_PROMPT permanece como instrução estrutural (formato JSON,
-    // não inventar dados, etc.) — vem DEPOIS da persona.
+    // Resolve skill ativo pra essa mensagem (Bloco F)
     const personaDefault = await this.persona.getDefault(orgId).catch(() => null);
-    const systemPrompt = personaDefault
-      ? `${this.persona.buildSystemPrompt(personaDefault)}\n\n---\n\n${SUGGEST_SYSTEM_PROMPT}`
-      : SUGGEST_SYSTEM_PROMPT;
+    const lastInbound = [...recent].reverse().find((m) => m.direction === 'inbound') ?? null;
+    let activeSkill: AiSkill | null = null;
+    if (personaDefault && lastInbound) {
+      activeSkill = await this.skills
+        .resolveSkillForMessage({
+          orgId,
+          persona: personaDefault,
+          message: {
+            ai_intent: lastInbound.ai_intent,
+            ai_sentiment: lastInbound.ai_sentiment,
+            plain_text: lastInbound.plain_text,
+          },
+          contact: contact ? { temperature: contact.temperature } : null,
+        })
+        .catch(() => null);
+    }
+
+    // Se há skill, busca KB com prioridade de docs específicos do skill
+    const skillKnowledgeHits =
+      activeSkill && (activeSkill.knowledge_source_ids.length > 0 || activeSkill.knowledge_categories.length > 0)
+        ? await this.knowledge
+            .searchSemanticForSkill(orgId, knowledgeQuery, {
+              source_ids: activeSkill.knowledge_source_ids,
+              categories: activeSkill.knowledge_categories,
+              intent: lastInbound?.ai_intent ?? null,
+            })
+            .catch(() => knowledgeHits)
+        : knowledgeHits;
+
+    const userPrompt = this.buildSuggestPrompt(contact, recent, skillKnowledgeHits);
+
+    // System prompt: persona + skill (se houver) + SUGGEST_SYSTEM_PROMPT
+    const parts: string[] = [];
+    if (personaDefault) parts.push(this.persona.buildSystemPrompt(personaDefault));
+    if (activeSkill) {
+      parts.push(`SKILL ATIVO: ${activeSkill.name}\n${activeSkill.description}\n\n${activeSkill.system_prompt}`);
+    }
+    parts.push(SUGGEST_SYSTEM_PROMPT);
+    const systemPrompt = parts.join('\n\n---\n\n');
 
     const { data: suggestion, interaction_id } = await this.anthropic.complete<SuggestionResult>({
       interaction_type: 'suggest_response',
@@ -132,6 +167,12 @@ export class AiService {
         contact_id: conversation.contact_id ?? undefined,
       },
     });
+
+    // Stats: registra execução do skill
+    if (activeSkill) {
+      const conf = Math.max(0, Math.min(1, Number(suggestion.confidence) || 0));
+      void this.skills.recordExecution(activeSkill.id, conf).catch(() => {});
+    }
 
     // Clamp confidence em [0, 1] — schema não permite minimum/maximum
     const confidence = Math.max(0, Math.min(1, Number(suggestion.confidence) || 0));
