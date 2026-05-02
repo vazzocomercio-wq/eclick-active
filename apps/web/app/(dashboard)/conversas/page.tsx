@@ -2,12 +2,16 @@
 
 import { useCallback, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
-import type { ConversationDetail } from '@eclick-active/shared';
+import { toast } from 'sonner';
+import type { Contact, ConversationDetail } from '@eclick-active/shared';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { useInbox } from '@/hooks/use-inbox';
 import { InboxList } from '@/components/inbox/inbox-list';
-import { ChatView } from '@/components/inbox/chat-view';
+import { ChatPanel } from '@/components/chat/chat-panel';
 import { ContactPanel } from '@/components/inbox/contact-panel';
+import { ContactDetailSheet } from '@/components/contacts/contact-detail-sheet';
+import { contactsApi } from '@/lib/api/contacts';
+import { ApiError } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 
 export default function ConversasPage() {
@@ -16,12 +20,35 @@ export default function ConversasPage() {
   const [panelOpen, setPanelOpen] = useState(true);
   const [activeDetail, setActiveDetail] = useState<ConversationDetail | null>(null);
 
+  // Contact Detail Sheet — aberto via "Ver perfil completo" no painel lateral
+  const [contactSheet, setContactSheet] = useState<Contact | null>(null);
+  const [contactSheetOpen, setContactSheetOpen] = useState(false);
+
   const handleSelect = useCallback((id: string) => {
     setSelectedId(id);
   }, []);
 
   const handleConversationLoad = useCallback((c: ConversationDetail) => {
     setActiveDetail(c);
+  }, []);
+
+  // Abre o ContactDetailSheet completo. Faz fetch primeiro pra garantir
+  // shape Contact completo (o ContactPanel só tem subset via join).
+  const handleOpenFullProfile = useCallback(async (contactId: string) => {
+    try {
+      const contact = await contactsApi.get(contactId);
+      setContactSheet(contact);
+      setContactSheetOpen(true);
+    } catch (err) {
+      toast.error('Falha ao abrir perfil do contato', {
+        description:
+          err instanceof ApiError
+            ? `${err.status}: ${err.message}`
+            : err instanceof Error
+              ? err.message
+              : 'Erro desconhecido',
+      });
+    }
   }, []);
 
   return (
@@ -61,7 +88,7 @@ export default function ConversasPage() {
 
           {/* COLUNA 2 — Chat */}
           <main className="flex flex-1 flex-col min-w-0">
-            <ChatView
+            <ChatPanel
               conversationId={selectedId}
               panelOpen={panelOpen}
               onTogglePanel={() => setPanelOpen((v) => !v)}
@@ -79,9 +106,20 @@ export default function ConversasPage() {
             )}
             aria-hidden={!panelOpen}
           >
-            <ContactPanel conversation={activeDetail} loading={false} />
+            <ContactPanel
+              conversation={activeDetail}
+              loading={false}
+              onOpenFullProfile={handleOpenFullProfile}
+            />
           </aside>
         </div>
+
+        {/* Contact Detail Sheet completo (overlay) */}
+        <ContactDetailSheet
+          contact={contactSheet}
+          open={contactSheetOpen}
+          onOpenChange={setContactSheetOpen}
+        />
       </div>
     </TooltipProvider>
   );

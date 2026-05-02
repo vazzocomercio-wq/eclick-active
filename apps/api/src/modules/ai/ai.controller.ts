@@ -1,10 +1,12 @@
 import {
+  Body,
   Controller,
   Get,
   HttpCode,
   HttpStatus,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -13,6 +15,8 @@ import { AuthGuard } from '../../common/auth/auth.guard';
 import { CurrentUser } from '../../common/auth/current-user.decorator';
 import type { AuthUser } from '../../common/auth/auth.types';
 import { AiService } from './ai.service';
+import { FeedbackDto } from './dto/feedback.dto';
+import { FillFieldDto } from './dto/fill-field.dto';
 import type {
   ClassificationResult,
   DealScoreResult,
@@ -42,12 +46,11 @@ export class AiController {
   // POST /ai/summarize/:conversationId — resume e atualiza ai_summary
   @Post('summarize/:conversationId')
   @HttpCode(HttpStatus.OK)
-  async summarize(
+  summarize(
     @CurrentUser() user: AuthUser,
     @Param('conversationId', ParseUUIDPipe) conversationId: string,
-  ): Promise<{ summary: string }> {
-    const summary = await this.service.summarizeConversation(user.org_id, conversationId);
-    return { summary };
+  ): Promise<{ summary: string; ai_interaction_id: string | null }> {
+    return this.service.summarizeConversation(user.org_id, conversationId);
   }
 
   // GET /ai/classification/:messageId — retorna classificação persistida
@@ -116,5 +119,62 @@ export class AiController {
     generated_at: string | null;
   }> {
     return this.service.getCachedFunnelAnalysis(user.org_id, pipelineId);
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // Feedback do usuário em respostas de IA (👍 / 👎)
+  // ──────────────────────────────────────────────────────────
+
+  // PATCH /ai/interactions/:id/feedback
+  @Patch('interactions/:id/feedback')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async feedback(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: FeedbackDto,
+  ): Promise<void> {
+    await this.service.submitInteractionFeedback(
+      user.org_id,
+      id,
+      dto.feedback,
+      dto.comment ?? null,
+    );
+  }
+
+  // POST /ai/fill-field — gera conteúdo pra um campo de texto
+  @Post('fill-field')
+  @HttpCode(HttpStatus.OK)
+  fillField(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: FillFieldDto,
+  ): Promise<{ value: string; ai_interaction_id: string | null }> {
+    return this.service.fillField({
+      orgId: user.org_id,
+      entityType: dto.entity_type,
+      entityId: dto.entity_id,
+      fieldName: dto.field_name,
+      ...(dto.current_value !== undefined ? { currentValue: dto.current_value } : {}),
+      ...(dto.hint !== undefined ? { hint: dto.hint } : {}),
+    });
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // Gaps & perguntas sem resposta (PARTE 6)
+  // ──────────────────────────────────────────────────────────
+
+  // GET /ai/unanswered/:conversationId
+  @Get('unanswered/:conversationId')
+  unanswered(
+    @CurrentUser() user: AuthUser,
+    @Param('conversationId', ParseUUIDPipe) conversationId: string,
+  ): Promise<
+    Array<{
+      message_id: string;
+      created_at: string;
+      text: string;
+      is_question: boolean;
+    }>
+  > {
+    return this.service.getUnansweredQuestions(user.org_id, conversationId);
   }
 }

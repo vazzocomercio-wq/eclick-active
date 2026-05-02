@@ -6,12 +6,14 @@ import type { Contact, ContactTemperature } from '@eclick-active/shared';
 import { Button } from '@/components/ui/button';
 import { useDebounce } from '@/lib/use-debounce';
 import { contactsApi } from '@/lib/api/contacts';
+import { pipelinesApi, type PipelineWithStages } from '@/lib/api/pipelines';
 import { ApiError } from '@/lib/api/client';
 import { ContactsFilters } from '@/components/contacts/contacts-filters';
 import { ContactsTable } from '@/components/contacts/contacts-table';
 import { Pagination } from '@/components/contacts/pagination';
 import { NewContactDialog } from '@/components/contacts/new-contact-dialog';
 import { ContactDetailSheet } from '@/components/contacts/contact-detail-sheet';
+import { DealDetailSheet } from '@/components/funis/deal-detail-sheet';
 
 const PAGE_SIZE = 25;
 
@@ -32,6 +34,28 @@ export default function ContatosPage() {
   const [selected, setSelected] = useState<Contact | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+
+  // Deal sheet aberto a partir do click num deal vinculado dentro do
+  // ContactDetailSheet. Carrega pipelines on-demand pra ter stages.
+  const [dealSheetId, setDealSheetId] = useState<string | null>(null);
+  const [dealSheetOpen, setDealSheetOpen] = useState(false);
+  const [pipelines, setPipelines] = useState<PipelineWithStages[] | null>(null);
+
+  useEffect(() => {
+    // Lazy load: só busca pipelines quando o user clica no primeiro deal
+    if (!dealSheetId || pipelines) return;
+    const ctrl = new AbortController();
+    void pipelinesApi
+      .list({}, ctrl.signal)
+      .then(setPipelines)
+      .catch(() => setPipelines([]));
+    return () => ctrl.abort();
+  }, [dealSheetId, pipelines]);
+
+  function handleOpenDeal(dealId: string) {
+    setDealSheetId(dealId);
+    setDealSheetOpen(true);
+  }
 
   // Reset pra página 1 quando filtros mudam
   useEffect(() => {
@@ -155,6 +179,28 @@ export default function ContatosPage() {
         contact={selected}
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
+        onChanged={() => void load()}
+        onOpenDeal={handleOpenDeal}
+      />
+
+      {/* Deal Detail Sheet — aberto via aba "Negócios" do contato.
+          Best-effort: passamos o pipeline default ou primeiro da lista pra
+          o dropdown de stages funcionar. Funciona perfeito quando a org
+          tem 1 pipeline ativo (caso comum). Múltiplos pipelines requerem
+          refator do DealDetailSheet pra carregar internamente — futuro. */}
+      <DealDetailSheet
+        dealId={dealSheetId}
+        pipeline={
+          pipelines && pipelines.length > 0
+            ? (pipelines.find((p) => p.is_default) ?? pipelines[0] ?? null)
+            : null
+        }
+        open={dealSheetOpen}
+        onOpenChange={(o) => {
+          setDealSheetOpen(o);
+          if (!o) setDealSheetId(null);
+        }}
+        onChanged={() => void load()}
       />
 
       {/* Modal de criação */}

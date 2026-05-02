@@ -33,6 +33,8 @@ interface CompleteResult<T> {
   input_tokens: number;
   output_tokens: number;
   latency_ms: number;
+  /** ID da row inserida em ai_interactions — null se a inserção falhou. */
+  interaction_id: string | null;
 }
 
 /**
@@ -137,7 +139,7 @@ export class AnthropicClient implements OnModuleInit {
     // Pra JSON é o JSON cru truncado; pra texto livre é o texto.
     const result_summary = textBlock.text.slice(0, 200);
 
-    await this.logInteraction({
+    const interaction_id = await this.logInteraction({
       org_id: input.org_id,
       interaction_type: input.interaction_type,
       input_tokens,
@@ -150,9 +152,10 @@ export class AnthropicClient implements OnModuleInit {
       this.logger.warn(
         `ai_interactions log failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`,
       );
+      return null;
     });
 
-    return { data, cost_usd, input_tokens, output_tokens, latency_ms };
+    return { data, cost_usd, input_tokens, output_tokens, latency_ms, interaction_id };
   }
 
   // ──────────────────────────────────────────────────────────
@@ -171,25 +174,30 @@ export class AnthropicClient implements OnModuleInit {
     user_id?: string;
     result_summary: string | null;
     metadata: Record<string, unknown>;
-  }): Promise<void> {
+  }): Promise<string | null> {
     const cost_usd = computeCost(input.input_tokens, input.output_tokens);
-    const { error } = await this.supabase.adminClient.from('ai_interactions').insert({
-      org_id: input.org_id,
-      interaction_type: input.interaction_type,
-      model: HAIKU_MODEL_ID,
-      provider: 'anthropic',
-      input_tokens: input.input_tokens,
-      output_tokens: input.output_tokens,
-      cost_usd,
-      latency_ms: input.latency_ms,
-      conversation_id: input.conversation_id ?? null,
-      contact_id: input.contact_id ?? null,
-      deal_id: input.deal_id ?? null,
-      user_id: input.user_id ?? null,
-      result_summary: input.result_summary,
-      metadata: input.metadata,
-    });
+    const { data, error } = await this.supabase.adminClient
+      .from('ai_interactions')
+      .insert({
+        org_id: input.org_id,
+        interaction_type: input.interaction_type,
+        model: HAIKU_MODEL_ID,
+        provider: 'anthropic',
+        input_tokens: input.input_tokens,
+        output_tokens: input.output_tokens,
+        cost_usd,
+        latency_ms: input.latency_ms,
+        conversation_id: input.conversation_id ?? null,
+        contact_id: input.contact_id ?? null,
+        deal_id: input.deal_id ?? null,
+        user_id: input.user_id ?? null,
+        result_summary: input.result_summary,
+        metadata: input.metadata,
+      })
+      .select('id')
+      .single();
     if (error) throw new Error(error.message);
+    return (data as { id: string } | null)?.id ?? null;
   }
 }
 

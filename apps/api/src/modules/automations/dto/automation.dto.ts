@@ -5,8 +5,10 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  IsUUID,
   Length,
   MaxLength,
+  ValidateIf,
 } from 'class-validator';
 import type { AutomationTriggerType } from '@eclick-active/shared';
 
@@ -49,6 +51,15 @@ export class CreateAutomationDto {
   @IsString()
   @MaxLength(2000)
   natural_language_source?: string;
+
+  /**
+   * Vincula a automação a um stage do funil. Quando setado, só dispara
+   * pra deals NESTE stage. Null = automação global. Migration 011.
+   */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsUUID()
+  stage_id?: string | null;
 }
 
 export class UpdateAutomationDto {
@@ -77,6 +88,11 @@ export class UpdateAutomationDto {
   @IsOptional()
   @IsBoolean()
   is_active?: boolean;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsUUID()
+  stage_id?: string | null;
 }
 
 export class GenerateAutomationDto {

@@ -29,6 +29,8 @@ export interface OrgSettings {
   has_erp_integration: boolean;
   member_count: number;
   channel_count: number;
+  /** Configurações livres da org (jsonb) — auto_create_deal, etc. */
+  settings: Record<string, unknown>;
 }
 
 export interface AiFeature {
@@ -54,6 +56,11 @@ const DEFAULT_FEATURES: AIFeatureName[] = [
   'train_agent',
 ];
 
+/**
+ * Settings da organização + features de IA. Custom field definitions
+ * vivem em src/modules/custom-fields/ (módulo separado a partir da PARTE 9
+ * do refactor de drawers).
+ */
 @Injectable()
 export class SettingsService {
   private readonly logger = new Logger(SettingsService.name);
@@ -68,7 +75,7 @@ export class SettingsService {
     const { data: org, error } = await this.supabase.adminClient
       .from('organizations')
       .select(
-        'id, name, slug, plan, trial_ends_at, max_users, max_channels, max_pipelines, max_automations, has_copilot, has_audit, has_erp_integration',
+        'id, name, slug, plan, trial_ends_at, max_users, max_channels, max_pipelines, max_automations, has_copilot, has_audit, has_erp_integration, settings',
       )
       .eq('id', orgId)
       .maybeSingle();
@@ -89,8 +96,12 @@ export class SettingsService {
         .neq('status', 'disconnected'),
     ]);
 
+    const orgRow = org as Omit<OrgSettings, 'member_count' | 'channel_count'> & {
+      settings: Record<string, unknown> | null;
+    };
     return {
-      ...(org as Omit<OrgSettings, 'member_count' | 'channel_count'>),
+      ...orgRow,
+      settings: orgRow.settings ?? {},
       member_count: memberResp.count ?? 0,
       channel_count: channelResp.count ?? 0,
     };
@@ -110,6 +121,19 @@ export class SettingsService {
     const patch: Record<string, unknown> = {};
     if (dto.name !== undefined) patch.name = dto.name.trim();
     if (dto.slug !== undefined) patch.slug = dto.slug.trim();
+
+    // Settings — merge raso com o jsonb existente. Frontend envia só as
+    // keys que mudou; manteremos as outras intactas.
+    if (dto.settings !== undefined) {
+      const { data: existing } = await this.supabase.adminClient
+        .from('organizations')
+        .select('settings')
+        .eq('id', orgId)
+        .maybeSingle();
+      const current = ((existing as { settings: Record<string, unknown> } | null)?.settings ??
+        {}) as Record<string, unknown>;
+      patch.settings = { ...current, ...dto.settings };
+    }
 
     if (Object.keys(patch).length === 0) {
       return this.getOrg(orgId);
@@ -153,7 +177,6 @@ export class SettingsService {
       new Map(),
     );
 
-    // Garante que todas as features padrão apareçam (mesmo sem registro ainda)
     return DEFAULT_FEATURES.map((name) => {
       const f = existing.get(name);
       if (f) return f;

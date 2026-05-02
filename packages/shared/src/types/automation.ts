@@ -117,6 +117,11 @@ export interface Automation {
   actions: AutomationAction[];
   /** Texto original em linguagem natural se a automação foi gerada pela IA */
   natural_language_source: string | null;
+  /**
+   * Funil Digital (migration 011): vincula automação a um stage. Quando
+   * setado, só dispara pra deals neste stage. Null = automação global.
+   */
+  stage_id: UUID | null;
   is_active: boolean;
   execution_count: number;
   last_executed_at: ISODateString | null;

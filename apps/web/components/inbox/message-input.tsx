@@ -12,6 +12,11 @@ interface MessageInputProps {
   /** Texto pré-preenchido (ex: vindo de sugestão IA) */
   prefill?: string;
   onPrefillConsumed?: () => void;
+  /**
+   * Modo compacto (drawers, painéis embutidos): sem botões emoji/anexo,
+   * padding reduzido, hint da combinação de teclas escondido.
+   */
+  compact?: boolean;
 }
 
 export function MessageInput({
@@ -19,6 +24,7 @@ export function MessageInput({
   disabled,
   prefill,
   onPrefillConsumed,
+  compact = false,
 }: MessageInputProps) {
   const [value, setValue] = useState('');
   const [isInternalNote, setIsInternalNote] = useState(false);
@@ -76,17 +82,19 @@ export function MessageInput({
   return (
     <div
       className={cn(
-        'border-t border-border p-3 transition-colors',
+        'border-t border-border transition-colors',
+        compact ? 'p-2' : 'p-3',
         isInternalNote && 'bg-yellow-500/5',
       )}
     >
       {/* Toggle nota interna */}
-      <div className="mb-2 flex items-center justify-between text-xs">
+      <div className={cn('flex items-center justify-between text-xs', compact ? 'mb-1.5' : 'mb-2')}>
         <button
           type="button"
           onClick={() => setIsInternalNote((v) => !v)}
           className={cn(
             'inline-flex items-center gap-1.5 rounded-md px-2 py-1 font-medium transition-colors',
+            compact && 'text-[11px]',
             isInternalNote
               ? 'bg-yellow-500/15 text-yellow-500'
               : 'text-muted-foreground hover:bg-muted hover:text-foreground',
@@ -95,18 +103,24 @@ export function MessageInput({
           <Lock className="h-3 w-3" />
           {isInternalNote ? 'Nota interna' : 'Mensagem'}
         </button>
-        <span className="text-[10px] text-muted-foreground">
-          Enter envia · Shift+Enter quebra linha
-        </span>
+        {!compact && (
+          <span className="text-[10px] text-muted-foreground">
+            Enter envia · Shift+Enter quebra linha
+          </span>
+        )}
       </div>
 
       <div className="flex items-end gap-2">
-        <Button variant="ghost" size="icon" aria-label="Emoji" disabled>
-          <Smile className="h-4 w-4 text-muted-foreground" />
-        </Button>
-        <Button variant="ghost" size="icon" aria-label="Anexar" disabled>
-          <Paperclip className="h-4 w-4 text-muted-foreground" />
-        </Button>
+        {!compact && (
+          <>
+            <Button variant="ghost" size="icon" aria-label="Emoji" disabled>
+              <Smile className="h-4 w-4 text-muted-foreground" />
+            </Button>
+            <Button variant="ghost" size="icon" aria-label="Anexar" disabled>
+              <Paperclip className="h-4 w-4 text-muted-foreground" />
+            </Button>
+          </>
+        )}
 
         <Textarea
           ref={taRef}
@@ -120,13 +134,17 @@ export function MessageInput({
           }
           rows={1}
           disabled={disabled || sending}
-          className="min-h-[40px] flex-1 resize-none"
+          className={cn(
+            'flex-1 resize-none',
+            compact ? 'min-h-[36px] text-[13px]' : 'min-h-[40px]',
+          )}
         />
 
         <Button
           type="button"
           onClick={submit}
           disabled={!value.trim() || sending || disabled}
+          size={compact ? 'sm' : 'default'}
           aria-label="Enviar"
         >
           {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}

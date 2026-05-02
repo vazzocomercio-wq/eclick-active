@@ -22,6 +22,15 @@ export class UpdateOrgDto {
     message: 'slug deve ter apenas letras minúsculas, números e hífens',
   })
   slug?: string;
+
+  /**
+   * Mergeado em `organizations.settings` (jsonb). Ex: shape conhecido
+   * `{ auto_create_deal: { enabled, pipeline_id, stage_id, ai_position } }`.
+   * Validação fina é responsabilidade do consumidor (lê com tolerância).
+   */
+  @IsOptional()
+  @IsObject()
+  settings?: Record<string, unknown>;
 }
 
 export class UpdateAiFeatureDto {

@@ -34,11 +34,26 @@ export interface ProcessQueryResult {
   cost_usd: number;
   latency_ms: number;
   assistant_message_id: string;
+  /** ID da row em ai_interactions — pra UI permitir 👍/👎. Null se log falhou. */
+  ai_interaction_id: string | null;
+}
+
+export type CopilotContextType = 'deal' | 'contact' | 'conversation' | 'general';
+
+export interface CopilotContext {
+  type: CopilotContextType;
+  /** Obrigatório quando type !== 'general'. */
+  id?: string;
 }
 
 export const copilotApi = {
-  send(message: string): Promise<ProcessQueryResult> {
-    return api.post<ProcessQueryResult>('/copilot/message', { message });
+  send(message: string, context?: CopilotContext): Promise<ProcessQueryResult> {
+    const payload: Record<string, unknown> = { message };
+    if (context && context.type !== 'general') {
+      payload.context_type = context.type;
+      if (context.id) payload.context_id = context.id;
+    }
+    return api.post<ProcessQueryResult>('/copilot/message', payload);
   },
   history(signal?: AbortSignal): Promise<CopilotMessageRecord[]> {
     return api.get<CopilotMessageRecord[]>('/copilot/history', { signal });

@@ -54,6 +54,8 @@ export interface ProcessQueryResult {
   latency_ms: number;
   /** ID do registro assistant criado em copilot_messages. */
   assistant_message_id: string;
+  /** ID da row em ai_interactions — pra UI permitir feedback 👍/👎. Null se log falhou. */
+  ai_interaction_id: string | null;
 }
 
 // ──────────────────────────────────────────────────────────
@@ -127,10 +129,16 @@ export class CopilotService implements OnModuleInit {
     orgId: string,
     userId: string,
     userMessage: string,
+    context?: { type?: CopilotContext['type']; id?: string },
   ): Promise<ProcessQueryResult> {
     const start = performance.now();
 
-    // 1. Persiste user message imediatamente (idempotência via select-after)
+    // 1. Persiste user message imediatamente (idempotência via select-after).
+    //    O contexto NÃO entra em `content` — apenas em `metadata` pra trace.
+    const userMetadata =
+      context?.type && context.type !== 'general'
+        ? { context_type: context.type, context_id: context.id ?? null }
+        : {};
     await this.persistMessage({
       orgId,
       userId,
@@ -138,6 +146,7 @@ export class CopilotService implements OnModuleInit {
       content: userMessage,
       toolCalls: [],
       costUsd: 0,
+      metadata: userMetadata,
     });
 
     // 2. Carrega histórico (já inclui a user message recém-persistida)
@@ -149,26 +158,29 @@ export class CopilotService implements OnModuleInit {
       content: h.content,
     }));
 
+    // 3a. Se houver contexto pra esse turn, busca a entidade e ANTEPÕE um
+    //     preâmbulo "[CONTEXTO ATIVO: ...]" à última user message. Isso
+    //     mantém o histórico persistido limpo e dá ao modelo a referência
+    //     pra interpretar a pergunta sem ambiguidade.
+    if (context?.type && context.type !== 'general' && context.id) {
+      const summary = await this.loadContextSummary(orgId, context.type, context.id);
+      const last = messages[messages.length - 1];
+      if (summary && last && last.role === 'user' && typeof last.content === 'string') {
+        messages[messages.length - 1] = {
+          role: 'user',
+          content: `[CONTEXTO ATIVO: ${summary}]\n\n${last.content}`,
+        };
+      }
+    }
+
     // 4. Tool runner loop
     const ctx: ToolContext = { orgId, userId };
     const result = await this.runToolLoop(messages, ctx);
 
-    // 5. Persiste assistant message
-    const assistant = await this.persistMessage({
-      orgId,
-      userId,
-      role: 'assistant',
-      content: result.reply,
-      toolCalls: result.toolCalls,
-      costUsd: result.costUsd,
-      metadata: {
-        latency_ms: Math.round(performance.now() - start),
-        iterations: result.iterations,
-      },
-    });
-
-    // 6. Loga em ai_interactions (audit). Não bloqueia caminho feliz.
-    await this.logAiInteraction({
+    // 5. Loga ai_interactions ANTES de persistir o assistant message — assim
+    //    o id da interação entra no metadata do copilot_messages e o
+    //    histórico recarregado consegue exibir 👍/👎 nas mensagens passadas.
+    const aiInteractionId = await this.logAiInteraction({
       orgId,
       userId,
       inputTokens: result.totalInputTokens,
@@ -179,6 +191,22 @@ export class CopilotService implements OnModuleInit {
       this.logger.warn(
         `ai_interactions log failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`,
       );
+      return null;
+    });
+
+    // 6. Persiste assistant message com ai_interaction_id no metadata
+    const assistant = await this.persistMessage({
+      orgId,
+      userId,
+      role: 'assistant',
+      content: result.reply,
+      toolCalls: result.toolCalls,
+      costUsd: result.costUsd,
+      metadata: {
+        latency_ms: Math.round(performance.now() - start),
+        iterations: result.iterations,
+        ...(aiInteractionId ? { ai_interaction_id: aiInteractionId } : {}),
+      },
     });
 
     return {
@@ -187,6 +215,7 @@ export class CopilotService implements OnModuleInit {
       cost_usd: result.costUsd,
       latency_ms: Math.round(performance.now() - start),
       assistant_message_id: assistant.id,
+      ai_interaction_id: aiInteractionId,
     };
   }
 
@@ -857,6 +886,124 @@ export class CopilotService implements OnModuleInit {
   }
 
   // ────────────────────────────────────────────
+  // Contexto contextual (deal/contact/conversation)
+  // ────────────────────────────────────────────
+
+  /**
+   * Resolve uma entidade pelo type+id e retorna uma frase resumindo o seu
+   * estado atual — pra dar ao modelo o contexto certo sem ele precisar
+   * chamar tool. Retorna `null` se não encontrar (o turn segue sem contexto).
+   */
+  private async loadContextSummary(
+    orgId: string,
+    type: 'deal' | 'contact' | 'conversation',
+    id: string,
+  ): Promise<string | null> {
+    if (type === 'deal') {
+      const { data } = await this.supabase.adminClient
+        .from('deals')
+        .select(
+          'id, title, value, currency, ai_score, ai_risk, ai_close_probability, ai_next_action, contact:contacts(name, temperature), stage:pipeline_stages(name)',
+        )
+        .eq('org_id', orgId)
+        .eq('id', id)
+        .maybeSingle();
+      if (!data) return null;
+      const d = data as {
+        title: string;
+        value: number | null;
+        currency: string;
+        ai_score: number;
+        ai_risk: string | null;
+        ai_close_probability: number | null;
+        contact: { name: string | null; temperature: string | null } | Array<{ name: string | null; temperature: string | null }> | null;
+        stage: { name: string } | Array<{ name: string }> | null;
+      };
+      const contact = Array.isArray(d.contact) ? d.contact[0] ?? null : d.contact;
+      const stage = Array.isArray(d.stage) ? d.stage[0] ?? null : d.stage;
+      const valueStr =
+        d.value !== null && d.value > 0
+          ? new Intl.NumberFormat('pt-BR', {
+              style: 'currency',
+              currency: d.currency || 'BRL',
+              maximumFractionDigits: 0,
+            }).format(d.value)
+          : null;
+      const parts = [
+        `deal "${d.title}"`,
+        contact?.name ? `cliente ${contact.name}` : null,
+        valueStr,
+        stage?.name ? `stage "${stage.name}"` : null,
+        contact?.temperature ? `temperatura ${contact.temperature}` : null,
+        d.ai_risk ? `risco ${d.ai_risk}` : null,
+        typeof d.ai_score === 'number' ? `score ${d.ai_score}/100` : null,
+        typeof d.ai_close_probability === 'number'
+          ? `prob fechamento ${d.ai_close_probability}%`
+          : null,
+      ].filter(Boolean);
+      return `Estou analisando o ${parts.join(', ')}.`;
+    }
+
+    if (type === 'contact') {
+      const { data } = await this.supabase.adminClient
+        .from('contacts')
+        .select('name, phone, temperature, score, ai_summary, tags')
+        .eq('org_id', orgId)
+        .eq('id', id)
+        .maybeSingle();
+      if (!data) return null;
+      const c = data as {
+        name: string | null;
+        phone: string | null;
+        temperature: string | null;
+        score: number;
+        ai_summary: string | null;
+        tags: string[];
+      };
+      const parts = [
+        `contato ${c.name ?? c.phone ?? '(sem nome)'}`,
+        typeof c.score === 'number' ? `score ${c.score}` : null,
+        c.temperature ? `temperatura ${c.temperature}` : null,
+        c.tags && c.tags.length > 0 ? `tags ${c.tags.slice(0, 3).join(', ')}` : null,
+      ].filter(Boolean);
+      const head = `Estou analisando o ${parts.join(', ')}.`;
+      return c.ai_summary ? `${head} Resumo IA: ${c.ai_summary}` : head;
+    }
+
+    if (type === 'conversation') {
+      const { data } = await this.supabase.adminClient
+        .from('conversations')
+        .select(
+          'status, channel_type, ai_intent, ai_temperature, ai_summary, contacts:contact_id(name, phone)',
+        )
+        .eq('org_id', orgId)
+        .eq('id', id)
+        .maybeSingle();
+      if (!data) return null;
+      const c = data as {
+        status: string;
+        channel_type: string;
+        ai_intent: string | null;
+        ai_temperature: string | null;
+        ai_summary: string | null;
+        contacts: { name: string | null; phone: string | null } | Array<{ name: string | null; phone: string | null }> | null;
+      };
+      const contact = Array.isArray(c.contacts) ? c.contacts[0] ?? null : c.contacts;
+      const parts = [
+        `conversa via ${c.channel_type}`,
+        contact?.name ? `com ${contact.name}` : contact?.phone ? `com ${contact.phone}` : null,
+        c.ai_temperature ? `temperatura ${c.ai_temperature}` : null,
+        c.ai_intent ? `intent ${c.ai_intent}` : null,
+        `status ${c.status}`,
+      ].filter(Boolean);
+      const head = `Estou analisando a ${parts.join(', ')}.`;
+      return c.ai_summary ? `${head} Resumo IA: ${c.ai_summary}` : head;
+    }
+
+    return null;
+  }
+
+  // ────────────────────────────────────────────
   // Persistência
   // ────────────────────────────────────────────
 
@@ -896,22 +1043,27 @@ export class CopilotService implements OnModuleInit {
     outputTokens: number;
     latencyMs: number;
     summary: string;
-  }): Promise<void> {
+  }): Promise<string | null> {
     const cost = computeSonnetCost(args.inputTokens, args.outputTokens);
-    const { error } = await this.supabase.adminClient.from('ai_interactions').insert({
-      org_id: args.orgId,
-      interaction_type: 'copilot',
-      model: SONNET_MODEL_ID,
-      provider: 'anthropic',
-      input_tokens: args.inputTokens,
-      output_tokens: args.outputTokens,
-      cost_usd: cost,
-      latency_ms: args.latencyMs,
-      user_id: args.userId,
-      result_summary: args.summary,
-      metadata: {},
-    });
+    const { data, error } = await this.supabase.adminClient
+      .from('ai_interactions')
+      .insert({
+        org_id: args.orgId,
+        interaction_type: 'copilot',
+        model: SONNET_MODEL_ID,
+        provider: 'anthropic',
+        input_tokens: args.inputTokens,
+        output_tokens: args.outputTokens,
+        cost_usd: cost,
+        latency_ms: args.latencyMs,
+        user_id: args.userId,
+        result_summary: args.summary,
+        metadata: {},
+      })
+      .select('id')
+      .single();
     if (error) throw new Error(error.message);
+    return (data as { id: string } | null)?.id ?? null;
   }
 }
 
@@ -923,6 +1075,11 @@ interface ToolContext {
   orgId: string;
   userId: string;
 }
+
+export type CopilotContext = {
+  type: 'deal' | 'contact' | 'conversation' | 'general';
+  id?: string;
+};
 
 function clampLimit(value: number, defaultValue: number, max: number): number {
   if (!Number.isFinite(value) || value <= 0) return defaultValue;

@@ -101,4 +101,52 @@ export const tasksApi = {
   overdue(signal?: AbortSignal): Promise<TaskRow[]> {
     return api.get<TaskRow[]>('/tasks/overdue', { signal });
   },
+  calendar(
+    params: CalendarTasksParams,
+    signal?: AbortSignal,
+  ): Promise<CalendarDay[]> {
+    const query: Record<string, string | string[] | undefined> = {
+      from: params.from,
+      to: params.to,
+      user_id: params.user_id,
+    };
+    if (params.task_type && params.task_type.length > 0) {
+      query.task_type = params.task_type;
+    }
+    return api.get<CalendarDay[]>('/tasks/calendar', { query, signal });
+  },
 };
+
+// ──────────────────────────────────────────────────────────
+// Calendar
+// ──────────────────────────────────────────────────────────
+
+export interface CalendarTasksParams {
+  /** ISO 8601 (date ou datetime) */
+  from: string;
+  /** ISO 8601 (date ou datetime) */
+  to: string;
+  user_id?: string;
+  task_type?: TaskType[];
+}
+
+export interface CalendarTask {
+  id: string;
+  title: string;
+  task_type: TaskType;
+  priority: TaskPriority;
+  status: TaskStatus;
+  due_date: string;
+  contact_id: string | null;
+  contact_name: string | null;
+  deal_id: string | null;
+  deal_title: string | null;
+  assigned_to: string;
+  assigned_to_name: string | null;
+}
+
+export interface CalendarDay {
+  /** YYYY-MM-DD */
+  date: string;
+  tasks: CalendarTask[];
+}

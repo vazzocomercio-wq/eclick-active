@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   closestCorners,
   DndContext,
@@ -14,6 +14,8 @@ import {
 } from '@dnd-kit/core';
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { AlertTriangle, Inbox } from 'lucide-react';
+import { toast } from 'sonner';
+import { createClient } from '@/lib/supabase/client';
 import type {
   BoardDealItem,
   BoardFilters,
@@ -24,6 +26,7 @@ import { pipelinesApi } from '@/lib/api/pipelines';
 import { dealsApi } from '@/lib/api/deals';
 import { ApiError } from '@/lib/api/client';
 import { useBoard } from '@/hooks/use-board';
+import { useEvents } from '@/hooks/use-events';
 import { BoardHeader } from '@/components/funis/board-header';
 import { BoardColumn } from '@/components/funis/board-column';
 import { BoardFiltersBar } from '@/components/funis/board-filters';
@@ -134,6 +137,46 @@ export default function FunisPage() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, []);
+
+  // ── Carrega user atual pra filtrar próprias ações em toasts WS ──
+  const currentUserIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    let supabase: ReturnType<typeof createClient>;
+    try {
+      supabase = createClient();
+    } catch {
+      return;
+    }
+    void supabase.auth.getUser().then(({ data }) => {
+      currentUserIdRef.current = data.user?.id ?? null;
+    });
+  }, []);
+
+  // ── Toasts em tempo real: outros agentes movendo / IA criando deals ──
+  useEvents({
+    onDealMoved: (payload) => {
+      // Não toasta as próprias ações — só de outros agentes
+      if (payload.moved_by_user_id === currentUserIdRef.current) return;
+      const title = payload.deal_title ?? 'Negócio';
+      const stage = payload.to_stage_name ?? 'outra etapa';
+      if (payload.closed_state === 'won') {
+        toast.success(`🏆 ${title} marcado como ganho!`);
+      } else if (payload.closed_state === 'lost') {
+        toast(`📉 ${title} marcado como perdido`);
+      } else {
+        toast(`Alguém moveu "${title}" → ${stage}`);
+      }
+      // Reload otimista — a row já mudou no DB
+      void refetch();
+    },
+    onDealCreated: (payload) => {
+      const tags = payload.deal.tags ?? [];
+      if (tags.includes('lead-automatico')) {
+        toast.info(`✨ Novo lead automático: ${payload.deal.title}`);
+        void refetch();
+      }
+    },
+  });
 
   function openCreate(stageId?: string) {
     setNewDealStageId(stageId);
@@ -300,8 +343,9 @@ export default function FunisPage() {
                 <BoardColumn
                   key={stage.id}
                   stage={stage}
-                  onAddDeal={(sid) => openCreate(sid)}
+                  pipelineId={selectedId!}
                   onSelectDeal={openDeal}
+                  onChanged={() => void refetch()}
                 />
               ))}
             </div>

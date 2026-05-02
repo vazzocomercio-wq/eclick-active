@@ -10,6 +10,7 @@ const STATUSES: ConversationStatus[] = ['open', 'pending', 'snoozed', 'resolved'
 const PRIORITIES: ConversationPriority[] = ['low', 'normal', 'high', 'urgent'];
 const CHANNEL_TYPES: ChannelType[] = [
   'whatsapp',
+  'whatsapp_free',
   'instagram',
   'messenger',
   'telegram',
@@ -56,4 +57,9 @@ export class ListConversationsQueryDto {
   @IsOptional()
   @IsBooleanString()
   mine?: string;
+
+  /** Filtra conversas de um contato específico (drawer do deal/contato). */
+  @IsOptional()
+  @IsUUID()
+  contact_id?: string;
 }

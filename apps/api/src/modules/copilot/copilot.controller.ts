@@ -30,7 +30,10 @@ export class CopilotController {
     @CurrentUser() user: AuthUser,
     @Body() dto: SendMessageDto,
   ): Promise<ProcessQueryResult> {
-    return this.service.processQuery(user.org_id, user.id, dto.message);
+    return this.service.processQuery(user.org_id, user.id, dto.message, {
+      ...(dto.context_type ? { type: dto.context_type } : {}),
+      ...(dto.context_id ? { id: dto.context_id } : {}),
+    });
   }
 
   // GET /copilot/history — últimas mensagens (cronológicas)

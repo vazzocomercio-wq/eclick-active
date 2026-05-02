@@ -15,6 +15,7 @@ import { ConversationsService } from '../../conversations/conversations.service'
 import { EventsGateway } from '../../../gateways/events.gateway';
 import { AiService } from '../../ai/ai.service';
 import { AutomationsService } from '../../automations/automations.service';
+import { AutoLeadService } from '../auto-lead.service';
 
 export interface WebhookHandleResult {
   accepted: boolean;
@@ -42,6 +43,7 @@ export class ZapiWebhookService {
     private readonly events: EventsGateway,
     private readonly ai: AiService,
     private readonly automations: AutomationsService,
+    private readonly autoLead: AutoLeadService,
   ) {}
 
   async handle(payload: ZapiInboundPayload): Promise<WebhookHandleResult> {
@@ -155,6 +157,16 @@ export class ZapiWebhookService {
           `AI processing failed: ${err instanceof Error ? err.message : String(err)}`,
         );
       });
+
+    // 8a. Fire-and-forget: auto-create deal pra contatos novos quando a
+    //     org tem `settings.auto_create_deal.enabled = true`. O service
+    //     ignora silenciosamente se setting desabilitada / contato já tem
+    //     deal ativo / sem pipeline configurado.
+    void this.autoLead.handleNewContact({
+      orgId: channel.org_id,
+      contactId: contact.id,
+      conversationId: conversation.id,
+    });
 
     // 9. Fire-and-forget: dispara automações com trigger=message_received.
     //    Não bloqueia o webhook (tem 5s de SLA). ai_intent pode estar null

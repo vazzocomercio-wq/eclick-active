@@ -1,142 +1,169 @@
 'use client';
 
-import { Mail, MessageSquare, Phone, Sparkles } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { History, MessageSquare, Sparkles, Target, User } from 'lucide-react';
+import { toast } from 'sonner';
 import type { Contact } from '@eclick-active/shared';
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { InitialsAvatar } from './initials-avatar';
-import { TemperatureBadge } from './temperature-badge';
-import { ScoreBar } from './score-bar';
-import { TagPills } from './tag-pills';
-import { formatPhone, formatRelativeTime } from '@/lib/format';
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ContactHeader } from './contact-detail-tabs/contact-header';
+import { ContactMainTab } from './contact-detail-tabs/main-tab';
+import { ContactConversationsTab } from './contact-detail-tabs/conversations-tab';
+import { ContactDealsTab } from './contact-detail-tabs/deals-tab';
+import { ContactAITab } from './contact-detail-tabs/ai-tab';
+import { ContactHistoryTab } from './contact-detail-tabs/history-tab';
+import { contactsApi } from '@/lib/api/contacts';
+import { ApiError } from '@/lib/api/client';
 
 interface ContactDetailSheetProps {
   contact: Contact | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Disparado após mutação bem-sucedida (recarrega lista pai). */
+  onChanged?: () => void;
+  /** Disparado quando o usuário clica num deal vinculado. */
+  onOpenDeal?: (dealId: string) => void;
 }
 
-export function ContactDetailSheet({ contact, open, onOpenChange }: ContactDetailSheetProps) {
+type TabKey = 'main' | 'chat' | 'deals' | 'ai' | 'history';
+
+/**
+ * Hub central do Contato. Sheet lateral 520px com:
+ *   - Header fixo: avatar grande, nome inline-edit, badges + score, menu ⋯
+ *   - 5 abas:
+ *     1. Principal — info + custom fields + AI gaps
+ *     2. Conversas — lista (auto-abre se única) ou ChatPanel
+ *     3. Negócios — cards com stage colorido + score; click abre Deal Sheet
+ *     4. IA — resumo, temperatura, score, objeções
+ *     5. Histórico — timeline append-only de active.contact_timeline
+ *
+ * Recarrega o contato sempre que muda — mas o pai (página /contatos)
+ * mantém a lista atualizada via `onChanged`.
+ */
+export function ContactDetailSheet({
+  contact: initialContact,
+  open,
+  onOpenChange,
+  onChanged,
+  onOpenDeal,
+}: ContactDetailSheetProps) {
+  // Mantém uma cópia local do contato pra refletir edits inline imediatamente
+  // sem esperar que o pai re-faça a query. Sincroniza com o prop quando muda.
+  const [contact, setContact] = useState<Contact | null>(initialContact);
+  const [tab, setTab] = useState<TabKey>('main');
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    setContact(initialContact);
+  }, [initialContact]);
+
+  // Reset aba ao abrir
+  useEffect(() => {
+    if (open) setTab('main');
+  }, [open, initialContact?.id]);
+
+  async function handleChanged() {
+    if (!contact) return;
+    try {
+      const fresh = await contactsApi.get(contact.id);
+      setContact(fresh);
+    } catch {
+      // Ignora — o pai recarrega via onChanged() e o próximo render sincroniza
+    }
+    onChanged?.();
+  }
+
+  async function handleDelete() {
+    if (!contact) return;
+    if (!window.confirm('Excluir este contato? A ação não pode ser desfeita.')) {
+      return;
+    }
+    setDeleting(true);
+    try {
+      await contactsApi.remove(contact.id);
+      toast.success('Contato excluído');
+      onOpenChange(false);
+      onChanged?.();
+    } catch (err) {
+      toast.error('Falha ao excluir', {
+        description:
+          err instanceof ApiError
+            ? `${err.status}: ${err.message}`
+            : err instanceof Error
+              ? err.message
+              : 'Erro desconhecido',
+      });
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full max-w-xl">
-        {contact && (
+      <SheetContent
+        side="right"
+        className="flex w-full max-w-[520px] flex-col gap-0 p-0 sm:max-w-[520px]"
+      >
+        <SheetTitle className="sr-only">
+          {contact?.name ?? 'Detalhes do contato'}
+        </SheetTitle>
+
+        {!contact ? (
+          <SkeletonView />
+        ) : (
           <>
-            <SheetHeader>
-              <div className="flex items-center gap-4">
-                <InitialsAvatar name={contact.name} src={contact.avatar_url} className="h-14 w-14 text-base" />
-                <div className="flex-1 min-w-0">
-                  <SheetTitle className="truncate">
-                    {contact.name ?? <span className="text-muted-foreground">Sem nome</span>}
-                  </SheetTitle>
-                  <SheetDescription>
-                    Atualizado {formatRelativeTime(contact.updated_at)}
-                  </SheetDescription>
-                </div>
-              </div>
-            </SheetHeader>
+            <ContactHeader
+              contact={contact}
+              onChanged={handleChanged}
+              onDelete={handleDelete}
+              deleting={deleting}
+            />
 
-            <div className="flex-1 overflow-y-auto px-6 py-5">
-              <div className="flex flex-col gap-4">
-                {/* Info de contato */}
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm">Informações</CardTitle>
-                  </CardHeader>
-                  <CardContent className="flex flex-col gap-2 text-sm">
-                    <InfoRow icon={Phone} label="Telefone" value={contact.phone ? formatPhone(contact.phone) : null} />
-                    <InfoRow icon={Mail} label="Email" value={contact.email} />
-                  </CardContent>
-                </Card>
+            <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)} className="flex-1">
+              <TabsList className="px-2">
+                <TabsTrigger value="main">
+                  <User className="h-3.5 w-3.5" />
+                  Principal
+                </TabsTrigger>
+                <TabsTrigger value="chat">
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  Conversas
+                </TabsTrigger>
+                <TabsTrigger value="deals">
+                  <Target className="h-3.5 w-3.5" />
+                  Negócios
+                </TabsTrigger>
+                <TabsTrigger value="ai">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  IA
+                </TabsTrigger>
+                <TabsTrigger value="history">
+                  <History className="h-3.5 w-3.5" />
+                  Histórico
+                </TabsTrigger>
+              </TabsList>
 
-                {/* Cards de IA / classificação */}
-                <div className="grid grid-cols-2 gap-3">
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-xs text-muted-foreground">Temperatura</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <TemperatureBadge temperature={contact.temperature} />
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-xs text-muted-foreground">Score</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl font-semibold tabular-nums">
-                          {contact.score}
-                        </span>
-                        <ScoreBar score={contact.score} showValue={false} />
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
+              <TabsContent value="main" className="overflow-y-auto">
+                <ContactMainTab contact={contact} onChanged={handleChanged} />
+              </TabsContent>
 
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="flex items-center gap-2 text-sm">
-                      <Sparkles className="h-3.5 w-3.5 text-primary" />
-                      Resumo IA
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground">
-                      {contact.ai_summary ?? 'Sem resumo gerado ainda.'}
-                    </p>
-                  </CardContent>
-                </Card>
+              <TabsContent value="chat" className="overflow-hidden">
+                <ContactConversationsTab contactId={contact.id} />
+              </TabsContent>
 
-                {/* Tags */}
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm">Tags</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <TagPills tags={contact.tags} max={20} />
-                  </CardContent>
-                </Card>
+              <TabsContent value="deals" className="overflow-y-auto">
+                <ContactDealsTab contactId={contact.id} onOpenDeal={onOpenDeal} />
+              </TabsContent>
 
-                {/* Timeline placeholder — endpoint não existe ainda */}
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm">Timeline</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-xs text-muted-foreground">
-                      Em breve. Endpoint <code className="text-xs">GET /contacts/:id/timeline</code> ainda não foi implementado no backend.
-                    </p>
-                  </CardContent>
-                </Card>
+              <TabsContent value="ai" className="overflow-y-auto">
+                <ContactAITab contact={contact} />
+              </TabsContent>
 
-                {/* Conversas placeholder */}
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm">Conversas</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-xs text-muted-foreground">
-                      Em breve. Filtro por <code className="text-xs">contact_id</code> em <code className="text-xs">/conversations</code> ainda não foi adicionado.
-                    </p>
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-
-            <div className="border-t border-border p-4">
-              <Button className="w-full" disabled>
-                <MessageSquare className="mr-2 h-4 w-4" />
-                Enviar mensagem (em breve)
-              </Button>
-            </div>
+              <TabsContent value="history" className="overflow-y-auto">
+                <ContactHistoryTab contactId={contact.id} />
+              </TabsContent>
+            </Tabs>
           </>
         )}
       </SheetContent>
@@ -144,18 +171,14 @@ export function ContactDetailSheet({ contact, open, onOpenChange }: ContactDetai
   );
 }
 
-interface InfoRowProps {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value: string | null;
-}
-
-function InfoRow({ icon: Icon, label, value }: InfoRowProps) {
+function SkeletonView() {
   return (
-    <div className="flex items-center gap-3">
-      <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-      <span className="text-xs text-muted-foreground w-20">{label}</span>
-      <span className="flex-1 truncate text-foreground">{value ?? '—'}</span>
+    <div className="flex flex-col gap-3 p-5">
+      <Skeleton className="h-14 w-14 rounded-full" />
+      <Skeleton className="h-5 w-1/2" />
+      <Skeleton className="h-3 w-1/3" />
+      <Skeleton className="h-9 w-full" />
+      <Skeleton className="h-32 w-full" />
     </div>
   );
 }

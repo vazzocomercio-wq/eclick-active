@@ -12,6 +12,8 @@ export interface PipelineWithStages extends Pipeline {
 /** Shape de cada deal no board (vem da view active.v_deal_board). */
 export interface BoardDealItem {
   id: string;
+  /** Número sequencial dentro da org (migration 009). */
+  deal_number: number;
   org_id: string;
   pipeline_id: string;
   stage_id: string;
@@ -111,9 +113,59 @@ function filtersToQuery(f: BoardFilters): Record<string, string | number | strin
   };
 }
 
+export type PipelineTemplateKey =
+  | 'ecommerce'
+  | 'clinica'
+  | 'imobiliaria'
+  | 'educacao'
+  | 'servicos_b2b'
+  | 'energia_solar';
+
+export interface PipelineTemplateMeta {
+  key: PipelineTemplateKey;
+  default_name: string;
+  description: string;
+  icon: string;
+  stages: Array<{ name: string; color: string; probability: number }>;
+}
+
 export const pipelinesApi = {
-  list(signal?: AbortSignal): Promise<PipelineWithStages[]> {
-    return api.get<PipelineWithStages[]>('/pipelines', { signal });
+  list(
+    options: { includeArchived?: boolean } = {},
+    signal?: AbortSignal,
+  ): Promise<PipelineWithStages[]> {
+    return api.get<PipelineWithStages[]>('/pipelines', {
+      query: options.includeArchived ? { include_archived: 'true' } : {},
+      signal,
+    });
+  },
+  listTemplates(signal?: AbortSignal): Promise<PipelineTemplateMeta[]> {
+    return api.get<PipelineTemplateMeta[]>('/pipelines/templates', { signal });
+  },
+  createFromTemplate(
+    template: PipelineTemplateKey,
+    name?: string,
+  ): Promise<PipelineWithStages> {
+    return api.post<PipelineWithStages>('/pipelines/from-template', {
+      template,
+      ...(name ? { name } : {}),
+    });
+  },
+  archive(id: string): Promise<Pipeline> {
+    return api.post<Pipeline>(`/pipelines/${id}/archive`);
+  },
+  restore(id: string): Promise<Pipeline> {
+    return api.post<Pipeline>(`/pipelines/${id}/restore`);
+  },
+  deleteAndMoveStage(
+    pipelineId: string,
+    stageId: string,
+    targetStageId: string,
+  ): Promise<{ moved: number }> {
+    return api.post<{ moved: number }>(
+      `/pipelines/${pipelineId}/stages/${stageId}/delete-and-move`,
+      { target_stage_id: targetStageId },
+    );
   },
   get(id: string, signal?: AbortSignal): Promise<PipelineWithStages> {
     return api.get<PipelineWithStages>(`/pipelines/${id}`, { signal });

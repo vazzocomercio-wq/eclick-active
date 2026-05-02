@@ -12,6 +12,11 @@ export interface Pipeline {
   name: string;
   is_default: boolean;
   settings: Json;
+  /**
+   * Quando setado, o pipeline está arquivado: não aparece no board nem
+   * no selector, mas dados ficam preservados pra relatórios. Migration 010.
+   */
+  archived_at: ISODateString | null;
   created_at: ISODateString;
   updated_at: ISODateString;
 }
@@ -51,6 +56,12 @@ export interface Deal {
   contact_id: UUID | null;
   company_id: UUID | null;
   conversation_id: UUID | null;
+  /**
+   * Número sequencial dentro da org (ex: 142). Gerado por trigger SQL
+   * BEFORE INSERT — atómico via leitura+max+inc no mesmo statement. Usado
+   * na UI ("Negócio #142") e em referências do Copiloto. Migration 009.
+   */
+  deal_number: number;
   // Info do deal
   title: string;
   value: number;

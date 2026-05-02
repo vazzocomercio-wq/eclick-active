@@ -2,7 +2,10 @@ import type {
   Contact,
   ContactSource,
   ContactTemperature,
+  ContactTimelineEventType,
   CreateContactDto,
+  DealRisk,
+  Json,
   UpdateContactDto,
 } from '@eclick-active/shared';
 import { api } from './client';
@@ -55,7 +58,48 @@ export const contactsApi = {
   remove(id: string) {
     return api.delete<void>(`/contacts/${id}`);
   },
+
+  /** GET /contacts/:id/timeline — eventos da timeline do contato */
+  getTimeline(id: string, signal?: AbortSignal) {
+    return api.get<ContactTimelineItem[]>(`/contacts/${id}/timeline`, { signal });
+  },
+
+  /** GET /contacts/:id/deals — deals vinculados ao contato */
+  getDeals(id: string, signal?: AbortSignal) {
+    return api.get<ContactDealItem[]>(`/contacts/${id}/deals`, { signal });
+  },
 };
+
+// ──────────────────────────────────────────────────────────
+// Tipos retornados pelos endpoints novos
+// ──────────────────────────────────────────────────────────
+
+export interface ContactTimelineItem {
+  id: string;
+  event_type: ContactTimelineEventType;
+  title: string | null;
+  description: string | null;
+  metadata: Json;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface ContactDealItem {
+  id: string;
+  title: string;
+  value: number;
+  currency: string;
+  stage_id: string;
+  pipeline_id: string;
+  ai_score: number;
+  ai_risk: DealRisk | null;
+  won_at: string | null;
+  lost_at: string | null;
+  updated_at: string;
+  created_at: string;
+  stage_name: string | null;
+  stage_color: string | null;
+}
 
 // Re-export tipo para conveniência (consumers da página não precisam importar do shared)
 export type { Contact, ContactTemperature, ContactSource, CreateContactDto, UpdateContactDto };

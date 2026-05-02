@@ -1,7 +1,6 @@
 'use client';
 
 import { ExternalLink, Mail, Phone, Sparkles } from 'lucide-react';
-import Link from 'next/link';
 import type { ConversationDetail } from '@eclick-active/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,9 +15,15 @@ import { formatPhone } from '@/lib/format';
 interface ContactPanelProps {
   conversation: ConversationDetail | null;
   loading: boolean;
+  /**
+   * Disparado ao clicar em "Ver perfil completo". O caller (página
+   * /conversas) abre o `<ContactDetailSheet>` em resposta. Quando ausente,
+   * o botão é renderizado como link `<a href="/contatos">` (fallback).
+   */
+  onOpenFullProfile?: (contactId: string) => void;
 }
 
-export function ContactPanel({ conversation, loading }: ContactPanelProps) {
+export function ContactPanel({ conversation, loading, onOpenFullProfile }: ContactPanelProps) {
   if (loading) {
     return (
       <div className="flex h-full flex-col gap-3 p-4">
@@ -147,12 +152,22 @@ export function ContactPanel({ conversation, loading }: ContactPanelProps) {
           </CardContent>
         </Card>
 
-        <Button variant="outline" asChild>
-          <Link href={`/contatos`}>
+        {onOpenFullProfile ? (
+          <Button
+            variant="outline"
+            onClick={() => onOpenFullProfile(contact.id)}
+          >
             <ExternalLink className="mr-2 h-3.5 w-3.5" />
             Ver perfil completo
-          </Link>
-        </Button>
+          </Button>
+        ) : (
+          <Button variant="outline" asChild>
+            <a href="/contatos">
+              <ExternalLink className="mr-2 h-3.5 w-3.5" />
+              Ver perfil completo
+            </a>
+          </Button>
+        )}
       </div>
     </ScrollArea>
   );

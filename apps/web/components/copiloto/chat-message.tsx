@@ -5,6 +5,7 @@ import type { ChatMessage } from '@/hooks/use-copilot';
 import { cn } from '@/lib/utils';
 import { Markdown } from './markdown';
 import { ToolCallCard } from './tool-call-card';
+import { AIFeedbackButtons } from '@/components/ai/ai-feedback-buttons';
 
 interface ChatMessageItemProps {
   message: ChatMessage;
@@ -16,7 +17,7 @@ export function ChatMessageItem({ message }: ChatMessageItemProps) {
   return (
     <div
       className={cn(
-        'flex gap-3',
+        'group flex gap-3',
         isUser ? 'flex-row-reverse' : 'flex-row',
         'animate-in fade-in slide-in-from-bottom-1 duration-300',
       )}
@@ -52,6 +53,14 @@ export function ChatMessageItem({ message }: ChatMessageItemProps) {
               <ToolCallCard key={i} call={tc} />
             ))}
           </div>
+        )}
+
+        {!isUser && message.ai_interaction_id && (
+          <AIFeedbackButtons
+            interactionId={message.ai_interaction_id}
+            align="start"
+            className="-mt-1"
+          />
         )}
       </div>
     </div>

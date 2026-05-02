@@ -36,6 +36,10 @@ interface NewTaskDialogProps {
   defaultContactId?: string;
   /** Pré-preenche um deal */
   defaultDealId?: string;
+  /** Pré-preenche a data (YYYY-MM-DD) — usado pelo calendário */
+  defaultDueDate?: string;
+  /** Pré-preenche a hora (HH:mm) — usado pelo calendário (visão Semana/Dia) */
+  defaultDueTime?: string;
   onCreated: () => void;
 }
 
@@ -70,6 +74,8 @@ export function NewTaskDialog({
   onOpenChange,
   defaultContactId,
   defaultDealId,
+  defaultDueDate,
+  defaultDueTime,
   onCreated,
 }: NewTaskDialogProps) {
   const [form, setForm] = useState<FormState>(EMPTY);
@@ -84,6 +90,8 @@ export function NewTaskDialog({
       ...EMPTY,
       contact_id: defaultContactId ?? null,
       deal_id: defaultDealId ?? null,
+      due_date: defaultDueDate ?? '',
+      due_time: defaultDueTime ?? '',
     });
     setServerError(null);
 
@@ -97,7 +105,7 @@ export function NewTaskDialog({
     void supabase.auth.getUser().then(({ data }) => {
       if (data.user) setCurrentUserId(data.user.id);
     });
-  }, [open, defaultContactId, defaultDealId]);
+  }, [open, defaultContactId, defaultDealId, defaultDueDate, defaultDueTime]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

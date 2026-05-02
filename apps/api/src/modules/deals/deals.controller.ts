@@ -26,6 +26,7 @@ import { UpdateDealDto } from './dto/update-deal.dto';
 import { MoveDealDto } from './dto/move-deal.dto';
 import { ReorderDealsDto } from './dto/reorder-deals.dto';
 import { ListDealsQueryDto } from './dto/list-deals.query.dto';
+import { AddActivityDto } from './dto/add-activity.dto';
 
 @UseGuards(AuthGuard)
 @Controller('deals')
@@ -99,7 +100,7 @@ export class DealsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: MoveDealDto,
   ): Promise<Deal> {
-    return this.service.moveToStage(user.org_id, id, dto);
+    return this.service.moveToStage(user.org_id, id, dto, user.id);
   }
 
   // GET /deals/:id/activities
@@ -109,5 +110,16 @@ export class DealsController {
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<DealActivity[]> {
     return this.service.getDealActivities(user.org_id, id);
+  }
+
+  // POST /deals/:id/activities — registra uma atividade manual (note_added etc.)
+  @Post(':id/activities')
+  @HttpCode(HttpStatus.CREATED)
+  addActivity(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AddActivityDto,
+  ): Promise<DealActivity> {
+    return this.service.addActivity(user.org_id, id, user.id, dto);
   }
 }

@@ -7,6 +7,7 @@ import type {
 
 const CHANNEL_TYPES: ChannelType[] = [
   'whatsapp',
+  'whatsapp_free',
   'instagram',
   'messenger',
   'telegram',

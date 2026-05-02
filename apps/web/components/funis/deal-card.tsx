@@ -75,10 +75,20 @@ export const DealCardVisual = forwardRef<HTMLDivElement, DealCardVisualProps>(
           'group flex cursor-grab flex-col gap-2 rounded-lg border border-border bg-background p-3 shadow-sm transition-[border-color,box-shadow] hover:border-primary/40 hover:shadow-md',
           isDragging && 'opacity-30',
           isOverlay && 'rotate-1 cursor-grabbing border-primary/50 shadow-2xl',
+          // Pulso vermelho quando o deal está fora do SLA — atrai atenção
+          // do agente sem ser invasivo. Keyframe em globals.css.
+          deal.sla_breached && !isOverlay && 'sla-pulse',
           className,
         )}
         {...props}
       >
+        {/* Linha 0: número discreto */}
+        <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <span>
+            #{deal.deal_number ? deal.deal_number : deal.id.slice(-4).toUpperCase()}
+          </span>
+        </div>
+
         {/* Linha 1: título + valor */}
         <div className="flex items-start justify-between gap-2">
           <h4 className="line-clamp-2 flex-1 text-sm font-semibold leading-tight text-foreground">

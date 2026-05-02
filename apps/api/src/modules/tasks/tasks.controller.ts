@@ -17,10 +17,11 @@ import { AuthGuard } from '../../common/auth/auth.guard';
 import { CurrentUser } from '../../common/auth/current-user.decorator';
 import type { AuthUser } from '../../common/auth/auth.types';
 import type { PaginatedResult } from '../contacts/contacts.service';
-import { TasksService, type TaskRow } from './tasks.service';
+import { TasksService, type CalendarDay, type TaskRow } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { ListTasksQueryDto } from './dto/list-tasks.query.dto';
+import { CalendarTasksQueryDto } from './dto/calendar-tasks.query.dto';
 
 @UseGuards(AuthGuard)
 @Controller('tasks')
@@ -37,6 +38,15 @@ export class TasksController {
   @Get('overdue')
   overdue(@CurrentUser() user: AuthUser): Promise<TaskRow[]> {
     return this.service.getOverdue(user.org_id);
+  }
+
+  // GET /tasks/calendar?from=...&to=...&user_id=...&task_type=call,meeting
+  @Get('calendar')
+  calendar(
+    @CurrentUser() user: AuthUser,
+    @Query() filters: CalendarTasksQueryDto,
+  ): Promise<CalendarDay[]> {
+    return this.service.getCalendar(user.org_id, filters);
   }
 
   // GET /tasks

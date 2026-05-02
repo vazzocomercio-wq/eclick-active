@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import type { Automation } from '@eclick-active/shared';
@@ -48,9 +49,18 @@ export class AutomationsController {
   // CRUD
   // ──────────────────────────────────────────────────────────
 
+  // GET /automations?stage_id=<uuid> — filtra por stage (Funil Digital)
+  // GET /automations?global_only=true — só globais
   @Get()
-  list(@CurrentUser() user: AuthUser): Promise<Automation[]> {
-    return this.service.findAll(user.org_id);
+  list(
+    @CurrentUser() user: AuthUser,
+    @Query('stage_id') stageId?: string,
+    @Query('global_only') globalOnly?: string,
+  ): Promise<Automation[]> {
+    return this.service.findAll(user.org_id, {
+      ...(stageId ? { stageId } : {}),
+      ...(globalOnly === 'true' ? { globalOnly: true } : {}),
+    });
   }
 
   @Post()

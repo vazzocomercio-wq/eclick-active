@@ -1,5 +1,5 @@
 import { getSupabase } from '../supabase.js';
-import { BaileysSession } from './baileys.session.js';
+import { BaileysSession, type OutboundContent } from './baileys.session.js';
 
 interface ChannelRow {
   id: string;
@@ -46,6 +46,34 @@ export class BaileysManager {
       Array.from(this.sessions.values()).map((s) => s.stop()),
     );
     this.sessions.clear();
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // Outbound — chamado pelo HTTP server interno quando API recebe um
+  // POST /conversations/:id/messages e o canal é whatsapp_free.
+  // ──────────────────────────────────────────────────────────
+
+  /**
+   * Envia uma mensagem pelo canal indicado. Lança erros tipados pra que o
+   * HTTP server possa traduzir em status code apropriado:
+   *   - `channel_not_found`: 404
+   *   - `session_not_ready`: 503 (canal existe mas socket ainda não abriu)
+   *   - outros: 500
+   */
+  async sendMessage(
+    channelId: string,
+    phone: string,
+    content: OutboundContent,
+  ): Promise<{ message_id: string }> {
+    const session = this.sessions.get(channelId);
+    if (!session) {
+      throw new Error(`channel_not_found: ${channelId}`);
+    }
+    if (!session.isReady()) {
+      throw new Error(`session_not_ready: ${channelId}`);
+    }
+    const messageId = await session.sendMessage(phone, content);
+    return { message_id: messageId };
   }
 
   // ──────────────────────────────────────────────────────────

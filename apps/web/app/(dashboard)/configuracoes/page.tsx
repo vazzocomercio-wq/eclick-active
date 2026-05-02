@@ -8,6 +8,8 @@ import {
   Cable,
   ChevronRight,
   Settings,
+  Sliders,
+  Webhook as WebhookIcon,
   Workflow,
 } from 'lucide-react';
 import { settingsApi, type OrgSettings } from '@/lib/api/settings';
@@ -15,9 +17,12 @@ import { ApiError } from '@/lib/api/client';
 import { OrgSection } from '@/components/configuracoes/org-section';
 import { ChannelsSection } from '@/components/configuracoes/channels-section';
 import { AiFeaturesSection } from '@/components/configuracoes/ai-features-section';
+import { CustomFieldsAdminSection } from '@/components/configuracoes/custom-fields-section';
+import { AutoLeadSection } from '@/components/configuracoes/auto-lead-section';
+import { WebhooksSection } from '@/components/configuracoes/webhooks-section';
 import { cn } from '@/lib/utils';
 
-type Section = 'org' | 'channels' | 'ai' | 'pipelines';
+type Section = 'org' | 'channels' | 'ai' | 'custom-fields' | 'webhooks' | 'pipelines';
 
 const SECTIONS: Array<{
   id: Section;
@@ -28,6 +33,18 @@ const SECTIONS: Array<{
   { id: 'org', label: 'Organização', icon: Building2, description: 'Nome, slug, plano' },
   { id: 'channels', label: 'Canais', icon: Cable, description: 'WhatsApp e outros' },
   { id: 'ai', label: 'Inteligência Artificial', icon: Bot, description: 'Features de IA' },
+  {
+    id: 'custom-fields',
+    label: 'Campos Personalizados',
+    icon: Sliders,
+    description: 'Deals, contatos, empresas',
+  },
+  {
+    id: 'webhooks',
+    label: 'Webhooks',
+    icon: WebhookIcon,
+    description: 'Integrações externas (Zapier, n8n)',
+  },
   { id: 'pipelines', label: 'Pipelines', icon: Workflow, description: 'Etapas e funis' },
 ];
 
@@ -137,12 +154,19 @@ export default function ConfiguracoesPage() {
             )}
 
             {section === 'org' && (
-              <OrgSection org={org} loading={orgLoading} onSaved={reloadOrg} />
+              <div className="flex flex-col gap-4">
+                <OrgSection org={org} loading={orgLoading} onSaved={reloadOrg} />
+                <AutoLeadSection org={org} onSaved={reloadOrg} />
+              </div>
             )}
 
             {section === 'channels' && <ChannelsSection />}
 
             {section === 'ai' && <AiFeaturesSection />}
+
+            {section === 'custom-fields' && <CustomFieldsAdminSection />}
+
+            {section === 'webhooks' && <WebhooksSection />}
 
             {section === 'pipelines' && <PipelinesLink />}
           </div>

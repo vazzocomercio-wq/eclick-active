@@ -10,6 +10,7 @@ import {
   Patch,
   Post,
   Put,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import type { Pipeline, PipelineStage } from '@eclick-active/shared';
@@ -26,6 +27,11 @@ import { UpdatePipelineDto } from './dto/update-pipeline.dto';
 import { CreateStageDto } from './dto/create-stage.dto';
 import { UpdateStageDto } from './dto/update-stage.dto';
 import { ReorderStagesDto } from './dto/reorder-stages.dto';
+import { DeleteAndMoveStageDto, FromTemplateDto } from './dto/from-template.dto';
+import {
+  PIPELINE_TEMPLATES,
+  type PipelineTemplateMeta,
+} from './pipeline-templates';
 
 @UseGuards(AuthGuard)
 @Controller('pipelines')
@@ -35,10 +41,20 @@ export class PipelinesController {
     private readonly stages: StagesService,
   ) {}
 
-  // GET /pipelines
+  // GET /pipelines/templates  (estático, antes de :id)
+  @Get('templates')
+  listTemplates(): Array<PipelineTemplateMeta> {
+    return Object.values(PIPELINE_TEMPLATES);
+  }
+
+  // GET /pipelines?include_archived=true
   @Get()
-  list(@CurrentUser() user: AuthUser): Promise<PipelineWithStages[]> {
-    return this.pipelines.findAll(user.org_id);
+  list(
+    @CurrentUser() user: AuthUser,
+    @Query('include_archived') includeArchivedRaw?: string,
+  ): Promise<PipelineWithStages[]> {
+    const includeArchived = includeArchivedRaw === 'true';
+    return this.pipelines.findAll(user.org_id, { includeArchived });
   }
 
   // POST /pipelines
@@ -49,6 +65,53 @@ export class PipelinesController {
     @Body() dto: CreatePipelineDto,
   ): Promise<Pipeline> {
     return this.pipelines.create(user.org_id, dto);
+  }
+
+  // POST /pipelines/from-template
+  @Post('from-template')
+  @HttpCode(HttpStatus.CREATED)
+  createFromTemplate(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: FromTemplateDto,
+  ): Promise<PipelineWithStages> {
+    return this.pipelines.createFromTemplate(user.org_id, dto.template, dto.name);
+  }
+
+  // POST /pipelines/:id/archive
+  @Post(':id/archive')
+  @HttpCode(HttpStatus.OK)
+  archive(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<Pipeline> {
+    return this.pipelines.archive(user.org_id, id);
+  }
+
+  // POST /pipelines/:id/restore
+  @Post(':id/restore')
+  @HttpCode(HttpStatus.OK)
+  restore(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<Pipeline> {
+    return this.pipelines.restore(user.org_id, id);
+  }
+
+  // POST /pipelines/:id/stages/:stageId/delete-and-move
+  @Post(':id/stages/:stageId/delete-and-move')
+  @HttpCode(HttpStatus.OK)
+  deleteAndMoveStage(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) pipelineId: string,
+    @Param('stageId', ParseUUIDPipe) stageId: string,
+    @Body() dto: DeleteAndMoveStageDto,
+  ): Promise<{ moved: number }> {
+    return this.pipelines.deleteStageAndMoveDeals(
+      user.org_id,
+      pipelineId,
+      stageId,
+      dto.target_stage_id,
+    );
   }
 
   // GET /pipelines/:id

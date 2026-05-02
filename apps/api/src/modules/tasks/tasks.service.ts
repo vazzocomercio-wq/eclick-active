@@ -10,6 +10,7 @@ import type { PaginatedResult } from '../contacts/contacts.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { ListTasksQueryDto } from './dto/list-tasks.query.dto';
+import { CalendarTasksQueryDto } from './dto/calendar-tasks.query.dto';
 
 /**
  * View enriquecida com nome do contato/deal/responsável (joins client-side).
@@ -274,6 +275,67 @@ export class TasksService {
   }
 
   // ────────────────────────────────────────────
+  // GET CALENDAR — agrupado por dia (YYYY-MM-DD)
+  // ────────────────────────────────────────────
+
+  async getCalendar(
+    orgId: string,
+    filters: CalendarTasksQueryDto,
+  ): Promise<CalendarDay[]> {
+    let q = this.supabase.adminClient
+      .from('tasks')
+      .select(SELECT_WITH_JOINS)
+      .eq('org_id', orgId)
+      .gte('due_date', filters.from)
+      .lte('due_date', filters.to)
+      .not('due_date', 'is', null)
+      .order('due_date', { ascending: true })
+      .limit(1000);
+
+    if (filters.user_id) q = q.eq('assigned_to', filters.user_id);
+    if (filters.task_type && filters.task_type.length > 0) {
+      q = q.in('task_type', filters.task_type);
+    }
+
+    const { data, error } = await q;
+    if (error) {
+      this.logger.error(`getCalendar failed: ${error.message}`);
+      throw new InternalServerErrorException(error.message);
+    }
+
+    const rows = (data ?? []).map((r) => normalizeRow(r as RawTaskRow));
+    await this.attachAssigneeNames(orgId, rows);
+
+    // Agrupa por YYYY-MM-DD (timezone do servidor)
+    const byDate = new Map<string, CalendarTask[]>();
+    for (const t of rows) {
+      if (!t.due_date) continue;
+      const date = isoToLocalDateKey(t.due_date);
+      const slim: CalendarTask = {
+        id: t.id,
+        title: t.title,
+        task_type: t.task_type,
+        priority: t.priority,
+        status: t.status,
+        due_date: t.due_date,
+        contact_id: t.contact_id,
+        contact_name: t.contact_name ?? null,
+        deal_id: t.deal_id,
+        deal_title: t.deal_title ?? null,
+        assigned_to: t.assigned_to,
+        assigned_to_name: t.assignee_name ?? null,
+      };
+      const arr = byDate.get(date);
+      if (arr) arr.push(slim);
+      else byDate.set(date, [slim]);
+    }
+
+    return Array.from(byDate.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, tasks]) => ({ date, tasks }));
+  }
+
+  // ────────────────────────────────────────────
   // Helper: batched lookup de display_name dos assignees
   // ────────────────────────────────────────────
 
@@ -307,6 +369,40 @@ export class TasksService {
       }
     }
   }
+}
+
+// ────────────────────────────────────────────
+// Calendar shape
+// ────────────────────────────────────────────
+
+export interface CalendarTask {
+  id: string;
+  title: string;
+  task_type: Task['task_type'];
+  priority: Task['priority'];
+  status: Task['status'];
+  due_date: string;
+  contact_id: string | null;
+  contact_name: string | null;
+  deal_id: string | null;
+  deal_title: string | null;
+  assigned_to: string;
+  assigned_to_name: string | null;
+}
+
+export interface CalendarDay {
+  /** YYYY-MM-DD (timezone do servidor) */
+  date: string;
+  tasks: CalendarTask[];
+}
+
+function isoToLocalDateKey(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 // ────────────────────────────────────────────

@@ -13,6 +13,7 @@ import type {
 } from '@eclick-active/shared';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { ChannelDispatcherService } from '../../common/channels/channel-dispatcher.service';
+import { PlaceholderService } from '../../common/placeholder/placeholder.service';
 import { AnthropicClient } from '../ai/anthropic.client';
 import {
   type ActionExecutionLog,
@@ -46,6 +47,7 @@ export class AutomationsService {
     private readonly supabase: SupabaseService,
     private readonly dispatcher: ChannelDispatcherService,
     private readonly anthropic: AnthropicClient,
+    private readonly placeholders: PlaceholderService,
   ) {}
 
   // ────────────────────────────────────────────
@@ -70,6 +72,7 @@ export class AutomationsService {
         actions: dto.actions,
         is_active: dto.is_active ?? false,
         natural_language_source: dto.natural_language_source ?? null,
+        stage_id: dto.stage_id ?? null,
         created_by: createdBy,
       })
       .select('*')
@@ -84,13 +87,24 @@ export class AutomationsService {
     return data as Automation;
   }
 
-  async findAll(orgId: string): Promise<Automation[]> {
-    const { data, error } = await this.supabase.adminClient
+  async findAll(
+    orgId: string,
+    options: { stageId?: string | null; globalOnly?: boolean } = {},
+  ): Promise<Automation[]> {
+    let q = this.supabase.adminClient
       .from('automations')
       .select('*')
       .eq('org_id', orgId)
       .order('updated_at', { ascending: false });
 
+    // Funil Digital: lista automações de UM stage específico
+    if (options.stageId !== undefined && options.stageId !== null) {
+      q = q.eq('stage_id', options.stageId);
+    } else if (options.globalOnly) {
+      q = q.is('stage_id', null);
+    }
+
+    const { data, error } = await q;
     if (error) throw new InternalServerErrorException(error.message);
     return (data ?? []) as Automation[];
   }
@@ -122,6 +136,7 @@ export class AutomationsService {
     if (dto.trigger_config !== undefined) patch.trigger_config = dto.trigger_config;
     if (dto.actions !== undefined) patch.actions = dto.actions;
     if (dto.is_active !== undefined) patch.is_active = dto.is_active;
+    if (dto.stage_id !== undefined) patch.stage_id = dto.stage_id;
 
     const { data, error } = await this.supabase.adminClient
       .from('automations')
@@ -209,13 +224,28 @@ Gere o JSON da automação seguindo o schema. Use textos PT-BR claros e específ
    */
   async checkTriggers(event: AnyTriggerEvent): Promise<void> {
     try {
-      const { data, error } = await this.supabase.adminClient
+      // Pra eventos de deal, descobre o stage atual pra filtrar automações
+      // vinculadas a stage. Eventos sem deal_id ignoram esse filtro.
+      const dealStageId = await this.resolveDealStageForEvent(event);
+
+      let q = this.supabase.adminClient
         .from('automations')
         .select('*')
         .eq('org_id', event.org_id)
         .eq('is_active', true)
         .eq('trigger_type', event.event);
 
+      // Funil Digital: pra eventos com stage conhecida, casa automações
+      // globais (stage_id IS NULL) OU automações vinculadas a esse stage.
+      // Pra eventos sem stage (ex: contact_created, message_received de
+      // conversa sem deal), pega só globais.
+      if (dealStageId) {
+        q = q.or(`stage_id.is.null,stage_id.eq.${dealStageId}`);
+      } else {
+        q = q.is('stage_id', null);
+      }
+
+      const { data, error } = await q;
       if (error) {
         this.logger.warn(`checkTriggers query failed: ${error.message}`);
         return;
@@ -397,7 +427,7 @@ Gere o JSON da automação seguindo o schema. Use textos PT-BR claros e específ
       throw new Error('send_message: nenhum channel_id disponível no contexto');
     }
 
-    const text = this.interpolate(action.text, ctx);
+    const text = await this.interpolateRich(action.text, ctx);
 
     const result = await this.dispatcher.send({
       org_id: ctx.orgId,
@@ -562,10 +592,76 @@ Gere o JSON da automação seguindo o schema. Use textos PT-BR claros e específ
   // helpers
   // ────────────────────────────────────────────
 
+  /**
+   * Pra eventos do tipo `deal_*`, retorna o `stage_id` atual do deal —
+   * usado em `checkTriggers` pra filtrar automações vinculadas a stage.
+   * Pra eventos sem deal, retorna null (cai no path "só globais").
+   */
+  private async resolveDealStageForEvent(
+    event: AnyTriggerEvent,
+  ): Promise<string | null> {
+    const dealId =
+      event.event === 'deal_stage_changed'
+        ? event.deal_id
+        : event.event === 'deal_created'
+          ? event.deal_id
+          : null;
+    if (!dealId) {
+      // Event types like message_received chegam ANTES do deal_id ser
+      // criado/conhecido — passa null pra pegar só globais.
+      return null;
+    }
+    // Pro deal_stage_changed, podemos preferir o stage destino do payload
+    if (event.event === 'deal_stage_changed') {
+      return event.to_stage_id ?? null;
+    }
+    // Pro deal_created, busca o stage atual no DB
+    try {
+      const { data } = await this.supabase.adminClient
+        .from('deals')
+        .select('stage_id')
+        .eq('id', dealId)
+        .maybeSingle();
+      return (data as { stage_id: string } | null)?.stage_id ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Resolve placeholders simples (compat) + se text contém `{{categoria.campo}}`
+   * canônico, faz fallback async pelo `PlaceholderService` que carrega dados
+   * completos. NOTE: chamada async é feita em `interpolateRich`. Este método
+   * cobre o fast-path (legacy {{contact.name}} + {{contact.first_name}}).
+   */
   private interpolate(text: string, ctx: ExecuteContext): string {
     return text
       .replace(/\{\{contact\.name\}\}/g, ctx.contactName ?? 'cliente')
-      .replace(/\{\{contact\.first_name\}\}/g, (ctx.contactName ?? 'cliente').split(' ')[0] ?? 'cliente');
+      .replace(
+        /\{\{contact\.first_name\}\}/g,
+        (ctx.contactName ?? 'cliente').split(' ')[0] ?? 'cliente',
+      );
+  }
+
+  /**
+   * Versão async com lookup completo via `PlaceholderService`. Usada em
+   * actions onde temos `ctx.dealId`/`contactId` e queremos `{{deal.titulo}}`,
+   * `{{contato.email}}`, etc. Best-effort: se buildContext falhar, cai no
+   * fallback simples.
+   */
+  private async interpolateRich(text: string, ctx: ExecuteContext): Promise<string> {
+    if (!text || !text.includes('{{')) return text;
+    try {
+      const placeholderCtx = await this.placeholders.buildContext({
+        orgId: ctx.orgId,
+        ...(ctx.dealId ? { dealId: ctx.dealId } : {}),
+        ...(ctx.contactId ? { contactId: ctx.contactId } : {}),
+        ...(ctx.assignedToUserId ? { userId: ctx.assignedToUserId } : {}),
+      });
+      return this.placeholders.resolve(text, placeholderCtx);
+    } catch {
+      return this.interpolate(text, ctx);
+    }
   }
 
   private async buildContext(

@@ -9,6 +9,7 @@ import type { Server, Socket } from 'socket.io';
 import type {
   Conversation,
   Deal,
+  DealActivity,
   Message,
   Notification,
   UUID,
@@ -34,6 +35,8 @@ export interface AISuggestionPayload {
   suggestion: string;
   /** Confidence 0..1 da IA */
   confidence?: number;
+  /** ID da row em ai_interactions — pra UI permitir feedback 👍/👎 */
+  ai_interaction_id?: UUID;
 }
 
 export interface DealCreatedPayload {
@@ -47,10 +50,21 @@ export interface DealMovedPayload {
   position: number;
   /** Setado quando o destino é stage is_won/is_lost */
   closed_state?: 'won' | 'lost' | null;
+  /** Quem moveu — frontend usa pra evitar toastar próprias ações. */
+  moved_by_user_id?: UUID;
+  /** Título do deal — pra UX dos toasts ("Carlos moveu 'X' pra Negociação"). */
+  deal_title?: string;
+  /** Nome do stage destino — idem. */
+  to_stage_name?: string;
 }
 
 export interface DealUpdatedPayload {
   deal: Deal;
+}
+
+export interface DealActivityAddedPayload {
+  deal_id: UUID;
+  activity: DealActivity;
 }
 
 // ── Baileys / WhatsApp Free ──
@@ -87,6 +101,7 @@ export type EventName =
   | 'deal:created'
   | 'deal:moved'
   | 'deal:updated'
+  | 'deal:activity_added'
   | 'whatsapp:qr'
   | 'whatsapp:connected'
   | 'whatsapp:disconnected';
@@ -99,6 +114,7 @@ export interface EventPayloadMap {
   'deal:created': DealCreatedPayload;
   'deal:moved': DealMovedPayload;
   'deal:updated': DealUpdatedPayload;
+  'deal:activity_added': DealActivityAddedPayload;
   'whatsapp:qr': WhatsappQrPayload;
   'whatsapp:connected': WhatsappConnectedPayload;
   'whatsapp:disconnected': WhatsappDisconnectedPayload;

@@ -3,16 +3,29 @@
   "version": "0.1.0",
   "private": true,
   "description": "Tipos TypeScript compartilhados do e-Click Active (espelha o schema active.* do Supabase)",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./enums": "./src/enums/index.ts",
-    "./constants": "./src/constants/index.ts",
-    "./dto": "./src/dto/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./enums": {
+      "types": "./dist/enums/index.d.ts",
+      "default": "./dist/enums/index.js"
+    },
+    "./constants": {
+      "types": "./dist/constants/index.d.ts",
+      "default": "./dist/constants/index.js"
+    },
+    "./dto": {
+      "types": "./dist/dto/index.d.ts",
+      "default": "./dist/dto/index.js"
+    }
   },
   "scripts": {
     "build": "tsc",
+    "dev": "tsc --watch --preserveWatchOutput",
     "type-check": "tsc --noEmit",
     "lint": "eslint \"src/**/*.ts\" --fix",
     "clean": "rm -rf dist .turbo"

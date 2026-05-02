@@ -2,10 +2,13 @@
 
 import { Sparkles, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { AIFeedbackButtons } from '@/components/ai/ai-feedback-buttons';
 
 interface AISuggestionBarProps {
   suggestion: string | null;
   confidence?: number;
+  /** ID da interação no backend — habilita 👍/👎 quando presente. */
+  aiInteractionId?: string | null;
   onUse: () => void;
   onEdit: () => void;
   onIgnore: () => void;
@@ -13,13 +16,14 @@ interface AISuggestionBarProps {
 
 /**
  * Mostrada acima do input quando a IA tem sugestão pra mensagem.
- *
- * Por enquanto fica oculta (suggestion=null). Tarefa 7 vai conectar via
- * `useEvents({ onAISuggestion })` pra preencher quando o backend emitir.
+ * Conecta via `useEvents({ onAISuggestion })` que recebe socket.io payload
+ * com `ai_interaction_id` — quando presente, exibe botões 👍/👎 pra
+ * coletar feedback da qualidade da sugestão.
  */
 export function AISuggestionBar({
   suggestion,
   confidence,
+  aiInteractionId,
   onUse,
   onEdit,
   onIgnore,
@@ -29,7 +33,7 @@ export function AISuggestionBar({
   return (
     <div className="flex items-start gap-3 border-t border-primary/30 bg-primary/5 px-4 py-2">
       <Sparkles className="mt-1 h-3.5 w-3.5 shrink-0 text-primary" />
-      <div className="flex-1 min-w-0">
+      <div className="group flex-1 min-w-0">
         <div className="mb-1 flex items-center gap-2">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">
             Sugestão IA
@@ -38,6 +42,11 @@ export function AISuggestionBar({
             <span className="text-[10px] text-muted-foreground">
               {Math.round(confidence * 100)}% confiança
             </span>
+          )}
+          {aiInteractionId && (
+            <div className="ml-auto">
+              <AIFeedbackButtons interactionId={aiInteractionId} size="xs" align="end" />
+            </div>
           )}
         </div>
         <p className="line-clamp-2 text-sm">{suggestion}</p>

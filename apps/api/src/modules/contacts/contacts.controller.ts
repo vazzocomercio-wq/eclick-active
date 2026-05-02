@@ -84,4 +84,22 @@ export class ContactsController {
   ): Promise<void> {
     return this.service.delete(user.org_id, id);
   }
+
+  // GET /contacts/:id/timeline — eventos da timeline do contato
+  @Get(':id/timeline')
+  timeline(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.service.getTimeline(user.org_id, id);
+  }
+
+  // GET /contacts/:id/deals — deals vinculados ao contato
+  @Get(':id/deals')
+  deals(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.service.getDeals(user.org_id, id);
+  }
 }

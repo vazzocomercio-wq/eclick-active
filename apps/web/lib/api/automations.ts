@@ -77,6 +77,8 @@ export interface CreateAutomationInput {
   actions: AutomationAction[];
   is_active?: boolean;
   natural_language_source?: string;
+  /** Vincula automação a um stage do funil (Funil Digital). */
+  stage_id?: string | null;
 }
 
 export interface UpdateAutomationInput {
@@ -86,6 +88,7 @@ export interface UpdateAutomationInput {
   trigger_config?: Record<string, unknown>;
   actions?: AutomationAction[];
   is_active?: boolean;
+  stage_id?: string | null;
 }
 
 export interface GeneratedAutomation {
@@ -97,8 +100,17 @@ export interface GeneratedAutomation {
 }
 
 export const automationsApi = {
-  list(signal?: AbortSignal): Promise<Automation[]> {
-    return api.get<Automation[]>('/automations', { signal });
+  list(
+    options: { stageId?: string; globalOnly?: boolean } = {},
+    signal?: AbortSignal,
+  ): Promise<Automation[]> {
+    return api.get<Automation[]>('/automations', {
+      query: {
+        ...(options.stageId ? { stage_id: options.stageId } : {}),
+        ...(options.globalOnly ? { global_only: 'true' } : {}),
+      },
+      signal,
+    });
   },
   get(id: string, signal?: AbortSignal): Promise<Automation> {
     return api.get<Automation>(`/automations/${id}`, { signal });

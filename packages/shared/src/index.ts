@@ -18,6 +18,8 @@ export * from './types/knowledge';
 export * from './types/ai';
 export * from './types/analytics';
 export * from './types/notification';
+export * from './types/custom-fields';
+export * from './types/webhook';
 
 // Enum union types
 export * from './enums';
@@ -27,3 +29,6 @@ export * from './dto';
 
 // Constants (PLAN_LIMITS, BRAND_COLORS, defaults)
 export * from './constants';
+
+// Utils
+export * from './utils/placeholder-resolver';

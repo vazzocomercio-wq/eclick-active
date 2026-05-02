@@ -1,7 +1,10 @@
 import type {
+  ChannelType,
   Conversation,
   ConversationDetail,
+  ConversationPriority,
   ConversationStatus,
+  CreateConversationDto,
   InboxItem,
   UpdateConversationDto,
 } from '@eclick-active/shared';
@@ -12,10 +15,21 @@ export interface InboxParams {
   page?: number;
   limit?: number;
   status?: ConversationStatus;
-  channel_type?: string;
+  channel_type?: ChannelType;
   assigned_to?: string;
   /** "true" pra filtrar somente conversas atribuídas ao usuário atual */
   mine?: boolean;
+  /** Filtra conversas de um contato específico (drawer do deal/contato). */
+  contact_id?: string;
+}
+
+export interface CreateConversationInput {
+  contact_id: string;
+  channel_type: ChannelType;
+  channel_id?: string;
+  priority?: ConversationPriority;
+  assigned_to?: string;
+  tags?: string[];
 }
 
 export const conversationsApi = {
@@ -27,14 +41,27 @@ export const conversationsApi = {
         status: params.status,
         channel_type: params.channel_type,
         assigned_to: params.assigned_to,
+        contact_id: params.contact_id,
         mine: params.mine ? 'true' : undefined,
       },
       signal,
     });
   },
 
+  /** Conversas de um contato (recentes primeiro). */
+  getByContactId(contactId: string, signal?: AbortSignal) {
+    return api.get<PaginatedResult<InboxItem>>('/conversations', {
+      query: { contact_id: contactId, limit: 25 },
+      signal,
+    });
+  },
+
   getById(id: string, signal?: AbortSignal) {
     return api.get<ConversationDetail>(`/conversations/${id}`, { signal });
+  },
+
+  create(input: CreateConversationInput) {
+    return api.post<Conversation>('/conversations', input);
   },
 
   update(id: string, dto: UpdateConversationDto) {
@@ -46,4 +73,10 @@ export const conversationsApi = {
   },
 };
 
-export type { Conversation, ConversationDetail, InboxItem, UpdateConversationDto };
+export type {
+  Conversation,
+  ConversationDetail,
+  CreateConversationDto,
+  InboxItem,
+  UpdateConversationDto,
+};

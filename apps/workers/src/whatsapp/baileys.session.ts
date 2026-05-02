@@ -106,6 +106,82 @@ export class BaileysSession {
   }
 
   // ──────────────────────────────────────────────────────────
+  // OUTBOUND — chamado pelo internal HTTP server quando a API
+  // recebe POST /conversations/:id/messages e o canal é whatsapp_free.
+  // ──────────────────────────────────────────────────────────
+
+  /**
+   * Envia mensagem via Baileys WebSocket. Requer sessão `connection === 'open'`.
+   *
+   * @param phone Número internacional sem `+` ou JID completo (ex: `5571999999999`
+   *   ou `5571999999999@s.whatsapp.net`).
+   * @param content Conteúdo a enviar — text/image/audio/video/document.
+   * @returns ID da mensagem no protocolo Baileys (ex: `3EB0...`).
+   */
+  async sendMessage(phone: string, content: OutboundContent): Promise<string> {
+    if (!this.sock) {
+      throw new Error('session_not_ready: socket Baileys ainda não conectado');
+    }
+    if (this.terminated) {
+      throw new Error('session_terminated: sessão encerrada');
+    }
+
+    const jid = phone.includes('@') ? phone : `${phone}@s.whatsapp.net`;
+
+    let payload: Parameters<WASocket['sendMessage']>[1];
+    switch (content.kind) {
+      case 'text':
+        payload = { text: content.body };
+        break;
+      case 'image':
+        payload = {
+          image: { url: content.url },
+          ...(content.caption ? { caption: content.caption } : {}),
+        };
+        break;
+      case 'audio':
+        payload = {
+          audio: { url: content.url },
+          mimetype: content.mime_type ?? 'audio/ogg; codecs=opus',
+          ptt: content.ptt ?? true,
+        };
+        break;
+      case 'video':
+        payload = {
+          video: { url: content.url },
+          ...(content.caption ? { caption: content.caption } : {}),
+        };
+        break;
+      case 'document':
+        payload = {
+          document: { url: content.url },
+          // Baileys exige mimetype não-opcional pra documentos. Fallback
+          // genérico permite enviar arquivos com tipo desconhecido.
+          mimetype: content.mime_type ?? 'application/octet-stream',
+          ...(content.filename ? { fileName: content.filename } : {}),
+        };
+        break;
+      default: {
+        const _exhaustive: never = content;
+        throw new Error(
+          `unsupported_content: ${(_exhaustive as { kind: string }).kind}`,
+        );
+      }
+    }
+
+    const result = await this.sock.sendMessage(jid, payload);
+    if (!result?.key?.id) {
+      throw new Error('send_failed: Baileys não retornou messageId');
+    }
+    return result.key.id;
+  }
+
+  /** True se a sessão está pronta pra enviar mensagens. */
+  isReady(): boolean {
+    return !!this.sock && !this.terminated;
+  }
+
+  // ──────────────────────────────────────────────────────────
   // Event handlers
   // ──────────────────────────────────────────────────────────
 
@@ -207,8 +283,11 @@ export class BaileysSession {
     const remoteJid = msg.key.remoteJid;
     if (!remoteJid || remoteJid.endsWith('@g.us')) return; // ignora grupos no MVP
 
-    const phone = extractPhoneFromJid(remoteJid);
-    if (!phone) return;
+    // JID pode ser `@s.whatsapp.net` (digits = telefone real) OU `@lid`
+    // (digits = pseudo-ID anônimo, NÃO é telefone). O JID completo é a
+    // identidade canônica — é o que o WhatsApp usa pra rotear de volta.
+    const isPhoneJid = remoteJid.endsWith('@s.whatsapp.net');
+    const phone = isPhoneJid ? extractPhoneFromJid(remoteJid) : null;
 
     const senderName = msg.pushName ?? undefined;
     const messageId = msg.key.id ?? `${Date.now()}-${Math.random()}`;
@@ -218,8 +297,8 @@ export class BaileysSession {
 
     const supabase = getSupabase();
 
-    // 1) findOrCreate contact (por org_id + phone)
-    const contactId = await this.findOrCreateContact(phone, senderName);
+    // 1) findOrCreate contact (por org_id + wa_jid; fallback phone p/ legacy)
+    const contactId = await this.findOrCreateContact(remoteJid, phone, senderName);
     if (!contactId) return;
 
     // 2) findOrCreate conversation
@@ -270,27 +349,59 @@ export class BaileysSession {
   // ──────────────────────────────────────────────────────────
 
   private async findOrCreateContact(
-    phone: string,
+    waJid: string,
+    phone: string | null,
     senderName: string | undefined,
   ): Promise<string | null> {
     const supabase = getSupabase();
 
-    const { data: existing } = await supabase
+    // 1) Match canônico: channel_profiles.whatsapp.wa_jid (JID completo).
+    // PostgREST jsonb path: `channel_profiles->whatsapp->>wa_jid`
+    const { data: byJid } = await supabase
       .from('contacts')
-      .select('id')
+      .select('id, channel_profiles')
       .eq('org_id', this.ctx.orgId)
-      .eq('phone', phone)
+      .eq('channel_profiles->whatsapp->>wa_jid', waJid)
       .maybeSingle();
 
-    if (existing?.id) return existing.id as string;
+    if (byJid?.id) {
+      await this.ensureWhatsappProfile(byJid.id as string, byJid.channel_profiles, waJid, senderName);
+      return byJid.id as string;
+    }
+
+    // 2) Fallback legacy: contatos antigos só têm `phone` (sem wa_jid).
+    // Só faz sentido se o JID for `@s.whatsapp.net` (digits = telefone real).
+    if (phone) {
+      const { data: byPhone } = await supabase
+        .from('contacts')
+        .select('id, channel_profiles')
+        .eq('org_id', this.ctx.orgId)
+        .eq('phone', phone)
+        .maybeSingle();
+
+      if (byPhone?.id) {
+        // Backfill wa_jid no contato legacy pra próximas idas-e-vindas
+        await this.ensureWhatsappProfile(byPhone.id as string, byPhone.channel_profiles, waJid, senderName);
+        return byPhone.id as string;
+      }
+    }
+
+    // 3) Cria novo contato com wa_jid populado
+    const channelProfiles: Record<string, Record<string, string>> = {
+      whatsapp: {
+        wa_jid: waJid,
+        ...(senderName ? { profile_name: senderName } : {}),
+      },
+    };
 
     const { data: created, error } = await supabase
       .from('contacts')
       .insert({
         org_id: this.ctx.orgId,
-        phone,
+        phone, // null pra @lid (não é telefone real); digits pra @s.whatsapp.net
         name: senderName ?? null,
         source: 'whatsapp',
+        channel_profiles: channelProfiles,
       })
       .select('id')
       .single();
@@ -301,6 +412,48 @@ export class BaileysSession {
       return null;
     }
     return created.id as string;
+  }
+
+  /**
+   * Garante que `channel_profiles.whatsapp.wa_jid` existe pro contato.
+   * Usado em (a) match por JID que chegou sem profile_name salvo, e
+   * (b) backfill de contatos legacy que casaram só por `phone`.
+   */
+  private async ensureWhatsappProfile(
+    contactId: string,
+    currentProfiles: unknown,
+    waJid: string,
+    senderName: string | undefined,
+  ): Promise<void> {
+    const profiles =
+      (currentProfiles as Record<string, Record<string, unknown>> | null) ?? {};
+    const wa = (profiles.whatsapp as Record<string, unknown> | undefined) ?? {};
+
+    const needsJid = wa.wa_jid !== waJid;
+    const needsName = senderName && !wa.profile_name;
+    if (!needsJid && !needsName) return;
+
+    const merged = {
+      ...profiles,
+      whatsapp: {
+        ...wa,
+        wa_jid: waJid,
+        ...(senderName ? { profile_name: senderName } : {}),
+      },
+    };
+
+    const { error } = await getSupabase()
+      .from('contacts')
+      .update({ channel_profiles: merged })
+      .eq('id', contactId);
+
+    if (error) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[baileys ${this.ctx.channelId}] ensureWhatsappProfile falhou:`,
+        error.message,
+      );
+    }
   }
 
   private async findOrCreateConversation(contactId: string): Promise<string | null> {
@@ -414,6 +567,18 @@ type ParsedContent =
   | AudioContent
   | VideoContent
   | DocumentContent;
+
+// ──────────────────────────────────────────────────────────
+// OUTBOUND content shapes — usadas pelo internal-server quando a API
+// proxia o pedido de envio (text/image/audio/video/document).
+// ──────────────────────────────────────────────────────────
+
+export type OutboundContent =
+  | { kind: 'text'; body: string }
+  | { kind: 'image'; url: string; caption?: string }
+  | { kind: 'audio'; url: string; mime_type?: string; ptt?: boolean }
+  | { kind: 'video'; url: string; caption?: string }
+  | { kind: 'document'; url: string; filename?: string; mime_type?: string };
 
 function extractContent(m: WAMessageContent): ParsedContent | null {
   // Texto direto

@@ -25,7 +25,9 @@ import {
   Plus,
   Trash2,
   X,
+  Zap,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import {
   Sheet,
   SheetContent,
@@ -33,6 +35,14 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -42,6 +52,7 @@ import {
   type PipelineWithStages,
 } from '@/lib/api/pipelines';
 import { ApiError } from '@/lib/api/client';
+import { StageAutomationsSheet } from './stage-automations-sheet';
 import { cn } from '@/lib/utils';
 
 interface PipelineConfigSheetProps {
@@ -61,6 +72,12 @@ export function PipelineConfigSheet({
   const [stages, setStages] = useState<PipelineStageWithCount[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [savingReorder, setSavingReorder] = useState(false);
+  // Dialog "Mover e deletar" — quando user tenta apagar stage com deals
+  const [moveAndDelete, setMoveAndDelete] = useState<{
+    stage: PipelineStageWithCount;
+  } | null>(null);
+  // Sheet de automações por stage (Funil Digital)
+  const [automationsStage, setAutomationsStage] = useState<PipelineStageWithCount | null>(null);
 
   useEffect(() => {
     if (open && pipeline) {
@@ -133,12 +150,24 @@ export function PipelineConfigSheet({
 
   async function handleStageDelete(stageId: string) {
     if (!pipeline) return;
+    // Se o stage tem deals, abre dialog de transferência em vez de deletar.
+    const stage = stages.find((s) => s.id === stageId);
+    if (stage && stage.deal_count > 0) {
+      setMoveAndDelete({ stage });
+      return;
+    }
     setError(null);
     try {
       await pipelinesApi.removeStage(pipeline.id, stageId);
       setStages((curr) => curr.filter((s) => s.id !== stageId));
       onChange();
     } catch (err) {
+      // Pode ainda dar 409 se houver deals criados em paralelo — fallback
+      // pro dialog de transferência.
+      if (err instanceof ApiError && err.status === 409 && stage) {
+        setMoveAndDelete({ stage });
+        return;
+      }
       setError(
         err instanceof ApiError
           ? err.message
@@ -223,6 +252,7 @@ export function PipelineConfigSheet({
                       stage={stage}
                       onUpdate={(patch) => handleStageUpdate(stage.id, patch)}
                       onDelete={() => handleStageDelete(stage.id)}
+                      onOpenAutomations={() => setAutomationsStage(stage)}
                     />
                   ))}
                 </ul>
@@ -236,7 +266,136 @@ export function PipelineConfigSheet({
           </Button>
         </div>
       </SheetContent>
+
+      {/* Sheet "⚡ Automações do stage" (Funil Digital) */}
+      <StageAutomationsSheet
+        open={automationsStage !== null}
+        onOpenChange={(o) => !o && setAutomationsStage(null)}
+        stageId={automationsStage?.id ?? null}
+        stageName={automationsStage?.name ?? null}
+        onChanged={onChange}
+      />
+
+      {/* Dialog "Mover e deletar" — pipeline tem deals e usuário quer apagar */}
+      <MoveAndDeleteDialog
+        open={moveAndDelete !== null}
+        sourceStage={moveAndDelete?.stage ?? null}
+        otherStages={
+          moveAndDelete
+            ? stages.filter((s) => s.id !== moveAndDelete.stage.id)
+            : []
+        }
+        onClose={() => setMoveAndDelete(null)}
+        onConfirm={async (targetStageId) => {
+          if (!pipeline || !moveAndDelete) return;
+          try {
+            const result = await pipelinesApi.deleteAndMoveStage(
+              pipeline.id,
+              moveAndDelete.stage.id,
+              targetStageId,
+            );
+            toast.success(
+              `Stage excluído — ${result.moved} deal(s) movido(s)`,
+            );
+            setStages((curr) => curr.filter((s) => s.id !== moveAndDelete.stage.id));
+            setMoveAndDelete(null);
+            onChange();
+          } catch (err) {
+            toast.error('Falha ao mover e deletar', {
+              description:
+                err instanceof ApiError
+                  ? `${err.status}: ${err.message}`
+                  : err instanceof Error
+                    ? err.message
+                    : 'Erro desconhecido',
+            });
+          }
+        }}
+      />
     </Sheet>
+  );
+}
+
+// ──────────────────────────────────────────────────────────
+// MoveAndDeleteDialog
+// ──────────────────────────────────────────────────────────
+
+function MoveAndDeleteDialog({
+  open,
+  sourceStage,
+  otherStages,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean;
+  sourceStage: PipelineStageWithCount | null;
+  otherStages: PipelineStageWithCount[];
+  onClose: () => void;
+  onConfirm: (targetStageId: string) => Promise<void>;
+}) {
+  const [target, setTarget] = useState<string>('');
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (open && otherStages.length > 0) {
+      setTarget(otherStages[0]!.id);
+    }
+  }, [open, otherStages]);
+
+  if (!sourceStage) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Mover deals e excluir &ldquo;{sourceStage.name}&rdquo;?</DialogTitle>
+          <DialogDescription>
+            Esta etapa tem <strong>{sourceStage.deal_count}</strong>{' '}
+            {sourceStage.deal_count === 1 ? 'negócio' : 'negócios'} ativo
+            {sourceStage.deal_count === 1 ? '' : 's'}. Escolha pra onde mover antes
+            de excluir.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex flex-col gap-2">
+          <Label className="text-xs">Mover deals para</Label>
+          <select
+            value={target}
+            onChange={(e) => setTarget(e.target.value)}
+            disabled={submitting}
+            className="h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            {otherStages.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+                {s.is_won ? ' (Ganho)' : s.is_lost ? ' (Perdido)' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose} disabled={submitting}>
+            Cancelar
+          </Button>
+          <Button
+            variant="destructive"
+            disabled={!target || submitting}
+            onClick={async () => {
+              setSubmitting(true);
+              try {
+                await onConfirm(target);
+              } finally {
+                setSubmitting(false);
+              }
+            }}
+          >
+            {submitting && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+            Mover e excluir
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -248,9 +407,16 @@ interface SortableStageRowProps {
   stage: PipelineStageWithCount;
   onUpdate: (patch: Parameters<typeof pipelinesApi.updateStage>[2]) => Promise<void>;
   onDelete: () => Promise<void>;
+  /** Abre a sheet de "⚡ Automações deste stage". */
+  onOpenAutomations: () => void;
 }
 
-function SortableStageRow({ stage, onUpdate, onDelete }: SortableStageRowProps) {
+function SortableStageRow({
+  stage,
+  onUpdate,
+  onDelete,
+  onOpenAutomations,
+}: SortableStageRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: stage.id,
   });
@@ -337,6 +503,16 @@ function SortableStageRow({ stage, onUpdate, onDelete }: SortableStageRowProps) 
           </span>
         </div>
 
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onOpenAutomations}
+          title="Automações deste stage"
+          className="h-7 px-2 text-xs text-primary hover:bg-primary/10"
+        >
+          <Zap className="mr-1 h-3 w-3" />
+          Automações
+        </Button>
         {!isProtected && (
           <Button
             variant="ghost"

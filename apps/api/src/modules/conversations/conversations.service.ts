@@ -74,6 +74,7 @@ export class ConversationsService {
     if (filters.status) q = q.eq('status', filters.status);
     if (filters.priority) q = q.eq('priority', filters.priority);
     if (filters.channel_type) q = q.eq('channel_type', filters.channel_type);
+    if (filters.contact_id) q = q.eq('contact_id', filters.contact_id);
 
     if (filters.mine === 'true' && currentUserId) {
       q = q.eq('assigned_to', currentUserId);
@@ -123,6 +124,7 @@ export class ConversationsService {
     if (filters.status) q = q.eq('status', filters.status);
     if (filters.priority) q = q.eq('priority', filters.priority);
     if (filters.channel_type) q = q.eq('channel_type', filters.channel_type);
+    if (filters.contact_id) q = q.eq('contact_id', filters.contact_id);
 
     if (filters.mine === 'true' && currentUserId) {
       q = q.eq('assigned_to', currentUserId);

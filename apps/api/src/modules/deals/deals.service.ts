@@ -9,11 +9,13 @@ import {
 import type { Deal, DealActivity, Pipeline } from '@eclick-active/shared';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { EventsGateway } from '../../gateways/events.gateway';
+import { OutboundWebhookService } from '../webhooks/outbound/outbound-webhook.service';
 import { AiService } from '../ai/ai.service';
 import { CreateDealDto } from './dto/create-deal.dto';
 import { UpdateDealDto } from './dto/update-deal.dto';
 import { MoveDealDto } from './dto/move-deal.dto';
 import { ListDealsQueryDto } from './dto/list-deals.query.dto';
+import { AddActivityDto } from './dto/add-activity.dto';
 import { BoardFiltersDto } from './dto/board-filters.query.dto';
 import { AutomationsService } from '../automations/automations.service';
 
@@ -24,6 +26,8 @@ import { AutomationsService } from '../automations/automations.service';
 /** Linha da view active.v_deal_board (deal ativo + joins). */
 export interface BoardDealItem {
   id: string;
+  /** Sequencial dentro da org (migration 009). View `v_deal_board` propaga via SELECT *. */
+  deal_number: number;
   org_id: string;
   pipeline_id: string;
   stage_id: string;
@@ -98,6 +102,7 @@ export class DealsService {
     private readonly events: EventsGateway,
     private readonly ai: AiService,
     private readonly automations: AutomationsService,
+    private readonly webhooks: OutboundWebhookService,
   ) {}
 
   // ──────────────────────────────────────────────────────────
@@ -149,6 +154,7 @@ export class DealsService {
 
     const deal = data as Deal;
     this.events.emitToOrg(orgId, 'deal:created', { deal });
+    void this.webhooks.deliver(orgId, 'deal.created', deal as unknown as Record<string, unknown>);
     return deal;
   }
 
@@ -342,6 +348,7 @@ export class DealsService {
     if (dto.assigned_to !== undefined) patch.assigned_to = dto.assigned_to;
     if (dto.tags !== undefined) patch.tags = dto.tags;
     if (dto.custom_fields !== undefined) patch.custom_fields = dto.custom_fields;
+    if (dto.conversation_id !== undefined) patch.conversation_id = dto.conversation_id;
 
     const { data, error } = await this.supabase.adminClient
       .from('deals')
@@ -358,6 +365,7 @@ export class DealsService {
 
     const deal = data as Deal;
     this.events.emitToOrg(orgId, 'deal:updated', { deal });
+    void this.webhooks.deliver(orgId, 'deal.updated', deal as unknown as Record<string, unknown>);
     return deal;
   }
 
@@ -393,6 +401,7 @@ export class DealsService {
     orgId: string,
     dealId: string,
     dto: MoveDealDto,
+    movedByUserId?: string,
   ): Promise<Deal> {
     const current = await this.assertDealInOrg(orgId, dealId);
     const targetStage = await this.assertStageInOrgAndPipeline(
@@ -440,6 +449,19 @@ export class DealsService {
 
     const deal = data as Deal;
 
+    // Pega nome do stage destino pra UX dos toasts no frontend
+    let toStageName: string | undefined;
+    try {
+      const { data: stageRow } = await this.supabase.adminClient
+        .from('pipeline_stages')
+        .select('name')
+        .eq('id', deal.stage_id)
+        .maybeSingle();
+      toStageName = (stageRow as { name?: string } | null)?.name;
+    } catch {
+      // não-crítico
+    }
+
     this.events.emitToOrg(orgId, 'deal:moved', {
       deal_id: deal.id,
       from_stage_id: fromStageId,
@@ -450,7 +472,25 @@ export class DealsService {
         : targetStage.is_lost
           ? 'lost'
           : null,
+      ...(movedByUserId ? { moved_by_user_id: movedByUserId } : {}),
+      deal_title: deal.title,
+      ...(toStageName ? { to_stage_name: toStageName } : {}),
     });
+
+    // Webhooks de saída — stage_changed + won/lost específicos quando aplicável
+    if (!isSameStage) {
+      void this.webhooks.deliver(orgId, 'deal.stage_changed', {
+        deal: deal as unknown as Record<string, unknown>,
+        from_stage_id: fromStageId,
+        to_stage_id: deal.stage_id,
+      });
+      if (targetStage.is_won) {
+        void this.webhooks.deliver(orgId, 'deal.won', deal as unknown as Record<string, unknown>);
+      }
+      if (targetStage.is_lost) {
+        void this.webhooks.deliver(orgId, 'deal.lost', deal as unknown as Record<string, unknown>);
+      }
+    }
 
     // Log extra: se mudou de stage, o trigger SQL já gravou um
     // deal_activities row com activity_type='stage_changed'. Não duplicar.
@@ -562,6 +602,47 @@ export class DealsService {
       throw new InternalServerErrorException(error.message);
     }
     return (data ?? []) as DealActivity[];
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // ADD ACTIVITY — registro manual (nota, email, ligação, etc.)
+  // ──────────────────────────────────────────────────────────
+
+  /**
+   * Insere uma atividade na timeline do deal. Restringido a tipos "user-
+   * creatable" no DTO — `stage_changed` e `value_changed` continuam sendo
+   * gerados automaticamente por triggers SQL.
+   */
+  async addActivity(
+    orgId: string,
+    dealId: string,
+    userId: string,
+    dto: AddActivityDto,
+  ): Promise<DealActivity> {
+    await this.assertDealInOrg(orgId, dealId);
+
+    const { data, error } = await this.supabase.adminClient
+      .from('deal_activities')
+      .insert({
+        org_id: orgId,
+        deal_id: dealId,
+        activity_type: dto.activity_type,
+        title: dto.title ?? null,
+        description: dto.description,
+        metadata: dto.metadata ?? {},
+        created_by: userId,
+      })
+      .select('*')
+      .single();
+
+    if (error || !data) {
+      this.logger.error(`addActivity failed: ${error?.message}`);
+      throw new InternalServerErrorException(error?.message ?? 'Failed to add activity');
+    }
+
+    const activity = data as DealActivity;
+    this.events.emitToOrg(orgId, 'deal:activity_added', { deal_id: dealId, activity });
+    return activity;
   }
 
   // ──────────────────────────────────────────────────────────

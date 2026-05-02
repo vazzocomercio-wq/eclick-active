@@ -16,11 +16,26 @@ export interface OrgSettings {
   has_erp_integration: boolean;
   member_count: number;
   channel_count: number;
+  /** Settings livres (jsonb) — auto_create_deal, etc. */
+  settings: Record<string, unknown>;
+}
+
+export interface AutoCreateDealSetting {
+  enabled: boolean;
+  pipeline_id?: string | null;
+  stage_id?: string | null;
+  /** Permite IA escolher o stage. Default: true. */
+  ai_position?: boolean;
 }
 
 export interface UpdateOrgInput {
   name?: string;
   slug?: string;
+  /** Mergeado em settings (raso). Use shape conhecido como `auto_create_deal`. */
+  settings?: {
+    auto_create_deal?: AutoCreateDealSetting;
+    [key: string]: unknown;
+  };
 }
 
 export interface AiFeature {

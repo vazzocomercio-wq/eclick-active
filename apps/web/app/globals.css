@@ -60,3 +60,21 @@
     font-feature-settings: 'rlig' 1, 'calt' 1;
   }
 }
+
+/* SLA breach pulse — usado em deals do Kanban com sla_breached=true.
+   Aplicado via classe `sla-pulse` no DealCard. Pulso suave em 2s loop. */
+@keyframes sla-pulse {
+  0%,
+  100% {
+    border-color: hsl(var(--border));
+    box-shadow: 0 0 0 0 hsl(var(--destructive) / 0);
+  }
+  50% {
+    border-color: hsl(var(--destructive));
+    box-shadow: 0 0 0 2px hsl(var(--destructive) / 0.25);
+  }
+}
+
+.sla-pulse {
+  animation: sla-pulse 2s ease-in-out infinite;
+}

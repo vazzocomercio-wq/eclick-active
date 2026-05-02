@@ -4,8 +4,14 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import type { Contact } from '@eclick-active/shared';
+import type {
+  Contact,
+  ContactTimelineEventType,
+  Deal,
+  Json,
+} from '@eclick-active/shared';
 import { SupabaseService } from '../../common/supabase/supabase.service';
+import { OutboundWebhookService } from '../webhooks/outbound/outbound-webhook.service';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
 import { ListContactsQueryDto } from './dto/list-contacts.query.dto';
@@ -21,7 +27,10 @@ export interface PaginatedResult<T> {
 export class ContactsService {
   private readonly logger = new Logger(ContactsService.name);
 
-  constructor(private readonly supabase: SupabaseService) {}
+  constructor(
+    private readonly supabase: SupabaseService,
+    private readonly webhooks: OutboundWebhookService,
+  ) {}
 
   // ──────────────────────────────────────────────────────────
   // CREATE
@@ -38,7 +47,9 @@ export class ContactsService {
       this.logger.error(`create failed: ${error?.message}`);
       throw new InternalServerErrorException(error?.message ?? 'Failed to create contact');
     }
-    return data as Contact;
+    const contact = data as Contact;
+    void this.webhooks.deliver(orgId, 'contact.created', contact as unknown as Record<string, unknown>);
+    return contact;
   }
 
   // ──────────────────────────────────────────────────────────
@@ -209,6 +220,142 @@ export class ContactsService {
       throw new InternalServerErrorException(error.message);
     }
     return (data ?? []) as Contact[];
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // GET /contacts/:id/timeline — eventos do contato
+  // ──────────────────────────────────────────────────────────
+
+  /**
+   * Linha do tempo do contato (active.contact_timeline). Append-only, ordenada
+   * DESC por created_at. Eventos chegam aqui via triggers SQL (deal_won,
+   * stage_changed, etc.) e via inserts manuais (note_added pelo agente).
+   */
+  async getTimeline(
+    orgId: string,
+    contactId: string,
+    limit = 100,
+  ): Promise<
+    Array<{
+      id: string;
+      event_type: ContactTimelineEventType;
+      title: string | null;
+      description: string | null;
+      metadata: Json;
+      created_by: string | null;
+      created_at: string;
+    }>
+  > {
+    await this.findById(orgId, contactId);
+
+    const { data, error } = await this.supabase.adminClient
+      .from('contact_timeline')
+      .select('id, event_type, title, description, metadata, created_by, created_at')
+      .eq('org_id', orgId)
+      .eq('contact_id', contactId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      this.logger.error(`getTimeline failed: ${error.message}`);
+      throw new InternalServerErrorException(error.message);
+    }
+
+    return (data ?? []) as Array<{
+      id: string;
+      event_type: ContactTimelineEventType;
+      title: string | null;
+      description: string | null;
+      metadata: Json;
+      created_by: string | null;
+      created_at: string;
+    }>;
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // GET /contacts/:id/deals — deals vinculados ao contato
+  // ──────────────────────────────────────────────────────────
+
+  /**
+   * Deals do contato (ativos e fechados) com nome do stage. Ordenados por
+   * `updated_at` DESC. Usado no Contact Detail Sheet → Aba "Negócios".
+   */
+  async getDeals(
+    orgId: string,
+    contactId: string,
+  ): Promise<
+    Array<
+      Pick<
+        Deal,
+        | 'id'
+        | 'title'
+        | 'value'
+        | 'currency'
+        | 'stage_id'
+        | 'pipeline_id'
+        | 'ai_score'
+        | 'ai_risk'
+        | 'won_at'
+        | 'lost_at'
+        | 'updated_at'
+        | 'created_at'
+      > & {
+        stage_name: string | null;
+        stage_color: string | null;
+      }
+    >
+  > {
+    await this.findById(orgId, contactId);
+
+    const { data, error } = await this.supabase.adminClient
+      .from('deals')
+      .select(
+        `id, title, value, currency, stage_id, pipeline_id, ai_score, ai_risk,
+         won_at, lost_at, updated_at, created_at,
+         stage:pipeline_stages(name, color)`,
+      )
+      .eq('org_id', orgId)
+      .eq('contact_id', contactId)
+      .order('updated_at', { ascending: false });
+
+    if (error) {
+      this.logger.error(`getDeals failed: ${error.message}`);
+      throw new InternalServerErrorException(error.message);
+    }
+
+    return ((data ?? []) as Array<{
+      id: string;
+      title: string;
+      value: number;
+      currency: string;
+      stage_id: string;
+      pipeline_id: string;
+      ai_score: number;
+      ai_risk: 'low' | 'medium' | 'high' | 'critical' | null;
+      won_at: string | null;
+      lost_at: string | null;
+      updated_at: string;
+      created_at: string;
+      stage: { name: string; color: string } | Array<{ name: string; color: string }> | null;
+    }>).map((d) => {
+      const stage = Array.isArray(d.stage) ? d.stage[0] ?? null : d.stage;
+      return {
+        id: d.id,
+        title: d.title,
+        value: d.value,
+        currency: d.currency,
+        stage_id: d.stage_id,
+        pipeline_id: d.pipeline_id,
+        ai_score: d.ai_score,
+        ai_risk: d.ai_risk,
+        won_at: d.won_at,
+        lost_at: d.lost_at,
+        updated_at: d.updated_at,
+        created_at: d.created_at,
+        stage_name: stage?.name ?? null,
+        stage_color: stage?.color ?? null,
+      };
+    });
   }
 
   // ──────────────────────────────────────────────────────────

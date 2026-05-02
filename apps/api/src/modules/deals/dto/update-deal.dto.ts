@@ -56,4 +56,13 @@ export class UpdateDealDto {
   @IsOptional()
   @IsObject()
   custom_fields?: Record<string, unknown>;
+
+  /**
+   * UUID da conversa vinculada — usado pelo Deal Detail Sheet pra ligar
+   * conversa existente do contato ao deal. Null pra desvincular.
+   */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsUUID()
+  conversation_id?: string | null;
 }

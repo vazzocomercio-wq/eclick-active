@@ -3,6 +3,7 @@ import { AppController } from './app.controller';
 import { SupabaseModule } from './common/supabase/supabase.module';
 import { AuthModule } from './common/auth/auth.module';
 import { ChannelsModule as ChannelDispatcherModule } from './common/channels/channels.module';
+import { PlaceholderModule } from './common/placeholder/placeholder.module';
 import { EventsModule } from './gateways/events.module';
 import { AiModule } from './modules/ai/ai.module';
 import { AutomationsModule } from './modules/automations/automations.module';
@@ -10,6 +11,7 @@ import { ChannelsModule } from './modules/channels/channels.module';
 import { ContactsModule } from './modules/contacts/contacts.module';
 import { ConversationsModule } from './modules/conversations/conversations.module';
 import { CopilotModule } from './modules/copilot/copilot.module';
+import { CustomFieldsModule } from './modules/custom-fields/custom-fields.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { DealsModule } from './modules/deals/deals.module';
 import { InternalModule } from './modules/internal/internal.module';
@@ -28,6 +30,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     SupabaseModule,
     AuthModule,
     ChannelDispatcherModule,
+    PlaceholderModule,
     EventsModule,
     // Feature modules
     ContactsModule,
@@ -35,6 +38,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     MessagesModule,
     PipelinesModule,
     DealsModule,
+    CustomFieldsModule,
     DashboardModule,
     TasksModule,
     KnowledgeModule,

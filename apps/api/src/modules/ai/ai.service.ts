@@ -87,7 +87,7 @@ export class AiService {
   async suggestResponse(
     orgId: string,
     conversationId: string,
-  ): Promise<SuggestionResult> {
+  ): Promise<SuggestionResult & { ai_interaction_id: string | null }> {
     const conversation = await this.fetchConversationCore(orgId, conversationId);
     const contact = conversation.contact_id
       ? await this.fetchContactSummary(orgId, conversation.contact_id)
@@ -110,7 +110,7 @@ export class AiService {
 
     const userPrompt = this.buildSuggestPrompt(contact, recent, knowledgeHits);
 
-    const { data: suggestion } = await this.anthropic.complete<SuggestionResult>({
+    const { data: suggestion, interaction_id } = await this.anthropic.complete<SuggestionResult>({
       interaction_type: 'suggest_response',
       org_id: orgId,
       system: SUGGEST_SYSTEM_PROMPT,
@@ -126,7 +126,7 @@ export class AiService {
     // Clamp confidence em [0, 1] — schema não permite minimum/maximum
     const confidence = Math.max(0, Math.min(1, Number(suggestion.confidence) || 0));
 
-    return { ...suggestion, confidence };
+    return { ...suggestion, confidence, ai_interaction_id: interaction_id };
   }
 
   // ──────────────────────────────────────────────────────────
@@ -137,15 +137,18 @@ export class AiService {
    * Gera resumo de 2-3 frases e atualiza conversation.ai_summary.
    * Output é texto livre (sem json_schema) — mais natural pro modelo.
    */
-  async summarizeConversation(orgId: string, conversationId: string): Promise<string> {
+  async summarizeConversation(
+    orgId: string,
+    conversationId: string,
+  ): Promise<{ summary: string; ai_interaction_id: string | null }> {
     const recent = await this.fetchRecentMessages(orgId, conversationId, 30);
     if (recent.length === 0) {
-      return '';
+      return { summary: '', ai_interaction_id: null };
     }
 
     const userPrompt = this.buildSummarizePrompt(recent);
 
-    const { data: summary } = await this.anthropic.complete<string>({
+    const { data: summary, interaction_id } = await this.anthropic.complete<string>({
       interaction_type: 'summarize',
       org_id: orgId,
       system: SUMMARIZE_SYSTEM_PROMPT,
@@ -163,7 +166,7 @@ export class AiService {
         .eq('id', conversationId);
     }
 
-    return trimmed;
+    return { summary: trimmed, ai_interaction_id: interaction_id };
   }
 
   // ──────────────────────────────────────────────────────────
@@ -207,6 +210,277 @@ export class AiService {
   }
 
   // ──────────────────────────────────────────────────────────
+  // POST /ai/fill-field — preencher campo com IA
+  // ──────────────────────────────────────────────────────────
+
+  /**
+   * Gera conteúdo pra um campo de texto baseado no estado da entidade
+   * (deal/contact/company/task) + últimas mensagens da conversa vinculada.
+   * Retorna o texto plano gerado (sem JSON schema — output mais natural).
+   */
+  async fillField(args: {
+    orgId: string;
+    entityType: 'deal' | 'contact' | 'company' | 'task';
+    entityId: string;
+    fieldName: string;
+    currentValue?: string;
+    hint?: string;
+  }): Promise<{ value: string; ai_interaction_id: string | null }> {
+    const ctx = await this.buildFillContext(args);
+    if (!ctx) {
+      throw new NotFoundException(
+        `${args.entityType} ${args.entityId} não encontrado.`,
+      );
+    }
+
+    const userPrompt = this.buildFillFieldPrompt({
+      ...args,
+      context: ctx,
+    });
+
+    const { data: text, interaction_id } = await this.anthropic.complete<string>({
+      interaction_type: 'summarize',
+      org_id: args.orgId,
+      system: FILL_FIELD_SYSTEM_PROMPT,
+      user: userPrompt,
+      max_tokens: 512,
+      context: {
+        ...(ctx.conversationId ? { conversation_id: ctx.conversationId } : {}),
+        ...(ctx.contactId ? { contact_id: ctx.contactId } : {}),
+        ...(args.entityType === 'deal' ? { deal_id: args.entityId } : {}),
+      },
+    });
+
+    return { value: text.trim(), ai_interaction_id: interaction_id };
+  }
+
+  /**
+   * Carrega resumo da entidade + últimas mensagens (quando há conversa
+   * vinculada). Volta `null` se a entidade não existir/não pertencer à org.
+   */
+  private async buildFillContext(args: {
+    orgId: string;
+    entityType: 'deal' | 'contact' | 'company' | 'task';
+    entityId: string;
+  }): Promise<FillContext | null> {
+    const lines: string[] = [];
+    let conversationId: string | undefined;
+    let contactId: string | undefined;
+
+    if (args.entityType === 'deal') {
+      const { data } = await this.supabase.adminClient
+        .from('deals')
+        .select(
+          'title, value, currency, ai_score, ai_risk, ai_next_action, conversation_id, contact_id, custom_fields, contact:contacts(name, phone, ai_summary, temperature, tags), stage:pipeline_stages(name)',
+        )
+        .eq('org_id', args.orgId)
+        .eq('id', args.entityId)
+        .maybeSingle();
+      if (!data) return null;
+      const d = data as DealCtx;
+      const contact = Array.isArray(d.contact) ? d.contact[0] ?? null : d.contact;
+      const stage = Array.isArray(d.stage) ? d.stage[0] ?? null : d.stage;
+      lines.push(`# Deal: ${d.title}`);
+      if (d.value) lines.push(`- Valor: ${d.currency} ${d.value}`);
+      if (stage?.name) lines.push(`- Stage: ${stage.name}`);
+      if (typeof d.ai_score === 'number') lines.push(`- AI Score: ${d.ai_score}/100`);
+      if (d.ai_risk) lines.push(`- Risco: ${d.ai_risk}`);
+      if (d.ai_next_action) lines.push(`- Próxima ação sugerida: ${d.ai_next_action}`);
+      if (contact?.name) lines.push(`- Cliente: ${contact.name}`);
+      if (contact?.temperature) lines.push(`- Temperatura: ${contact.temperature}`);
+      if (contact?.tags?.length) lines.push(`- Tags: ${contact.tags.join(', ')}`);
+      if (contact?.ai_summary) lines.push(`- Resumo do cliente: ${contact.ai_summary}`);
+      conversationId = d.conversation_id ?? undefined;
+      contactId = d.contact_id ?? undefined;
+    } else if (args.entityType === 'contact') {
+      const { data } = await this.supabase.adminClient
+        .from('contacts')
+        .select('name, phone, email, temperature, score, ai_summary, tags, custom_fields')
+        .eq('org_id', args.orgId)
+        .eq('id', args.entityId)
+        .maybeSingle();
+      if (!data) return null;
+      const c = data as ContactCtx;
+      lines.push(`# Contato: ${c.name ?? c.phone ?? '(sem nome)'}`);
+      if (c.phone) lines.push(`- Telefone: ${c.phone}`);
+      if (c.email) lines.push(`- Email: ${c.email}`);
+      if (c.temperature) lines.push(`- Temperatura: ${c.temperature}`);
+      if (typeof c.score === 'number') lines.push(`- Score: ${c.score}/100`);
+      if (c.tags?.length) lines.push(`- Tags: ${c.tags.join(', ')}`);
+      if (c.ai_summary) lines.push(`- Resumo: ${c.ai_summary}`);
+      contactId = args.entityId;
+    } else if (args.entityType === 'company') {
+      const { data } = await this.supabase.adminClient
+        .from('companies')
+        .select('name, domain, industry, size, custom_fields')
+        .eq('org_id', args.orgId)
+        .eq('id', args.entityId)
+        .maybeSingle();
+      if (!data) return null;
+      const c = data as CompanyCtx;
+      lines.push(`# Empresa: ${c.name}`);
+      if (c.domain) lines.push(`- Domínio: ${c.domain}`);
+      if (c.industry) lines.push(`- Setor: ${c.industry}`);
+      if (c.size) lines.push(`- Porte: ${c.size}`);
+    } else if (args.entityType === 'task') {
+      const { data } = await this.supabase.adminClient
+        .from('tasks')
+        .select('title, task_type, priority, status, due_date, deal_id, contact_id')
+        .eq('org_id', args.orgId)
+        .eq('id', args.entityId)
+        .maybeSingle();
+      if (!data) return null;
+      const t = data as TaskCtx;
+      lines.push(`# Tarefa: ${t.title}`);
+      if (t.task_type) lines.push(`- Tipo: ${t.task_type}`);
+      if (t.priority) lines.push(`- Prioridade: ${t.priority}`);
+      if (t.status) lines.push(`- Status: ${t.status}`);
+      if (t.due_date) lines.push(`- Vencimento: ${t.due_date}`);
+      contactId = t.contact_id ?? undefined;
+    }
+
+    // Últimas 8 mensagens, se houver conversa vinculada
+    let messageLines = '';
+    if (conversationId) {
+      const recent = await this.fetchRecentMessages(args.orgId, conversationId, 8);
+      messageLines = recent
+        .map((m, i) => `${i + 1}. ${formatMessageLine(m)}`)
+        .join('\n');
+    }
+
+    return {
+      summary: lines.join('\n'),
+      messageLines,
+      conversationId,
+      contactId,
+    };
+  }
+
+  private buildFillFieldPrompt(args: {
+    entityType: 'deal' | 'contact' | 'company' | 'task';
+    fieldName: string;
+    currentValue?: string;
+    hint?: string;
+    context: FillContext;
+  }): string {
+    const lines: string[] = [];
+    lines.push(args.context.summary);
+
+    if (args.context.messageLines) {
+      lines.push('');
+      lines.push('# Conversa recente (mais antigas → mais novas)');
+      lines.push(args.context.messageLines);
+    }
+
+    lines.push('');
+    lines.push(`# Campo a preencher`);
+    lines.push(`- Nome: ${args.fieldName}`);
+    lines.push(`- Tipo de entidade: ${args.entityType}`);
+    if (args.currentValue) {
+      lines.push(`- Valor atual (ajuste/melhore se útil): ${args.currentValue}`);
+    }
+    if (args.hint) {
+      lines.push(`- Hint: ${args.hint}`);
+    }
+    return lines.join('\n');
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // PATCH /ai/interactions/:id/feedback — feedback do usuário (👍/👎)
+  // ──────────────────────────────────────────────────────────
+
+  /**
+   * Salva feedback positivo/negativo do usuário em
+   * `ai_interactions.metadata.feedback`. Usado pra refinar prompts e
+   * detectar regressões de qualidade ao longo do tempo.
+   */
+  async submitInteractionFeedback(
+    orgId: string,
+    interactionId: string,
+    feedback: 'positive' | 'negative',
+    comment: string | null,
+  ): Promise<void> {
+    // 1. Busca metadata atual pra fazer merge não-destrutivo
+    const { data, error } = await this.supabase.adminClient
+      .from('ai_interactions')
+      .select('metadata')
+      .eq('org_id', orgId)
+      .eq('id', interactionId)
+      .maybeSingle();
+
+    if (error) throw new InternalServerErrorException(error.message);
+    if (!data) throw new NotFoundException(`Interaction ${interactionId} not found`);
+
+    const metadata = (data.metadata as Record<string, unknown> | null) ?? {};
+    const next = {
+      ...metadata,
+      feedback,
+      feedback_comment: comment ?? null,
+      feedback_at: new Date().toISOString(),
+    };
+
+    const { error: updErr } = await this.supabase.adminClient
+      .from('ai_interactions')
+      .update({ metadata: next })
+      .eq('org_id', orgId)
+      .eq('id', interactionId);
+
+    if (updErr) throw new InternalServerErrorException(updErr.message);
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // GET /ai/unanswered/:conversationId — perguntas inbound sem resposta
+  // ──────────────────────────────────────────────────────────
+
+  /**
+   * Detecta mensagens inbound da conversa que potencialmente são perguntas
+   * sem resposta — sem custo de IA. Heurística simples:
+   *   1. Pega últimas 30 mensagens em ordem cronológica
+   *   2. Pega TODAS as inbound após a última outbound do agente
+   *   3. Marca as que parecem pergunta (terminam em ?, ou têm marcadores)
+   *
+   * Retorna até 5 itens recentes pra UI exibir como "perguntas pendentes".
+   */
+  async getUnansweredQuestions(
+    orgId: string,
+    conversationId: string,
+  ): Promise<
+    Array<{
+      message_id: string;
+      created_at: string;
+      text: string;
+      is_question: boolean;
+    }>
+  > {
+    const recent = await this.fetchRecentMessages(orgId, conversationId, 30);
+
+    // Encontra a última outbound (de agente humano OU bot — ambos são "respostas").
+    let lastOutboundIdx = -1;
+    for (let i = recent.length - 1; i >= 0; i--) {
+      if (recent[i]?.direction === 'outbound') {
+        lastOutboundIdx = i;
+        break;
+      }
+    }
+
+    // Pega inbound APÓS a última outbound — esses são "não respondidos"
+    const candidates = recent.slice(lastOutboundIdx + 1).filter((m) => m.direction === 'inbound');
+
+    // Limita a 5 mais recentes pra não poluir a UI
+    const top = candidates.slice(-5);
+
+    return top.map((m) => {
+      const text = (m.plain_text ?? extractInlineText(m) ?? '').trim();
+      return {
+        message_id: m.id,
+        created_at: m.created_at,
+        text: text.length > 240 ? `${text.slice(0, 240)}…` : text,
+        is_question: looksLikeQuestion(text),
+      };
+    });
+  }
+
+  // ──────────────────────────────────────────────────────────
   // Orquestração: processInbound (chamado fire-and-forget pelo webhook)
   // ──────────────────────────────────────────────────────────
 
@@ -243,6 +517,9 @@ export class AiService {
           conversation_id: conversationId,
           suggestion: suggestion.suggested_response,
           confidence: suggestion.confidence,
+          ...(suggestion.ai_interaction_id
+            ? { ai_interaction_id: suggestion.ai_interaction_id }
+            : {}),
         });
       }
 
@@ -1044,4 +1321,101 @@ function clamp(n: number, min: number, max: number): number {
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+// ──────────────────────────────────────────────────────────
+// fill-field: tipos + prompt
+// ──────────────────────────────────────────────────────────
+
+interface FillContext {
+  summary: string;
+  messageLines: string;
+  conversationId?: string;
+  contactId?: string;
+}
+
+interface DealCtx {
+  title: string;
+  value: number | null;
+  currency: string;
+  ai_score: number;
+  ai_risk: string | null;
+  ai_next_action: string | null;
+  conversation_id: string | null;
+  contact_id: string | null;
+  custom_fields: Record<string, unknown>;
+  contact:
+    | {
+        name: string | null;
+        phone: string | null;
+        ai_summary: string | null;
+        temperature: string | null;
+        tags: string[] | null;
+      }
+    | Array<{
+        name: string | null;
+        phone: string | null;
+        ai_summary: string | null;
+        temperature: string | null;
+        tags: string[] | null;
+      }>
+    | null;
+  stage: { name: string } | Array<{ name: string }> | null;
+}
+
+interface ContactCtx {
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  temperature: string | null;
+  score: number;
+  ai_summary: string | null;
+  tags: string[] | null;
+  custom_fields: Record<string, unknown>;
+}
+
+interface CompanyCtx {
+  name: string;
+  domain: string | null;
+  industry: string | null;
+  size: string | null;
+  custom_fields: Record<string, unknown>;
+}
+
+interface TaskCtx {
+  title: string;
+  task_type: string | null;
+  priority: string | null;
+  status: string | null;
+  due_date: string | null;
+  deal_id: string | null;
+  contact_id: string | null;
+}
+
+const FILL_FIELD_SYSTEM_PROMPT = `Você é um assistente que preenche campos de CRM em português do Brasil.
+Receba informações sobre uma entidade (deal/contato/empresa/tarefa) e o histórico
+da conversa, e gere o conteúdo apropriado pro campo solicitado.
+
+Regras:
+- Responda APENAS com o conteúdo do campo, sem explicações, prefixos ou aspas.
+- Seja conciso e direto. Texto plano (sem markdown), no máximo 3 frases curtas
+  pra campos descritivos curtos; até 5 linhas pra notas/textareas.
+- Se o campo for óbvio pelo contexto (ex: "ai_summary"), produza um resumo;
+  se for descritivo (ex: "description" de tarefa), descreva a ação;
+  se for nota livre, capture a próxima ação ou observação relevante.
+- Se faltar contexto, faça uma sugestão genérica útil em vez de retornar vazio.
+- Não invente nomes, valores ou datas que não estejam nos dados fornecidos.`;
+
+/**
+ * Heurística leve pra detectar perguntas em PT-BR e EN. Não é perfeita —
+ * a UI mostra ❓ quando true e ⚠️ quando false (mensagem inbound sem
+ * resposta mas sem ponto de interrogação claro).
+ */
+function looksLikeQuestion(text: string): boolean {
+  if (!text) return false;
+  if (/[?？]/.test(text)) return true;
+  // Marcadores interrogativos comuns em PT-BR + alguns em inglês
+  return /^(?:quanto|quando|onde|como|qual|quem|por que|porque|posso|consegue|consigo|tem|how|what|when|where|why|who|can|could|do you|does)/i.test(
+    text.trim(),
+  );
 }

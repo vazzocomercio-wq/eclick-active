@@ -20,6 +20,7 @@ import { AuthGuard } from '../../common/auth/auth.guard';
 import { CurrentUser } from '../../common/auth/current-user.decorator';
 import type { AuthUser } from '../../common/auth/auth.types';
 import { ConversationsService } from './conversations.service';
+import { CreateConversationDto } from './dto/create-conversation.dto';
 import { UpdateConversationDto } from './dto/update-conversation.dto';
 import { ListConversationsQueryDto } from './dto/list-conversations.query.dto';
 import type { PaginatedResult } from '../contacts/contacts.service';
@@ -29,13 +30,23 @@ import type { PaginatedResult } from '../contacts/contacts.service';
 export class ConversationsController {
   constructor(private readonly service: ConversationsService) {}
 
-  // GET /conversations?page=&limit=&status=&priority=&assigned_to=&channel_type=&mine=
+  // GET /conversations?page=&limit=&status=&priority=&assigned_to=&channel_type=&mine=&contact_id=
   @Get()
   inbox(
     @CurrentUser() user: AuthUser,
     @Query() filters: ListConversationsQueryDto,
   ): Promise<PaginatedResult<InboxItem>> {
     return this.service.getInbox(user.org_id, filters, user.id);
+  }
+
+  // POST /conversations — cria conversa nova (drawer "Iniciar conversa")
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  create(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: CreateConversationDto,
+  ): Promise<Conversation> {
+    return this.service.create(user.org_id, dto);
   }
 
   // GET /conversations/:id

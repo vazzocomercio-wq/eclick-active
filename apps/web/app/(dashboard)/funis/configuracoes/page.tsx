@@ -3,41 +3,39 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
+  Archive,
+  ArchiveRestore,
   ArrowLeft,
   Copy,
-  Loader2,
   Plus,
   Settings,
   Trash2,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   pipelinesApi,
   type PipelineWithStages,
 } from '@/lib/api/pipelines';
 import { ApiError } from '@/lib/api/client';
 import { PipelineConfigSheet } from '@/components/funis/pipeline-config-sheet';
+import { NewPipelineDialog } from '@/components/funis/new-pipeline-dialog';
 import { cn } from '@/lib/utils';
 
 export default function PipelineSettingsPage() {
   const [pipelines, setPipelines] = useState<PipelineWithStages[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
   const [editingPipeline, setEditingPipeline] = useState<PipelineWithStages | null>(null);
-
-  // Form do "Novo pipeline"
-  const [showNewForm, setShowNewForm] = useState(false);
-  const [newName, setNewName] = useState('');
+  const [newDialogOpen, setNewDialogOpen] = useState(false);
 
   const reload = useCallback(async () => {
     setError(null);
     try {
-      const list = await pipelinesApi.list();
+      // Em /configuracoes, lista TUDO (inclui arquivados pra restore)
+      const list = await pipelinesApi.list({ includeArchived: true });
       setPipelines(list);
-      // Mantém o pipeline editingPipeline atualizado se ainda existir
       setEditingPipeline((curr) =>
         curr ? list.find((p) => p.id === curr.id) ?? null : null,
       );
@@ -58,25 +56,30 @@ export default function PipelineSettingsPage() {
     void reload();
   }, [reload]);
 
-  async function handleCreatePipeline() {
-    if (!newName.trim()) return;
-    setCreating(true);
-    setError(null);
+  async function handleArchive(p: PipelineWithStages) {
+    if (!confirm(`Arquivar "${p.name}"? Não aparece no board, dados ficam preservados.`)) {
+      return;
+    }
     try {
-      await pipelinesApi.create({ name: newName.trim() });
-      setNewName('');
-      setShowNewForm(false);
+      await pipelinesApi.archive(p.id);
+      toast.success('Pipeline arquivado');
       await reload();
     } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? `${err.status}: ${err.message}`
-          : err instanceof Error
-            ? err.message
-            : 'Erro ao criar pipeline',
-      );
-    } finally {
-      setCreating(false);
+      toast.error('Falha ao arquivar', {
+        description: err instanceof ApiError ? err.message : String(err),
+      });
+    }
+  }
+
+  async function handleRestore(p: PipelineWithStages) {
+    try {
+      await pipelinesApi.restore(p.id);
+      toast.success('Pipeline restaurado');
+      await reload();
+    } catch (err) {
+      toast.error('Falha ao restaurar', {
+        description: err instanceof ApiError ? err.message : String(err),
+      });
     }
   }
 
@@ -134,7 +137,7 @@ export default function PipelineSettingsPage() {
           </p>
         </div>
 
-        <Button size="sm" onClick={() => setShowNewForm((v) => !v)}>
+        <Button size="sm" onClick={() => setNewDialogOpen(true)}>
           <Plus className="mr-2 h-3.5 w-3.5" />
           Novo pipeline
         </Button>
@@ -148,46 +151,10 @@ export default function PipelineSettingsPage() {
             </div>
           )}
 
-          {showNewForm && (
-            <div className="flex flex-col gap-3 rounded-xl border border-primary/30 bg-card p-4">
-              <h2 className="text-sm font-semibold">Novo pipeline</h2>
-              <div className="flex flex-col gap-2">
-                <Label className="text-xs">Nome</Label>
-                <Input
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Ex: Vendas B2B"
-                  autoFocus
-                />
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setShowNewForm(false);
-                    setNewName('');
-                  }}
-                  disabled={creating}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={handleCreatePipeline}
-                  disabled={creating || !newName.trim()}
-                >
-                  {creating && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
-                  Criar pipeline
-                </Button>
-              </div>
-            </div>
-          )}
-
           {loading ? (
             <SkeletonList />
           ) : pipelines.length === 0 ? (
-            <EmptyState onCreate={() => setShowNewForm(true)} />
+            <EmptyState onCreate={() => setNewDialogOpen(true)} />
           ) : (
             <ul className="flex flex-col gap-3">
               {pipelines.map((p) => (
@@ -197,6 +164,8 @@ export default function PipelineSettingsPage() {
                   onConfigure={() => setEditingPipeline(p)}
                   onRename={(name) => handleRenamePipeline(p, name)}
                   onDelete={() => handleDeletePipeline(p.id)}
+                  onArchive={() => void handleArchive(p)}
+                  onRestore={() => void handleRestore(p)}
                 />
               ))}
             </ul>
@@ -210,6 +179,12 @@ export default function PipelineSettingsPage() {
         pipeline={editingPipeline}
         onChange={reload}
       />
+
+      <NewPipelineDialog
+        open={newDialogOpen}
+        onOpenChange={setNewDialogOpen}
+        onCreated={() => void reload()}
+      />
     </div>
   );
 }
@@ -219,11 +194,15 @@ function PipelineCard({
   onConfigure,
   onRename,
   onDelete,
+  onArchive,
+  onRestore,
 }: {
   pipeline: PipelineWithStages;
   onConfigure: () => void;
   onRename: (name: string) => void;
   onDelete: () => void;
+  onArchive: () => void;
+  onRestore: () => void;
 }) {
   const [editingName, setEditingName] = useState(false);
   const [name, setName] = useState(pipeline.name);
@@ -231,9 +210,17 @@ function PipelineCard({
   useEffect(() => setName(pipeline.name), [pipeline.name]);
 
   const totalDeals = pipeline.stages.reduce((acc, s) => acc + s.deal_count, 0);
+  const isArchived = !!pipeline.archived_at;
 
   return (
-    <li className="flex flex-col gap-3 rounded-xl border border-border bg-card p-5 transition-colors hover:border-primary/30">
+    <li
+      className={cn(
+        'flex flex-col gap-3 rounded-xl border bg-card p-5 transition-colors',
+        isArchived
+          ? 'border-border/50 opacity-70 hover:opacity-100'
+          : 'border-border hover:border-primary/30',
+      )}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           {editingName ? (
@@ -268,6 +255,12 @@ function PipelineCard({
               className="text-left text-base font-semibold transition-colors hover:text-primary"
             >
               {pipeline.name}
+              {isArchived && (
+                <span className="ml-2 inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <Archive className="h-2.5 w-2.5" />
+                  Arquivado
+                </span>
+              )}
             </button>
           )}
           <span className="text-xs text-muted-foreground">
@@ -286,6 +279,21 @@ function PipelineCard({
             <Settings className="mr-1 h-3.5 w-3.5" />
             Configurar etapas
           </Button>
+          {isArchived ? (
+            <Button variant="outline" size="sm" onClick={onRestore}>
+              <ArchiveRestore className="mr-1 h-3.5 w-3.5" />
+              Restaurar
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onArchive}
+              title="Arquivar pipeline"
+            >
+              <Archive className="h-3.5 w-3.5" />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="sm"

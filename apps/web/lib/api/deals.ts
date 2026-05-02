@@ -1,4 +1,4 @@
-import type { Deal, DealActivity } from '@eclick-active/shared';
+import type { Deal, DealActivity, DealActivityType } from '@eclick-active/shared';
 import { api } from './client';
 
 export interface ListDealsParams {
@@ -40,6 +40,8 @@ export interface UpdateDealInput {
   expected_close_date?: string | null;
   assigned_to?: string | null;
   tags?: string[];
+  custom_fields?: Record<string, unknown>;
+  conversation_id?: string | null;
 }
 
 export interface MoveDealInput {
@@ -51,6 +53,23 @@ export interface MoveDealInput {
 export interface ReorderDealsInput {
   stage_id: string;
   deal_ids: string[];
+}
+
+/**
+ * Tipos que a UI pode criar manualmente. `stage_changed`, `value_changed`,
+ * `assigned`, `task_created` e `score_changed` ficam reservados pra triggers
+ * SQL ou serviços internos (espelha o whitelist do backend).
+ */
+export type UserCreatableActivityType = Extract<
+  DealActivityType,
+  'note_added' | 'email_sent' | 'call_made' | 'meeting_scheduled' | 'proposal_sent'
+>;
+
+export interface AddActivityInput {
+  activity_type: UserCreatableActivityType;
+  description: string;
+  title?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export const dealsApi = {
@@ -87,6 +106,9 @@ export const dealsApi = {
   },
   getActivities(id: string, signal?: AbortSignal) {
     return api.get<DealActivity[]>(`/deals/${id}/activities`, { signal });
+  },
+  addActivity(id: string, input: AddActivityInput) {
+    return api.post<DealActivity>(`/deals/${id}/activities`, input);
   },
   getById(id: string, signal?: AbortSignal) {
     return api.get<Deal & { contact?: unknown; company?: unknown; pipeline?: unknown; stage?: unknown }>(

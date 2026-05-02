@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   copilotApi,
+  type CopilotContext,
   type CopilotMessageRecord,
   type ToolCallRecord,
 } from '@/lib/api/copilot';
@@ -19,6 +20,12 @@ export interface ChatMessage {
   tool_calls: ToolCallRecord[];
   /** ISO. Para mensagens otimistas, ts do client. */
   created_at: string;
+  /**
+   * ID da row em ai_interactions associada à resposta (assistant only).
+   * Vem do backend em `metadata.ai_interaction_id`. Null quando o log
+   * falhou (cenário raro) — UI esconde 👍/👎 nesse caso.
+   */
+  ai_interaction_id?: string | null;
 }
 
 interface UseCopilotResult {
@@ -32,7 +39,18 @@ interface UseCopilotResult {
 
 const TEMP_PREFIX = 'temp-';
 
-export function useCopilot(): UseCopilotResult {
+/**
+ * Hook do copiloto. Aceita um `context` opcional — quando passado, todas as
+ * mensagens enviadas via `send()` carregam o contexto, e o backend prepende
+ * um preâmbulo "[CONTEXTO ATIVO: ...]" antes de chamar o modelo. O histórico
+ * persistido em `copilot_messages` permanece com o texto original do usuário
+ * (sem o preâmbulo) — `metadata.context_type` e `metadata.context_id` são
+ * salvos pra trace.
+ *
+ * O histórico é único por usuário (não isolado por contexto) — o painel
+ * abre na mesma conversa em qualquer página, mantendo continuidade.
+ */
+export function useCopilot(context?: CopilotContext): UseCopilotResult {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [thinking, setThinking] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
@@ -63,52 +81,63 @@ export function useCopilot(): UseCopilotResult {
     return () => ctrl.abort();
   }, []);
 
-  const send = useCallback(async (text: string) => {
-    const trimmed = text.trim();
-    if (!trimmed || inFlight.current) return;
-    inFlight.current = true;
-    setError(null);
+  // Estabiliza referência do context pra dependency do useCallback. Se o pai
+  // recriar o objeto a cada render, a função `send` ainda permanece estável
+  // enquanto type+id forem iguais.
+  const ctxType = context?.type;
+  const ctxId = context?.id;
 
-    // Otimista: append user message
-    const tempId = `${TEMP_PREFIX}${Date.now()}`;
-    const userMsg: ChatMessage = {
-      id: tempId,
-      role: 'user',
-      content: trimmed,
-      tool_calls: [],
-      created_at: new Date().toISOString(),
-    };
-    setMessages((m) => [...m, userMsg]);
-    setThinking(true);
+  const send = useCallback(
+    async (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed || inFlight.current) return;
+      inFlight.current = true;
+      setError(null);
 
-    try {
-      const result = await copilotApi.send(trimmed);
-      setMessages((m) => [
-        // Substitui o temp pelo persistido (assumimos sucesso, server salvou)
-        ...m.filter((msg) => msg.id !== tempId),
-        { ...userMsg, id: `user-${result.assistant_message_id}` },
-        {
-          id: result.assistant_message_id,
-          role: 'assistant',
-          content: result.reply,
-          tool_calls: result.tool_calls,
-          created_at: new Date().toISOString(),
-        },
-      ]);
-    } catch (err) {
-      // Mantém a user message visível, mostra erro
-      setError(
-        err instanceof ApiError
-          ? `${err.status}: ${err.message}`
-          : err instanceof Error
-            ? err.message
-            : 'Erro ao enviar mensagem',
-      );
-    } finally {
-      inFlight.current = false;
-      setThinking(false);
-    }
-  }, []);
+      // Otimista: append user message
+      const tempId = `${TEMP_PREFIX}${Date.now()}`;
+      const userMsg: ChatMessage = {
+        id: tempId,
+        role: 'user',
+        content: trimmed,
+        tool_calls: [],
+        created_at: new Date().toISOString(),
+      };
+      setMessages((m) => [...m, userMsg]);
+      setThinking(true);
+
+      try {
+        const result = await copilotApi.send(
+          trimmed,
+          ctxType ? { type: ctxType, ...(ctxId ? { id: ctxId } : {}) } : undefined,
+        );
+        setMessages((m) => [
+          ...m.filter((msg) => msg.id !== tempId),
+          { ...userMsg, id: `user-${result.assistant_message_id}` },
+          {
+            id: result.assistant_message_id,
+            role: 'assistant',
+            content: result.reply,
+            tool_calls: result.tool_calls,
+            created_at: new Date().toISOString(),
+            ai_interaction_id: result.ai_interaction_id,
+          },
+        ]);
+      } catch (err) {
+        setError(
+          err instanceof ApiError
+            ? `${err.status}: ${err.message}`
+            : err instanceof Error
+              ? err.message
+              : 'Erro ao enviar mensagem',
+        );
+      } finally {
+        inFlight.current = false;
+        setThinking(false);
+      }
+    },
+    [ctxType, ctxId],
+  );
 
   const clear = useCallback(async () => {
     setError(null);
@@ -130,11 +159,15 @@ export function useCopilot(): UseCopilotResult {
 }
 
 function toChatMessage(rec: CopilotMessageRecord): ChatMessage {
+  const meta = rec.metadata as Record<string, unknown> | null | undefined;
+  const interactionId =
+    meta && typeof meta.ai_interaction_id === 'string' ? meta.ai_interaction_id : null;
   return {
     id: rec.id,
     role: rec.role,
     content: rec.content,
     tool_calls: rec.tool_calls,
     created_at: rec.created_at,
+    ai_interaction_id: rec.role === 'assistant' ? interactionId : null,
   };
 }

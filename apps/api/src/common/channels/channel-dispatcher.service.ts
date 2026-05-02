@@ -15,6 +15,7 @@ import type {
 import { SupabaseService } from '../supabase/supabase.service';
 import { ZapiProvider } from './providers/zapi/zapi.provider';
 import { BaileysProvider } from './providers/baileys/baileys.provider';
+import { EmailProvider } from './providers/email/email.provider';
 
 export interface DispatcherSendInput {
   org_id: string;
@@ -34,9 +35,11 @@ export class ChannelDispatcherService {
     private readonly supabase: SupabaseService,
     private readonly zapi: ZapiProvider,
     private readonly baileys: BaileysProvider,
+    private readonly email: EmailProvider,
   ) {
     this.register(zapi);
     this.register(baileys);
+    this.register(email);
   }
 
   register(provider: ChannelProvider): void {
@@ -154,9 +157,23 @@ export class ChannelDispatcherService {
       case 'whatsapp':
       case 'whatsapp_free': {
         const wa = profiles.whatsapp;
+        // Identidade canônica do contato no Baileys: wa_jid (`...@s.whatsapp.net`
+        // OU `...@lid`). Round-trip preserva o JID exato — sem isso, contatos
+        // que vieram via @lid (não compartilharam telefone) viram contatos
+        // novos a cada reply (criando uma thread aleatória no WhatsApp).
+        if (typeof wa?.wa_jid === 'string') return wa.wa_jid;
+        // Z-API legado / contatos antigos: wa_id (digits-only, formato Z-API).
         if (typeof wa?.wa_id === 'string') return wa.wa_id;
-        // Fallback: telefone do contato (Z-API e Baileys aceitam internacional)
+        // Último recurso: phone bruto. Pra Baileys, isso só funciona se
+        // for telefone real conhecido pelo WhatsApp — contatos LID legados
+        // (criados antes do fix) podem ter `phone` com dígitos do LID que
+        // NÃO são telefone, e o envio vai pra um chat aleatório. Avisamos.
         if (typeof data.phone === 'string') {
+          if (channelType === 'whatsapp_free' && this.looksLikeLidDigits(data.phone)) {
+            this.logger.warn(
+              `Contact ${contactId} sem wa_jid e phone "${data.phone}" parece LID — envio pode falhar/rotear errado. Aguardando próxima inbound pra backfill.`,
+            );
+          }
           return this.normalizePhone(data.phone);
         }
         return null;
@@ -186,5 +203,15 @@ export class ChannelDispatcherService {
   private normalizePhone(phone: string): string {
     // Remove tudo que não for dígito. Z-API espera "5571999999999".
     return phone.replace(/\D/g, '');
+  }
+
+  /**
+   * Heurística pra detectar contatos legacy onde `phone` foi populado com
+   * dígitos extraídos de um JID `@lid` (não é telefone real). Telefones
+   * internacionais válidos têm 10–13 dígitos; LIDs costumam ter 14+ dígitos.
+   */
+  private looksLikeLidDigits(phone: string): boolean {
+    const digits = phone.replace(/\D/g, '');
+    return digits.length >= 14;
   }
 }
