@@ -52,7 +52,8 @@ export type ConversationStatus =
   | 'pending'
   | 'snoozed'
   | 'resolved'
-  | 'closed';
+  | 'closed'
+  | 'archived';
 
 export type ConversationPriority = 'low' | 'normal' | 'high' | 'urgent';
 

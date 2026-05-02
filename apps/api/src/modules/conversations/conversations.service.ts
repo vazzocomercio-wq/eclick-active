@@ -71,7 +71,13 @@ export class ConversationsService {
       .order('last_message_at', { ascending: false, nullsFirst: false })
       .range(from, to);
 
-    if (filters.status) q = q.eq('status', filters.status);
+    if (filters.status) {
+      q = q.eq('status', filters.status);
+    } else {
+      // Sem filtro explícito: oculta archived (soft-deleted).
+      // Pra ver arquivadas, passar status=archived.
+      q = q.neq('status', 'archived');
+    }
     if (filters.priority) q = q.eq('priority', filters.priority);
     if (filters.channel_type) q = q.eq('channel_type', filters.channel_type);
     if (filters.contact_id) q = q.eq('contact_id', filters.contact_id);
@@ -121,7 +127,13 @@ export class ConversationsService {
       .order('last_message_at', { ascending: false, nullsFirst: false })
       .range(from, to);
 
-    if (filters.status) q = q.eq('status', filters.status);
+    if (filters.status) {
+      q = q.eq('status', filters.status);
+    } else {
+      // Sem filtro explícito: oculta archived (soft-deleted).
+      // Pra ver arquivadas, passar status=archived.
+      q = q.neq('status', 'archived');
+    }
     if (filters.priority) q = q.eq('priority', filters.priority);
     if (filters.channel_type) q = q.eq('channel_type', filters.channel_type);
     if (filters.contact_id) q = q.eq('contact_id', filters.contact_id);

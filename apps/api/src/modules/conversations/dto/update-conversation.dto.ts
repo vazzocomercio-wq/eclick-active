@@ -19,6 +19,7 @@ const STATUSES: ConversationStatus[] = [
   'snoozed',
   'resolved',
   'closed',
+  'archived',
 ];
 
 const PRIORITIES: ConversationPriority[] = ['low', 'normal', 'high', 'urgent'];

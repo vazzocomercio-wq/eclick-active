@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
+  Archive,
   BookOpenCheck,
   Check,
   CheckCircle2,
@@ -12,6 +13,7 @@ import {
 import { toast } from 'sonner';
 import type { ConversationDetail } from '@eclick-active/shared';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { aiApi } from '@/lib/api/ai';
 import { conversationsApi } from '@/lib/api/conversations';
 import { ApiError } from '@/lib/api/client';
@@ -44,9 +46,12 @@ export function ChatActions({ conversation, onUpdated, onSummary }: ChatActionsP
   const [marking, setMarking] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
   const [assigning, setAssigning] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+  const [confirmArchiveOpen, setConfirmArchiveOpen] = useState(false);
 
   const conversationId = conversation?.id ?? null;
   const isResolved = conversation?.status === 'resolved' || conversation?.status === 'closed';
+  const isArchived = conversation?.status === 'archived';
   const isUnread = (conversation?.unread_count ?? 0) > 0;
   const assignedTo = conversation?.assigned_to ?? null;
 
@@ -55,9 +60,18 @@ export function ChatActions({ conversation, onUpdated, onSummary }: ChatActionsP
     setSummarizing(true);
     try {
       const r = await aiApi.summarizeConversation(conversationId);
+      if (!r.summary || !r.summary.trim()) {
+        toast.info('Sem mensagens suficientes', {
+          description:
+            'A IA não conseguiu gerar resumo — provavelmente a conversa não tem mensagens trocadas ainda.',
+        });
+        return;
+      }
       onSummary?.(r.summary);
       onUpdated?.({ ai_summary: r.summary });
-      toast.success('Resumo gerado', { description: 'A IA produziu um novo resumo da conversa.' });
+      toast.success('Resumo gerado', {
+        description: 'A IA produziu um novo resumo da conversa.',
+      });
     } catch (err) {
       toast.error('Falha ao resumir', { description: extractMessage(err) });
     } finally {
@@ -90,6 +104,21 @@ export function ChatActions({ conversation, onUpdated, onSummary }: ChatActionsP
       toast.error('Falha ao marcar', { description: extractMessage(err) });
     } finally {
       setMarking(false);
+    }
+  }
+
+  async function handleArchiveConfirmed() {
+    if (!conversationId || isArchived) return;
+    setArchiving(true);
+    try {
+      const updated = await conversationsApi.update(conversationId, { status: 'archived' });
+      onUpdated?.(updated);
+      toast.success('Conversa arquivada');
+    } catch (err) {
+      toast.error('Falha ao arquivar', { description: extractMessage(err) });
+      throw err; // ConfirmDialog mantém aberto se rejeitar
+    } finally {
+      setArchiving(false);
     }
   }
 
@@ -137,6 +166,27 @@ export function ChatActions({ conversation, onUpdated, onSummary }: ChatActionsP
         assignedTo={assignedTo}
         assigning={assigning}
         onAssign={handleAssign}
+      />
+
+      <Pill
+        onClick={() => setConfirmArchiveOpen(true)}
+        disabled={archiving || isArchived}
+        loading={archiving}
+      >
+        <Archive
+          className={cn('h-3.5 w-3.5', isArchived ? 'text-amber-500' : 'text-muted-foreground')}
+        />
+        {isArchived ? 'Arquivada' : 'Arquivar'}
+      </Pill>
+
+      <ConfirmDialog
+        open={confirmArchiveOpen}
+        onOpenChange={setConfirmArchiveOpen}
+        title="Arquivar conversa?"
+        description='A conversa some da inbox principal mas pode ser recuperada no filtro "Arquivadas". As mensagens são preservadas pra relatórios.'
+        confirmLabel="Arquivar"
+        icon={Archive}
+        onConfirm={handleArchiveConfirmed}
       />
     </div>
   );

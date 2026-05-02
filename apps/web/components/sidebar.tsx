@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { useUnreadCount } from '@/hooks/use-unread-count';
 
 interface NavItem {
   href: string;
@@ -33,7 +34,8 @@ interface NavItem {
 
 const PRIMARY_NAV: NavItem[] = [
   { href: '/central-de-acao', icon: LayoutDashboard, label: 'Central de Ação' },
-  { href: '/conversas', icon: MessageSquare, label: 'Conversas', badge: 12 },
+  // O badge de Conversas é injetado dinamicamente via useUnreadCount no render
+  { href: '/conversas', icon: MessageSquare, label: 'Conversas' },
   { href: '/funis', icon: Kanban, label: 'Funis' },
   { href: '/contatos', icon: Users, label: 'Contatos' },
   { href: '/tarefas', icon: CheckSquare, label: 'Tarefas' },
@@ -55,6 +57,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const unreadCount = useUnreadCount();
 
   useEffect(() => {
     try {
@@ -146,14 +149,21 @@ export function Sidebar() {
       {/* Primary nav */}
       <nav className="flex-1 overflow-y-auto py-3">
         <ul className="flex flex-col gap-0.5 px-2">
-          {PRIMARY_NAV.map((item) => (
-            <NavLink
-              key={item.href}
-              item={item}
-              active={isActive(pathname, item.href)}
-              collapsed={isCollapsed}
-            />
-          ))}
+          {PRIMARY_NAV.map((item) => {
+            // Injeta badge dinâmico em /conversas com count de não-lidas
+            const itemWithBadge: NavItem =
+              item.href === '/conversas' && unreadCount > 0
+                ? { ...item, badge: unreadCount }
+                : item;
+            return (
+              <NavLink
+                key={item.href}
+                item={itemWithBadge}
+                active={isActive(pathname, item.href)}
+                collapsed={isCollapsed}
+              />
+            );
+          })}
         </ul>
 
         <div className="mx-3 my-3 border-t border-border" />

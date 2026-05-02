@@ -6,7 +6,14 @@ import type {
   ConversationStatus,
 } from '@eclick-active/shared';
 
-const STATUSES: ConversationStatus[] = ['open', 'pending', 'snoozed', 'resolved', 'closed'];
+const STATUSES: ConversationStatus[] = [
+  'open',
+  'pending',
+  'snoozed',
+  'resolved',
+  'closed',
+  'archived',
+];
 const PRIORITIES: ConversationPriority[] = ['low', 'normal', 'high', 'urgent'];
 const CHANNEL_TYPES: ChannelType[] = [
   'whatsapp',

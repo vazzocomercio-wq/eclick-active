@@ -17,6 +17,7 @@ const FILTERS: Array<{ value: InboxFilter; label: string }> = [
   { value: 'mine', label: 'Minhas' },
   { value: 'unassigned', label: 'Não atribuídas' },
   { value: 'resolved', label: 'Resolvidas' },
+  { value: 'archived', label: 'Arquivadas' },
 ];
 
 export function InboxFilters({

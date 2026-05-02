@@ -111,9 +111,9 @@ export function ContactPanel({ conversation, loading, onOpenFullProfile }: Conta
           </CardHeader>
           <CardContent>
             <p className="text-xs leading-relaxed text-muted-foreground">
-              {conversation.ai_summary ?? contact.tags?.length
+              {conversation.ai_summary
                 ? conversation.ai_summary
-                : 'Sem resumo gerado ainda. A IA gera após algumas trocas de mensagem.'}
+                : 'Sem resumo gerado ainda. Clique em "Resumir" no chat após algumas mensagens trocadas.'}
             </p>
           </CardContent>
         </Card>

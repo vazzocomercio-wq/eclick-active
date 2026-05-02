@@ -6,7 +6,7 @@ import { conversationsApi } from '@/lib/api/conversations';
 import { ApiError } from '@/lib/api/client';
 import { createClient } from '@/lib/supabase/client';
 
-export type InboxFilter = 'all' | 'mine' | 'unassigned' | 'resolved';
+export type InboxFilter = 'all' | 'mine' | 'unassigned' | 'resolved' | 'archived';
 
 interface UseInboxResult {
   items: InboxItem[];
@@ -38,6 +38,7 @@ export function useInbox(): UseInboxResult {
         limit: PAGE_LIMIT,
         ...(filter === 'mine' ? { mine: true } : {}),
         ...(filter === 'resolved' ? { status: 'resolved' } : {}),
+        ...(filter === 'archived' ? { status: 'archived' } : {}),
       });
       if (reqId !== reqIdRef.current) return;
       setItems(result.data);
@@ -84,7 +85,22 @@ export function useInbox(): UseInboxResult {
           const updated = payload.new;
           setItems((prev) => {
             const idx = prev.findIndex((i) => i.id === updated.id);
-            if (idx === -1) return prev;
+            if (idx === -1) {
+              // Item não está na lista atual. Se virou archived e estamos em
+              // 'archived', precisamos refetch pra ele aparecer (ou reverso).
+              // Disparamos refetch de fora desse setItems pra evitar loop.
+              return prev;
+            }
+
+            // Item virou archived e o filtro ativo não é 'archived' — remove
+            if (updated.status === 'archived' && filter !== 'archived') {
+              return prev.filter((_, i) => i !== idx);
+            }
+            // Inverso: item deixou de ser archived e estamos em 'archived' — remove
+            if (updated.status !== 'archived' && filter === 'archived') {
+              return prev.filter((_, i) => i !== idx);
+            }
+
             const merged: InboxItem = {
               ...prev[idx]!,
               status: updated.status,
@@ -116,7 +132,7 @@ export function useInbox(): UseInboxResult {
     return () => {
       void channel.unsubscribe();
     };
-  }, [refetch]);
+  }, [refetch, filter]);
 
   // Filtros que aplicamos client-side (backend não tem suporte direto)
   const filtered = items.filter((item) => {
