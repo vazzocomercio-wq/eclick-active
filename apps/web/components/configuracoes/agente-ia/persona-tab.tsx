@@ -9,12 +9,12 @@ import type {
   AiPersonaRole,
   AiPersonaTone,
 } from '@eclick-active/shared';
+import { ApiError } from '@/lib/api/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { aiPersonaApi, type CreatePersonaInput } from '@/lib/api/ai-persona';
-import { ApiError } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 
 const ROLES: Array<{ value: AiPersonaRole; label: string }> = [
@@ -68,12 +68,12 @@ export function PersonaTab() {
   });
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  const refresh = async () => {
+  /** Carga inicial: pega lista + popula form com a persona default. */
+  const initialLoad = async () => {
     setLoading(true);
     try {
       const list = await aiPersonaApi.list();
       setPersonas(list);
-      // Carrega persona default no form (se existir)
       const def = list.find((p) => p.is_default && p.is_active) ?? list[0] ?? null;
       if (def) {
         loadFromPersona(def);
@@ -85,8 +85,18 @@ export function PersonaTab() {
     }
   };
 
+  /** Re-fetch lista sem desmontar o form (pra atualizar chips/badges). */
+  const reloadListOnly = async () => {
+    try {
+      const list = await aiPersonaApi.list();
+      setPersonas(list);
+    } catch {
+      // best-effort — se falhar, a lista local fica desatualizada mas o form continua
+    }
+  };
+
   useEffect(() => {
-    void refresh();
+    void initialLoad();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -134,15 +144,20 @@ export function PersonaTab() {
     }
     setSaving(true);
     try {
+      let saved: AiAgentPersona;
       if (editingId) {
-        await aiPersonaApi.update(editingId, form);
+        saved = await aiPersonaApi.update(editingId, form);
         toast.success('Persona atualizada');
       } else {
-        const created = await aiPersonaApi.create(form);
+        saved = await aiPersonaApi.create(form);
         toast.success('Persona criada');
-        setEditingId(created.id);
       }
-      await refresh();
+      // Recarrega o form a partir da persona QUE ACABOU DE SER SALVA — não
+      // a default. Isso garante que os campos voltem com os valores que o
+      // backend retornou (e expõe imediatamente se algo não persistiu).
+      loadFromPersona(saved);
+      // Atualiza só a lista de chips em background — não desmonta o form.
+      void reloadListOnly();
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Erro';
       toast.error('Falha ao salvar', { description: msg });

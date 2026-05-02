@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Contact, ConversationDetail } from '@eclick-active/shared';
@@ -31,6 +31,18 @@ export default function ConversasPage() {
   const handleConversationLoad = useCallback((c: ConversationDetail) => {
     setActiveDetail(c);
   }, []);
+
+  // Quando a conversa selecionada deixa de existir na lista atual (foi
+  // arquivada, resolvida, ou o filtro mudou), limpa a seleção pra UI não
+  // ficar mostrando chat + sidebar de uma conversa que sumiu.
+  useEffect(() => {
+    if (!selectedId || inbox.loading) return;
+    const stillInList = inbox.items.some((i) => i.id === selectedId);
+    if (!stillInList) {
+      setSelectedId(null);
+      setActiveDetail(null);
+    }
+  }, [selectedId, inbox.items, inbox.loading]);
 
   // Abre o ContactDetailSheet completo. Faz fetch primeiro pra garantir
   // shape Contact completo (o ContactPanel só tem subset via join).

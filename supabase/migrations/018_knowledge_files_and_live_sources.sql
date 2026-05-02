@@ -39,7 +39,7 @@ ALTER TABLE active.knowledge_live_sources ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "org_isolation" ON active.knowledge_live_sources;
 CREATE POLICY "org_isolation" ON active.knowledge_live_sources
-  FOR ALL USING (org_id = active.get_user_org_id(auth.uid()));
+  FOR ALL USING (org_id = active.get_user_org_id());
 
 CREATE INDEX IF NOT EXISTS idx_live_sources_org
   ON active.knowledge_live_sources (org_id, is_active)
