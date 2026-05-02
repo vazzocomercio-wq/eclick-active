@@ -26,6 +26,11 @@ export interface MessageNewPayload {
   message: Message;
 }
 
+export interface MessageUpdatedPayload {
+  conversation_id: UUID;
+  message: Message;
+}
+
 export interface ConversationUpdatedPayload {
   conversation: Conversation;
 }
@@ -95,6 +100,7 @@ export interface WhatsappDisconnectedPayload {
 
 export type EventName =
   | 'message:new'
+  | 'message:updated'
   | 'conversation:updated'
   | 'ai:suggestion'
   | 'notification'
@@ -108,6 +114,7 @@ export type EventName =
 
 export interface EventPayloadMap {
   'message:new': MessageNewPayload;
+  'message:updated': MessageUpdatedPayload;
   'conversation:updated': ConversationUpdatedPayload;
   'ai:suggestion': AISuggestionPayload;
   notification: Notification;

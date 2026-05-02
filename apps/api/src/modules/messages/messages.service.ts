@@ -241,7 +241,20 @@ export class MessagesService {
       // Cliente pode re-fetch pra ver estado real.
       return { ...persisted, ...patch } as Message;
     }
-    return data as Message;
+
+    const updated = data as Message;
+    // Emit message:updated pro frontend reconciliar status (pending → sent/failed/delivered/read)
+    try {
+      this.events.emitToOrg(persisted.org_id, 'message:updated', {
+        conversation_id: persisted.conversation_id,
+        message: updated,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `message:updated emit failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    return updated;
   }
 
   private buildMetadata(dto: SendMessageDto): Record<string, unknown> {

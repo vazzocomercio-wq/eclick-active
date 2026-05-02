@@ -15,6 +15,7 @@ interface BroadcastInput {
     | 'whatsapp:connected'
     | 'whatsapp:disconnected'
     | 'message:new'
+    | 'message:updated'
     | 'conversation:updated';
   payload: unknown;
 }

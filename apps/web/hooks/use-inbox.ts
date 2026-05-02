@@ -73,7 +73,6 @@ export function useInbox(): UseInboxResult {
         'postgres_changes' as any,
         { event: 'INSERT', schema: 'active', table: 'conversations' },
         () => {
-          // Conversa nova — refetch pra ter contact info joinado.
           void refetch();
         },
       )

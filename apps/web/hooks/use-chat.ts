@@ -1,10 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Message } from '@eclick-active/shared';
 import { messagesApi } from '@/lib/api/messages';
 import { ApiError } from '@/lib/api/client';
-import { createClient } from '@/lib/supabase/client';
+import { useEvents } from './use-events';
 
 interface UseChatResult {
   messages: Message[];
@@ -20,8 +20,11 @@ interface UseChatResult {
 const PAGE_LIMIT = 50;
 
 /**
- * Carrega mensagens de uma conversa com cursor pagination + Supabase Realtime
- * pra novos INSERTs em active.messages.
+ * Carrega mensagens de uma conversa com cursor pagination + atualização em
+ * tempo real via Socket.IO (`message:new`, `message:updated`) — escutado pelo
+ * EventsGateway do api. Não usamos Supabase Realtime aqui porque
+ * `active.messages` é particionada e a delivery dos eventos das partições
+ * filhas não chega ao cliente mesmo com `publish_via_partition_root=true`.
  *
  * `messages` armazenadas em ordem CRESCENTE (oldest → newest) — UI renderiza
  * top-down. Backend retorna DESC; revertemos antes de gravar no estado.
@@ -72,56 +75,26 @@ export function useChat(conversationId: string | null): UseChatResult {
       });
   }, [conversationId]);
 
-  // Realtime: novos INSERTs filtrados pela conversa atual
-  useEffect(() => {
-    if (!conversationId) return;
-    let supabase;
-    try {
-      supabase = createClient();
-    } catch {
-      return;
-    }
-
-    const channel = supabase
-      .channel(`chat:${conversationId}`)
-      .on(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        'postgres_changes' as any,
-        {
-          event: 'INSERT',
-          schema: 'active',
-          table: 'messages',
-          filter: `conversation_id=eq.${conversationId}`,
-        },
-        (payload: { new: Message }) => {
-          setMessages((prev) => {
-            // Evita duplicar se a mensagem já foi adicionada via send() local
-            if (prev.some((m) => m.id === payload.new.id)) return prev;
-            return [...prev, payload.new];
-          });
-        },
-      )
-      .on(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        'postgres_changes' as any,
-        {
-          event: 'UPDATE',
-          schema: 'active',
-          table: 'messages',
-          filter: `conversation_id=eq.${conversationId}`,
-        },
-        (payload: { new: Message }) => {
-          setMessages((prev) =>
-            prev.map((m) => (m.id === payload.new.id ? payload.new : m)),
-          );
-        },
-      )
-      .subscribe();
-
-    return () => {
-      void channel.unsubscribe();
-    };
-  }, [conversationId]);
+  // Realtime via socket.io — filtra pelo conversationId atual
+  const realtimeHandlers = useMemo(
+    () => ({
+      onMessageNew: (payload: { conversation_id: string; message: Message }) => {
+        if (payload.conversation_id !== conversationId) return;
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === payload.message.id)) return prev;
+          return [...prev, payload.message];
+        });
+      },
+      onMessageUpdated: (payload: { conversation_id: string; message: Message }) => {
+        if (payload.conversation_id !== conversationId) return;
+        setMessages((prev) =>
+          prev.map((m) => (m.id === payload.message.id ? payload.message : m)),
+        );
+      },
+    }),
+    [conversationId],
+  );
+  useEvents(realtimeHandlers);
 
   const loadMore = useCallback(async () => {
     if (!conversationId || !hasMore || loadingMore || !cursorRef.current) return;
