@@ -38,6 +38,8 @@ export interface Conversation {
   // Metadata
   tags: string[];
   custom_fields: Record<string, unknown>;
+  /** jsonb arbitrário — usa pra transfer_briefing, pending_transfer, etc. (Bloco G) */
+  metadata: Record<string, unknown>;
   snoozed_until: ISODateString | null;
   /** Setado uma única vez na primeira resposta de agente (outbound + sender_type=agent) */
   first_response_at: ISODateString | null;

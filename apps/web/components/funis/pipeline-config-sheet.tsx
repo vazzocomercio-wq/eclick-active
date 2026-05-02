@@ -23,6 +23,7 @@ import {
   GripVertical,
   Loader2,
   Plus,
+  Sparkles,
   Trash2,
   X,
   Zap,
@@ -426,6 +427,12 @@ function SortableStageRow({
   const [color, setColor] = useState(stage.color);
   const [probability, setProbability] = useState(String(stage.probability));
   const [slaHours, setSlaHours] = useState(stage.sla_hours?.toString() ?? '');
+  const [requiredContact, setRequiredContact] = useState<string[]>(
+    stage.required_contact_fields ?? [],
+  );
+  const [requiredDeal, setRequiredDeal] = useState<string[]>(
+    stage.required_deal_fields ?? [],
+  );
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -435,6 +442,8 @@ function SortableStageRow({
     setColor(stage.color);
     setProbability(String(stage.probability));
     setSlaHours(stage.sla_hours?.toString() ?? '');
+    setRequiredContact(stage.required_contact_fields ?? []);
+    setRequiredDeal(stage.required_deal_fields ?? []);
   }, [stage]);
 
   const isProtected = stage.is_won || stage.is_lost;
@@ -447,6 +456,8 @@ function SortableStageRow({
         color,
         probability: Number(probability) || 0,
         sla_hours: slaHours.trim() ? Number(slaHours) : null,
+        required_contact_fields: requiredContact,
+        required_deal_fields: requiredDeal,
       });
       setEditing(false);
     } finally {
@@ -568,6 +579,31 @@ function SortableStageRow({
             />
           </SmallField>
 
+          {/* Bloco G: required fields */}
+          <div className="col-span-2 flex flex-col gap-2 rounded-md border border-dashed border-primary/30 bg-primary/5 p-3">
+            <div className="flex items-center gap-1.5 text-[11px]">
+              <Sparkles className="h-3 w-3 text-primary" />
+              <span className="font-semibold">Dados obrigatórios neste stage</span>
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              A IA pedirá esses dados ao cliente quando faltarem. Ao receber a resposta, ela extrai
+              e atualiza automaticamente.
+            </p>
+
+            <RequiredFieldsToggleList
+              label="Do contato"
+              options={CONTACT_FIELD_OPTIONS}
+              values={requiredContact}
+              onChange={setRequiredContact}
+            />
+            <RequiredFieldsToggleList
+              label="Do negócio"
+              options={DEAL_FIELD_OPTIONS}
+              values={requiredDeal}
+              onChange={setRequiredDeal}
+            />
+          </div>
+
           <div className="col-span-2 flex items-center justify-between gap-2 pt-1">
             {confirmDelete ? (
               <div className="flex items-center gap-1 text-[11px]">
@@ -636,6 +672,68 @@ function SortableStageRow({
         </div>
       )}
     </li>
+  );
+}
+
+// ──────────────────────────────────────────────────────────
+// Required fields config (Bloco G)
+// ──────────────────────────────────────────────────────────
+
+const CONTACT_FIELD_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'name', label: 'Nome' },
+  { value: 'email', label: 'Email' },
+  { value: 'phone', label: 'Telefone' },
+  { value: 'company_name', label: 'Empresa' },
+];
+
+const DEAL_FIELD_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'value', label: 'Valor' },
+  { value: 'expected_close_date', label: 'Previsão fechamento' },
+];
+
+function RequiredFieldsToggleList({
+  label,
+  options,
+  values,
+  onChange,
+}: {
+  label: string;
+  options: Array<{ value: string; label: string }>;
+  values: string[];
+  onChange: (v: string[]) => void;
+}) {
+  function toggle(v: string) {
+    if (values.includes(v)) {
+      onChange(values.filter((x) => x !== v));
+    } else {
+      onChange([...values, v]);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</span>
+      <div className="flex flex-wrap gap-1.5">
+        {options.map((opt) => {
+          const active = values.includes(opt.value);
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => toggle(opt.value)}
+              className={cn(
+                'rounded-full border px-2.5 py-1 text-[11px] transition-colors',
+                active
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-border bg-card text-muted-foreground hover:border-primary/30',
+              )}
+            >
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

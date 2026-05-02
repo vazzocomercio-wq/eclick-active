@@ -7,6 +7,7 @@ import { conversationsApi } from '@/lib/api/conversations';
 import { useChat } from '@/hooks/use-chat';
 import { useEvents } from '@/hooks/use-events';
 import { ChatHeader } from '@/components/inbox/chat-header';
+import { TransferBriefingBanner } from '@/components/inbox/transfer-briefing-banner';
 import { MessageList } from '@/components/inbox/message-list';
 import { MessageInput } from '@/components/inbox/message-input';
 import { AISuggestionBar } from '@/components/inbox/ai-suggestion-bar';
@@ -184,6 +185,8 @@ export function ChatPanel({
           onTogglePanel={onTogglePanel ?? (() => {})}
         />
       )}
+
+      <TransferBriefingBanner conversation={detailLoading ? null : detail} />
 
       <MessageList
         messages={chat.messages}

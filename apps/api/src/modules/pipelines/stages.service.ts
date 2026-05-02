@@ -78,6 +78,10 @@ export class StagesService {
     if (dto.probability !== undefined) patch.probability = dto.probability;
     if (dto.sla_hours !== undefined) patch.sla_hours = dto.sla_hours; // null permitido
     if (dto.automation_rules !== undefined) patch.automation_rules = dto.automation_rules;
+    if (dto.required_contact_fields !== undefined)
+      patch.required_contact_fields = dto.required_contact_fields;
+    if (dto.required_deal_fields !== undefined)
+      patch.required_deal_fields = dto.required_deal_fields;
 
     const { data, error } = await this.supabase.adminClient
       .from('pipeline_stages')

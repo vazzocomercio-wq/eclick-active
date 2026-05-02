@@ -41,6 +41,14 @@ export interface PipelineStage {
   automation_rules: Json;
   is_won: boolean;
   is_lost: boolean;
+  /**
+   * Bloco G: campos do CONTATO que precisam estar preenchidos quando o
+   * deal está nesse stage. Valores: chaves padrão ('name', 'email',
+   * 'phone', 'company_name') ou 'custom:<uuid>' pra custom fields.
+   */
+  required_contact_fields: string[];
+  /** Idem para campos do DEAL (ex: 'value', 'expected_close_date', 'custom:<uuid>') */
+  required_deal_fields: string[];
   created_at: ISODateString;
 }
 

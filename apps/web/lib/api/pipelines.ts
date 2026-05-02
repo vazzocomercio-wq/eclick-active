@@ -101,6 +101,8 @@ export interface UpdateStageInput {
   color?: string;
   probability?: number;
   sla_hours?: number | null;
+  required_contact_fields?: string[];
+  required_deal_fields?: string[];
 }
 
 function filtersToQuery(f: BoardFilters): Record<string, string | number | string[] | undefined> {

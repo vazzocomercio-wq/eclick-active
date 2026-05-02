@@ -11,6 +11,7 @@ import { KnowledgeService } from '../knowledge/knowledge.service';
 import { AiPersonaService } from '../ai-persona/ai-persona.service';
 import { AiSkillsService } from '../ai-skills/ai-skills.service';
 import { AnthropicClient } from './anthropic.client';
+import { DataCollectionService } from './data-collection.service';
 import type { AiSkill } from '@eclick-active/shared';
 import {
   CLASSIFY_SCHEMA,
@@ -39,6 +40,7 @@ export class AiService {
     private readonly knowledge: KnowledgeService,
     private readonly persona: AiPersonaService,
     private readonly skills: AiSkillsService,
+    private readonly dataCollection: DataCollectionService,
   ) {}
 
   // ──────────────────────────────────────────────────────────
@@ -724,12 +726,72 @@ export class AiService {
         void this.summarizeConversation(orgId, conversationId).catch(() => {});
       }
 
+      // Bloco G PARTE 1 — coleta proativa de dados:
+      // Se há deal vinculado e o stage tem required_fields, tenta extrair
+      // dados da última mensagem inbound. Best-effort.
+      void this.tryExtractRequiredFields(orgId, conversationId, messageId).catch((err) => {
+        this.logger.warn(
+          `data-collection extract failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+
       this.logger.debug(
         `processInbound done conv=${conversationId} classified=${!!classification} suggested=${!!suggestion}`,
       );
     } catch (err) {
       this.logger.error(
         `processInbound failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  /**
+   * Tenta extrair dados (email, telefone, valor, etc.) da última mensagem
+   * inbound quando o deal está num stage que tem required_fields. Atualiza
+   * contact/deal automaticamente sem pedir nada — se a info já veio de
+   * graça, não custa nada salvar.
+   */
+  private async tryExtractRequiredFields(
+    orgId: string,
+    conversationId: string,
+    messageId: string,
+  ): Promise<void> {
+    // Busca deal vinculado (se houver)
+    const { data: dealData } = await this.supabase.adminClient
+      .from('deals')
+      .select('id')
+      .eq('org_id', orgId)
+      .eq('conversation_id', conversationId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const dealId = (dealData as { id: string } | null)?.id;
+    if (!dealId) return;
+
+    const detected = await this.dataCollection.detectMissingFields(orgId, dealId);
+    if (!detected || detected.missing.length === 0) return;
+
+    // Pega texto da mensagem
+    const { data: msg } = await this.supabase.adminClient
+      .from('messages')
+      .select('plain_text, direction')
+      .eq('org_id', orgId)
+      .eq('id', messageId)
+      .maybeSingle();
+    const messageRow = msg as { plain_text: string | null; direction: string } | null;
+    if (!messageRow || messageRow.direction !== 'inbound' || !messageRow.plain_text) return;
+
+    const extracted = await this.dataCollection.processResponseForFields(
+      orgId,
+      messageRow.plain_text,
+      detected,
+    );
+    if (!extracted.contact && !extracted.deal) return;
+
+    const result = await this.dataCollection.applyExtractedFields(orgId, detected, extracted);
+    if (result.updated_contact.length > 0 || result.updated_deal.length > 0) {
+      this.logger.log(
+        `data-collection: contact=${result.updated_contact.join(',') || '-'} deal=${result.updated_deal.join(',') || '-'}`,
       );
     }
   }

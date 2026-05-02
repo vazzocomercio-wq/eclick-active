@@ -39,4 +39,14 @@ export class UpdateStageDto {
   @IsOptional()
   @IsArray()
   automation_rules?: unknown[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  required_contact_fields?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  required_deal_fields?: string[];
 }
