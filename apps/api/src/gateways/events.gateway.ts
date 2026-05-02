@@ -16,6 +16,7 @@ import type {
 } from '@eclick-active/shared';
 import { AuthService } from '../common/auth/auth.service';
 import type { AuthUser } from '../common/auth/auth.types';
+import { resolveCorsOrigins } from '../common/cors';
 
 // ──────────────────────────────────────────────────────────
 // Event payload contracts (server → client)
@@ -143,7 +144,7 @@ const ROOM_PREFIX = 'org';
 @WebSocketGateway({
   namespace: '/events',
   cors: {
-    origin: process.env.WEB_ORIGIN ?? 'http://localhost:3000',
+    origin: resolveCorsOrigins(),
     credentials: true,
   },
 })

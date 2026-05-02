@@ -1,0 +1,53 @@
+# ──────────────────────────────────────────────────────────
+# e-Click Active — Netlify config para o frontend (apps/web)
+#
+# Netlify suporta Next.js 15 nativamente via @netlify/plugin-nextjs.
+# Como é monorepo Turborepo + npm workspaces, o build precisa rodar
+# do root pra resolver os workspace packages.
+# ──────────────────────────────────────────────────────────
+
+[build]
+  base = "."
+  command = "npm install && npm run build:shared && npm run build --workspace=@eclick-active/web"
+  publish = "apps/web/.next"
+
+[build.environment]
+  NODE_VERSION = "20"
+  NPM_VERSION = "10"
+  # NEXT_TELEMETRY_DISABLED corta latência do build
+  NEXT_TELEMETRY_DISABLED = "1"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+# ── Headers ──
+# Headers padrão pra produção — segurança + cache.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    # CSP relaxada pro Supabase + API
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://api.active.eclick.app.br wss://api.active.eclick.app.br https://hzhrkfdwzxalaromcffn.supabase.co wss://hzhrkfdwzxalaromcffn.supabase.co; frame-ancestors 'none';"
+
+# Static assets do Next podem ser cacheadas agressivamente
+[[headers]]
+  for = "/_next/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# ── Redirects ──
+# Redirect www → apex (canonical)
+[[redirects]]
+  from = "https://www.active.eclick.app.br/*"
+  to = "https://active.eclick.app.br/:splat"
+  status = 301
+  force = true
+
+# Healthcheck pra monitoring
+[[redirects]]
+  from = "/healthz"
+  to = "/api/healthz"
+  status = 200
+  force = false

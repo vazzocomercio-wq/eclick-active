@@ -10,6 +10,13 @@
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
+    "build:shared": "npm run build --workspace=@eclick-active/shared",
+    "build:api": "npm run build:shared && npm run build --workspace=@eclick-active/api",
+    "build:web": "npm run build:shared && npm run build --workspace=@eclick-active/web",
+    "build:workers": "npm run build:shared && npm run build --workspace=@eclick-active/workers",
+    "build:all": "npm run build:shared && npm run build --workspace=@eclick-active/api && npm run build --workspace=@eclick-active/web && npm run build --workspace=@eclick-active/workers",
+    "start:api": "node apps/api/dist/main.js",
+    "start:workers": "node apps/workers/dist/index.js",
     "lint": "turbo run lint",
     "type-check": "turbo run type-check",
     "clean": "turbo run clean && rm -rf node_modules"
