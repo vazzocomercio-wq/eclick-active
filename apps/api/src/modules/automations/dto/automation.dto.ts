@@ -100,3 +100,20 @@ export class GenerateAutomationDto {
   @Length(10, 2000)
   description!: string;
 }
+
+export class AutomationToTextDto {
+  @IsIn(TRIGGER_TYPES)
+  trigger_type!: AutomationTriggerType;
+
+  @IsOptional()
+  @IsObject()
+  trigger_config?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsArray()
+  actions?: Array<Record<string, unknown>>;
+
+  @IsOptional()
+  @IsString()
+  name?: string;
+}

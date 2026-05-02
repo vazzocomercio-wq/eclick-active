@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   Bot,
+  BotMessageSquare,
   Building2,
   Cable,
   ChevronRight,
@@ -22,7 +23,14 @@ import { AutoLeadSection } from '@/components/configuracoes/auto-lead-section';
 import { WebhooksSection } from '@/components/configuracoes/webhooks-section';
 import { cn } from '@/lib/utils';
 
-type Section = 'org' | 'channels' | 'ai' | 'custom-fields' | 'webhooks' | 'pipelines';
+type Section =
+  | 'org'
+  | 'channels'
+  | 'ai'
+  | 'agente-ia'
+  | 'custom-fields'
+  | 'webhooks'
+  | 'pipelines';
 
 const SECTIONS: Array<{
   id: Section;
@@ -33,6 +41,12 @@ const SECTIONS: Array<{
   { id: 'org', label: 'Organização', icon: Building2, description: 'Nome, slug, plano' },
   { id: 'channels', label: 'Canais', icon: Cable, description: 'WhatsApp e outros' },
   { id: 'ai', label: 'Inteligência Artificial', icon: Bot, description: 'Features de IA' },
+  {
+    id: 'agente-ia',
+    label: 'Agente de IA',
+    icon: BotMessageSquare,
+    description: 'Persona, horário, teste',
+  },
   {
     id: 'custom-fields',
     label: 'Campos Personalizados',
@@ -164,6 +178,8 @@ export default function ConfiguracoesPage() {
 
             {section === 'ai' && <AiFeaturesSection />}
 
+            {section === 'agente-ia' && <AgenteIaLink />}
+
             {section === 'custom-fields' && <CustomFieldsAdminSection />}
 
             {section === 'webhooks' && <WebhooksSection />}
@@ -192,6 +208,29 @@ function PipelinesLink() {
         <span className="text-sm font-semibold">Configurar pipelines e etapas</span>
         <span className="text-xs text-muted-foreground">
           Reordene stages, ajuste cores, probabilidade e SLA.
+        </span>
+      </div>
+      <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-1" />
+    </Link>
+  );
+}
+
+function AgenteIaLink() {
+  return (
+    <Link
+      href="/configuracoes/agente-ia"
+      className={cn(
+        'group flex items-center gap-3 rounded-xl border border-border bg-card p-6 transition-colors',
+        'hover:border-primary/30 hover:bg-accent/5',
+      )}
+    >
+      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+        <BotMessageSquare className="h-5 w-5" />
+      </div>
+      <div className="flex flex-1 flex-col">
+        <span className="text-sm font-semibold">Configurar Agente de IA</span>
+        <span className="text-xs text-muted-foreground">
+          Persona (nome, tom, diretrizes), horário comercial, modo teste e estatísticas.
         </span>
       </div>
       <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-1" />

@@ -8,6 +8,7 @@ import type { Deal, DealActivity, Json, Message } from '@eclick-active/shared';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { EventsGateway } from '../../gateways/events.gateway';
 import { KnowledgeService } from '../knowledge/knowledge.service';
+import { AiPersonaService } from '../ai-persona/ai-persona.service';
 import { AnthropicClient } from './anthropic.client';
 import {
   CLASSIFY_SCHEMA,
@@ -34,6 +35,7 @@ export class AiService {
     private readonly supabase: SupabaseService,
     private readonly events: EventsGateway,
     private readonly knowledge: KnowledgeService,
+    private readonly persona: AiPersonaService,
   ) {}
 
   // ──────────────────────────────────────────────────────────
@@ -110,10 +112,18 @@ export class AiService {
 
     const userPrompt = this.buildSuggestPrompt(contact, recent, knowledgeHits);
 
+    // Persona da org (default) — prepended ao system prompt pra dar identidade.
+    // SUGGEST_SYSTEM_PROMPT permanece como instrução estrutural (formato JSON,
+    // não inventar dados, etc.) — vem DEPOIS da persona.
+    const personaDefault = await this.persona.getDefault(orgId).catch(() => null);
+    const systemPrompt = personaDefault
+      ? `${this.persona.buildSystemPrompt(personaDefault)}\n\n---\n\n${SUGGEST_SYSTEM_PROMPT}`
+      : SUGGEST_SYSTEM_PROMPT;
+
     const { data: suggestion, interaction_id } = await this.anthropic.complete<SuggestionResult>({
       interaction_type: 'suggest_response',
       org_id: orgId,
-      system: SUGGEST_SYSTEM_PROMPT,
+      system: systemPrompt,
       user: userPrompt,
       schema: SUGGEST_SCHEMA,
       max_tokens: 768,

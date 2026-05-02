@@ -21,11 +21,12 @@ import {
   type AutomationLogRow,
 } from './automations.service';
 import {
+  AutomationToTextDto,
   CreateAutomationDto,
   GenerateAutomationDto,
   UpdateAutomationDto,
 } from './dto/automation.dto';
-import type { GeneratedAutomation } from './automation.types';
+import type { AutomationAction, GeneratedAutomation } from './automation.types';
 
 @UseGuards(AuthGuard)
 @Controller('automations')
@@ -43,6 +44,21 @@ export class AutomationsController {
     @Body() dto: GenerateAutomationDto,
   ): Promise<GeneratedAutomation> {
     return this.service.generateFromNaturalLanguage(user.org_id, dto.description);
+  }
+
+  // POST /automations/to-text — reverse: estrutura → descrição PT-BR
+  @Post('to-text')
+  @HttpCode(HttpStatus.OK)
+  toText(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: AutomationToTextDto,
+  ): Promise<{ description: string }> {
+    return this.service.automationToNaturalLanguage(user.org_id, {
+      trigger_type: dto.trigger_type,
+      trigger_config: dto.trigger_config ?? {},
+      actions: (dto.actions ?? []) as unknown as AutomationAction[],
+      ...(dto.name ? { name: dto.name } : {}),
+    });
   }
 
   // ──────────────────────────────────────────────────────────

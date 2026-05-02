@@ -8,6 +8,7 @@ import { performance } from 'node:perf_hooks';
 import Anthropic from '@anthropic-ai/sdk';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { KnowledgeService } from '../knowledge/knowledge.service';
+import { AiPersonaService } from '../ai-persona/ai-persona.service';
 import {
   COPILOT_SYSTEM_PROMPT,
   MAX_HISTORY_MESSAGES,
@@ -70,6 +71,7 @@ export class CopilotService implements OnModuleInit {
   constructor(
     private readonly supabase: SupabaseService,
     private readonly knowledge: KnowledgeService,
+    private readonly persona: AiPersonaService,
   ) {}
 
   onModuleInit(): void {
@@ -173,9 +175,14 @@ export class CopilotService implements OnModuleInit {
       }
     }
 
-    // 4. Tool runner loop
+    // 4. Tool runner loop — system prompt = persona (se houver) + COPILOT_SYSTEM_PROMPT
+    const personaDefault = await this.persona.getDefault(orgId).catch(() => null);
+    const systemPrompt = personaDefault
+      ? `${this.persona.buildSystemPrompt(personaDefault)}\n\n---\n\n${COPILOT_SYSTEM_PROMPT}`
+      : COPILOT_SYSTEM_PROMPT;
+
     const ctx: ToolContext = { orgId, userId };
-    const result = await this.runToolLoop(messages, ctx);
+    const result = await this.runToolLoop(messages, ctx, systemPrompt);
 
     // 5. Loga ai_interactions ANTES de persistir o assistant message — assim
     //    o id da interação entra no metadata do copilot_messages e o
@@ -226,6 +233,7 @@ export class CopilotService implements OnModuleInit {
   private async runToolLoop(
     initialMessages: Anthropic.MessageParam[],
     ctx: ToolContext,
+    systemPrompt: string = COPILOT_SYSTEM_PROMPT,
   ): Promise<{
     reply: string;
     toolCalls: ToolCallRecord[];
@@ -248,7 +256,7 @@ export class CopilotService implements OnModuleInit {
       const response = (await this.getClient().messages.create({
         model: SONNET_MODEL_ID,
         max_tokens: 1024,
-        system: COPILOT_SYSTEM_PROMPT,
+        system: systemPrompt,
         tools: COPILOT_TOOLS,
         messages,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

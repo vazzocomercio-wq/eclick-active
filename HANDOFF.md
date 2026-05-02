@@ -7,12 +7,12 @@
 
 ## Estado atual
 
-**Última migration**: `011_automations_stage_id_and_webhooks.sql` (Bloco D não exigiu migration nova)
-**Próxima migration**: `012_*.sql`
+**Última migration**: `014_ai_persona_and_business_hours.sql` (criada — usuário precisa rodar no Studio)
+**Próxima migration**: `015_*.sql`
 
-**Branches**: trabalhando direto em `master` no eclick-active. Commits manuais quando user pede.
+**Branches**: `main` no eclick-active (não master).
 
-**Type-check status** (último validado): ✅ tsc api + web limpos após Bloco D.
+**Type-check status** (último validado): ✅ tsc 5/5 packages limpos após Bloco E.
 
 ---
 
@@ -35,7 +35,33 @@
 - WebSocket toasts (deals criados/movidos)
 - Move-and-delete stage dialog (move deals antes de deletar)
 
-### Bloco D — Calendário nativo (concluído — mais recente)
+### Bloco E — Agente de IA configurável (concluído — mais recente)
+- **Migration 014**: `ai_agent_personas`, `organizations.business_hours` jsonb, `ai_test_conversations` (TTL 24h via pg_cron quando habilitado)
+- **Migration 013**: `conversations.status` ganhou `'archived'` (soft-delete de conversas)
+- **Migration 012**: REPLICA IDENTITY FULL nas partições de messages + função `create_messages_partition` atualizada + `create_ai_interactions_partition` (nova)
+- **Shared**: tipos `AiAgentPersona`, `BusinessHoursConfig`, `AiTestConversation`, `AiTestMessage` em `packages/shared/src/types/ai-persona.ts`
+- **API**:
+  - `apps/api/src/modules/ai-persona/` — service + controller; `buildSystemPrompt()` é o coração: transforma persona em system prompt rico (role, tone, length, language, guidelines, forbidden_topics, fallback)
+  - `apps/api/src/modules/business-hours/` — `isWithinBusinessHours()`, `nextOpenAt()`, `update()`, endpoints `GET/PATCH /settings/business-hours`
+  - `apps/api/src/modules/ai-test/` — sessão sandbox com TTL 24h. `sendMessage()` roda classify + RAG + reply com persona, retorna metadata (intent, sentiment, KB sources, ações hipotéticas, latência). Não toca em contatos/deals reais.
+  - Integrações: `ai.service.suggestResponse` e `copilot.service` agora prepend persona system prompt antes do system específico da feature
+  - Endpoint novo: `POST /automations/to-text` (reverse de `generate`) — converte automação estruturada em descrição PT-BR
+- **Frontend**:
+  - Rota nova `/configuracoes/agente-ia` com 4 abas: Persona, Horário Comercial, Modo Teste, Estatísticas
+  - **Persona tab** completa: form com nome, papel, personalidade, tom (4 opções com exemplos), tamanho, idioma, delay slider, list editors pra guidelines + forbidden_topics, mensagens de saudação/fallback, toggle is_default
+  - **Business Hours tab** completa: master toggle, timezone select, grade semanal com toggle por dia + inputs HH:mm + barra visual proporcional
+  - **Modo Teste tab** completo: chat com seleção de persona, sugestões pré-definidas (preço/reclamação/agendamento/saudação), bubbles com metadata (intent, sentiment, temperature, KB sources, ações hipotéticas, latência)
+  - **Estatísticas tab** placeholder (depende de novo endpoint /ai/stats — TODO)
+  - Entry "Agente de IA" adicionado ao sidebar de `/configuracoes`
+  - API clients: `ai-persona.ts`, `business-hours.ts`, `ai-test.ts`
+- **TODOs pendentes** (Bloco E não cobriu):
+  - Webhook auto-respond fora do horário (zapi/baileys → check business hours → gerar resposta com persona → enviar). Requer wiring em zapi-webhook.service.ts e baileys.session.ts
+  - Briefing matinal: function `generateMorningBriefing()` + cron job (15min antes da abertura) + UI card no /central-de-acao
+  - Stats endpoint `GET /ai/stats?period=...` + frontend com recharts
+  - Dual builder UI no frontend de automações (split-view com sync bidirecional). Backend já pronto (`POST /automations/to-text`)
+  - Avatar uploader (galeria de ícones ou upload custom)
+
+### Bloco D — Calendário nativo (anterior)
 - **Sem migration** (reusa `active.tasks` com seus campos `due_date`, `task_type`, etc.)
 - **Backend**:
   - `apps/api/src/modules/tasks/dto/calendar-tasks.query.dto.ts` — `from`, `to`, `user_id?`, `task_type[]?` (csv ou repeat)

@@ -20,6 +20,7 @@ export * from './types/analytics';
 export * from './types/notification';
 export * from './types/custom-fields';
 export * from './types/webhook';
+export * from './types/ai-persona';
 
 // Enum union types
 export * from './enums';

@@ -215,6 +215,42 @@ Gere o JSON da automação seguindo o schema. Use textos PT-BR claros e específ
   }
 
   // ────────────────────────────────────────────
+  // AUTOMATION → NATURAL LANGUAGE (reverse — pra dual builder)
+  // ────────────────────────────────────────────
+
+  /**
+   * Converte uma automação estruturada em descrição PT-BR legível.
+   * Usado pelo builder dual: ao editar visualmente o usuário, atualiza o
+   * lado de texto pra manter sync.
+   */
+  async automationToNaturalLanguage(
+    orgId: string,
+    args: {
+      trigger_type: AutomationTriggerType;
+      trigger_config: Record<string, unknown>;
+      actions: AutomationAction[];
+      name?: string;
+    },
+  ): Promise<{ description: string }> {
+    const userPrompt = [
+      `Tipo de gatilho: ${args.trigger_type}`,
+      `Configuração do gatilho: ${JSON.stringify(args.trigger_config ?? {}, null, 2)}`,
+      `Ações (em ordem):`,
+      ...args.actions.map((a, i) => `${i + 1}. ${JSON.stringify(a)}`),
+    ].join('\n');
+
+    const { data } = await this.anthropic.complete<string>({
+      interaction_type: 'generate_automation',
+      org_id: orgId,
+      system: AUTOMATION_TO_TEXT_SYSTEM,
+      user: userPrompt,
+      max_tokens: 400,
+    });
+
+    return { description: (data ?? '').trim() };
+  }
+
+  // ────────────────────────────────────────────
   // CHECK TRIGGERS — chamado de fora (webhook, deals, etc)
   // ────────────────────────────────────────────
 
@@ -804,3 +840,11 @@ interface ExecuteContext {
   dealId?: string;
   assignedToUserId?: string;
 }
+
+const AUTOMATION_TO_TEXT_SYSTEM = `Você converte automações de CRM em descrições legíveis em português do Brasil.
+A descrição deve ser direta, em uma única frase quando possível, ou no máximo 2 frases.
+Use linguagem do tipo "Quando [gatilho], [ações]". Não invente ações que não estão no JSON.
+Exemplos:
+- "Quando uma mensagem é recebida com a palavra 'orçamento', enviar template de boas-vindas e criar tarefa de follow-up em 24h."
+- "Quando um deal é movido para a stage 'Proposta', atribuir ao agente Carlos e enviar template de proposta."
+Retorne APENAS a descrição, sem aspas, sem prefixos, sem markdown.`;
