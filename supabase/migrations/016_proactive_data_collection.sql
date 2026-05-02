@@ -17,7 +17,7 @@ ALTER TABLE active.pipeline_stages
   ADD COLUMN IF NOT EXISTS required_deal_fields text[] NOT NULL DEFAULT '{}';
 
 -- Adiciona settings do auto-escalation em ai_feature_settings (idempotente)
-INSERT INTO active.ai_feature_settings (org_id, feature_name, provider, model, is_enabled, config)
+INSERT INTO active.ai_feature_settings (org_id, feature_name, provider, model, enabled, config)
 SELECT
   o.id,
   'auto_escalation',

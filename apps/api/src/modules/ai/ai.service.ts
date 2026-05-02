@@ -224,11 +224,11 @@ export class AiService {
     // Carrega config
     const { data: setting } = await this.supabase.adminClient
       .from('ai_feature_settings')
-      .select('is_enabled, config')
+      .select('enabled, config')
       .eq('org_id', orgId)
       .eq('feature_name', 'auto_escalation')
       .maybeSingle();
-    if (!setting || !(setting as { is_enabled: boolean }).is_enabled) return;
+    if (!setting || !(setting as { enabled: boolean }).enabled) return;
 
     const config = (((setting as { config: Record<string, unknown> }).config) ?? {}) as {
       confidence_threshold?: number;
