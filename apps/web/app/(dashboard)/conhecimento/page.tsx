@@ -3,12 +3,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BookOpen,
+  ExternalLink,
   FileText,
+  Link as LinkIcon,
   Loader2,
   Package,
   Plus,
   RefreshCw,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import type {
   KnowledgeCategory,
   ProductCatalogItem,
@@ -26,6 +29,8 @@ import {
   categoryLabel,
 } from '@/components/conhecimento/category-badge';
 import { NewDocumentDialog } from '@/components/conhecimento/new-document-dialog';
+import { ImportUrlDialog } from '@/components/conhecimento/import-url-dialog';
+import { ImportUrlBatchDialog } from '@/components/conhecimento/import-url-batch-dialog';
 import { EditDocumentSheet } from '@/components/conhecimento/edit-document-sheet';
 import { ProductSheet } from '@/components/conhecimento/product-sheet';
 import { formatRelativeTime } from '@/lib/format';
@@ -110,7 +115,10 @@ function DocumentsTab() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<KnowledgeCategory | 'all'>('all');
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'manual' | 'url' | 'integration' | 'auto'>('all');
   const [newOpen, setNewOpen] = useState(false);
+  const [importUrlOpen, setImportUrlOpen] = useState(false);
+  const [importBatchOpen, setImportBatchOpen] = useState(false);
   const [editing, setEditing] = useState<KnowledgeDocumentListItem | null>(null);
 
   const reload = useCallback(async () => {
@@ -138,6 +146,11 @@ function DocumentsTab() {
     setLoading(true);
     void reload();
   }, [reload]);
+
+  const filtered = useMemo(() => {
+    if (sourceFilter === 'all') return docs;
+    return docs.filter((d) => d.source_type === sourceFilter);
+  }, [docs, sourceFilter]);
 
   async function toggleActive(doc: KnowledgeDocumentListItem) {
     setDocs((curr) =>
@@ -179,15 +192,40 @@ function DocumentsTab() {
           ))}
         </select>
 
+        <select
+          value={sourceFilter}
+          onChange={(e) => setSourceFilter(e.target.value as typeof sourceFilter)}
+          className={cn(
+            'h-9 rounded-md border border-input bg-background px-3 text-xs',
+            'focus:outline-none focus:ring-2 focus:ring-ring',
+          )}
+        >
+          <option value="all">Todas as fontes</option>
+          <option value="manual">Manual</option>
+          <option value="url">URL</option>
+          <option value="integration">Integração</option>
+          <option value="auto">IA</option>
+        </select>
+
         <Button variant="outline" size="sm" onClick={() => void reload()} disabled={loading}>
           <RefreshCw className={`mr-2 h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
           Atualizar
         </Button>
 
-        <Button size="sm" className="ml-auto" onClick={() => setNewOpen(true)}>
-          <Plus className="mr-2 h-3.5 w-3.5" />
-          Novo documento
-        </Button>
+        <div className="ml-auto flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setImportBatchOpen(true)}>
+            <LinkIcon className="mr-2 h-3.5 w-3.5" />
+            Múltiplas URLs
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setImportUrlOpen(true)}>
+            <LinkIcon className="mr-2 h-3.5 w-3.5" />
+            Importar de URL
+          </Button>
+          <Button size="sm" onClick={() => setNewOpen(true)}>
+            <Plus className="mr-2 h-3.5 w-3.5" />
+            Novo documento
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -198,11 +236,11 @@ function DocumentsTab() {
 
       {loading && docs.length === 0 ? (
         <DocsSkeleton />
-      ) : docs.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <DocsEmpty onCreate={() => setNewOpen(true)} />
       ) : (
         <ul className="flex flex-col gap-2">
-          {docs.map((d, i) => (
+          {filtered.map((d, i) => (
             <li
               key={d.id}
               className="animate-in fade-in slide-in-from-bottom-1"
@@ -212,6 +250,7 @@ function DocumentsTab() {
                 doc={d}
                 onSelect={() => setEditing(d)}
                 onToggleActive={() => void toggleActive(d)}
+                onRefreshed={() => void reload()}
               />
             </li>
           ))}
@@ -219,6 +258,16 @@ function DocumentsTab() {
       )}
 
       <NewDocumentDialog open={newOpen} onOpenChange={setNewOpen} onCreated={() => void reload()} />
+      <ImportUrlDialog
+        open={importUrlOpen}
+        onOpenChange={setImportUrlOpen}
+        onImported={() => void reload()}
+      />
+      <ImportUrlBatchDialog
+        open={importBatchOpen}
+        onOpenChange={setImportBatchOpen}
+        onImported={() => void reload()}
+      />
       <EditDocumentSheet
         open={editing !== null}
         onOpenChange={(o) => !o && setEditing(null)}
@@ -233,11 +282,35 @@ function DocRow({
   doc,
   onSelect,
   onToggleActive,
+  onRefreshed,
 }: {
   doc: KnowledgeDocumentListItem;
   onSelect: () => void;
   onToggleActive: () => void;
+  onRefreshed: () => void;
 }) {
+  const [refreshing, setRefreshing] = useState(false);
+  const isUrlDoc = doc.source_type === 'url' && doc.source_url;
+
+  async function handleRefresh(e: React.MouseEvent) {
+    e.stopPropagation();
+    setRefreshing(true);
+    try {
+      const r = await knowledgeApi.refreshUrlDocument(doc.id);
+      if (r.updated) {
+        toast.success('Documento atualizado', { description: 'Conteúdo da URL mudou — embedding regenerado.' });
+      } else {
+        toast.info('Sem mudanças', { description: 'O conteúdo da URL é o mesmo.' });
+      }
+      onRefreshed();
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Erro';
+      toast.error('Falha ao atualizar', { description: msg });
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   return (
     <div
       onClick={onSelect}
@@ -256,13 +329,49 @@ function DocRow({
         <div className="flex items-center gap-2">
           <span className="truncate text-sm font-medium">{doc.title}</span>
           <CategoryBadge category={doc.category} />
+          {isUrlDoc && (
+            <span className="inline-flex items-center gap-0.5 rounded bg-muted px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
+              <LinkIcon className="h-2.5 w-2.5" /> URL
+            </span>
+          )}
         </div>
+        {isUrlDoc && doc.source_url && (
+          <a
+            href={doc.source_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center gap-1 truncate text-[11px] text-muted-foreground hover:text-foreground hover:underline"
+          >
+            <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+            {doc.source_url}
+          </a>
+        )}
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
           <span>{doc.tokens?.toLocaleString('pt-BR') ?? '~'} tokens</span>
           <span>·</span>
           <span>Atualizado {formatRelativeTime(doc.updated_at)}</span>
+          {isUrlDoc && doc.last_synced_at && (
+            <>
+              <span>·</span>
+              <span>Sync {formatRelativeTime(doc.last_synced_at)}</span>
+            </>
+          )}
         </div>
       </div>
+
+      {isUrlDoc && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="shrink-0"
+          title="Re-fetch URL e atualizar conteúdo"
+        >
+          <RefreshCw className={cn('h-3.5 w-3.5', refreshing && 'animate-spin')} />
+        </Button>
+      )}
 
       <label
         className="flex shrink-0 items-center gap-1.5"

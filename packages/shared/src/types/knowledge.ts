@@ -21,6 +21,20 @@ export interface KnowledgeDocument {
   is_active: boolean;
   /** Contagem de tokens do `content` (pra controle de custo) */
   tokens: number | null;
+  /**
+   * Origem do documento (Bloco URL Import). 'manual' = criado direto pelo
+   * admin via form. 'url' = importado de uma página web. 'integration' =
+   * sincronizado de sistema externo (futuro). 'auto' = gerado pela IA.
+   */
+  source_type: 'manual' | 'url' | 'integration' | 'auto';
+  /** URL de origem (só pra source_type='url') */
+  source_url: string | null;
+  /** Última vez que o conteúdo foi re-fetchado (só pra source_type='url') */
+  last_synced_at: ISODateString | null;
+  /** Reservado pra sync periódico futuro (cron) */
+  auto_sync: boolean;
+  /** Bloco F: docs com priority_intents aparecem primeiro no RAG quando o intent bate */
+  priority_intents: string[];
   created_by: UUID | null;
   created_at: ISODateString;
   updated_at: ISODateString;

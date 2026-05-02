@@ -39,6 +39,26 @@ export interface UpdateDocumentInput {
   metadata?: Record<string, unknown>;
 }
 
+export interface UrlPreview {
+  title: string;
+  content: string;
+  url: string;
+  char_count: number;
+  token_estimate: number;
+  truncated: boolean;
+}
+
+export interface UrlBatchPreview {
+  url: string;
+  ok: boolean;
+  title?: string;
+  content?: string;
+  char_count?: number;
+  token_estimate?: number;
+  truncated?: boolean;
+  error?: string;
+}
+
 export interface SemanticSearchHit {
   id: string;
   title: string;
@@ -123,6 +143,37 @@ export const knowledgeApi = {
   },
   search(query: string, limit = 5): Promise<SemanticSearchHit[]> {
     return api.post<SemanticSearchHit[]>('/knowledge/search', { query, limit });
+  },
+
+  // URL Import
+  previewUrl(url: string, category?: KnowledgeCategory): Promise<UrlPreview> {
+    return api.post<UrlPreview>('/knowledge/import-url', {
+      url,
+      ...(category ? { category } : {}),
+    });
+  },
+  confirmUrlImport(input: {
+    url: string;
+    title: string;
+    content: string;
+    category?: KnowledgeCategory;
+  }): Promise<KnowledgeDocumentListItem> {
+    return api.post<KnowledgeDocumentListItem>('/knowledge/import-url/confirm', input);
+  },
+  batchPreviewUrls(urls: string[], category?: KnowledgeCategory): Promise<UrlBatchPreview[]> {
+    return api.post<UrlBatchPreview[]>('/knowledge/import-url/batch', {
+      urls,
+      ...(category ? { category } : {}),
+    });
+  },
+  batchConfirmUrls(input: {
+    items: Array<{ url: string; title: string; content: string }>;
+    category?: KnowledgeCategory;
+  }): Promise<KnowledgeDocumentListItem[]> {
+    return api.post<KnowledgeDocumentListItem[]>('/knowledge/import-url/batch/confirm', input);
+  },
+  refreshUrlDocument(id: string): Promise<{ updated: boolean; document: KnowledgeDocumentListItem }> {
+    return api.post<{ updated: boolean; document: KnowledgeDocumentListItem }>(`/knowledge/${id}/refresh`);
   },
 
   // Products

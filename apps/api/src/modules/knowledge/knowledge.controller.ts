@@ -31,6 +31,12 @@ import {
   ListProductsQueryDto,
   UpdateProductDto,
 } from './dto/product.dto';
+import {
+  ImportUrlBatchConfirmDto,
+  ImportUrlBatchDto,
+  ImportUrlConfirmDto,
+  ImportUrlPreviewDto,
+} from './dto/import-url.dto';
 
 @UseGuards(AuthGuard)
 @Controller('knowledge')
@@ -101,6 +107,53 @@ export class KnowledgeController {
   }
 
   // ──────────────────────────────────────────────────────────
+  // URL Import — declarados ANTES de :id pra não colidir
+  // ──────────────────────────────────────────────────────────
+
+  // POST /knowledge/import-url — preview (não salva, retorna conteúdo extraído)
+  @Post('import-url')
+  @HttpCode(HttpStatus.OK)
+  previewUrl(@Body() dto: ImportUrlPreviewDto) {
+    return this.service.previewUrl(dto.url);
+  }
+
+  // POST /knowledge/import-url/confirm — admin revisou + salva
+  @Post('import-url/confirm')
+  @HttpCode(HttpStatus.CREATED)
+  confirmImport(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: ImportUrlConfirmDto,
+  ): Promise<KnowledgeDocumentListItem> {
+    return this.service.confirmUrlImport(
+      user.org_id,
+      {
+        url: dto.url,
+        title: dto.title,
+        content: dto.content,
+        ...(dto.category ? { category: dto.category } : {}),
+      },
+      user.id,
+    );
+  }
+
+  // POST /knowledge/import-url/batch — preview de várias URLs em paralelo
+  @Post('import-url/batch')
+  @HttpCode(HttpStatus.OK)
+  batchPreview(@Body() dto: ImportUrlBatchDto) {
+    return this.service.batchPreview(dto.urls);
+  }
+
+  // POST /knowledge/import-url/batch/confirm — salva itens selecionados
+  @Post('import-url/batch/confirm')
+  @HttpCode(HttpStatus.CREATED)
+  batchConfirm(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: ImportUrlBatchConfirmDto,
+  ): Promise<KnowledgeDocumentListItem[]> {
+    return this.service.confirmBatchImport(user.org_id, dto.items, dto.category, user.id);
+  }
+
+  // ──────────────────────────────────────────────────────────
   // Documents
   // ──────────────────────────────────────────────────────────
 
@@ -145,5 +198,15 @@ export class KnowledgeController {
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<void> {
     return this.service.delete(user.org_id, id);
+  }
+
+  // POST /knowledge/:id/refresh — re-fetch URL e atualiza se mudou
+  @Post(':id/refresh')
+  @HttpCode(HttpStatus.OK)
+  refresh(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<{ updated: boolean; document: KnowledgeDocumentListItem }> {
+    return this.service.refreshUrlDocument(user.org_id, id);
   }
 }

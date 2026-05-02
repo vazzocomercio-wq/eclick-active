@@ -9,7 +9,9 @@ import { SupabaseService } from '../../common/supabase/supabase.service';
 import { EmbeddingsClient } from './embeddings.client';
 import { CreateDocumentDto, UpdateDocumentDto } from './dto/create-document.dto';
 import { ListDocumentsQueryDto } from './dto/list-documents.query.dto';
+import { UrlScraperService } from './url-scraper.service';
 import type { PaginatedResult } from '../contacts/contacts.service';
+import type { KnowledgeCategory } from '@eclick-active/shared';
 
 /** Linha enxuta usada nas listas (sem `embedding` que é grande). */
 export type KnowledgeDocumentListItem = Omit<KnowledgeDocument, 'embedding'>;
@@ -39,7 +41,176 @@ export class KnowledgeService {
   constructor(
     private readonly supabase: SupabaseService,
     private readonly embeddings: EmbeddingsClient,
+    private readonly scraper: UrlScraperService,
   ) {}
+
+  // ────────────────────────────────────────────
+  // URL IMPORT (preview / confirm / batch / refresh)
+  // ────────────────────────────────────────────
+
+  async previewUrl(
+    rawUrl: string,
+  ): Promise<{ title: string; content: string; url: string; char_count: number; token_estimate: number; truncated: boolean }> {
+    return this.scraper.scrape(rawUrl);
+  }
+
+  async confirmUrlImport(
+    orgId: string,
+    args: { url: string; title: string; content: string; category?: KnowledgeCategory },
+    createdBy: string | null,
+  ): Promise<KnowledgeDocumentListItem> {
+    const tokens = this.embeddings.estimateTokens(args.content);
+    const embedding = await this.embeddings.embed(this.embedInput(args.title, args.content));
+
+    const { data, error } = await this.supabase.adminClient
+      .from('knowledge_documents')
+      .insert({
+        org_id: orgId,
+        title: args.title,
+        category: args.category ?? 'general',
+        content: args.content,
+        embedding,
+        metadata: {},
+        is_active: true,
+        tokens,
+        source_type: 'url',
+        source_url: args.url,
+        last_synced_at: new Date().toISOString(),
+        auto_sync: false,
+        created_by: createdBy,
+      })
+      .select(LIST_COLUMNS)
+      .single();
+
+    if (error || !data) {
+      this.logger.error(`confirmUrlImport failed: ${error?.message}`);
+      throw new InternalServerErrorException(error?.message ?? 'Failed to import URL');
+    }
+    return data as KnowledgeDocumentListItem;
+  }
+
+  async batchPreview(
+    urls: string[],
+  ): Promise<Array<{ url: string; ok: boolean; title?: string; content?: string; char_count?: number; token_estimate?: number; truncated?: boolean; error?: string }>> {
+    // Concurrency limit pra não estourar rate limits
+    const concurrency = 3;
+    const results: Array<{
+      url: string;
+      ok: boolean;
+      title?: string;
+      content?: string;
+      char_count?: number;
+      token_estimate?: number;
+      truncated?: boolean;
+      error?: string;
+    }> = [];
+
+    let cursor = 0;
+    const worker = async (): Promise<void> => {
+      while (cursor < urls.length) {
+        const i = cursor++;
+        const url = urls[i]!;
+        try {
+          const r = await this.scraper.scrape(url);
+          results[i] = {
+            url,
+            ok: true,
+            title: r.title,
+            content: r.content,
+            char_count: r.char_count,
+            token_estimate: r.token_estimate,
+            truncated: r.truncated,
+          };
+        } catch (err) {
+          results[i] = {
+            url,
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          };
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: concurrency }, () => worker()));
+    return results;
+  }
+
+  async confirmBatchImport(
+    orgId: string,
+    items: Array<{ url: string; title: string; content: string }>,
+    category: KnowledgeCategory | undefined,
+    createdBy: string | null,
+  ): Promise<KnowledgeDocumentListItem[]> {
+    const out: KnowledgeDocumentListItem[] = [];
+    for (const it of items) {
+      try {
+        const doc = await this.confirmUrlImport(
+          orgId,
+          { ...it, ...(category ? { category } : {}) },
+          createdBy,
+        );
+        out.push(doc);
+      } catch (err) {
+        this.logger.warn(
+          `batch import skipped ${it.url}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Re-fetch URL e atualiza content + embedding se mudou. Marca
+   * last_synced_at sempre. Funciona apenas pra source_type='url'.
+   */
+  async refreshUrlDocument(
+    orgId: string,
+    docId: string,
+  ): Promise<{ updated: boolean; document: KnowledgeDocumentListItem }> {
+    const { data: doc, error } = await this.supabase.adminClient
+      .from('knowledge_documents')
+      .select('id, source_type, source_url, title, content')
+      .eq('org_id', orgId)
+      .eq('id', docId)
+      .maybeSingle();
+    if (error) throw new InternalServerErrorException(error.message);
+    if (!doc) throw new NotFoundException(`Documento ${docId} não encontrado`);
+
+    const row = doc as { id: string; source_type: string; source_url: string | null; title: string; content: string };
+    if (row.source_type !== 'url' || !row.source_url) {
+      throw new InternalServerErrorException('Documento não foi importado de URL — refresh não disponível');
+    }
+
+    const scraped = await this.scraper.scrape(row.source_url);
+    const contentChanged = scraped.content !== row.content;
+    const titleChanged = scraped.title !== row.title;
+
+    const updates: Record<string, unknown> = {
+      last_synced_at: new Date().toISOString(),
+    };
+    if (titleChanged) updates.title = scraped.title;
+    if (contentChanged) {
+      updates.content = scraped.content;
+      updates.tokens = this.embeddings.estimateTokens(scraped.content);
+      const embedding = await this.embeddings.embed(this.embedInput(scraped.title, scraped.content));
+      if (embedding) updates.embedding = embedding;
+    }
+
+    const { data: updated, error: updErr } = await this.supabase.adminClient
+      .from('knowledge_documents')
+      .update(updates)
+      .eq('org_id', orgId)
+      .eq('id', docId)
+      .select(LIST_COLUMNS)
+      .single();
+    if (updErr || !updated) {
+      throw new InternalServerErrorException(updErr?.message ?? 'Failed to refresh document');
+    }
+
+    return {
+      updated: contentChanged || titleChanged,
+      document: updated as KnowledgeDocumentListItem,
+    };
+  }
 
   // ────────────────────────────────────────────
   // CREATE
