@@ -393,6 +393,42 @@ function PresetButton({
 }
 
 // ──────────────────────────────────────────────────────────
+// Traduções dos enums do classificador (backend retorna em inglês,
+// UI em pt-BR)
+// ──────────────────────────────────────────────────────────
+
+const INTENT_LABEL: Record<string, string> = {
+  budget: 'orçamento',
+  question: 'dúvida',
+  complaint: 'reclamação',
+  negotiation: 'negociação',
+  support: 'suporte',
+  greeting: 'saudação',
+  farewell: 'despedida',
+  spam: 'spam',
+  other: 'outro',
+};
+
+const SENTIMENT_LABEL: Record<string, string> = {
+  very_positive: 'muito positivo',
+  positive: 'positivo',
+  neutral: 'neutro',
+  negative: 'negativo',
+  very_negative: 'muito negativo',
+};
+
+const TEMPERATURE_LABEL: Record<string, string> = {
+  cold: 'frio',
+  warm: 'morno',
+  hot: 'quente',
+  very_hot: 'muito quente',
+};
+
+function translateEnum(map: Record<string, string>, value: string): string {
+  return map[value] ?? value;
+}
+
+// ──────────────────────────────────────────────────────────
 // Message bubble + metadata
 // ──────────────────────────────────────────────────────────
 
@@ -424,9 +460,15 @@ function MessageBubble({
       {!isUser && meta && (
         <div className="flex max-w-[85%] flex-col gap-1 pt-1">
           <div className="flex flex-wrap gap-1.5 text-[10px]">
-            {meta.intent_detected && <Pill label="Intenção" value={meta.intent_detected} />}
-            {meta.sentiment && <Pill label="Sentimento" value={meta.sentiment} />}
-            {meta.temperature && <Pill label="Temperatura" value={meta.temperature} />}
+            {meta.intent_detected && (
+              <Pill label="Intenção" value={translateEnum(INTENT_LABEL, meta.intent_detected)} />
+            )}
+            {meta.sentiment && (
+              <Pill label="Sentimento" value={translateEnum(SENTIMENT_LABEL, meta.sentiment)} />
+            )}
+            {meta.temperature && (
+              <Pill label="Temperatura" value={translateEnum(TEMPERATURE_LABEL, meta.temperature)} />
+            )}
             {meta.active_skill ? (
               <Pill label="Skill" value={meta.active_skill.name} variant="primary" icon={Brain} />
             ) : meta.sources_disabled?.includes('skills') ? (
