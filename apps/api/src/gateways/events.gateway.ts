@@ -53,6 +53,32 @@ export interface DealUpdatedPayload {
   deal: Deal;
 }
 
+// ── Baileys / WhatsApp Free ──
+// Worker (apps/workers) emite esses eventos via POST /internal/realtime
+// quando a sessão Baileys de um canal muda de estado.
+
+export interface WhatsappQrPayload {
+  channel_id: UUID;
+  /** QR code raw (string que vem do Baileys, frontend renderiza como QR) */
+  qr: string;
+}
+
+export interface WhatsappConnectedPayload {
+  channel_id: UUID;
+  /** Número internacional pareado (ex: '5571999999999') */
+  phone_number: string;
+  /** pushName do perfil WhatsApp */
+  display_name?: string;
+}
+
+export interface WhatsappDisconnectedPayload {
+  channel_id: UUID;
+  /** Razão (Baileys DisconnectReason) ou 'logged_out' */
+  reason: string;
+  /** Se true, precisa reescanear QR */
+  needs_reauth: boolean;
+}
+
 export type EventName =
   | 'message:new'
   | 'conversation:updated'
@@ -60,7 +86,10 @@ export type EventName =
   | 'notification'
   | 'deal:created'
   | 'deal:moved'
-  | 'deal:updated';
+  | 'deal:updated'
+  | 'whatsapp:qr'
+  | 'whatsapp:connected'
+  | 'whatsapp:disconnected';
 
 export interface EventPayloadMap {
   'message:new': MessageNewPayload;
@@ -70,6 +99,9 @@ export interface EventPayloadMap {
   'deal:created': DealCreatedPayload;
   'deal:moved': DealMovedPayload;
   'deal:updated': DealUpdatedPayload;
+  'whatsapp:qr': WhatsappQrPayload;
+  'whatsapp:connected': WhatsappConnectedPayload;
+  'whatsapp:disconnected': WhatsappDisconnectedPayload;
 }
 
 const ROOM_PREFIX = 'org';

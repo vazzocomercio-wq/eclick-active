@@ -9,9 +9,11 @@ import {
   Pause,
   Plus,
   Play,
+  QrCode,
   Trash2,
 } from 'lucide-react';
 import type { ChannelStatus } from '@eclick-active/shared';
+import { BaileysConnectDialog } from './baileys-connect-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -47,6 +49,7 @@ export function ChannelsSection() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [baileysDialogOpen, setBaileysDialogOpen] = useState(false);
 
   const reload = useCallback(async () => {
     setError(null);
@@ -100,10 +103,20 @@ export function ChannelsSection() {
           <Cable className="h-4 w-4 text-primary" />
           <h2 className="text-sm font-semibold">Canais Conectados</h2>
         </div>
-        <Button size="sm" onClick={() => setDialogOpen(true)}>
-          <Plus className="mr-2 h-3.5 w-3.5" />
-          Conectar canal
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setBaileysDialogOpen(true)}
+          >
+            <QrCode className="mr-2 h-3.5 w-3.5" />
+            WhatsApp Gratuito
+          </Button>
+          <Button size="sm" onClick={() => setDialogOpen(true)}>
+            <Plus className="mr-2 h-3.5 w-3.5" />
+            WhatsApp (Z-API)
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -135,6 +148,12 @@ export function ChannelsSection() {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         onCreated={() => void reload()}
+      />
+
+      <BaileysConnectDialog
+        open={baileysDialogOpen}
+        onOpenChange={setBaileysDialogOpen}
+        onConnected={() => void reload()}
       />
     </section>
   );

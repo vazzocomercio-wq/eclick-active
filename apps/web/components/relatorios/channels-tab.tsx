@@ -18,6 +18,7 @@ interface ChannelsTabProps {
 
 const CHANNEL_COLORS: Record<string, string> = {
   whatsapp: '#22C55E',
+  whatsapp_free: '#10B981',
   instagram: '#E1306C',
   messenger: '#0084FF',
   telegram: '#229ED9',
@@ -29,6 +30,7 @@ const CHANNEL_COLORS: Record<string, string> = {
 
 const CHANNEL_LABELS: Record<string, string> = {
   whatsapp: 'WhatsApp',
+  whatsapp_free: 'WhatsApp (QR)',
   instagram: 'Instagram',
   messenger: 'Messenger',
   telegram: 'Telegram',

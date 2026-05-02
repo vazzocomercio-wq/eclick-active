@@ -12,6 +12,7 @@ import { ConversationsModule } from './modules/conversations/conversations.modul
 import { CopilotModule } from './modules/copilot/copilot.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { DealsModule } from './modules/deals/deals.module';
+import { InternalModule } from './modules/internal/internal.module';
 import { KnowledgeModule } from './modules/knowledge/knowledge.module';
 import { MessagesModule } from './modules/messages/messages.module';
 import { PipelinesModule } from './modules/pipelines/pipelines.module';
@@ -45,6 +46,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     ReportsModule,
     AutomationsModule,
     WebhooksModule,
+    InternalModule,
   ],
   controllers: [AppController],
 })

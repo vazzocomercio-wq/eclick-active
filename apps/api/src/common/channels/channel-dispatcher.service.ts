@@ -14,6 +14,7 @@ import type {
 } from '@eclick-active/shared';
 import { SupabaseService } from '../supabase/supabase.service';
 import { ZapiProvider } from './providers/zapi/zapi.provider';
+import { BaileysProvider } from './providers/baileys/baileys.provider';
 
 export interface DispatcherSendInput {
   org_id: string;
@@ -32,8 +33,10 @@ export class ChannelDispatcherService {
   constructor(
     private readonly supabase: SupabaseService,
     private readonly zapi: ZapiProvider,
+    private readonly baileys: BaileysProvider,
   ) {
     this.register(zapi);
+    this.register(baileys);
   }
 
   register(provider: ChannelProvider): void {
@@ -148,10 +151,11 @@ export class ChannelDispatcherService {
       (data.channel_profiles as Record<string, Record<string, unknown>>) ?? {};
 
     switch (channelType) {
-      case 'whatsapp': {
+      case 'whatsapp':
+      case 'whatsapp_free': {
         const wa = profiles.whatsapp;
         if (typeof wa?.wa_id === 'string') return wa.wa_id;
-        // Fallback: telefone do contato (Z-API aceita em formato internacional)
+        // Fallback: telefone do contato (Z-API e Baileys aceitam internacional)
         if (typeof data.phone === 'string') {
           return this.normalizePhone(data.phone);
         }

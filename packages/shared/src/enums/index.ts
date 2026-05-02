@@ -29,6 +29,7 @@ export type ContactSource =
 
 export type ChannelType =
   | 'whatsapp'
+  | 'whatsapp_free'
   | 'instagram'
   | 'messenger'
   | 'telegram'

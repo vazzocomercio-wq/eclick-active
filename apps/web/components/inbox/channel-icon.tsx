@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 
 const ICON_MAP: Record<ChannelType, typeof Mail> = {
   whatsapp: MessageCircle,
+  whatsapp_free: MessageCircle,
   instagram: Instagram,
   messenger: MessageSquare,
   telegram: Send,
@@ -24,6 +25,7 @@ const ICON_MAP: Record<ChannelType, typeof Mail> = {
 
 const COLOR_MAP: Record<ChannelType, string> = {
   whatsapp: 'text-green-500',
+  whatsapp_free: 'text-emerald-400',
   instagram: 'text-pink-500',
   messenger: 'text-blue-500',
   telegram: 'text-sky-500',

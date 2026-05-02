@@ -21,8 +21,11 @@ export interface TaskRow extends Task {
   assignee_name?: string | null;
 }
 
+// Embeds só pra contact/deal (FKs reais). Assignee é resolvido separadamente
+// em loadAssigneeNames() porque tasks.assigned_to não tem FK pra org_members
+// (org_members.user_id não é único — chave composta é (org_id, user_id)).
 const SELECT_WITH_JOINS =
-  '*, contact:contacts(id, name, phone), deal:deals(id, title), assignee:org_members!tasks_assigned_to_fkey(user_id, display_name)';
+  '*, contact:contacts(id, name, phone), deal:deals(id, title)';
 
 @Injectable()
 export class TasksService {
@@ -118,6 +121,7 @@ export class TasksService {
     }
 
     const rows = (data ?? []).map((r) => normalizeRow(r as RawTaskRow));
+    await this.attachAssigneeNames(orgId, rows);
 
     return {
       data: rows,
@@ -146,7 +150,9 @@ export class TasksService {
     if (!data) {
       throw new NotFoundException(`Task ${id} not found`);
     }
-    return normalizeRow(data as RawTaskRow);
+    const row = normalizeRow(data as RawTaskRow);
+    await this.attachAssigneeNames(orgId, [row]);
+    return row;
   }
 
   // ────────────────────────────────────────────
@@ -237,7 +243,9 @@ export class TasksService {
       this.logger.error(`getMyToday failed: ${error.message}`);
       throw new InternalServerErrorException(error.message);
     }
-    return (data ?? []).map((r) => normalizeRow(r as RawTaskRow));
+    const rows = (data ?? []).map((r) => normalizeRow(r as RawTaskRow));
+    await this.attachAssigneeNames(orgId, rows);
+    return rows;
   }
 
   // ────────────────────────────────────────────
@@ -260,7 +268,44 @@ export class TasksService {
       this.logger.error(`getOverdue failed: ${error.message}`);
       throw new InternalServerErrorException(error.message);
     }
-    return (data ?? []).map((r) => normalizeRow(r as RawTaskRow));
+    const rows = (data ?? []).map((r) => normalizeRow(r as RawTaskRow));
+    await this.attachAssigneeNames(orgId, rows);
+    return rows;
+  }
+
+  // ────────────────────────────────────────────
+  // Helper: batched lookup de display_name dos assignees
+  // ────────────────────────────────────────────
+
+  private async attachAssigneeNames(orgId: string, rows: TaskRow[]): Promise<void> {
+    if (rows.length === 0) return;
+
+    const userIds = Array.from(
+      new Set(rows.map((r) => r.assigned_to).filter((v): v is string => !!v)),
+    );
+    if (userIds.length === 0) return;
+
+    const { data, error } = await this.supabase.adminClient
+      .from('org_members')
+      .select('user_id, display_name')
+      .eq('org_id', orgId)
+      .in('user_id', userIds);
+
+    if (error) {
+      this.logger.warn(`attachAssigneeNames failed: ${error.message}`);
+      return;
+    }
+
+    const byUserId = new Map<string, string | null>();
+    for (const m of data ?? []) {
+      byUserId.set(m.user_id as string, (m.display_name as string | null) ?? null);
+    }
+
+    for (const r of rows) {
+      if (r.assigned_to) {
+        r.assignee_name = byUserId.get(r.assigned_to) ?? null;
+      }
+    }
   }
 }
 
@@ -271,7 +316,6 @@ export class TasksService {
 interface RawTaskRow extends Task {
   contact?: { id: string; name: string | null; phone: string | null } | Array<{ id: string; name: string | null; phone: string | null }> | null;
   deal?: { id: string; title: string } | Array<{ id: string; title: string }> | null;
-  assignee?: { user_id: string; display_name: string | null } | Array<{ user_id: string; display_name: string | null }> | null;
 }
 
 function pickOne<T>(value: T | T[] | null | undefined): T | null {
@@ -283,18 +327,16 @@ function pickOne<T>(value: T | T[] | null | undefined): T | null {
 function normalizeRow(raw: RawTaskRow): TaskRow {
   const contact = pickOne(raw.contact);
   const deal = pickOne(raw.deal);
-  const assignee = pickOne(raw.assignee);
 
   // Strip the nested join keys before returning the flat shape
-  const { contact: _c, deal: _d, assignee: _a, ...rest } = raw;
+  const { contact: _c, deal: _d, ...rest } = raw;
   void _c;
   void _d;
-  void _a;
 
   return {
     ...(rest as Task),
     contact_name: contact?.name ?? contact?.phone ?? null,
     deal_title: deal?.title ?? null,
-    assignee_name: assignee?.display_name ?? null,
+    assignee_name: null, // preenchido depois por attachAssigneeNames()
   };
 }
