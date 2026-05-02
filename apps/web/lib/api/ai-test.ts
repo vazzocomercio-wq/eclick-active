@@ -1,6 +1,12 @@
 import type { AiTestConversation, AiTestMessage } from '@eclick-active/shared';
 import { api } from './client';
 
+export interface TestSourcesInput {
+  use_kb?: boolean;
+  use_skills?: boolean;
+  use_live?: boolean;
+}
+
 export const aiTestApi = {
   listSessions(signal?: AbortSignal): Promise<AiTestConversation[]> {
     return api.get<AiTestConversation[]>('/ai/test/sessions', { signal });
@@ -16,10 +22,11 @@ export const aiTestApi = {
   sendMessage(
     sessionId: string,
     content: string,
+    sources?: TestSourcesInput,
   ): Promise<{ session: AiTestConversation; reply: AiTestMessage }> {
     return api.post<{ session: AiTestConversation; reply: AiTestMessage }>(
       `/ai/test/sessions/${sessionId}/message`,
-      { content },
+      { content, ...(sources ? { sources } : {}) },
     );
   },
   deleteSession(id: string): Promise<void> {

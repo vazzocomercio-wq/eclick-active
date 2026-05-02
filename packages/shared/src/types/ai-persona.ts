@@ -93,6 +93,12 @@ export interface AiTestResponseMetadata {
   /** 0..1 */
   confidence?: number;
   knowledge_sources_used?: Array<{ id: UUID; title: string; category: string }>;
+  /** Skill ativo resolvido (Bloco F). Null se nenhum skill bateu. */
+  active_skill?: { id: UUID; name: string } | null;
+  /** Fontes live consultadas em tempo real (Feature B). */
+  live_sources_used?: Array<{ id: UUID; name: string; url: string }>;
+  /** Quais fontes a IA *poderia* ter usado mas foram desligadas via toggle. */
+  sources_disabled?: Array<'kb' | 'skills' | 'live'>;
   /** Ações que a IA tomaria caso não fosse modo teste (ex: "Criaria tarefa X") */
   actions_would_take?: string[];
   model?: string;

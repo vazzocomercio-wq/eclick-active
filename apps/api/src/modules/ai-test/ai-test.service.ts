@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type {
-  AiAgentPersona,
+  AiSkill,
   AiTestConversation,
   AiTestMessage,
   AiTestResponseMetadata,
@@ -13,13 +13,25 @@ import type {
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { AnthropicClient } from '../ai/anthropic.client';
 import { AiPersonaService } from '../ai-persona/ai-persona.service';
+import { AiSkillsService } from '../ai-skills/ai-skills.service';
 import { KnowledgeService } from '../knowledge/knowledge.service';
+import { LiveSourcesService } from '../knowledge/live-sources.service';
 import {
   CLASSIFY_SCHEMA,
   CLASSIFY_SYSTEM_PROMPT,
   ClassificationResult,
   HAIKU_MODEL_ID,
 } from '../ai/ai.types';
+
+/**
+ * Toggles que controlam quais fontes alimentam a IA no modo teste.
+ * Default = todas ligadas (paridade com produção).
+ */
+export interface TestSources {
+  use_kb?: boolean;
+  use_skills?: boolean;
+  use_live?: boolean;
+}
 
 @Injectable()
 export class AiTestService {
@@ -29,7 +41,9 @@ export class AiTestService {
     private readonly supabase: SupabaseService,
     private readonly anthropic: AnthropicClient,
     private readonly persona: AiPersonaService,
+    private readonly skills: AiSkillsService,
     private readonly knowledge: KnowledgeService,
+    private readonly liveSources: LiveSourcesService,
   ) {}
 
   // ──────────────────────────────────────────────────────────
@@ -41,7 +55,6 @@ export class AiTestService {
     userId: string,
     personaId?: string,
   ): Promise<AiTestConversation> {
-    // Resolve persona — usa default da org se não passar id
     let resolvedPersonaId: string | null = null;
     if (personaId) {
       const p = await this.persona.getById(orgId, personaId);
@@ -101,15 +114,20 @@ export class AiTestService {
   }
 
   // ──────────────────────────────────────────────────────────
-  // sendTestMessage — coração do modo teste
+  // sendTestMessage — paridade com ai.service.suggestResponse
   // ──────────────────────────────────────────────────────────
 
   /**
-   * Simula o cliente mandando uma mensagem pra persona. Roda:
-   *  1. classify (intent/sentiment/temperature) com Haiku
-   *  2. RAG na knowledge base
-   *  3. Geração de resposta com persona system prompt + KB
-   *  4. Persiste user + assistant na sessão
+   * Simula um cliente. Aplica o MESMO pipeline do suggestResponse de produção:
+   *   1. classify (intent/sentiment/temperature)
+   *   2. resolve skill ativo (se use_skills)
+   *   3. RAG na KB — skill-aware se houver skill, senão semantic plain (se use_kb)
+   *   4. Live sources se KB local insuficiente (se use_live)
+   *   5. Compose system prompt: persona + skill (se houver)
+   *   6. Persiste user + assistant messages na sessão
+   *
+   * Os toggles `sources` deixam o admin desligar cada alimentação pra
+   * comparar quanto cada fonte contribui isoladamente.
    *
    * NÃO envia mensagem real, NÃO cria contato/deal, NÃO dispara automações.
    */
@@ -117,7 +135,12 @@ export class AiTestService {
     orgId: string,
     sessionId: string,
     userMessage: string,
+    sources: TestSources = {},
   ): Promise<{ session: AiTestConversation; reply: AiTestMessage }> {
+    const useKb = sources.use_kb !== false;
+    const useSkills = sources.use_skills !== false;
+    const useLive = sources.use_live !== false;
+
     const session = await this.getSession(orgId, sessionId);
     const persona = session.persona_id
       ? await this.persona.getById(orgId, session.persona_id).catch(() => null)
@@ -129,9 +152,9 @@ export class AiTestService {
       content: userMessage,
       timestamp: now,
     };
-
-    // 1) Classifica a mensagem (paralelo c/ KB)
     const recent: AiTestMessage[] = [...session.messages, userMsg];
+
+    // 1) Classifica em paralelo
     const classifyPromise = this.anthropic
       .complete<ClassificationResult>({
         interaction_type: 'classify_intent',
@@ -148,23 +171,79 @@ export class AiTestService {
         return null;
       });
 
-    // 2) RAG na KB usando a mensagem do user
-    const kbHitsPromise = this.knowledge
-      .searchSemantic(orgId, userMessage, 3)
-      .catch(() => []);
+    const classifyRes = await classifyPromise;
+    const classification = classifyRes?.data ?? null;
 
-    const [classifyRes, kbHits] = await Promise.all([classifyPromise, kbHitsPromise]);
+    // 2) Resolve skill ativo (se toggled on + persona disponível)
+    let activeSkill: AiSkill | null = null;
+    if (useSkills && persona) {
+      activeSkill = await this.skills
+        .resolveSkillForMessage({
+          orgId,
+          persona,
+          message: {
+            ai_intent: classification?.intent ?? null,
+            ai_sentiment: classification?.sentiment ?? null,
+            plain_text: userMessage,
+          },
+          contact: null,
+        })
+        .catch(() => null);
+    }
 
-    // 3) Gera resposta usando persona + KB + histórico
+    // 3) KB — skill-aware se houver skill com filtros, senão semantic plain
+    let kbHits: Array<{ id: string; title: string; category: string; content: string; tokens: number | null; metadata: Record<string, unknown>; similarity: number }> = [];
+    if (useKb) {
+      if (
+        activeSkill &&
+        (activeSkill.knowledge_source_ids.length > 0 || activeSkill.knowledge_categories.length > 0)
+      ) {
+        kbHits = await this.knowledge
+          .searchSemanticForSkill(orgId, userMessage, {
+            source_ids: activeSkill.knowledge_source_ids,
+            categories: activeSkill.knowledge_categories,
+            intent: classification?.intent ?? null,
+          })
+          .catch(() => []);
+      } else {
+        kbHits = await this.knowledge.searchSemantic(orgId, userMessage, 3).catch(() => []);
+      }
+    }
+
+    // 4) Live sources se KB local insuficiente (mesma heurística da produção)
+    let liveContent: string | null = null;
+    let liveSourcesUsed: Array<{ id: string; name: string; url: string }> = [];
+    if (useLive) {
+      const lowResults = kbHits.length < 2;
+      const lowSim =
+        kbHits.length > 0 &&
+        kbHits.reduce((s, h) => s + h.similarity, 0) / kbHits.length < 0.55;
+      if (lowResults || lowSim) {
+        const live = await this.liveSources.fetchLiveContent(orgId, userMessage).catch(() => null);
+        if (live) {
+          liveContent = live.content;
+          liveSourcesUsed = live.sources_used;
+        }
+      }
+    }
+
+    // 5) Compose system prompt: persona + skill (se houver)
     const startedAt = Date.now();
     const personaSystem = persona ? this.persona.buildSystemPrompt(persona) : DEFAULT_TEST_SYSTEM;
-    const userPrompt = this.buildResponsePrompt(recent, kbHits);
+    const systemParts = [personaSystem];
+    if (activeSkill) {
+      systemParts.push(`SKILL ATIVO: ${activeSkill.name}\n${activeSkill.description}\n\n${activeSkill.system_prompt}`);
+    }
+    systemParts.push(TEST_REPLY_INSTRUCTION);
+    const systemPrompt = systemParts.join('\n\n---\n\n');
+
+    const userPrompt = this.buildResponsePrompt(recent, kbHits, liveContent);
 
     const reply = await this.anthropic
       .complete<string>({
         interaction_type: 'suggest_response',
         org_id: orgId,
-        system: `${personaSystem}\n\n${TEST_REPLY_INSTRUCTION}`,
+        system: systemPrompt,
         user: userPrompt,
         max_tokens: 512,
       })
@@ -175,15 +254,22 @@ export class AiTestService {
         return null;
       });
 
-    const replyText = reply?.data?.trim() ?? '⚠️ Não consegui gerar resposta. Verifique a configuração da IA (ANTHROPIC_API_KEY) e tente de novo.';
+    const replyText =
+      reply?.data?.trim() ??
+      '⚠️ Não consegui gerar resposta. Verifique a configuração da IA (ANTHROPIC_API_KEY) e tente de novo.';
 
-    // 4) Monta metadata pra UI
+    // 6) Metadata pra UI
+    const sourcesDisabled: Array<'kb' | 'skills' | 'live'> = [];
+    if (!useKb) sourcesDisabled.push('kb');
+    if (!useSkills) sourcesDisabled.push('skills');
+    if (!useLive) sourcesDisabled.push('live');
+
     const metadata: AiTestResponseMetadata = {
-      ...(classifyRes?.data
+      ...(classification
         ? {
-            intent_detected: classifyRes.data.intent,
-            sentiment: classifyRes.data.sentiment,
-            temperature: classifyRes.data.temperature,
+            intent_detected: classification.intent,
+            sentiment: classification.sentiment,
+            temperature: classification.temperature,
           }
         : {}),
       knowledge_sources_used: kbHits.map((h) => ({
@@ -191,7 +277,10 @@ export class AiTestService {
         title: h.title,
         category: h.category,
       })),
-      actions_would_take: this.hypotheticalActions(classifyRes?.data ?? null),
+      active_skill: activeSkill ? { id: activeSkill.id, name: activeSkill.name } : null,
+      live_sources_used: liveSourcesUsed,
+      ...(sourcesDisabled.length > 0 ? { sources_disabled: sourcesDisabled } : {}),
+      actions_would_take: this.hypotheticalActions(classification),
       model: HAIKU_MODEL_ID,
       ...(reply
         ? {
@@ -209,7 +298,7 @@ export class AiTestService {
       ai_metadata: metadata,
     };
 
-    // 5) Persiste nas messages jsonb
+    // 7) Persiste
     const newMessages: AiTestMessage[] = [...session.messages, userMsg, assistantMsg];
     const { data: updated, error } = await this.supabase.adminClient
       .from('ai_test_conversations')
@@ -242,6 +331,7 @@ export class AiTestService {
   private buildResponsePrompt(
     messages: AiTestMessage[],
     knowledge: Array<{ title: string; category: string; content: string }>,
+    liveContent: string | null,
   ): string {
     const lines: string[] = [];
 
@@ -253,6 +343,12 @@ export class AiTestService {
         lines.push(snippet);
         lines.push('');
       });
+    }
+
+    if (liveContent) {
+      lines.push('DADOS ATUALIZADOS DE FONTES EXTERNAS (consultados agora — informação fresca, prefira essa quando houver conflito com a base local):');
+      lines.push(liveContent.length > 4000 ? `${liveContent.slice(0, 4000)}…` : liveContent);
+      lines.push('');
     }
 
     lines.push('Conversa (cronológica):');

@@ -51,7 +51,7 @@ export class AiTestController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: SendTestMessageDto,
   ): Promise<{ session: AiTestConversation; reply: AiTestMessage }> {
-    return this.service.sendMessage(user.org_id, id, dto.content);
+    return this.service.sendMessage(user.org_id, id, dto.content, dto.sources);
   }
 
   @Delete(':id')

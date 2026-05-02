@@ -1,13 +1,23 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Loader2, RefreshCw, Send, Sparkles, Trash2 } from 'lucide-react';
+import {
+  BookOpen,
+  Brain,
+  ChevronDown,
+  ChevronRight,
+  Globe,
+  Loader2,
+  RefreshCw,
+  Send,
+  Sparkles,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import type { AiAgentPersona, AiTestConversation, AiTestMessage } from '@eclick-active/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { aiPersonaApi } from '@/lib/api/ai-persona';
-import { aiTestApi } from '@/lib/api/ai-test';
+import { aiTestApi, type TestSourcesInput } from '@/lib/api/ai-test';
 import { ApiError } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 
@@ -16,7 +26,10 @@ const SUGGESTIONS = [
   { label: 'Reclamação', text: 'Estou muito insatisfeito com o atendimento.' },
   { label: 'Agendamento', text: 'Vocês conseguem me atender amanhã?' },
   { label: 'Saudação', text: 'Olá, tudo bem?' },
+  { label: 'Estoque (live)', text: 'Tem em estoque o produto X?' },
 ];
+
+type SourceKey = 'use_kb' | 'use_skills' | 'use_live';
 
 export function TestModeTab() {
   const [personas, setPersonas] = useState<AiAgentPersona[]>([]);
@@ -25,9 +38,13 @@ export function TestModeTab() {
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  const [sources, setSources] = useState<Required<TestSourcesInput>>({
+    use_kb: true,
+    use_skills: true,
+    use_live: true,
+  });
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Carrega personas + cria sessão inicial
   useEffect(() => {
     void (async () => {
       try {
@@ -49,10 +66,21 @@ export function TestModeTab() {
     })();
   }, []);
 
-  // Auto-scroll quando chega msg nova
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [session?.messages.length]);
+
+  function toggleSource(key: SourceKey) {
+    setSources((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  function applyPreset(preset: 'persona_only' | 'kb_only' | 'kb_skills' | 'all') {
+    setSources({
+      use_kb: preset !== 'persona_only',
+      use_skills: preset === 'kb_skills' || preset === 'all',
+      use_live: preset === 'all',
+    });
+  }
 
   async function handleSend(text?: string) {
     const content = (text ?? draft).trim();
@@ -60,7 +88,7 @@ export function TestModeTab() {
     setSending(true);
     setDraft('');
     try {
-      const result = await aiTestApi.sendMessage(session.id, content);
+      const result = await aiTestApi.sendMessage(session.id, content, sources);
       setSession(result.session);
     } catch (err) {
       toast.error('Falha ao enviar', {
@@ -146,6 +174,13 @@ export function TestModeTab() {
         </div>
       </div>
 
+      {/* Toggles de fontes — pra calibrar qual alimentação funciona melhor */}
+      <SourcesPanel
+        sources={sources}
+        onToggle={toggleSource}
+        onPreset={applyPreset}
+      />
+
       {/* Sugestões */}
       <div className="flex flex-wrap gap-1.5">
         {SUGGESTIONS.map((s) => (
@@ -215,11 +250,145 @@ export function TestModeTab() {
 
       <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-[11px] text-amber-700 dark:text-amber-300">
         💡 Modo teste — nada do que aparece aqui afeta contatos, deals ou automações reais.
-        Use pra refinar a persona antes de ativar o auto-respond.
+        Use os toggles acima pra isolar quais fontes calibram melhor a IA.
       </div>
     </div>
   );
 }
+
+// ──────────────────────────────────────────────────────────
+// Sources panel — controles de calibração
+// ──────────────────────────────────────────────────────────
+
+function SourcesPanel({
+  sources,
+  onToggle,
+  onPreset,
+}: {
+  sources: Required<TestSourcesInput>;
+  onToggle: (key: SourceKey) => void;
+  onPreset: (preset: 'persona_only' | 'kb_only' | 'kb_skills' | 'all') => void;
+}) {
+  const [open, setOpen] = useState(true);
+  const enabledCount = [sources.use_kb, sources.use_skills, sources.use_live].filter(Boolean).length;
+
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-3">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 text-xs font-medium"
+      >
+        {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+        Fontes da IA (calibração)
+        <span className="text-muted-foreground">
+          — Persona sempre ON · {enabledCount}/3 fontes adicionais ligadas
+        </span>
+      </button>
+
+      {open && (
+        <>
+          <div className="grid gap-2 md:grid-cols-3">
+            <SourceToggle
+              icon={BookOpen}
+              label="Knowledge Base"
+              description="Documentos manuais, URLs, arquivos uploadados"
+              enabled={sources.use_kb}
+              onToggle={() => onToggle('use_kb')}
+            />
+            <SourceToggle
+              icon={Brain}
+              label="Skills"
+              description="Habilidades modulares com KB priorizado por intent"
+              enabled={sources.use_skills}
+              onToggle={() => onToggle('use_skills')}
+            />
+            <SourceToggle
+              icon={Globe}
+              label="Fontes Live"
+              description="URLs consultadas em tempo real (estoque, preços)"
+              enabled={sources.use_live}
+              onToggle={() => onToggle('use_live')}
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Presets:
+            </span>
+            <PresetButton onClick={() => onPreset('persona_only')}>Só persona</PresetButton>
+            <PresetButton onClick={() => onPreset('kb_only')}>Persona + KB</PresetButton>
+            <PresetButton onClick={() => onPreset('kb_skills')}>+ Skills</PresetButton>
+            <PresetButton onClick={() => onPreset('all')}>Tudo (produção)</PresetButton>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function SourceToggle({
+  icon: Icon,
+  label,
+  description,
+  enabled,
+  onToggle,
+}: {
+  icon: typeof BookOpen;
+  label: string;
+  description: string;
+  enabled: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className={cn(
+        'flex flex-col gap-1 rounded-md border p-2 text-left transition-colors',
+        enabled
+          ? 'border-primary/40 bg-primary/5 hover:bg-primary/10'
+          : 'border-border bg-background opacity-60 hover:opacity-100',
+      )}
+    >
+      <div className="flex items-center gap-1.5">
+        <Icon className={cn('h-3.5 w-3.5', enabled ? 'text-primary' : 'text-muted-foreground')} />
+        <span className="text-xs font-medium">{label}</span>
+        <span
+          className={cn(
+            'ml-auto rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider',
+            enabled ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-400' : 'bg-muted text-muted-foreground',
+          )}
+        >
+          {enabled ? 'ON' : 'OFF'}
+        </span>
+      </div>
+      <span className="text-[10px] text-muted-foreground">{description}</span>
+    </button>
+  );
+}
+
+function PresetButton({
+  onClick,
+  children,
+}: {
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-full border border-border bg-card px-2.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
+    >
+      {children}
+    </button>
+  );
+}
+
+// ──────────────────────────────────────────────────────────
+// Message bubble + metadata
+// ──────────────────────────────────────────────────────────
 
 function MessageBubble({
   message,
@@ -229,6 +398,9 @@ function MessageBubble({
   personaName: string;
 }) {
   const isUser = message.role === 'user';
+  const meta = message.ai_metadata;
+  const liveSourcesCount = meta?.live_sources_used?.length ?? 0;
+
   return (
     <div className={cn('flex flex-col gap-1', isUser ? 'items-end' : 'items-start')}>
       <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -243,31 +415,105 @@ function MessageBubble({
         {message.content}
       </div>
 
-      {!isUser && message.ai_metadata && (
-        <div className="flex flex-wrap gap-1.5 pt-1 text-[10px]">
-          {message.ai_metadata.intent_detected && (
-            <Pill label="Intenção" value={message.ai_metadata.intent_detected} />
-          )}
-          {message.ai_metadata.sentiment && (
-            <Pill label="Sentimento" value={message.ai_metadata.sentiment} />
-          )}
-          {message.ai_metadata.temperature && (
-            <Pill label="Temperatura" value={message.ai_metadata.temperature} />
-          )}
-          {(message.ai_metadata.knowledge_sources_used?.length ?? 0) > 0 && (
+      {!isUser && meta && (
+        <div className="flex max-w-[85%] flex-col gap-1 pt-1">
+          <div className="flex flex-wrap gap-1.5 text-[10px]">
+            {meta.intent_detected && <Pill label="Intenção" value={meta.intent_detected} />}
+            {meta.sentiment && <Pill label="Sentimento" value={meta.sentiment} />}
+            {meta.temperature && <Pill label="Temperatura" value={meta.temperature} />}
+            {meta.active_skill ? (
+              <Pill label="Skill" value={meta.active_skill.name} variant="primary" icon={Brain} />
+            ) : meta.sources_disabled?.includes('skills') ? (
+              <Pill label="Skill" value="OFF" variant="muted" />
+            ) : (
+              <Pill label="Skill" value="nenhum" variant="muted" />
+            )}
             <Pill
               label="KB"
-              value={`${message.ai_metadata.knowledge_sources_used?.length} fonte(s)`}
+              value={
+                meta.sources_disabled?.includes('kb')
+                  ? 'OFF'
+                  : `${meta.knowledge_sources_used?.length ?? 0} doc(s)`
+              }
+              variant={
+                meta.sources_disabled?.includes('kb')
+                  ? 'muted'
+                  : (meta.knowledge_sources_used?.length ?? 0) > 0
+                    ? 'primary'
+                    : 'default'
+              }
+              icon={BookOpen}
             />
-          )}
-          {(message.ai_metadata.actions_would_take?.length ?? 0) > 0 && (
             <Pill
-              label="Ações"
-              value={`${message.ai_metadata.actions_would_take?.length} sugerida(s)`}
+              label="Live"
+              value={
+                meta.sources_disabled?.includes('live')
+                  ? 'OFF'
+                  : liveSourcesCount > 0
+                    ? `${liveSourcesCount} fonte(s)`
+                    : 'não usada'
+              }
+              variant={
+                meta.sources_disabled?.includes('live') ? 'muted' : liveSourcesCount > 0 ? 'success' : 'default'
+              }
+              icon={Globe}
             />
+            {(meta.actions_would_take?.length ?? 0) > 0 && (
+              <Pill label="Ações" value={`${meta.actions_would_take?.length} sugerida(s)`} />
+            )}
+            {meta.latency_ms && <Pill label="Lat" value={`${meta.latency_ms}ms`} />}
+          </div>
+
+          {/* Lista expandida de fontes consultadas */}
+          {(meta.knowledge_sources_used?.length ?? 0) > 0 && (
+            <details className="text-[10px]">
+              <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                ▸ Documentos KB usados
+              </summary>
+              <ul className="mt-1 ml-3 flex flex-col gap-0.5 text-muted-foreground">
+                {meta.knowledge_sources_used?.map((s) => (
+                  <li key={s.id}>
+                    • <span className="font-medium text-foreground">{s.title}</span> ({s.category})
+                  </li>
+                ))}
+              </ul>
+            </details>
           )}
-          {message.ai_metadata.latency_ms && (
-            <Pill label="Lat" value={`${message.ai_metadata.latency_ms}ms`} />
+
+          {liveSourcesCount > 0 && (
+            <details className="text-[10px]">
+              <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                ▸ Fontes live consultadas
+              </summary>
+              <ul className="mt-1 ml-3 flex flex-col gap-0.5 text-muted-foreground">
+                {meta.live_sources_used?.map((s) => (
+                  <li key={s.id}>
+                    • <span className="font-medium text-foreground">{s.name}</span> —{' '}
+                    <a
+                      href={s.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      {s.url}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+
+          {(meta.actions_would_take?.length ?? 0) > 0 && (
+            <details className="text-[10px]">
+              <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                ▸ Ações que tomaria em produção
+              </summary>
+              <ul className="mt-1 ml-3 flex flex-col gap-0.5 text-muted-foreground">
+                {meta.actions_would_take?.map((a, i) => (
+                  <li key={i}>• {a}</li>
+                ))}
+              </ul>
+            </details>
           )}
         </div>
       )}
@@ -275,9 +521,28 @@ function MessageBubble({
   );
 }
 
-function Pill({ label, value }: { label: string; value: string }) {
+function Pill({
+  label,
+  value,
+  variant = 'default',
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  variant?: 'default' | 'primary' | 'success' | 'muted';
+  icon?: typeof BookOpen;
+}) {
   return (
-    <span className="inline-flex items-center gap-1 rounded bg-muted/50 px-1.5 py-0.5">
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 rounded px-1.5 py-0.5',
+        variant === 'primary' && 'bg-primary/10 text-primary',
+        variant === 'success' && 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
+        variant === 'muted' && 'bg-muted/30 text-muted-foreground opacity-60',
+        variant === 'default' && 'bg-muted/50',
+      )}
+    >
+      {Icon && <Icon className="h-2.5 w-2.5" />}
       <span className="font-semibold uppercase tracking-wider opacity-60">{label}:</span>
       <span>{value}</span>
     </span>
