@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -87,22 +88,57 @@ export function Sidebar() {
       aria-label="Navegação principal"
     >
       {/* Logo + collapse toggle */}
-      <div className="flex h-16 items-center justify-between border-b border-border px-4">
-        {!isCollapsed && (
-          <Link href="/central-de-acao" className="text-lg font-semibold tracking-tight">
-            e-Click <span className="text-primary">Active</span>
+      <div
+        className={cn(
+          'flex items-center border-b border-border',
+          isCollapsed ? 'h-16 justify-center px-2' : 'h-24 justify-between px-4',
+        )}
+      >
+        {isCollapsed ? (
+          // Quando colapsado, o ícone é o próprio botão de expandir
+          <button
+            type="button"
+            onClick={toggleCollapse}
+            aria-label="Expandir sidebar"
+            className="flex h-12 w-12 items-center justify-center rounded-md hover:bg-card"
+          >
+            <Image
+              src="/logo-active.svg"
+              alt="e-Click Active"
+              width={48}
+              height={48}
+              priority
+              className="h-10 w-10"
+            />
+          </button>
+        ) : (
+          <Link
+            href="/central-de-acao"
+            className="flex items-center"
+            aria-label="e-Click Active"
+          >
+            <Image
+              src="/logo-icon.svg"
+              alt="e-Click Active"
+              width={280}
+              height={112}
+              priority
+              className="h-20 w-auto"
+            />
           </Link>
         )}
+        {!isCollapsed && (
         <button
           type="button"
           onClick={toggleCollapse}
-          aria-label={isCollapsed ? 'Expandir sidebar' : 'Colapsar sidebar'}
+          aria-label="Colapsar sidebar"
           className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-card hover:text-foreground"
         >
           <ChevronLeft
             className={cn('h-4 w-4 transition-transform', isCollapsed && 'rotate-180')}
           />
         </button>
+        )}
       </div>
 
       {/* Primary nav */}

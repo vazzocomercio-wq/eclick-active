@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Image from 'next/image';
 import Link from 'next/link';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -60,10 +61,15 @@ function LoginPageInner() {
       <Card className="w-full max-w-md border-border shadow-2xl">
         <CardContent className="flex flex-col gap-6 p-8">
           {/* Logo */}
-          <div className="flex flex-col items-center gap-1">
-            <h1 className="text-3xl font-bold tracking-tight">
-              e-Click <span className="text-primary">Active</span>
-            </h1>
+          <div className="flex flex-col items-center gap-2">
+            <Image
+              src="/logo-icon.svg"
+              alt="e-Click Active"
+              width={240}
+              height={96}
+              priority
+              className="h-16 w-auto"
+            />
             <p className="text-sm text-muted-foreground">
               CRM de Inteligência Comercial Ativa
             </p>

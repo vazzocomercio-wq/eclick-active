@@ -7,29 +7,18 @@
 -- ============================================================
 
 -- Enable required extensions
-CREATE EXTENSION IF NOT EXISTS "pgvector";
+-- No Supabase a extensão pgvector é registrada como "vector"
+CREATE EXTENSION IF NOT EXISTS "vector";
 CREATE EXTENSION IF NOT EXISTS "pg_cron";
 
 -- Create dedicated schema
 CREATE SCHEMA IF NOT EXISTS active;
 
 -- ============================================================
--- HELPER FUNCTIONS
+-- HELPER FUNCTIONS (apenas as que não dependem de tabelas)
+-- get_user_org_id é definida ABAIXO, após active.org_members ser criada,
+-- pois o planner valida o FROM na criação da função SQL.
 -- ============================================================
-
--- Get current user's organization ID (reuses auth.uid() from Supabase)
-CREATE OR REPLACE FUNCTION active.get_user_org_id()
-RETURNS uuid
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-AS $$
-  SELECT org_id
-  FROM active.org_members
-  WHERE user_id = auth.uid()
-    AND status = 'active'
-  LIMIT 1;
-$$;
 
 -- Generate a URL-friendly slug from text
 CREATE OR REPLACE FUNCTION active.slugify(text)
@@ -107,6 +96,21 @@ CREATE TABLE active.org_members (
 CREATE TRIGGER trg_org_members_updated_at
   BEFORE UPDATE ON active.org_members
   FOR EACH ROW EXECUTE FUNCTION active.set_updated_at();
+
+-- Get current user's organization ID — usada nas RLS policies abaixo.
+-- Definida aqui porque referencia active.org_members.
+CREATE OR REPLACE FUNCTION active.get_user_org_id()
+RETURNS uuid
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+AS $$
+  SELECT org_id
+  FROM active.org_members
+  WHERE user_id = auth.uid()
+    AND status = 'active'
+  LIMIT 1;
+$$;
 
 -- Workspaces (optional sub-divisions)
 CREATE TABLE active.workspaces (
@@ -639,7 +643,7 @@ CREATE TRIGGER trg_response_templates_updated_at
 
 -- AI interaction log (cost tracking, auditing)
 CREATE TABLE active.ai_interactions (
-  id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  id                uuid NOT NULL DEFAULT gen_random_uuid(),
   org_id            uuid NOT NULL,
   interaction_type  text NOT NULL,
   -- Types: classify_intent, suggest_response, summarize, sentiment,
@@ -658,7 +662,9 @@ CREATE TABLE active.ai_interactions (
   -- Result
   result_summary    text,
   metadata          jsonb NOT NULL DEFAULT '{}'::jsonb,
-  created_at        timestamptz NOT NULL DEFAULT now()
+  created_at        timestamptz NOT NULL DEFAULT now(),
+  -- PK precisa incluir a coluna de particionamento (regra Postgres)
+  PRIMARY KEY (id, created_at)
 ) PARTITION BY RANGE (created_at);
 
 -- Create partitions for AI interactions (same pattern as messages)
