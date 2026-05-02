@@ -197,6 +197,22 @@ export const COPILOT_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: 'search_live_sources',
+    description:
+      'Consulta fontes externas cadastradas (sites, lojas, APIs, RSS) para buscar informações atualizadas em TEMPO REAL. Use quando o usuário precisa de dado fresco que pode mudar (estoque, preço do dia, status atual). NÃO use pra info estável — pra isso, use search_knowledge.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description:
+            'Termo ou pergunta em linguagem natural — quanto mais específico, melhor (ex: "preço atual da camiseta azul").',
+        },
+      },
+      required: ['query'],
+    },
+  },
+  {
     name: 'create_deal',
     description:
       'Cria um novo negócio (deal) no funil. Use quando o usuário pedir para criar oportunidade ou registrar venda em andamento.',
@@ -225,4 +241,5 @@ export type CopilotToolName =
   | 'get_agent_stats'
   | 'create_task'
   | 'create_deal'
-  | 'search_knowledge';
+  | 'search_knowledge'
+  | 'search_live_sources';

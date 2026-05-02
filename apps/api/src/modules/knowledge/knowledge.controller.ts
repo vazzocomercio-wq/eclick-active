@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -10,9 +11,12 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
-import type { ProductCatalogItem } from '@eclick-active/shared';
+import { FileInterceptor } from '@nestjs/platform-express';
+import type { KnowledgeLiveSource, ProductCatalogItem } from '@eclick-active/shared';
 import { AuthGuard } from '../../common/auth/auth.guard';
 import { CurrentUser } from '../../common/auth/current-user.decorator';
 import type { AuthUser } from '../../common/auth/auth.types';
@@ -23,6 +27,7 @@ import {
   type SemanticSearchHit,
 } from './knowledge.service';
 import { ProductsService } from './products.service';
+import { LiveSourcesService } from './live-sources.service';
 import { CreateDocumentDto, UpdateDocumentDto } from './dto/create-document.dto';
 import { ListDocumentsQueryDto } from './dto/list-documents.query.dto';
 import { SemanticSearchDto } from './dto/search.dto';
@@ -37,6 +42,20 @@ import {
   ImportUrlConfirmDto,
   ImportUrlPreviewDto,
 } from './dto/import-url.dto';
+import { ConfirmFileUploadDto } from './dto/upload-file.dto';
+import { CreateLiveSourceDto, UpdateLiveSourceDto } from './dto/live-source.dto';
+
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10MB
+const ACCEPTED_EXTENSIONS = /\.(pdf|xlsx|xls|csv|docx|txt|md)$/i;
+
+interface MulterFile {
+  fieldname: string;
+  originalname: string;
+  encoding: string;
+  mimetype: string;
+  buffer: Buffer;
+  size: number;
+}
 
 @UseGuards(AuthGuard)
 @Controller('knowledge')
@@ -44,6 +63,7 @@ export class KnowledgeController {
   constructor(
     private readonly service: KnowledgeService,
     private readonly products: ProductsService,
+    private readonly liveSources: LiveSourcesService,
   ) {}
 
   // ──────────────────────────────────────────────────────────
@@ -110,14 +130,12 @@ export class KnowledgeController {
   // URL Import — declarados ANTES de :id pra não colidir
   // ──────────────────────────────────────────────────────────
 
-  // POST /knowledge/import-url — preview (não salva, retorna conteúdo extraído)
   @Post('import-url')
   @HttpCode(HttpStatus.OK)
   previewUrl(@Body() dto: ImportUrlPreviewDto) {
     return this.service.previewUrl(dto.url);
   }
 
-  // POST /knowledge/import-url/confirm — admin revisou + salva
   @Post('import-url/confirm')
   @HttpCode(HttpStatus.CREATED)
   confirmImport(
@@ -136,14 +154,12 @@ export class KnowledgeController {
     );
   }
 
-  // POST /knowledge/import-url/batch — preview de várias URLs em paralelo
   @Post('import-url/batch')
   @HttpCode(HttpStatus.OK)
   batchPreview(@Body() dto: ImportUrlBatchDto) {
     return this.service.batchPreview(dto.urls);
   }
 
-  // POST /knowledge/import-url/batch/confirm — salva itens selecionados
   @Post('import-url/batch/confirm')
   @HttpCode(HttpStatus.CREATED)
   batchConfirm(
@@ -151,6 +167,101 @@ export class KnowledgeController {
     @Body() dto: ImportUrlBatchConfirmDto,
   ): Promise<KnowledgeDocumentListItem[]> {
     return this.service.confirmBatchImport(user.org_id, dto.items, dto.category, user.id);
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // FILE UPLOAD — Feature A
+  // ──────────────────────────────────────────────────────────
+
+  /** Step 1: extrai conteúdo do arquivo, retorna preview pra revisão. */
+  @Post('upload')
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_UPLOAD_BYTES } }))
+  async uploadFile(@UploadedFile() file: MulterFile | undefined) {
+    if (!file) {
+      throw new BadRequestException('Nenhum arquivo recebido (campo "file" no multipart).');
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      throw new BadRequestException(`Arquivo maior que 10MB (recebido ${(file.size / 1024 / 1024).toFixed(1)}MB).`);
+    }
+    if (!ACCEPTED_EXTENSIONS.test(file.originalname)) {
+      throw new BadRequestException(
+        'Tipo de arquivo não suportado. Aceitos: .pdf, .xlsx, .xls, .csv, .docx, .txt, .md',
+      );
+    }
+    return this.service.previewFileUpload({
+      filename: file.originalname,
+      mimetype: file.mimetype,
+      buffer: file.buffer,
+    });
+  }
+
+  /** Step 2: confirma e salva (com chunking automático se >8000 tokens). */
+  @Post('upload/confirm')
+  @HttpCode(HttpStatus.CREATED)
+  confirmUpload(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: ConfirmFileUploadDto,
+  ): Promise<KnowledgeDocumentListItem[]> {
+    return this.service.confirmFileUpload(
+      user.org_id,
+      {
+        filename: dto.filename,
+        title: dto.title,
+        content: dto.content,
+        ...(dto.category ? { category: dto.category } : {}),
+        ...(dto.file_type ? { file_type: dto.file_type } : {}),
+        ...(dto.file_size !== undefined ? { file_size: dto.file_size } : {}),
+        ...(dto.pages_count !== undefined ? { pages_count: dto.pages_count } : {}),
+        ...(dto.selected_sheets ? { selected_sheets: dto.selected_sheets } : {}),
+      },
+      user.id,
+    );
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // LIVE SOURCES — Feature B
+  // ──────────────────────────────────────────────────────────
+
+  @Get('live-sources')
+  listLiveSources(@CurrentUser() user: AuthUser): Promise<KnowledgeLiveSource[]> {
+    return this.liveSources.list(user.org_id);
+  }
+
+  @Post('live-sources')
+  @HttpCode(HttpStatus.CREATED)
+  createLiveSource(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: CreateLiveSourceDto,
+  ): Promise<KnowledgeLiveSource> {
+    return this.liveSources.create(user.org_id, dto);
+  }
+
+  @Patch('live-sources/:id')
+  updateLiveSource(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateLiveSourceDto,
+  ): Promise<KnowledgeLiveSource> {
+    return this.liveSources.update(user.org_id, id, dto);
+  }
+
+  @Delete('live-sources/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  deleteLiveSource(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<void> {
+    return this.liveSources.delete(user.org_id, id);
+  }
+
+  @Post('live-sources/:id/test')
+  @HttpCode(HttpStatus.OK)
+  testLiveSource(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.liveSources.test(user.org_id, id);
   }
 
   // ──────────────────────────────────────────────────────────
@@ -200,7 +311,6 @@ export class KnowledgeController {
     return this.service.delete(user.org_id, id);
   }
 
-  // POST /knowledge/:id/refresh — re-fetch URL e atualiza se mudou
   @Post(':id/refresh')
   @HttpCode(HttpStatus.OK)
   refresh(

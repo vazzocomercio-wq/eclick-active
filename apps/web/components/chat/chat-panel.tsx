@@ -18,6 +18,7 @@ interface AISuggestion {
   text: string;
   confidence?: number;
   ai_interaction_id?: string;
+  live_sources_used?: Array<{ id: string; name: string; url: string }>;
 }
 
 export interface ChatPanelProps {
@@ -147,6 +148,7 @@ export function ChatPanel({
         text: payload.suggestion,
         confidence: payload.confidence,
         ...(payload.ai_interaction_id ? { ai_interaction_id: payload.ai_interaction_id } : {}),
+        ...(payload.live_sources_used ? { live_sources_used: payload.live_sources_used } : {}),
       });
     },
   });
@@ -219,6 +221,7 @@ export function ChatPanel({
         suggestion={aiSuggestion?.text ?? null}
         confidence={aiSuggestion?.confidence}
         aiInteractionId={aiSuggestion?.ai_interaction_id ?? null}
+        liveSourcesUsed={aiSuggestion?.live_sources_used}
         onUse={() => {
           if (aiSuggestion) {
             setPrefill(aiSuggestion.text);

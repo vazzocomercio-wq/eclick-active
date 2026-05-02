@@ -22,6 +22,7 @@ export * from './types/custom-fields';
 export * from './types/webhook';
 export * from './types/ai-persona';
 export * from './types/ai-skill';
+export * from './types/knowledge-live-source';
 
 // Enum union types
 export * from './enums';

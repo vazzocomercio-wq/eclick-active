@@ -20,10 +20,11 @@ interface RequestOptions {
   signal?: AbortSignal;
 }
 
-async function buildHeaders(): Promise<HeadersInit> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
+async function buildHeaders(isMultipart: boolean): Promise<HeadersInit> {
+  // Pra FormData, deixa o browser setar Content-Type com boundary automático.
+  const headers: Record<string, string> = isMultipart
+    ? {}
+    : { 'Content-Type': 'application/json' };
   try {
     const supabase = createClient();
     const { data } = await supabase.auth.getSession();
@@ -58,12 +59,19 @@ async function request<T>(
   options: RequestOptions = {},
 ): Promise<T> {
   const url = buildUrl(path, options.query);
-  const headers = await buildHeaders();
+  const isMultipart =
+    typeof FormData !== 'undefined' && options.body instanceof FormData;
+  const headers = await buildHeaders(isMultipart);
 
   const res = await fetch(url, {
     method,
     headers,
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    body:
+      options.body === undefined
+        ? undefined
+        : isMultipart
+          ? (options.body as FormData)
+          : JSON.stringify(options.body),
     signal: options.signal,
   });
 

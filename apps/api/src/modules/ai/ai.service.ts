@@ -8,6 +8,7 @@ import type { Deal, DealActivity, Json, Message } from '@eclick-active/shared';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { EventsGateway } from '../../gateways/events.gateway';
 import { KnowledgeService } from '../knowledge/knowledge.service';
+import { LiveSourcesService } from '../knowledge/live-sources.service';
 import { AiPersonaService } from '../ai-persona/ai-persona.service';
 import { AiSkillsService } from '../ai-skills/ai-skills.service';
 import { AnthropicClient } from './anthropic.client';
@@ -38,6 +39,7 @@ export class AiService {
     private readonly supabase: SupabaseService,
     private readonly events: EventsGateway,
     private readonly knowledge: KnowledgeService,
+    private readonly liveSources: LiveSourcesService,
     private readonly persona: AiPersonaService,
     private readonly skills: AiSkillsService,
     private readonly dataCollection: DataCollectionService,
@@ -94,7 +96,12 @@ export class AiService {
   async suggestResponse(
     orgId: string,
     conversationId: string,
-  ): Promise<SuggestionResult & { ai_interaction_id: string | null }> {
+  ): Promise<
+    SuggestionResult & {
+      ai_interaction_id: string | null;
+      live_sources_used: Array<{ id: string; name: string; url: string }>;
+    }
+  > {
     const conversation = await this.fetchConversationCore(orgId, conversationId);
     const contact = conversation.contact_id
       ? await this.fetchContactSummary(orgId, conversation.contact_id)
@@ -146,7 +153,28 @@ export class AiService {
             .catch(() => knowledgeHits)
         : knowledgeHits;
 
-    const userPrompt = this.buildSuggestPrompt(contact, recent, skillKnowledgeHits);
+    // Live sources (Feature B): consulta fontes URL em tempo real quando o
+    // RAG local devolve poucos hits OU similaridade média baixa. Best-effort:
+    // erros e timeouts não quebram a sugestão.
+    let liveContent: string | null = null;
+    let liveSourcesUsed: Array<{ id: string; name: string; url: string }> = [];
+    if (knowledgeQuery && lastInbound) {
+      const lowResults = skillKnowledgeHits.length < 2;
+      const lowSim =
+        skillKnowledgeHits.length > 0 &&
+        skillKnowledgeHits.reduce((s, h) => s + h.similarity, 0) / skillKnowledgeHits.length < 0.55;
+      if (lowResults || lowSim) {
+        const live = await this.liveSources
+          .fetchLiveContent(orgId, knowledgeQuery)
+          .catch(() => null);
+        if (live) {
+          liveContent = live.content;
+          liveSourcesUsed = live.sources_used;
+        }
+      }
+    }
+
+    const userPrompt = this.buildSuggestPrompt(contact, recent, skillKnowledgeHits, liveContent);
 
     // System prompt: persona + skill (se houver) + SUGGEST_SYSTEM_PROMPT
     const parts: string[] = [];
@@ -194,7 +222,12 @@ export class AiService {
     // Clamp confidence em [0, 1] — schema não permite minimum/maximum
     const confidence = Math.max(0, Math.min(1, Number(suggestion.confidence) || 0));
 
-    return { ...suggestion, confidence, ai_interaction_id: interaction_id };
+    return {
+      ...suggestion,
+      confidence,
+      ai_interaction_id: interaction_id,
+      live_sources_used: liveSourcesUsed,
+    };
   }
 
   // ──────────────────────────────────────────────────────────
@@ -716,6 +749,9 @@ export class AiService {
           confidence: suggestion.confidence,
           ...(suggestion.ai_interaction_id
             ? { ai_interaction_id: suggestion.ai_interaction_id }
+            : {}),
+          ...(suggestion.live_sources_used.length > 0
+            ? { live_sources_used: suggestion.live_sources_used }
             : {}),
         });
       }
@@ -1262,6 +1298,7 @@ export class AiService {
     contact: ContactSummary | null,
     recent: Message[],
     knowledgeHits: Array<{ title: string; category: string; content: string }> = [],
+    liveContent: string | null = null,
   ): string {
     const lines: string[] = [];
     if (contact) {
@@ -1283,6 +1320,12 @@ export class AiService {
         lines.push(snippet);
         lines.push('');
       });
+    }
+
+    if (liveContent) {
+      lines.push('DADOS ATUALIZADOS DE FONTES EXTERNAS (consultados agora — informação fresca, prefira essa quando houver conflito com a base local):');
+      lines.push(liveContent.length > 4000 ? `${liveContent.slice(0, 4000)}…` : liveContent);
+      lines.push('');
     }
 
     lines.push('Conversa recente (cronológica):');

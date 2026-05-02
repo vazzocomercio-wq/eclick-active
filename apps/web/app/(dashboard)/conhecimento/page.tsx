@@ -5,8 +5,10 @@ import {
   BookOpen,
   ExternalLink,
   FileText,
+  FileUp,
+  Globe,
   Link as LinkIcon,
-  Loader2,
+  PlayCircle,
   Package,
   Plus,
   RefreshCw,
@@ -14,6 +16,7 @@ import {
 import { toast } from 'sonner';
 import type {
   KnowledgeCategory,
+  KnowledgeLiveSource,
   ProductCatalogItem,
 } from '@eclick-active/shared';
 import { Button } from '@/components/ui/button';
@@ -31,12 +34,19 @@ import {
 import { NewDocumentDialog } from '@/components/conhecimento/new-document-dialog';
 import { ImportUrlDialog } from '@/components/conhecimento/import-url-dialog';
 import { ImportUrlBatchDialog } from '@/components/conhecimento/import-url-batch-dialog';
+import {
+  UploadFileDialog,
+  FileTypeIcon,
+  fileTypeLabel,
+} from '@/components/conhecimento/upload-file-dialog';
+import { NewLiveSourceDialog } from '@/components/conhecimento/new-live-source-dialog';
+import { EditLiveSourceSheet } from '@/components/conhecimento/edit-live-source-sheet';
 import { EditDocumentSheet } from '@/components/conhecimento/edit-document-sheet';
 import { ProductSheet } from '@/components/conhecimento/product-sheet';
 import { formatRelativeTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
-type Tab = 'docs' | 'products';
+type Tab = 'docs' | 'products' | 'live';
 
 export default function ConhecimentoPage() {
   const [tab, setTab] = useState<Tab>('docs');
@@ -58,6 +68,9 @@ export default function ConhecimentoPage() {
           <TabButton active={tab === 'docs'} onClick={() => setTab('docs')} icon={FileText}>
             Documentos
           </TabButton>
+          <TabButton active={tab === 'live'} onClick={() => setTab('live')} icon={Globe}>
+            Fontes Live
+          </TabButton>
           <TabButton active={tab === 'products'} onClick={() => setTab('products')} icon={Package}>
             Catálogo
           </TabButton>
@@ -66,7 +79,7 @@ export default function ConhecimentoPage() {
 
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 p-6">
-          {tab === 'docs' ? <DocumentsTab /> : <ProductsTab />}
+          {tab === 'docs' ? <DocumentsTab /> : tab === 'live' ? <LiveSourcesTab /> : <ProductsTab />}
         </div>
       </div>
     </div>
@@ -115,10 +128,11 @@ function DocumentsTab() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<KnowledgeCategory | 'all'>('all');
-  const [sourceFilter, setSourceFilter] = useState<'all' | 'manual' | 'url' | 'integration' | 'auto'>('all');
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'manual' | 'url' | 'file' | 'integration' | 'auto'>('all');
   const [newOpen, setNewOpen] = useState(false);
   const [importUrlOpen, setImportUrlOpen] = useState(false);
   const [importBatchOpen, setImportBatchOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const [editing, setEditing] = useState<KnowledgeDocumentListItem | null>(null);
 
   const reload = useCallback(async () => {
@@ -203,6 +217,7 @@ function DocumentsTab() {
           <option value="all">Todas as fontes</option>
           <option value="manual">Manual</option>
           <option value="url">URL</option>
+          <option value="file">Arquivo</option>
           <option value="integration">Integração</option>
           <option value="auto">IA</option>
         </select>
@@ -213,6 +228,10 @@ function DocumentsTab() {
         </Button>
 
         <div className="ml-auto flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setUploadOpen(true)}>
+            <FileUp className="mr-2 h-3.5 w-3.5" />
+            Upload Arquivo
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setImportBatchOpen(true)}>
             <LinkIcon className="mr-2 h-3.5 w-3.5" />
             Múltiplas URLs
@@ -268,6 +287,11 @@ function DocumentsTab() {
         onOpenChange={setImportBatchOpen}
         onImported={() => void reload()}
       />
+      <UploadFileDialog
+        open={uploadOpen}
+        onOpenChange={setUploadOpen}
+        onImported={() => void reload()}
+      />
       <EditDocumentSheet
         open={editing !== null}
         onOpenChange={(o) => !o && setEditing(null)}
@@ -291,6 +315,15 @@ function DocRow({
 }) {
   const [refreshing, setRefreshing] = useState(false);
   const isUrlDoc = doc.source_type === 'url' && doc.source_url;
+  const isFileDoc = doc.source_type === 'file';
+  const fileMeta = isFileDoc ? (doc.metadata as Record<string, unknown>) : null;
+  const fileType = (fileMeta?.file_type as string) ?? null;
+  const originalFilename = (fileMeta?.original_filename as string) ?? null;
+  const fileSize = typeof fileMeta?.file_size === 'number' ? (fileMeta.file_size as number) : null;
+  const pagesCount = typeof fileMeta?.pages_count === 'number' ? (fileMeta.pages_count as number) : null;
+  const chunkIndex = typeof fileMeta?.chunk_index === 'number' ? (fileMeta.chunk_index as number) : null;
+  const chunkTotal = typeof fileMeta?.chunk_total === 'number' ? (fileMeta.chunk_total as number) : null;
+  const isChunkPart = chunkIndex !== null && chunkTotal !== null && chunkTotal > 1;
 
   async function handleRefresh(e: React.MouseEvent) {
     e.stopPropagation();
@@ -323,6 +356,7 @@ function DocRow({
         'flex cursor-pointer items-center gap-3 rounded-lg border border-border bg-card p-4 transition-all',
         'hover:border-primary/30 hover:shadow-sm',
         !doc.is_active && 'opacity-60',
+        isChunkPart && 'ml-6 border-l-2 border-l-primary/20',
       )}
     >
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
@@ -332,6 +366,12 @@ function DocRow({
           {isUrlDoc && (
             <span className="inline-flex items-center gap-0.5 rounded bg-muted px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
               <LinkIcon className="h-2.5 w-2.5" /> URL
+            </span>
+          )}
+          {isFileDoc && fileType && (
+            <span className="inline-flex items-center gap-0.5 rounded bg-muted px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
+              <FileTypeIcon filename={originalFilename ?? `.${fileType}`} className="h-2.5 w-2.5" />
+              {fileTypeLabel(fileType as 'pdf' | 'excel' | 'csv' | 'word' | 'text')}
             </span>
           )}
         </div>
@@ -347,6 +387,13 @@ function DocRow({
             {doc.source_url}
           </a>
         )}
+        {isFileDoc && originalFilename && (
+          <span className="truncate text-[11px] text-muted-foreground">
+            {originalFilename}
+            {fileSize !== null && ` · ${(fileSize / 1024).toFixed(0)} KB`}
+            {pagesCount !== null && ` · ${pagesCount} páginas`}
+          </span>
+        )}
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
           <span>{doc.tokens?.toLocaleString('pt-BR') ?? '~'} tokens</span>
           <span>·</span>
@@ -355,6 +402,12 @@ function DocRow({
             <>
               <span>·</span>
               <span>Sync {formatRelativeTime(doc.last_synced_at)}</span>
+            </>
+          )}
+          {isChunkPart && (
+            <>
+              <span>·</span>
+              <span>Parte {chunkIndex}/{chunkTotal}</span>
             </>
           )}
         </div>
@@ -417,6 +470,240 @@ function DocsSkeleton() {
       {[0, 1, 2, 3].map((i) => (
         <div key={i} className="h-20 animate-pulse rounded-lg bg-muted" />
       ))}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────
+// LIVE SOURCES TAB (Feature B)
+// ──────────────────────────────────────────────────────────
+
+function LiveSourcesTab() {
+  const [sources, setSources] = useState<KnowledgeLiveSource[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<KnowledgeLiveSource | null>(null);
+  const [testingId, setTestingId] = useState<string | null>(null);
+
+  const reload = useCallback(async () => {
+    setError(null);
+    try {
+      const data = await knowledgeApi.listLiveSources();
+      setSources(data);
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? `${err.status}: ${err.message}`
+          : err instanceof Error
+            ? err.message
+            : 'Erro ao carregar fontes',
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    setLoading(true);
+    void reload();
+  }, [reload]);
+
+  async function toggleActive(s: KnowledgeLiveSource) {
+    setSources((curr) =>
+      curr.map((x) => (x.id === s.id ? { ...x, is_active: !x.is_active } : x)),
+    );
+    try {
+      await knowledgeApi.updateLiveSource(s.id, { is_active: !s.is_active });
+    } catch {
+      setSources((curr) =>
+        curr.map((x) => (x.id === s.id ? { ...x, is_active: s.is_active } : x)),
+      );
+    }
+  }
+
+  async function handleTest(s: KnowledgeLiveSource) {
+    setTestingId(s.id);
+    try {
+      const r = await knowledgeApi.testLiveSource(s.id);
+      if (r.ok) {
+        toast.success(`"${s.name}" respondendo`, {
+          description: `${r.char_count?.toLocaleString('pt-BR') ?? '?'} chars extraídos.`,
+        });
+        void reload();
+      } else {
+        toast.error(`"${s.name}" com problema`, { description: r.error });
+      }
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Erro';
+      toast.error('Falha ao testar', { description: msg });
+    } finally {
+      setTestingId(null);
+    }
+  }
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="outline" size="sm" onClick={() => void reload()} disabled={loading}>
+          <RefreshCw className={`mr-2 h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+          Atualizar
+        </Button>
+        <Button size="sm" className="ml-auto" onClick={() => setCreating(true)}>
+          <Plus className="mr-2 h-3.5 w-3.5" />
+          Nova fonte live
+        </Button>
+      </div>
+
+      {error && (
+        <div className="rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
+        <strong className="text-foreground">Fontes live</strong> são URLs que a IA consulta em tempo real quando precisa de
+        informação atualizada (estoque, preços do dia, status). Diferente da importação, o conteúdo não é salvo —
+        cada consulta busca dados frescos. Cache em memória reduz hits repetidos.
+      </div>
+
+      {loading && sources.length === 0 ? (
+        <DocsSkeleton />
+      ) : sources.length === 0 ? (
+        <LiveSourcesEmpty onCreate={() => setCreating(true)} />
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {sources.map((s, i) => (
+            <li
+              key={s.id}
+              className="animate-in fade-in slide-in-from-bottom-1"
+              style={{ animationDelay: `${i * 25}ms`, animationFillMode: 'backwards' }}
+            >
+              <LiveSourceRow
+                source={s}
+                testing={testingId === s.id}
+                onSelect={() => setEditing(s)}
+                onToggleActive={() => void toggleActive(s)}
+                onTest={() => void handleTest(s)}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <NewLiveSourceDialog open={creating} onOpenChange={setCreating} onCreated={() => void reload()} />
+      <EditLiveSourceSheet
+        open={editing !== null}
+        onOpenChange={(o) => !o && setEditing(null)}
+        source={editing}
+        onChanged={() => void reload()}
+      />
+    </>
+  );
+}
+
+function LiveSourceRow({
+  source,
+  testing,
+  onSelect,
+  onToggleActive,
+  onTest,
+}: {
+  source: KnowledgeLiveSource;
+  testing: boolean;
+  onSelect: () => void;
+  onToggleActive: () => void;
+  onTest: () => void;
+}) {
+  return (
+    <div
+      onClick={onSelect}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') onSelect();
+      }}
+      className={cn(
+        'flex cursor-pointer items-center gap-3 rounded-lg border border-border bg-card p-4 transition-all',
+        'hover:border-primary/30 hover:shadow-sm',
+        !source.is_active && 'opacity-60',
+      )}
+    >
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+        <div className="flex items-center gap-2">
+          <Globe className="h-3.5 w-3.5 text-primary" />
+          <span className="truncate text-sm font-medium">{source.name}</span>
+          <span className="inline-flex items-center rounded bg-muted px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
+            {source.source_type === 'webpage' ? 'Web' : source.source_type === 'api_endpoint' ? 'API' : 'RSS'}
+          </span>
+        </div>
+        <a
+          href={source.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="inline-flex items-center gap-1 truncate text-[11px] text-muted-foreground hover:text-foreground hover:underline"
+        >
+          <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+          {source.url}
+        </a>
+        {source.description && (
+          <span className="line-clamp-1 text-[11px] text-muted-foreground">{source.description}</span>
+        )}
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          <span>Cache {source.cache_ttl_minutes}min</span>
+          <span>·</span>
+          <span>
+            {source.last_fetched_at
+              ? `Última consulta ${formatRelativeTime(source.last_fetched_at)}`
+              : 'Nunca consultado'}
+          </span>
+        </div>
+      </div>
+
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={(e) => {
+          e.stopPropagation();
+          onTest();
+        }}
+        disabled={testing}
+        className="shrink-0"
+        title="Testar conexão e extrair conteúdo agora"
+      >
+        <PlayCircle className={cn('h-3.5 w-3.5', testing && 'animate-pulse')} />
+      </Button>
+
+      <label className="flex shrink-0 items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+        <span className="text-[11px] text-muted-foreground">{source.is_active ? 'Ativa' : 'Inativa'}</span>
+        <input
+          type="checkbox"
+          checked={source.is_active}
+          onChange={onToggleActive}
+          className="h-4 w-4 cursor-pointer rounded border-input"
+        />
+      </label>
+    </div>
+  );
+}
+
+function LiveSourcesEmpty({ onCreate }: { onCreate: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-card/50 p-12 text-center">
+      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+        <Globe className="h-6 w-6" />
+      </div>
+      <div className="flex flex-col gap-1">
+        <p className="text-sm font-medium">Nenhuma fonte live cadastrada</p>
+        <p className="text-xs text-muted-foreground">
+          Cadastre URLs que a IA consulta em tempo real pra dados atualizados (estoque, preços do dia, etc.).
+        </p>
+      </div>
+      <Button size="sm" onClick={onCreate}>
+        <Plus className="mr-2 h-3.5 w-3.5" />
+        Criar primeira fonte
+      </Button>
     </div>
   );
 }

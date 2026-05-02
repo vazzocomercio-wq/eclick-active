@@ -22,11 +22,12 @@ export interface KnowledgeDocument {
   /** Contagem de tokens do `content` (pra controle de custo) */
   tokens: number | null;
   /**
-   * Origem do documento (Bloco URL Import). 'manual' = criado direto pelo
-   * admin via form. 'url' = importado de uma página web. 'integration' =
-   * sincronizado de sistema externo (futuro). 'auto' = gerado pela IA.
+   * Origem do documento. 'manual' = criado direto pelo admin via form.
+   * 'url' = importado de uma página web. 'file' = upload de arquivo
+   * (PDF, Excel, Word, CSV, TXT). 'integration' = sincronizado de sistema
+   * externo (futuro). 'auto' = gerado pela IA.
    */
-  source_type: 'manual' | 'url' | 'integration' | 'auto';
+  source_type: 'manual' | 'url' | 'file' | 'integration' | 'auto';
   /** URL de origem (só pra source_type='url') */
   source_url: string | null;
   /** Última vez que o conteúdo foi re-fetchado (só pra source_type='url') */

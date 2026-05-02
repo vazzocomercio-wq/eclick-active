@@ -10,6 +10,7 @@ import { EmbeddingsClient } from './embeddings.client';
 import { CreateDocumentDto, UpdateDocumentDto } from './dto/create-document.dto';
 import { ListDocumentsQueryDto } from './dto/list-documents.query.dto';
 import { UrlScraperService } from './url-scraper.service';
+import { FileExtractorService, type ExtractedFile } from './file-extractor.service';
 import type { PaginatedResult } from '../contacts/contacts.service';
 import type { KnowledgeCategory } from '@eclick-active/shared';
 
@@ -42,6 +43,7 @@ export class KnowledgeService {
     private readonly supabase: SupabaseService,
     private readonly embeddings: EmbeddingsClient,
     private readonly scraper: UrlScraperService,
+    private readonly fileExtractor: FileExtractorService,
   ) {}
 
   // ────────────────────────────────────────────
@@ -210,6 +212,141 @@ export class KnowledgeService {
       updated: contentChanged || titleChanged,
       document: updated as KnowledgeDocumentListItem,
     };
+  }
+
+  // ────────────────────────────────────────────
+  // FILE UPLOAD (preview / confirm) — Feature A
+  // ────────────────────────────────────────────
+
+  /** Step 1: extrai texto do arquivo. Não persiste. */
+  async previewFileUpload(args: {
+    filename: string;
+    mimetype: string;
+    buffer: Buffer;
+  }): Promise<ExtractedFile> {
+    return this.fileExtractor.extract(args);
+  }
+
+  /**
+   * Step 2: admin revisou e confirmou. Cria documento (ou múltiplos
+   * quando o conteúdo for grande, com chunking) na knowledge_documents.
+   */
+  async confirmFileUpload(
+    orgId: string,
+    args: {
+      filename: string;
+      title: string;
+      content: string;
+      category?: KnowledgeCategory;
+      file_type?: 'pdf' | 'excel' | 'csv' | 'word' | 'text';
+      file_size?: number;
+      pages_count?: number;
+      selected_sheets?: Array<{ name: string; content: string; rows?: number }>;
+    },
+    createdBy: string | null,
+  ): Promise<KnowledgeDocumentListItem[]> {
+    // Caso 1: admin selecionou sheets específicos do Excel — cada sheet
+    // vira um documento separado.
+    if (args.selected_sheets && args.selected_sheets.length > 0) {
+      const docs: KnowledgeDocumentListItem[] = [];
+      for (const sheet of args.selected_sheets) {
+        const doc = await this.insertFileDocument(orgId, {
+          title: `${args.title} — ${sheet.name}`,
+          content: sheet.content,
+          category: args.category ?? 'general',
+          metadata: {
+            original_filename: args.filename,
+            file_type: args.file_type ?? 'excel',
+            file_size: args.file_size ?? null,
+            sheet_name: sheet.name,
+            sheet_rows: sheet.rows ?? null,
+          },
+          createdBy,
+        });
+        docs.push(doc);
+      }
+      return docs;
+    }
+
+    // Caso 2: chunking automático se o conteúdo exceder 8000 tokens.
+    const tokens = this.embeddings.estimateTokens(args.content);
+    const baseMetadata = {
+      original_filename: args.filename,
+      file_type: args.file_type ?? 'text',
+      file_size: args.file_size ?? null,
+      pages_count: args.pages_count ?? null,
+    };
+
+    if (tokens <= 8000) {
+      const doc = await this.insertFileDocument(orgId, {
+        title: args.title,
+        content: args.content,
+        category: args.category ?? 'general',
+        metadata: baseMetadata,
+        createdBy,
+      });
+      return [doc];
+    }
+
+    // Chunking — cada chunk é um doc, ligados via metadata.parent_id
+    const chunks = this.fileExtractor.chunkContent(args.content);
+    const parentMarker = `parent::${args.filename}::${Date.now()}`;
+    const docs: KnowledgeDocumentListItem[] = [];
+    for (let i = 0; i < chunks.length; i++) {
+      const doc = await this.insertFileDocument(orgId, {
+        title: `${args.title} (Parte ${i + 1}/${chunks.length})`,
+        content: chunks[i] ?? '',
+        category: args.category ?? 'general',
+        metadata: {
+          ...baseMetadata,
+          parent_id: parentMarker,
+          chunk_index: i + 1,
+          chunk_total: chunks.length,
+        },
+        createdBy,
+      });
+      docs.push(doc);
+    }
+    return docs;
+  }
+
+  private async insertFileDocument(
+    orgId: string,
+    args: {
+      title: string;
+      content: string;
+      category: KnowledgeCategory;
+      metadata: Record<string, unknown>;
+      createdBy: string | null;
+    },
+  ): Promise<KnowledgeDocumentListItem> {
+    const tokens = this.embeddings.estimateTokens(args.content);
+    const embedding = await this.embeddings.embed(`${args.title}\n\n${args.content}`);
+
+    const { data, error } = await this.supabase.adminClient
+      .from('knowledge_documents')
+      .insert({
+        org_id: orgId,
+        title: args.title,
+        category: args.category,
+        content: args.content,
+        embedding,
+        metadata: args.metadata,
+        is_active: true,
+        tokens,
+        source_type: 'file',
+        source_url: null,
+        last_synced_at: null,
+        auto_sync: false,
+        created_by: args.createdBy,
+      })
+      .select(LIST_COLUMNS)
+      .single();
+    if (error || !data) {
+      this.logger.error(`insertFileDocument failed: ${error?.message}`);
+      throw new InternalServerErrorException(error?.message ?? 'Falha ao salvar documento');
+    }
+    return data as KnowledgeDocumentListItem;
   }
 
   // ────────────────────────────────────────────

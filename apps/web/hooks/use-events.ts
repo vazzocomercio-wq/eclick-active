@@ -10,6 +10,8 @@ interface AISuggestionPayload {
   confidence?: number;
   /** ID da row em ai_interactions — pra UI permitir 👍/👎. */
   ai_interaction_id?: string;
+  /** Fontes live consultadas em tempo real (Feature B). */
+  live_sources_used?: Array<{ id: string; name: string; url: string }>;
 }
 
 interface DealMovedPayload {

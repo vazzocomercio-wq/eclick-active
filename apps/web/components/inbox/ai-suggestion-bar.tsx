@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertTriangle, Sparkles, X } from 'lucide-react';
+import { AlertTriangle, Globe, Sparkles, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AIFeedbackButtons } from '@/components/ai/ai-feedback-buttons';
 import { cn } from '@/lib/utils';
@@ -13,6 +13,8 @@ interface AISuggestionBarProps {
   confidence?: number;
   /** ID da interação no backend — habilita 👍/👎 quando presente. */
   aiInteractionId?: string | null;
+  /** Fontes live consultadas — exibe badge "Dados em tempo real". */
+  liveSourcesUsed?: Array<{ id: string; name: string; url: string }>;
   onUse: () => void;
   onEdit: () => void;
   onIgnore: () => void;
@@ -28,11 +30,13 @@ export function AISuggestionBar({
   suggestion,
   confidence,
   aiInteractionId,
+  liveSourcesUsed,
   onUse,
   onEdit,
   onIgnore,
 }: AISuggestionBarProps) {
   if (!suggestion) return null;
+  const hasLiveSources = (liveSourcesUsed?.length ?? 0) > 0;
 
   const isLowConfidence =
     confidence !== undefined && confidence < LOW_CONFIDENCE_THRESHOLD;
@@ -78,6 +82,17 @@ export function AISuggestionBar({
           )}
         </div>
         <p className="line-clamp-2 text-sm">{suggestion}</p>
+        {hasLiveSources && (
+          <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px]">
+            <span className="inline-flex items-center gap-1 rounded bg-emerald-500/15 px-1.5 py-0.5 font-medium text-emerald-700 dark:text-emerald-400">
+              <Globe className="h-2.5 w-2.5" />
+              Dados em tempo real
+            </span>
+            <span className="text-muted-foreground">
+              {liveSourcesUsed!.map((s) => s.name).join(', ')}
+            </span>
+          </div>
+        )}
         {isLowConfidence && (
           <p className="mt-0.5 text-[11px] text-destructive/80">
             Revise com cuidado antes de enviar — uma tarefa foi criada pra você analisar.

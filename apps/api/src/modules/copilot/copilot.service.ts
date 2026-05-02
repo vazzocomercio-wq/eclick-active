@@ -8,6 +8,7 @@ import { performance } from 'node:perf_hooks';
 import Anthropic from '@anthropic-ai/sdk';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { KnowledgeService } from '../knowledge/knowledge.service';
+import { LiveSourcesService } from '../knowledge/live-sources.service';
 import { AiPersonaService } from '../ai-persona/ai-persona.service';
 import {
   COPILOT_SYSTEM_PROMPT,
@@ -71,6 +72,7 @@ export class CopilotService implements OnModuleInit {
   constructor(
     private readonly supabase: SupabaseService,
     private readonly knowledge: KnowledgeService,
+    private readonly liveSources: LiveSourcesService,
     private readonly persona: AiPersonaService,
   ) {}
 
@@ -363,9 +365,43 @@ export class CopilotService implements OnModuleInit {
         return this.toolCreateDeal(input, ctx);
       case 'search_knowledge':
         return this.toolSearchKnowledge(input, ctx);
+      case 'search_live_sources':
+        return this.toolSearchLiveSources(input, ctx);
       default:
         throw new Error(`Tool desconhecida: ${name}`);
     }
+  }
+
+  private async toolSearchLiveSources(
+    input: Record<string, unknown>,
+    ctx: ToolContext,
+  ): Promise<{ result: unknown; record: ToolCallRecord }> {
+    const query = String(input.query ?? '').trim();
+    if (!query) throw new Error('query é obrigatório');
+
+    const live = await this.liveSources.fetchLiveContent(ctx.orgId, query);
+    if (!live || live.sources_used.length === 0) {
+      return {
+        result: { content: null, sources_used: [], note: 'Nenhuma fonte live cadastrada ou relevante pra essa query.' },
+        record: {
+          tool: 'search_live_sources',
+          summary: 'Nenhuma fonte live relevante',
+          result_count: 0,
+        },
+      };
+    }
+
+    return {
+      result: {
+        content: live.content.length > 4000 ? `${live.content.slice(0, 4000)}…` : live.content,
+        sources_used: live.sources_used,
+      },
+      record: {
+        tool: 'search_live_sources',
+        summary: `Consultou ${live.sources_used.length} fonte${live.sources_used.length === 1 ? '' : 's'} live: ${live.sources_used.map((s) => s.name).join(', ')}`,
+        result_count: live.sources_used.length,
+      },
+    };
   }
 
   // ────────────────────────────────────────────
