@@ -49,6 +49,9 @@ export class ChannelsController {
   async diagnostics(
     @CurrentUser() user: AuthUser,
   ): Promise<WhatsAppFreeDiagnostics & { sockets_connected: number }> {
+    this.logger.log(
+      `[diag] /channels/diagnostics/whatsapp-free called by user=${user.id} org=${user.org_id}`,
+    );
     try {
       const data = await this.service.getWhatsAppFreeDiagnostics(user.org_id);
       let sockets_connected = 0;
