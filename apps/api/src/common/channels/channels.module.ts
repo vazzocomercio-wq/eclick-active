@@ -4,6 +4,7 @@ import { ZapiProvider } from './providers/zapi/zapi.provider';
 import { BaileysProvider } from './providers/baileys/baileys.provider';
 import { EmailProvider } from './providers/email/email.provider';
 import { InstagramProvider } from './providers/instagram/instagram.provider';
+import { TikTokProvider } from './providers/tiktok/tiktok.provider';
 
 @Global()
 @Module({
@@ -12,6 +13,7 @@ import { InstagramProvider } from './providers/instagram/instagram.provider';
     BaileysProvider,
     EmailProvider,
     InstagramProvider,
+    TikTokProvider,
     ChannelDispatcherService,
   ],
   exports: [
@@ -20,6 +22,7 @@ import { InstagramProvider } from './providers/instagram/instagram.provider';
     BaileysProvider,
     EmailProvider,
     InstagramProvider,
+    TikTokProvider,
   ],
 })
 export class ChannelsModule {}
