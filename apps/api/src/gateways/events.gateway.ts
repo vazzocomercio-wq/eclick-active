@@ -242,8 +242,18 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
     const room = `${ROOM_PREFIX}:${orgId}`;
-    const sockets = this.server.sockets.adapter.rooms.get(room);
-    const count = sockets?.size ?? 0;
+    let count = 0;
+    try {
+      // Em NestJS, @WebSocketServer() num gateway com namespace injeta o
+      // Namespace direto (não o Server raiz). Namespace tem .adapter.rooms,
+      // não .sockets.adapter.rooms. Trycatch protege caso a infra mude.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      count = (this.server as any).adapter?.rooms?.get(room)?.size ?? 0;
+    } catch (err) {
+      this.logger.warn(
+        `count subscribers falhou (não fatal): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
     this.logger.log(
       `[events] emitToOrg event=${event} org=${orgId} subscribers=${count}`,
     );
@@ -257,7 +267,12 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   countSocketsForOrg(orgId: string): number {
     if (!this.server) return 0;
     const room = `${ROOM_PREFIX}:${orgId}`;
-    return this.server.sockets.adapter.rooms.get(room)?.size ?? 0;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (this.server as any).adapter?.rooms?.get(room)?.size ?? 0;
+    } catch {
+      return 0;
+    }
   }
 
   /**
