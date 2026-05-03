@@ -67,8 +67,7 @@ export function TabsList({ className, children }: TabsListProps) {
       // Scrollbar-thin gracefully em browsers modernos; oculta nas barras nas
       // demais (com ::-webkit-scrollbar custom em globals.css se quiser).
       className={cn(
-        'flex shrink-0 items-center gap-0.5 overflow-x-auto border-b border-border',
-        '[scrollbar-width:thin]',
+        'flex shrink-0 items-center gap-0.5 overflow-x-auto border-b border-border scrollbar-thin',
         className,
       )}
     >

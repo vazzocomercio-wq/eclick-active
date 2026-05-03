@@ -100,7 +100,7 @@ export function Sidebar() {
       <div
         className={cn(
           'flex items-center border-b border-border',
-          isCollapsed ? 'h-16 justify-center px-2' : 'h-24 justify-between px-4',
+          isCollapsed ? 'h-16 justify-center px-2' : 'h-20 justify-between px-4',
         )}
       >
         {isCollapsed ? (
@@ -132,7 +132,7 @@ export function Sidebar() {
               width={280}
               height={112}
               priority
-              className="h-20 w-auto"
+              className="h-14 w-auto"
             />
           </Link>
         )}
@@ -151,7 +151,7 @@ export function Sidebar() {
       </div>
 
       {/* Primary nav */}
-      <nav className="flex-1 overflow-y-auto py-3">
+      <nav className="flex-1 overflow-y-auto py-2 scrollbar-auto-hide">
         <ul className="flex flex-col gap-0.5 px-2">
           {PRIMARY_NAV.map((item) => {
             // Injeta badge dinâmico em /conversas com count de não-lidas
@@ -170,7 +170,7 @@ export function Sidebar() {
           })}
         </ul>
 
-        <div className="mx-3 my-3 border-t border-border" />
+        <div className="mx-3 my-2 border-t border-border" />
 
         <ul className="flex flex-col gap-0.5 px-2">
           {FOOTER_NAV.map((item) => (
@@ -187,7 +187,7 @@ export function Sidebar() {
       {/* Theme toggle */}
       <div
         className={cn(
-          'border-t border-border p-3',
+          'border-t border-border p-2',
           isCollapsed ? 'flex justify-center' : '',
         )}
       >
@@ -217,7 +217,7 @@ function NavLink({ item, active, collapsed }: NavLinkProps) {
         title={collapsed ? item.label : undefined}
         aria-current={active ? 'page' : undefined}
         className={cn(
-          'group relative flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors',
+          'group relative flex items-center gap-3 rounded-md px-3 py-1.5 text-sm transition-colors',
           'border-l-2 border-transparent',
           active
             ? 'border-primary bg-card text-foreground'
