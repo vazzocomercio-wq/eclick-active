@@ -33,6 +33,8 @@ export class BaileysManager {
   private timer: NodeJS.Timeout | null = null;
   private syncing = false;
   private stopped = false;
+  /** Última assinatura do estado dos canais — usada pra evitar log repetido a cada 3s */
+  private lastStateSig = '__init__';
 
   async start(): Promise<void> {
     const intervalSec = Number(process.env.BAILEYS_POLL_INTERVAL_SEC ?? 3);
@@ -105,6 +107,19 @@ export class BaileysManager {
       }
 
       const allRows = (data ?? []) as ChannelRow[];
+
+      // Log de diagnóstico — só quando o estado muda pra não poluir
+      const stateSig = allRows
+        .map((r) => `${r.id.slice(0, 8)}:${r.status}`)
+        .sort()
+        .join(',');
+      if (stateSig !== this.lastStateSig) {
+        // eslint-disable-next-line no-console
+        console.log(
+          `[baileys-manager] poll: ${allRows.length} canais [${stateSig || 'nenhum'}]`,
+        );
+        this.lastStateSig = stateSig;
+      }
 
       // Limpeza: apaga canais pending sem auth_state que estouraram TTL.
       // São tentativas de pareamento abandonadas (user fechou dialog,
