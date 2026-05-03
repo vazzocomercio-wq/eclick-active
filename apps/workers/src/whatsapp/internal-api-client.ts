@@ -25,11 +25,17 @@ export async function broadcastRealtime(input: BroadcastInput): Promise<boolean>
   const key = process.env.INTERNAL_API_KEY;
   if (!url || !key) {
     // eslint-disable-next-line no-console
-    console.warn('[internal-api] INTERNAL_API_URL/KEY ausentes — broadcast descartado');
+    console.warn(
+      `[internal-api] env ausente: INTERNAL_API_URL=${!!url} INTERNAL_API_KEY=${!!key} — broadcast event=${input.event} descartado`,
+    );
     return false;
   }
 
   try {
+    // eslint-disable-next-line no-console
+    console.log(
+      `[internal-api] → POST ${url}/internal/realtime event=${input.event} org=${input.org_id}`,
+    );
     const res = await fetch(`${url}/internal/realtime`, {
       method: 'POST',
       headers: {
@@ -39,17 +45,20 @@ export async function broadcastRealtime(input: BroadcastInput): Promise<boolean>
       body: JSON.stringify(input),
     });
     if (!res.ok) {
+      const body = await res.text().catch(() => '');
       // eslint-disable-next-line no-console
       console.warn(
-        `[internal-api] broadcast falhou: ${res.status} ${res.statusText}`,
+        `[internal-api] broadcast event=${input.event} falhou: ${res.status} ${res.statusText} body=${body.slice(0, 200)}`,
       );
       return false;
     }
+    // eslint-disable-next-line no-console
+    console.log(`[internal-api] ✓ broadcast event=${input.event} OK`);
     return true;
   } catch (err) {
     // eslint-disable-next-line no-console
     console.warn(
-      `[internal-api] broadcast erro: ${err instanceof Error ? err.message : String(err)}`,
+      `[internal-api] broadcast event=${input.event} erro: ${err instanceof Error ? err.message : String(err)}`,
     );
     return false;
   }

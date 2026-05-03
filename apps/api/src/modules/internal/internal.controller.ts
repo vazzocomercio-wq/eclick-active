@@ -55,6 +55,10 @@ export class InternalController {
       throw new BadRequestException('org_id e event são obrigatórios');
     }
 
+    this.logger.log(
+      `[internal] ← broadcast received event=${body.event} org=${body.org_id}`,
+    );
+
     // Type-cast pra satisfazer EventPayloadMap; o caller (worker) é
     // responsável por mandar o payload correto pro evento.
     this.events.emitToOrg(

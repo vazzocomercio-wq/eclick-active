@@ -241,7 +241,23 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.logger.warn(`Server not ready, dropping ${event} for org=${orgId}`);
       return;
     }
-    this.server.to(`${ROOM_PREFIX}:${orgId}`).emit(event, payload);
+    const room = `${ROOM_PREFIX}:${orgId}`;
+    const sockets = this.server.sockets.adapter.rooms.get(room);
+    const count = sockets?.size ?? 0;
+    this.logger.log(
+      `[events] emitToOrg event=${event} org=${orgId} subscribers=${count}`,
+    );
+    this.server.to(room).emit(event, payload);
+  }
+
+  /**
+   * Quantos sockets dessa org estão atualmente conectados.
+   * Útil pra diagnósticos: se for 0, frontend não está ouvindo broadcasts.
+   */
+  countSocketsForOrg(orgId: string): number {
+    if (!this.server) return 0;
+    const room = `${ROOM_PREFIX}:${orgId}`;
+    return this.server.sockets.adapter.rooms.get(room)?.size ?? 0;
   }
 
   /**
