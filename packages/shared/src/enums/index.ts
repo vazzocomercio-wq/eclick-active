@@ -20,6 +20,7 @@ export type ContactTemperature = 'cold' | 'warm' | 'hot' | 'very_hot';
 export type ContactSource =
   | 'whatsapp'
   | 'instagram'
+  | 'email'
   | 'website'
   | 'import'
   | 'manual'

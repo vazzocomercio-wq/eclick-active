@@ -7,6 +7,7 @@ import {
   Cable,
   Instagram,
   Loader2,
+  Mail,
   MessageCircle,
   Pause,
   Plus,
@@ -17,6 +18,7 @@ import {
 import { toast } from 'sonner';
 import type { ChannelStatus } from '@eclick-active/shared';
 import { BaileysConnectDialog } from './baileys-connect-dialog';
+import { ConnectEmailDialog } from './connect-email-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -54,6 +56,7 @@ export function ChannelsSection() {
   const [error, setError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [baileysDialogOpen, setBaileysDialogOpen] = useState(false);
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [connectingInstagram, setConnectingInstagram] = useState(false);
 
   // Lê callback do OAuth Instagram (?channel=success&provider=instagram)
@@ -165,6 +168,15 @@ export function ChannelsSection() {
             )}
             Instagram
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setEmailDialogOpen(true)}
+            className="border-blue-500/30 text-blue-500 hover:bg-blue-500/10 hover:text-blue-600"
+          >
+            <Mail className="mr-2 h-3.5 w-3.5" />
+            Email
+          </Button>
         </div>
       </div>
 
@@ -202,6 +214,12 @@ export function ChannelsSection() {
       <BaileysConnectDialog
         open={baileysDialogOpen}
         onOpenChange={setBaileysDialogOpen}
+        onConnected={() => void reload()}
+      />
+
+      <ConnectEmailDialog
+        open={emailDialogOpen}
+        onOpenChange={setEmailDialogOpen}
         onConnected={() => void reload()}
       />
     </section>

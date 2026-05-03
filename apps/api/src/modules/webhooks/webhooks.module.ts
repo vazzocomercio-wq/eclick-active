@@ -4,6 +4,9 @@ import { ZapiWebhookService } from './zapi/zapi-webhook.service';
 import { InstagramWebhookController } from './instagram/instagram-webhook.controller';
 import { InstagramWebhookService } from './instagram/instagram-webhook.service';
 import { InstagramOAuthController } from './instagram/instagram-oauth.controller';
+import { EmailWebhookService } from './email/email-webhook.service';
+import { EmailPollerService } from './email/email-poller.service';
+import { EmailConnectController } from './email/email-connect.controller';
 import { AutoLeadService } from './auto-lead.service';
 import { OutboundWebhookController } from './outbound/outbound-webhook.controller';
 import { OutboundWebhookService } from './outbound/outbound-webhook.service';
@@ -25,12 +28,15 @@ import { AutomationsModule } from '../automations/automations.module';
     OutboundWebhookController,
     InstagramWebhookController,
     InstagramOAuthController,
+    EmailConnectController,
   ],
   providers: [
     ZapiWebhookService,
     AutoLeadService,
     OutboundWebhookService,
     InstagramWebhookService,
+    EmailWebhookService,
+    EmailPollerService,
   ],
   exports: [AutoLeadService, OutboundWebhookService],
 })

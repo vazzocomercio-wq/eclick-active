@@ -181,6 +181,29 @@ export class ContactsService {
     });
   }
 
+  /**
+   * Busca/cria contato por endereço de email. Usa email como chave única
+   * (constraint UNIQUE existente). Se já tiver telefone vinculado, mantém
+   * — só completa nome quando estiver vazio.
+   */
+  async findOrCreateByEmail(orgId: string, email: string, name?: string): Promise<Contact> {
+    const normalizedEmail = email.trim().toLowerCase();
+    const { data, error } = await this.supabase.adminClient
+      .from('contacts')
+      .select('*')
+      .eq('org_id', orgId)
+      .eq('email', normalizedEmail)
+      .maybeSingle();
+    if (error) throw new InternalServerErrorException(error.message);
+    if (data) return data as Contact;
+
+    return this.create(orgId, {
+      email: normalizedEmail,
+      name,
+      source: 'email',
+    });
+  }
+
   // ──────────────────────────────────────────────────────────
   // UPDATE
   // ──────────────────────────────────────────────────────────

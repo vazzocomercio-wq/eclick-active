@@ -25,6 +25,7 @@ export * from './types/ai-skill';
 export * from './types/knowledge-live-source';
 export * from './types/appointment';
 export * from './types/calendar-integration';
+export * from './types/email-thread';
 
 // Enum union types
 export * from './enums';
