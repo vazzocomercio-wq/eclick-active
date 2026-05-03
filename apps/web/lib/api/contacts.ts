@@ -96,6 +96,16 @@ export const contactsApi = {
       pending: number;
     }>('/contacts/whatsapp-stats', { signal });
   },
+
+  /**
+   * POST /contacts/verify-whatsapp/batch — enfileira N contatos pra validação
+   * em background. Worker processa respeitando rate limit do provider.
+   */
+  verifyWhatsappBatch(contactIds: string[]) {
+    return api.post<{ enqueued: number }>('/contacts/verify-whatsapp/batch', {
+      contact_ids: contactIds,
+    });
+  },
 };
 
 // ──────────────────────────────────────────────────────────

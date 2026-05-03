@@ -10,10 +10,12 @@ import { pipelinesApi, type PipelineWithStages } from '@/lib/api/pipelines';
 import { ApiError } from '@/lib/api/client';
 import { ContactsFilters } from '@/components/contacts/contacts-filters';
 import { ContactsTable } from '@/components/contacts/contacts-table';
+import { BulkActionsBar } from '@/components/contacts/bulk-actions-bar';
 import { Pagination } from '@/components/contacts/pagination';
 import { NewContactDialog } from '@/components/contacts/new-contact-dialog';
 import { ContactDetailSheet } from '@/components/contacts/contact-detail-sheet';
 import { DealDetailSheet } from '@/components/funis/deal-detail-sheet';
+import { getSocket } from '@/lib/realtime/socket-client';
 
 const PAGE_SIZE = 25;
 
@@ -34,6 +36,42 @@ export default function ContatosPage() {
   const [selected, setSelected] = useState<Contact | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+
+  // Seleção em massa (checkboxes na tabela)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  function toggleOne(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    setSelectedIds((prev) => {
+      const allSelected = contacts.every((c) => prev.has(c.id));
+      if (allSelected) {
+        // Desmarca somente os da página atual (mantém seleção de outras páginas)
+        const next = new Set(prev);
+        for (const c of contacts) next.delete(c.id);
+        return next;
+      }
+      const next = new Set(prev);
+      for (const c of contacts) next.add(c.id);
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
+
+  // Limpa seleção quando filtros/paginação mudam (evita atuar em itens não visíveis)
+  useEffect(() => {
+    clearSelection();
+  }, [page, debouncedSearch, temperature]);
 
   // Deal sheet aberto a partir do click num deal vinculado dentro do
   // ContactDetailSheet. Carrega pipelines on-demand pra ter stages.
@@ -100,6 +138,40 @@ export default function ContatosPage() {
     return () => ctrl.abort();
   }, [load]);
 
+  // Realtime: quando uma conversa é criada/atualizada (ex: novo contato manda
+  // primeira mensagem ou WhatsApp foi verificado), refetch da lista pra
+  // mostrar/atualizar sem precisar de F5. Best-effort com debounce simples
+  // pra não disparar refetch em rajada de mensagens.
+  useEffect(() => {
+    let cancelled = false;
+    let cleanup: (() => void) | null = null;
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleReload = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        if (!cancelled) void load();
+      }, 1500);
+    };
+
+    void (async () => {
+      const socket = await getSocket();
+      if (!socket || cancelled) return;
+      socket.on('conversation:updated', scheduleReload);
+      socket.on('message:new', scheduleReload);
+      cleanup = () => {
+        socket.off('conversation:updated', scheduleReload);
+        socket.off('message:new', scheduleReload);
+      };
+    })();
+
+    return () => {
+      cancelled = true;
+      if (debounceTimer) clearTimeout(debounceTimer);
+      cleanup?.();
+    };
+  }, [load]);
+
   function handleSelect(contact: Contact) {
     setSelected(contact);
     setDrawerOpen(true);
@@ -162,9 +234,23 @@ export default function ContatosPage() {
         onTemperatureChange={setTemperature}
       />
 
+      {/* Barra de ações em massa — aparece quando há seleção */}
+      <BulkActionsBar
+        selectedIds={selectedIds}
+        onClear={clearSelection}
+        onChanged={() => void load()}
+      />
+
       {/* Tabela */}
       <div className="flex-1 overflow-auto">
-        <ContactsTable contacts={contacts} loading={loading} onSelect={handleSelect} />
+        <ContactsTable
+          contacts={contacts}
+          loading={loading}
+          onSelect={handleSelect}
+          selectedIds={selectedIds}
+          onToggleOne={toggleOne}
+          onToggleAll={toggleAll}
+        />
       </div>
 
       <Pagination
