@@ -12,6 +12,8 @@ import { LiveSourcesService } from '../knowledge/live-sources.service';
 import { AiPersonaService } from '../ai-persona/ai-persona.service';
 import { AppointmentsService } from '../appointments/appointments.service';
 import { AppointmentTypesService } from '../appointments/appointment-types.service';
+import { CalendarIntegrationsService } from '../calendar-integrations/calendar-integrations.service';
+import { CalendlyService } from '../calendar-integrations/calendly.service';
 import {
   COPILOT_SYSTEM_PROMPT,
   MAX_HISTORY_MESSAGES,
@@ -78,6 +80,8 @@ export class CopilotService implements OnModuleInit {
     private readonly persona: AiPersonaService,
     private readonly appointments: AppointmentsService,
     private readonly appointmentTypes: AppointmentTypesService,
+    private readonly calendarIntegrations: CalendarIntegrationsService,
+    private readonly calendly: CalendlyService,
   ) {}
 
   onModuleInit(): void {
@@ -375,6 +379,8 @@ export class CopilotService implements OnModuleInit {
         return this.toolCheckAvailableSlots(input, ctx);
       case 'schedule_appointment':
         return this.toolScheduleAppointment(input, ctx);
+      case 'send_scheduling_link':
+        return this.toolSendSchedulingLink(input, ctx);
       default:
         throw new Error(`Tool desconhecida: ${name}`);
     }
@@ -410,6 +416,61 @@ export class CopilotService implements OnModuleInit {
         tool: 'check_available_slots',
         summary: `${slots.length} horário${slots.length === 1 ? '' : 's'} disponível${slots.length === 1 ? '' : 'eis'} em ${date}`,
         result_count: slots.length,
+      },
+    };
+  }
+
+  private async toolSendSchedulingLink(
+    input: Record<string, unknown>,
+    ctx: ToolContext,
+  ): Promise<{ result: unknown; record: ToolCallRecord }> {
+    // Resolve member_id do user que falou com copilot
+    const { data: memberRow } = await this.supabase.adminClient
+      .from('org_members')
+      .select('id')
+      .eq('org_id', ctx.orgId)
+      .eq('user_id', ctx.userId)
+      .maybeSingle();
+    const memberId = (memberRow as { id: string } | null)?.id ?? null;
+    if (!memberId) {
+      return {
+        result: { error: 'Membro não encontrado' },
+        record: { tool: 'send_scheduling_link', summary: 'Sem member_id' },
+      };
+    }
+
+    const integration = await this.calendarIntegrations.findActiveForAgent(
+      ctx.orgId,
+      memberId,
+      'calendly',
+    );
+    if (!integration) {
+      return {
+        result: {
+          error: 'Sem Calendly conectado',
+          hint: 'Conecte em Configurações → Agendamento → Integrações',
+        },
+        record: { tool: 'send_scheduling_link', summary: 'Calendly não conectado' },
+      };
+    }
+
+    const eventTypeUri = typeof input.event_type_uri === 'string' ? input.event_type_uri : undefined;
+    const link = await this.calendly.getSchedulingLink(integration.id, eventTypeUri);
+    if (!link) {
+      return {
+        result: { error: 'Link não encontrado' },
+        record: { tool: 'send_scheduling_link', summary: 'Sem link disponível' },
+      };
+    }
+
+    return {
+      result: {
+        scheduling_url: link,
+        provider: 'calendly',
+      },
+      record: {
+        tool: 'send_scheduling_link',
+        summary: `Link Calendly: ${link}`,
       },
     };
   }

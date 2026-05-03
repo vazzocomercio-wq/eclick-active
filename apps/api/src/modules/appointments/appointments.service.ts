@@ -1,6 +1,8 @@
 import {
   BadRequestException,
   ConflictException,
+  forwardRef,
+  Inject,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -13,6 +15,8 @@ import type {
   AvailabilitySlot,
 } from '@eclick-active/shared';
 import { SupabaseService } from '../../common/supabase/supabase.service';
+import { CalendarIntegrationsService } from '../calendar-integrations/calendar-integrations.service';
+import { GoogleCalendarService } from '../calendar-integrations/google-calendar.service';
 import { AppointmentTypesService } from './appointment-types.service';
 import {
   CalendarRangeQueryDto,
@@ -35,6 +39,10 @@ export class AppointmentsService {
   constructor(
     private readonly supabase: SupabaseService,
     private readonly types: AppointmentTypesService,
+    @Inject(forwardRef(() => CalendarIntegrationsService))
+    private readonly integrations: CalendarIntegrationsService,
+    @Inject(forwardRef(() => GoogleCalendarService))
+    private readonly google: GoogleCalendarService,
   ) {}
 
   // ──────────────────────────────────────────────────────────
@@ -86,7 +94,56 @@ export class AppointmentsService {
       this.logger.error(`create failed: ${error?.message}`);
       throw new InternalServerErrorException(error?.message ?? 'Falha ao criar agendamento');
     }
-    return this.findById(orgId, (data as Appointment).id);
+
+    const created = data as Appointment;
+
+    // Sync com Google Calendar (se agente tem integração ativa) — best-effort
+    if (dto.assigned_to) {
+      void this.syncToGoogleAfterCreate(orgId, created.id, dto.assigned_to).catch((err) => {
+        this.logger.warn(
+          `sync to google after create falhou (não-fatal): ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+    }
+
+    return this.findById(orgId, created.id);
+  }
+
+  /**
+   * Cria evento correspondente no Google Calendar do agente (se conectado).
+   * Salva external_calendar_id no appointment pra permitir update/delete.
+   */
+  private async syncToGoogleAfterCreate(
+    orgId: string,
+    appointmentId: string,
+    agentId: string,
+  ): Promise<void> {
+    const integration = await this.integrations.findActiveForAgent(orgId, agentId, 'google');
+    if (!integration || !integration.calendar_id) return;
+
+    const appt = await this.findById(orgId, appointmentId);
+    const ev = await this.google.createEvent(integration.id, integration.calendar_id, {
+      title: appt.title,
+      description: appt.description,
+      start_time: appt.start_time,
+      end_time: appt.end_time,
+      location_details: appt.location_details,
+      contact_email:
+        (appt.metadata as { contact_email?: string } | null)?.contact_email ?? null,
+    });
+
+    await this.supabase.adminClient
+      .from('appointments')
+      .update({
+        external_calendar_id: ev.event_id,
+        external_calendar_provider: 'google',
+        metadata: {
+          ...(appt.metadata ?? {}),
+          google_html_link: ev.html_link,
+        },
+      })
+      .eq('org_id', orgId)
+      .eq('id', appointmentId);
   }
 
   async findAll(
@@ -161,14 +218,36 @@ export class AppointmentsService {
   }
 
   async cancel(orgId: string, id: string, reason?: string): Promise<AppointmentDetail> {
-    await this.findById(orgId, id);
+    const existing = await this.findById(orgId, id);
     const { error } = await this.supabase.adminClient
       .from('appointments')
       .update({ status: 'cancelled', cancelled_reason: reason ?? null })
       .eq('org_id', orgId)
       .eq('id', id);
     if (error) throw new InternalServerErrorException(error.message);
+
+    // Deleta evento no Google se sincronizado — best-effort
+    if (
+      existing.external_calendar_id &&
+      existing.external_calendar_provider === 'google' &&
+      existing.assigned_to
+    ) {
+      void this.deleteFromGoogle(orgId, existing.assigned_to, existing.external_calendar_id).catch(
+        (err) => this.logger.warn(`delete google falhou: ${err instanceof Error ? err.message : String(err)}`),
+      );
+    }
+
     return this.findById(orgId, id);
+  }
+
+  private async deleteFromGoogle(
+    orgId: string,
+    agentId: string,
+    eventId: string,
+  ): Promise<void> {
+    const integration = await this.integrations.findActiveForAgent(orgId, agentId, 'google');
+    if (!integration || !integration.calendar_id) return;
+    await this.google.deleteEvent(integration.id, integration.calendar_id, eventId);
   }
 
   async complete(orgId: string, id: string): Promise<AppointmentDetail> {
@@ -273,7 +352,23 @@ export class AppointmentsService {
     if (error || !data) {
       throw new InternalServerErrorException(error?.message ?? 'Falha ao reagendar');
     }
-    return this.findById(orgId, (data as { id: string }).id);
+    const newId = (data as { id: string }).id;
+
+    // Sincroniza com Google: deleta evento original + cria novo
+    if (
+      original.external_calendar_id &&
+      original.external_calendar_provider === 'google' &&
+      original.assigned_to
+    ) {
+      void this.deleteFromGoogle(
+        orgId,
+        original.assigned_to,
+        original.external_calendar_id,
+      ).catch(() => {});
+      void this.syncToGoogleAfterCreate(orgId, newId, original.assigned_to).catch(() => {});
+    }
+
+    return this.findById(orgId, newId);
   }
 
   // ──────────────────────────────────────────────────────────
@@ -663,7 +758,7 @@ export class AppointmentsService {
     dayStart: Date,
     dayEnd: Date,
   ): Promise<TimeRange[]> {
-    const [appts, tasks] = await Promise.all([
+    const [appts, tasks, googleBusy] = await Promise.all([
       this.supabase.adminClient
         .from('appointments')
         .select('start_time, end_time')
@@ -680,6 +775,7 @@ export class AppointmentsService {
         .in('status', ['pending', 'in_progress'])
         .gte('due_date', dayStart.toISOString())
         .lte('due_date', dayEnd.toISOString()),
+      this.fetchGoogleBusy(orgId, agentId, dayStart, dayEnd),
     ]);
 
     const out: TimeRange[] = [];
@@ -692,7 +788,39 @@ export class AppointmentsService {
       // Tasks bloqueiam 30min ao redor do due_date
       out.push({ start: new Date(d.getTime() - 15 * 60_000), end: new Date(d.getTime() + 15 * 60_000) });
     }
+    for (const g of googleBusy) {
+      out.push({ start: new Date(g.start), end: new Date(g.end) });
+    }
     return out;
+  }
+
+  /**
+   * Consulta Google Calendar freeBusy quando o agente tem integração ativa
+   * com `consider_personal_events=true`. Best-effort: se falha, retorna [].
+   */
+  private async fetchGoogleBusy(
+    orgId: string,
+    agentId: string,
+    dayStart: Date,
+    dayEnd: Date,
+  ): Promise<Array<{ start: string; end: string }>> {
+    try {
+      const integration = await this.integrations.findActiveForAgent(orgId, agentId, 'google');
+      if (!integration || !integration.consider_personal_events || !integration.calendar_id) {
+        return [];
+      }
+      return await this.google.getBusyRanges(
+        integration.id,
+        integration.calendar_id,
+        dayStart.toISOString(),
+        dayEnd.toISOString(),
+      );
+    } catch (err) {
+      this.logger.warn(
+        `fetchGoogleBusy falhou (não-fatal): ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return [];
+    }
   }
 
   private generateSlots(

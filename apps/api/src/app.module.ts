@@ -11,6 +11,7 @@ import { AiSkillsModule } from './modules/ai-skills/ai-skills.module';
 import { AiTestModule } from './modules/ai-test/ai-test.module';
 import { AppointmentsModule } from './modules/appointments/appointments.module';
 import { AutomationsModule } from './modules/automations/automations.module';
+import { CalendarIntegrationsModule } from './modules/calendar-integrations/calendar-integrations.module';
 import { BusinessHoursModule } from './modules/business-hours/business-hours.module';
 import { ChannelsModule } from './modules/channels/channels.module';
 import { ContactsModule } from './modules/contacts/contacts.module';
@@ -53,6 +54,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     AiModule,
     AiTestModule,
     AppointmentsModule,
+    CalendarIntegrationsModule,
     CopilotModule,
     ChannelsModule,
     SettingsModule,

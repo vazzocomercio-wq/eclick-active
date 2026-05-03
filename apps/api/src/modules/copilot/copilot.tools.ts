@@ -260,6 +260,21 @@ export const COPILOT_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: 'send_scheduling_link',
+    description:
+      'Gera o link de agendamento (Calendly) do agente atual para enviar ao cliente. Use quando o vendedor pedir "envia meu link de agendamento", "manda o Calendly". Retorna a URL pra o vendedor copiar/colar.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        event_type_uri: {
+          type: 'string',
+          description: 'URI do event_type específico do Calendly. Se omitido, usa link geral.',
+        },
+      },
+      required: [],
+    },
+  },
+  {
     name: 'create_deal',
     description:
       'Cria um novo negócio (deal) no funil. Use quando o usuário pedir para criar oportunidade ou registrar venda em andamento.',
@@ -291,4 +306,5 @@ export type CopilotToolName =
   | 'search_knowledge'
   | 'search_live_sources'
   | 'check_available_slots'
-  | 'schedule_appointment';
+  | 'schedule_appointment'
+  | 'send_scheduling_link';

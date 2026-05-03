@@ -7,6 +7,7 @@ import {
   BotMessageSquare,
   Building2,
   Cable,
+  CalendarClock,
   ChevronRight,
   Settings,
   Sliders,
@@ -21,6 +22,7 @@ import { AiFeaturesSection } from '@/components/configuracoes/ai-features-sectio
 import { CustomFieldsAdminSection } from '@/components/configuracoes/custom-fields-section';
 import { AutoLeadSection } from '@/components/configuracoes/auto-lead-section';
 import { WebhooksSection } from '@/components/configuracoes/webhooks-section';
+import { CalendarIntegrationsSection } from '@/components/configuracoes/calendar-integrations-section';
 import { cn } from '@/lib/utils';
 
 type Section =
@@ -28,6 +30,7 @@ type Section =
   | 'channels'
   | 'ai'
   | 'agente-ia'
+  | 'agenda'
   | 'custom-fields'
   | 'webhooks'
   | 'pipelines';
@@ -46,6 +49,12 @@ const SECTIONS: Array<{
     label: 'Agente de IA',
     icon: BotMessageSquare,
     description: 'Persona, horário, teste',
+  },
+  {
+    id: 'agenda',
+    label: 'Agenda',
+    icon: CalendarClock,
+    description: 'Google Calendar, Calendly',
   },
   {
     id: 'custom-fields',
@@ -177,6 +186,8 @@ export default function ConfiguracoesPage() {
             {section === 'channels' && <ChannelsSection />}
 
             {section === 'ai' && <AiFeaturesSection />}
+
+            {section === 'agenda' && <CalendarIntegrationsSection />}
 
             {section === 'agente-ia' && <AgenteIaLink />}
 
