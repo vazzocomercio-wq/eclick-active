@@ -11,6 +11,7 @@ import { ChatPanel } from '@/components/chat/chat-panel';
 import { ContactPanel } from '@/components/inbox/contact-panel';
 import { CopilotPanel } from '@/components/copilot/copilot-panel';
 import { ContactDetailSheet } from '@/components/contacts/contact-detail-sheet';
+import { StartConversationDialog } from '@/components/inbox/start-conversation-dialog';
 import { contactsApi } from '@/lib/api/contacts';
 import { ApiError } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
@@ -27,6 +28,9 @@ export default function ConversasPage() {
   // Contact Detail Sheet — aberto via "Ver perfil completo" no painel lateral
   const [contactSheet, setContactSheet] = useState<Contact | null>(null);
   const [contactSheetOpen, setContactSheetOpen] = useState(false);
+
+  // Dialog "Nova conversa" — botão no header da coluna 1
+  const [startOpen, setStartOpen] = useState(false);
 
   const handleSelect = useCallback((id: string) => {
     setSelectedId(id);
@@ -99,6 +103,7 @@ export default function ConversasPage() {
               onFilterChange={inbox.setFilter}
               search={inbox.search}
               onSearchChange={inbox.setSearch}
+              onStartNew={() => setStartOpen(true)}
             />
           </aside>
 
@@ -180,6 +185,17 @@ export default function ConversasPage() {
           contact={contactSheet}
           open={contactSheetOpen}
           onOpenChange={setContactSheetOpen}
+        />
+
+        {/* Dialog "Nova conversa" — vendedor inicia outbound */}
+        <StartConversationDialog
+          open={startOpen}
+          onOpenChange={setStartOpen}
+          onStarted={(resp) => {
+            // Recarrega o inbox e seleciona a conversa criada/reusada.
+            void inbox.refetch();
+            setSelectedId(resp.conversation.id);
+          }}
         />
       </div>
     </TooltipProvider>

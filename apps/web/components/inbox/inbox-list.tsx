@@ -1,7 +1,8 @@
 'use client';
 
-import { Inbox } from 'lucide-react';
+import { Inbox, MessageSquarePlus } from 'lucide-react';
 import type { InboxItem } from '@eclick-active/shared';
+import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InboxFilters } from './inbox-filters';
@@ -17,6 +18,8 @@ interface InboxListProps {
   onFilterChange: (f: InboxFilter) => void;
   search: string;
   onSearchChange: (q: string) => void;
+  /** Click no botão "Nova conversa" no header — abre o dialog na page. */
+  onStartNew: () => void;
 }
 
 export function InboxList({
@@ -28,14 +31,27 @@ export function InboxList({
   onFilterChange,
   search,
   onSearchChange,
+  onStartNew,
 }: InboxListProps) {
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b border-border px-4 py-3">
-        <h2 className="text-sm font-semibold tracking-tight">Conversas</h2>
-        <p className="text-xs text-muted-foreground">
-          {loading ? 'Carregando...' : `${items.length} conversas`}
-        </p>
+      <div className="flex items-start justify-between gap-2 border-b border-border px-4 py-3">
+        <div className="flex-1 min-w-0">
+          <h2 className="text-sm font-semibold tracking-tight">Conversas</h2>
+          <p className="text-xs text-muted-foreground">
+            {loading ? 'Carregando...' : `${items.length} conversas`}
+          </p>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          onClick={onStartNew}
+          className="h-8 shrink-0 gap-1.5"
+          title="Iniciar nova conversa"
+        >
+          <MessageSquarePlus className="h-3.5 w-3.5" />
+          <span className="text-xs">Nova</span>
+        </Button>
       </div>
 
       <InboxFilters

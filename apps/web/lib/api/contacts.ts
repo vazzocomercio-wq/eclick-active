@@ -68,6 +68,34 @@ export const contactsApi = {
   getDeals(id: string, signal?: AbortSignal) {
     return api.get<ContactDealItem[]>(`/contacts/${id}/deals`, { signal });
   },
+
+  /**
+   * POST /contacts/:id/verify-whatsapp — força validação síncrona do
+   * número (usado quando user clica no badge "?" pra verificar agora).
+   */
+  verifyWhatsapp(id: string) {
+    return api.post<{
+      ok: boolean;
+      result: {
+        exists: boolean;
+        jid?: string;
+        profile_name?: string;
+        profile_pic_url?: string;
+        provider: 'baileys' | 'zapi';
+      } | null;
+    }>(`/contacts/${id}/verify-whatsapp`);
+  },
+
+  /** GET /contacts/whatsapp-stats — métricas de validação */
+  whatsappStats(signal?: AbortSignal) {
+    return api.get<{
+      total: number;
+      verified_valid: number;
+      verified_invalid: number;
+      not_verified: number;
+      pending: number;
+    }>('/contacts/whatsapp-stats', { signal });
+  },
 };
 
 // ──────────────────────────────────────────────────────────

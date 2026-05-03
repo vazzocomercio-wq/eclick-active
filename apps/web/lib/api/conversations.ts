@@ -6,10 +6,26 @@ import type {
   ConversationStatus,
   CreateConversationDto,
   InboxItem,
+  Message,
   UpdateConversationDto,
 } from '@eclick-active/shared';
 import { api } from './client';
 import type { PaginatedResult } from './contacts';
+
+export interface StartConversationInput {
+  contact_id: string;
+  channel_id: string;
+  message: string;
+  message_type?: 'text';
+  is_internal_note?: boolean;
+}
+
+export interface StartConversationResponse {
+  conversation: Conversation;
+  message: Message;
+  /** True se a conversa já existia e foi reaproveitada. */
+  reused: boolean;
+}
 
 export interface InboxParams {
   page?: number;
@@ -65,6 +81,14 @@ export const conversationsApi = {
 
   create(input: CreateConversationInput) {
     return api.post<Conversation>('/conversations', input);
+  },
+
+  /**
+   * POST /conversations/start — vendedor inicia conversa outbound.
+   * Reaproveita conversa existente se já houver pra (contato, canal).
+   */
+  start(input: StartConversationInput) {
+    return api.post<StartConversationResponse>('/conversations/start', input);
   },
 
   update(id: string, dto: UpdateConversationDto) {
