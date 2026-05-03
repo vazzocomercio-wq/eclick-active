@@ -163,16 +163,47 @@ export function BaileysConnectDialog({
     }
   }
 
-  function handleClose() {
-    // Se conectou com sucesso, avisa o pai pra recarregar a lista
+  /**
+   * Apaga o canal recém-criado se o user fechar o dialog antes de
+   * completar o pareamento. Sem isso, cada tentativa abandonada deixa
+   * uma row pending órfã que o worker tenta parear pra sempre.
+   *
+   * Se já conectou (stage='connected'), o canal é mantido — o
+   * pareamento foi efetivo.
+   */
+  async function abortIfNotConnected(): Promise<void> {
+    if (!channel) return;
+    if (stage === 'connected') return;
+    try {
+      await channelsApi.remove(channel.id);
+    } catch {
+      // Best-effort. Worker tem cleanup de pending antigos como rede.
+    }
+  }
+
+  async function handleClose() {
     if (stage === 'connected') {
       onConnected();
+      onOpenChange(false);
+      return;
     }
+    await abortIfNotConnected();
     onOpenChange(false);
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !submitting && onOpenChange(o)}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (submitting) return;
+        if (!o) {
+          // Fecha via Esc / click fora — também aborta canal pending
+          void handleClose();
+        } else {
+          onOpenChange(o);
+        }
+      }}
+    >
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>WhatsApp Gratuito (QR Code)</DialogTitle>
@@ -208,7 +239,7 @@ export function BaileysConnectDialog({
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => onOpenChange(false)}
+                onClick={handleClose}
                 disabled={submitting}
               >
                 Cancelar
@@ -244,7 +275,7 @@ export function BaileysConnectDialog({
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => onOpenChange(false)}
+              onClick={handleClose}
               className="text-xs"
             >
               <XCircle className="mr-1.5 h-3.5 w-3.5" />

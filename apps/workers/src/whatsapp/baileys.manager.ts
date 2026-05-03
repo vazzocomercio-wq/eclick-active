@@ -6,7 +6,16 @@ interface ChannelRow {
   org_id: string;
   status: 'active' | 'paused' | 'error' | 'pending' | 'disconnected';
   credentials: { baileys_auth?: unknown } | null;
+  created_at: string;
 }
+
+/**
+ * Idade máxima de um canal pending sem auth antes de ser considerado
+ * órfão e apagado pelo cleanup. 10 minutos é suficiente — o pareamento
+ * normal leva ~30s. Canais que ficam pending > 10min foram abandonados
+ * (user fechou aba, perdeu conexão, etc).
+ */
+const PENDING_TTL_SECONDS = 10 * 60;
 
 /**
  * Orquestra todas as sessões Baileys do worker. Faz polling em
@@ -85,7 +94,7 @@ export class BaileysManager {
       const supabase = getSupabase();
       const { data, error } = await supabase
         .from('channels')
-        .select('id, org_id, status, credentials')
+        .select('id, org_id, status, credentials, created_at')
         .eq('channel_type', 'whatsapp_free')
         .in('status', ['active', 'pending', 'error']);
 
@@ -95,7 +104,35 @@ export class BaileysManager {
         return;
       }
 
-      const rows = (data ?? []) as ChannelRow[];
+      const allRows = (data ?? []) as ChannelRow[];
+
+      // Limpeza: apaga canais pending sem auth_state que estouraram TTL.
+      // São tentativas de pareamento abandonadas (user fechou dialog,
+      // sessão expirou, etc).
+      const now = Date.now();
+      const orphanIds = new Set<string>();
+      for (const row of allRows) {
+        if (row.status !== 'pending') continue;
+        if (row.credentials?.baileys_auth) continue;
+        const ageSec = (now - new Date(row.created_at).getTime()) / 1000;
+        if (ageSec > PENDING_TTL_SECONDS) {
+          // eslint-disable-next-line no-console
+          console.log(
+            `[baileys-manager] cleanup: deletando canal pending órfão ${row.id} (idade=${Math.round(ageSec)}s)`,
+          );
+          // Encerra sessão local antes de deletar do banco
+          const sess = this.sessions.get(row.id);
+          if (sess) {
+            await sess.stop().catch(() => {});
+            this.sessions.delete(row.id);
+          }
+          await supabase.from('channels').delete().eq('id', row.id);
+          orphanIds.add(row.id);
+        }
+      }
+
+      // Filtra os já-deletados pra não recriar sessão pra eles na sequência
+      const rows = allRows.filter((r) => !orphanIds.has(r.id));
       const wantedIds = new Set(rows.map((r) => r.id));
 
       // Encerra sessões que sumiram do conjunto desejado
