@@ -13,6 +13,7 @@ import { MessageInput } from '@/components/inbox/message-input';
 import { AISuggestionBar } from '@/components/inbox/ai-suggestion-bar';
 import { ChatActions, type ChatActionEvent } from './chat-actions';
 import { InlineAISummary } from './inline-ai-summary';
+import { AIInsightsCard } from './ai-insights-card';
 import { cn } from '@/lib/utils';
 
 interface AISuggestion {
@@ -106,6 +107,9 @@ export function ChatPanel({
   const [freshSummary, setFreshSummary] = useState<string | null>(null);
   /** Permite o usuário dispensar o card de resumo até o próximo "Resumir" ou troca de conversa. */
   const [summaryDismissed, setSummaryDismissed] = useState(false);
+  /** Trigger refetch dos gaps — incrementa quando uma nova mensagem chega
+   *  (debounced 30s pra não chamar IA a cada turn). */
+  const [gapsRefreshKey, setGapsRefreshKey] = useState(0);
 
   const chat = useChat(conversationId);
 
@@ -162,6 +166,18 @@ export function ChatPanel({
       });
     },
   });
+
+  // Debounced refresh dos gaps quando o número de mensagens muda — 30s
+  // pra evitar chamada de IA a cada mensagem (cache backend é 5min, mas o
+  // refreshKey força invalidação do componente quando há contexto novo).
+  const messageCount = chat.messages.length;
+  useEffect(() => {
+    if (!conversationId || messageCount === 0) return;
+    const t = setTimeout(() => {
+      setGapsRefreshKey((k) => k + 1);
+    }, 30_000);
+    return () => clearTimeout(t);
+  }, [conversationId, messageCount]);
 
   if (!conversationId) {
     return <EmptyChatState compact={compact} className={className} />;
@@ -225,6 +241,26 @@ export function ChatPanel({
           compact={compact}
         />
       )}
+
+      {/* Atenção da IA — gaps detectados via Haiku. Cache 5min no backend +
+          refresh debounced 30s no frontend ao chegar mensagem nova. */}
+      <AIInsightsCard
+        conversationId={conversationId}
+        refreshKey={gapsRefreshKey}
+        compact={compact}
+        onAskNow={(suggestion) => setPrefill(suggestion)}
+        onScrollToMessage={(idx) => {
+          // Tenta scroll até a mensagem N — MessageList renderiza em ordem
+          // cronológica (oldest → newest), então usa nth-child do <ul>.
+          const list = document.querySelector('[data-chat-message-list] ul');
+          const target = list?.children[idx] as HTMLElement | undefined;
+          target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          target?.classList.add('ring-2', 'ring-yellow-500/50');
+          setTimeout(() => {
+            target?.classList.remove('ring-2', 'ring-yellow-500/50');
+          }, 2000);
+        }}
+      />
 
       {showActions && (
         <ChatActions

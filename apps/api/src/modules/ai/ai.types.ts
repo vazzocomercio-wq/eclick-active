@@ -233,3 +233,67 @@ export const SUGGEST_SYSTEM_PROMPT =
 
 export const SUMMARIZE_SYSTEM_PROMPT =
   'Você analisa conversas comerciais brasileiras e produz resumos curtos (2-3 frases) em português. Foque em: o que o cliente quer, em que estágio da negociação está, e qual a próxima ação esperada. Não invente fatos. Retorne apenas o resumo, sem prefixos como "Resumo:" ou aspas.';
+
+// ──────────────────────────────────────────────────────────
+// Gaps detection (Melhoria 7) — Haiku, JSON estruturado
+// ──────────────────────────────────────────────────────────
+
+export interface GapsResult {
+  unanswered_questions: Array<{
+    /** Texto da pergunta como apareceu na conversa (paráfrase ok). */
+    question: string;
+    /** Index 0-based da mensagem na lista enviada ao prompt. */
+    message_index: number;
+  }>;
+  missing_profile_data: Array<{
+    /** Campo do contato (email, phone, company, name, tags, segment). */
+    field: string;
+    /** Razão prática pela qual o vendedor deveria coletar isso agora. */
+    reason: string;
+  }>;
+  /** Ações sugeridas pra próxima mensagem do vendedor. */
+  suggested_actions: string[];
+}
+
+export const GAPS_SCHEMA = {
+  type: 'object',
+  properties: {
+    unanswered_questions: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          question: { type: 'string' },
+          message_index: { type: 'integer' },
+        },
+        required: ['question', 'message_index'],
+        additionalProperties: false,
+      },
+    },
+    missing_profile_data: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          field: { type: 'string' },
+          reason: { type: 'string' },
+        },
+        required: ['field', 'reason'],
+        additionalProperties: false,
+      },
+    },
+    suggested_actions: {
+      type: 'array',
+      items: { type: 'string' },
+    },
+  },
+  required: ['unanswered_questions', 'missing_profile_data', 'suggested_actions'],
+  additionalProperties: false,
+} as const;
+
+export const GAPS_SYSTEM_PROMPT =
+  'Você é um analista de conversas comerciais brasileiras. Analise a conversa e o perfil do contato fornecidos. Identifique TRÊS coisas e retorne APENAS JSON válido contra o schema:\n' +
+  '1) unanswered_questions: perguntas FEITAS PELO CLIENTE que o vendedor não respondeu adequadamente (ou ignorou). Use o message_index da pergunta original.\n' +
+  '2) missing_profile_data: campos do contato que estão "(faltando)" no perfil acima E que seriam ÚTEIS pra avançar essa venda específica. Não liste todos os faltantes — só os relevantes. Para cada um, dê uma razão curta e prática (ex: "Email pra enviar proposta por escrito").\n' +
+  '3) suggested_actions: 2-4 ações concretas pra próxima mensagem do vendedor (ex: "Responder sobre prazo de entrega", "Confirmar email pra envio").\n' +
+  'Se não houver gaps, retorne arrays vazios. Não invente. Use português brasileiro.';

@@ -21,6 +21,7 @@ import type {
   ClassificationResult,
   DealScoreResult,
   FunnelAnalysisResult,
+  GapsResult,
   SuggestionResult,
 } from './ai.types';
 
@@ -176,5 +177,36 @@ export class AiController {
     }>
   > {
     return this.service.getUnansweredQuestions(user.org_id, conversationId);
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // GET /ai/gaps/:conversationId — Melhoria 7 (IA-powered, cache 5min)
+  // ──────────────────────────────────────────────────────────
+
+  @Get('gaps/:conversationId')
+  gaps(
+    @CurrentUser() user: AuthUser,
+    @Param('conversationId', ParseUUIDPipe) conversationId: string,
+  ): Promise<GapsResult> {
+    return this.service.detectGaps(user.org_id, conversationId);
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // GET /ai/feedback/stats — agregação pra Relatórios (Melhoria 6)
+  // ──────────────────────────────────────────────────────────
+
+  @Get('feedback/stats')
+  feedbackStats(
+    @CurrentUser() user: AuthUser,
+    @Query('period_days') periodDays?: string,
+  ): Promise<{
+    total_positive: number;
+    total_negative: number;
+    approval_rate: number;
+    recent_negative_comments: Array<{ comment: string; at: string }>;
+    weekly: Array<{ week_start: string; positive: number; negative: number; approval_rate: number }>;
+  }> {
+    const days = periodDays ? Math.min(365, Math.max(1, Number(periodDays))) : 30;
+    return this.service.getFeedbackStats(user.org_id, days);
   }
 }

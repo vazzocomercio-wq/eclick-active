@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Bot, User } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Contact, ConversationDetail } from '@eclick-active/shared';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -9,16 +9,20 @@ import { useInbox } from '@/hooks/use-inbox';
 import { InboxList } from '@/components/inbox/inbox-list';
 import { ChatPanel } from '@/components/chat/chat-panel';
 import { ContactPanel } from '@/components/inbox/contact-panel';
+import { CopilotPanel } from '@/components/copilot/copilot-panel';
 import { ContactDetailSheet } from '@/components/contacts/contact-detail-sheet';
 import { contactsApi } from '@/lib/api/contacts';
 import { ApiError } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
+
+type SidePanel = 'contact' | 'copilot';
 
 export default function ConversasPage() {
   const inbox = useInbox();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(true);
   const [activeDetail, setActiveDetail] = useState<ConversationDetail | null>(null);
+  const [sidePanel, setSidePanel] = useState<SidePanel>('contact');
 
   // Contact Detail Sheet — aberto via "Ver perfil completo" no painel lateral
   const [contactSheet, setContactSheet] = useState<Contact | null>(null);
@@ -108,21 +112,66 @@ export default function ConversasPage() {
             />
           </main>
 
-          {/* COLUNA 3 — Painel do contato */}
+          {/* COLUNA 3 — Painel do contato OU Copiloto contextual */}
           <aside
             className={cn(
-              'w-72 shrink-0 border-l border-border bg-background transition-[width]',
+              'flex w-72 shrink-0 flex-col border-l border-border bg-background transition-[width]',
               !panelOpen && 'w-0 overflow-hidden',
               // Esconde em telas < lg sempre (toggle só em lg+)
-              'hidden lg:block',
+              'hidden lg:flex',
             )}
             aria-hidden={!panelOpen}
           >
-            <ContactPanel
-              conversation={activeDetail}
-              loading={false}
-              onOpenFullProfile={handleOpenFullProfile}
-            />
+            {/* Toggle Contato / Copiloto */}
+            <div className="flex shrink-0 items-center gap-1 border-b border-border bg-card/50 p-1.5">
+              <button
+                type="button"
+                onClick={() => setSidePanel('contact')}
+                className={cn(
+                  'flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors',
+                  sidePanel === 'contact'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                )}
+              >
+                <User className="h-3.5 w-3.5" />
+                Contato
+              </button>
+              <button
+                type="button"
+                onClick={() => setSidePanel('copilot')}
+                className={cn(
+                  'flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors',
+                  sidePanel === 'copilot'
+                    ? 'bg-cyan-500 text-white'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                )}
+              >
+                <Bot className="h-3.5 w-3.5" />
+                Copiloto
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-hidden">
+              {sidePanel === 'contact' ? (
+                <ContactPanel
+                  conversation={activeDetail}
+                  loading={false}
+                  onOpenFullProfile={handleOpenFullProfile}
+                />
+              ) : (
+                <CopilotPanel
+                  contextType="conversation"
+                  {...(selectedId ? { contextId: selectedId } : {})}
+                  contextLabel={
+                    activeDetail?.contact?.name ?? activeDetail?.contact?.phone ?? undefined
+                  }
+                  compact
+                  showHeader={false}
+                  className="h-full"
+                />
+              )}
+            </div>
           </aside>
         </div>
 

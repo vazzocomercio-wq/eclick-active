@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BarChart3,
+  Bot,
   Cable,
   Sparkles,
   TrendingUp,
@@ -31,15 +32,17 @@ import { SalesTab } from '@/components/relatorios/sales-tab';
 import { AgentsTab } from '@/components/relatorios/agents-tab';
 import { ChannelsTab } from '@/components/relatorios/channels-tab';
 import { FunnelTab } from '@/components/relatorios/funnel-tab';
+import { AIFeedbackTab } from '@/components/relatorios/ai-feedback-tab';
 import { cn } from '@/lib/utils';
 
-type Tab = 'sales' | 'agents' | 'channels' | 'funnel';
+type Tab = 'sales' | 'agents' | 'channels' | 'funnel' | 'ai';
 
 const TABS: Array<{ id: Tab; label: string; icon: typeof BarChart3 }> = [
   { id: 'sales', label: 'Vendas', icon: TrendingUp },
   { id: 'agents', label: 'Equipe', icon: Users },
   { id: 'channels', label: 'Canais', icon: Cable },
   { id: 'funnel', label: 'Funil', icon: Workflow },
+  { id: 'ai', label: 'IA', icon: Bot },
 ];
 
 export default function RelatoriosPage() {
@@ -247,8 +250,22 @@ export default function RelatoriosPage() {
               onSelectPipeline={setSelectedPipelineId}
             />
           )}
+          {tab === 'ai' && <AIFeedbackTab periodDays={periodDaysFromPeriod(period)} />}
         </div>
       </div>
     </div>
   );
+}
+
+function periodDaysFromPeriod(period: Period): number {
+  // Calcula a janela em dias a partir do range — fallback 30
+  try {
+    const start = new Date(period.from);
+    const end = new Date(period.to);
+    const ms = end.getTime() - start.getTime();
+    if (Number.isFinite(ms) && ms > 0) return Math.max(1, Math.round(ms / 86_400_000));
+  } catch {
+    // ignore
+  }
+  return 30;
 }

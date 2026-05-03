@@ -24,6 +24,9 @@ import {
   FUNNEL_ANALYSIS_SCHEMA,
   FUNNEL_ANALYSIS_SYSTEM_PROMPT,
   FunnelAnalysisResult,
+  GAPS_SCHEMA,
+  GAPS_SYSTEM_PROMPT,
+  GapsResult,
   SUGGEST_SCHEMA,
   SUGGEST_SYSTEM_PROMPT,
   SUMMARIZE_SYSTEM_PROMPT,
@@ -642,20 +645,198 @@ export class AiService {
     if (!data) throw new NotFoundException(`Interaction ${interactionId} not found`);
 
     const metadata = (data.metadata as Record<string, unknown> | null) ?? {};
+    const feedbackAt = new Date().toISOString();
     const next = {
       ...metadata,
       feedback,
       feedback_comment: comment ?? null,
-      feedback_at: new Date().toISOString(),
+      feedback_at: feedbackAt,
     };
 
+    // Escreve nas COLUNAS explícitas (migration 019) + jsonb (compat).
+    // Colunas indexadas permitem agregações rápidas no relatório.
     const { error: updErr } = await this.supabase.adminClient
       .from('ai_interactions')
-      .update({ metadata: next })
+      .update({
+        metadata: next,
+        feedback,
+        feedback_comment: comment ?? null,
+        feedback_at: feedbackAt,
+      })
       .eq('org_id', orgId)
       .eq('id', interactionId);
 
     if (updErr) throw new InternalServerErrorException(updErr.message);
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // GET /ai/feedback/stats — métricas de feedback pra Relatórios
+  // ──────────────────────────────────────────────────────────
+
+  /**
+   * Agrega feedback por org num período (default 30 dias):
+   *   - total positivos / negativos
+   *   - taxa de aprovação (% positivos sobre total feedback dado)
+   *   - top 5 comentários negativos mais recentes
+   *   - série semanal de aprovação (line chart)
+   */
+  async getFeedbackStats(
+    orgId: string,
+    periodDays = 30,
+  ): Promise<{
+    total_positive: number;
+    total_negative: number;
+    approval_rate: number;
+    recent_negative_comments: Array<{ comment: string; at: string }>;
+    weekly: Array<{ week_start: string; positive: number; negative: number; approval_rate: number }>;
+  }> {
+    const sinceIso = new Date(Date.now() - periodDays * 86_400_000).toISOString();
+
+    const { data, error } = await this.supabase.adminClient
+      .from('ai_interactions')
+      .select('feedback, feedback_comment, feedback_at')
+      .eq('org_id', orgId)
+      .not('feedback', 'is', null)
+      .gte('feedback_at', sinceIso)
+      .order('feedback_at', { ascending: false });
+
+    if (error) throw new InternalServerErrorException(error.message);
+
+    const rows = ((data ?? []) as Array<{
+      feedback: 'positive' | 'negative';
+      feedback_comment: string | null;
+      feedback_at: string;
+    }>);
+
+    const total_positive = rows.filter((r) => r.feedback === 'positive').length;
+    const total_negative = rows.filter((r) => r.feedback === 'negative').length;
+    const total = total_positive + total_negative;
+    const approval_rate = total > 0 ? Math.round((total_positive / total) * 100) : 0;
+
+    const recent_negative_comments = rows
+      .filter((r) => r.feedback === 'negative' && r.feedback_comment && r.feedback_comment.trim())
+      .slice(0, 5)
+      .map((r) => ({ comment: r.feedback_comment!, at: r.feedback_at }));
+
+    // Buckets semanais (UTC week start)
+    const weekMap = new Map<string, { positive: number; negative: number }>();
+    for (const r of rows) {
+      const d = new Date(r.feedback_at);
+      const dayOfWeek = d.getUTCDay(); // 0=domingo
+      const monday = new Date(d);
+      monday.setUTCDate(d.getUTCDate() - ((dayOfWeek + 6) % 7));
+      monday.setUTCHours(0, 0, 0, 0);
+      const key = monday.toISOString().slice(0, 10);
+      const bucket = weekMap.get(key) ?? { positive: 0, negative: 0 };
+      if (r.feedback === 'positive') bucket.positive += 1;
+      else bucket.negative += 1;
+      weekMap.set(key, bucket);
+    }
+    const weekly = Array.from(weekMap.entries())
+      .map(([week_start, b]) => {
+        const t = b.positive + b.negative;
+        return {
+          week_start,
+          positive: b.positive,
+          negative: b.negative,
+          approval_rate: t > 0 ? Math.round((b.positive / t) * 100) : 0,
+        };
+      })
+      .sort((a, b) => a.week_start.localeCompare(b.week_start));
+
+    return { total_positive, total_negative, approval_rate, recent_negative_comments, weekly };
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // GET /ai/gaps/:conversationId — detecta gaps via IA (Haiku)
+  // ──────────────────────────────────────────────────────────
+
+  /**
+   * Cache em memória de gaps por conversa (TTL 5 min).
+   * Map<orgId::conversationId, { result, expiresAt }>.
+   */
+  private readonly gapsCache = new Map<
+    string,
+    { result: GapsResult; expiresAt: number }
+  >();
+
+  /**
+   * Analisa as últimas 20 mensagens da conversa via Haiku e identifica:
+   *   - Perguntas do cliente sem resposta adequada
+   *   - Dados do perfil do contato faltando (email, empresa, etc.)
+   *   - Ações sugeridas para o vendedor
+   *
+   * Cache de 5 min por conversa pra evitar custo de IA a cada toque.
+   */
+  async detectGaps(orgId: string, conversationId: string): Promise<GapsResult> {
+    const cacheKey = `${orgId}::${conversationId}`;
+    const cached = this.gapsCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.result;
+    }
+
+    const conv = await this.fetchConversationCore(orgId, conversationId);
+    const recent = await this.fetchRecentMessages(orgId, conversationId, 20);
+
+    // Perfil do contato (pra saber quais campos já estão preenchidos)
+    let contactProfile = '';
+    if (conv.contact_id) {
+      const { data: c } = await this.supabase.adminClient
+        .from('contacts')
+        .select('name, email, phone, company_id, tags')
+        .eq('org_id', orgId)
+        .eq('id', conv.contact_id)
+        .maybeSingle();
+      if (c) {
+        const fields: string[] = [];
+        const row = c as { name: string | null; email: string | null; phone: string | null; company_id: string | null; tags: string[] | null };
+        fields.push(`- name: ${row.name ?? '(faltando)'}`);
+        fields.push(`- email: ${row.email ?? '(faltando)'}`);
+        fields.push(`- phone: ${row.phone ?? '(faltando)'}`);
+        fields.push(`- company: ${row.company_id ? 'vinculada' : '(faltando)'}`);
+        fields.push(`- tags: ${(row.tags && row.tags.length > 0) ? row.tags.join(', ') : '(faltando)'}`);
+        contactProfile = fields.join('\n');
+      }
+    }
+
+    const userPrompt = [
+      'Conversa recente (cronológica, mais antiga → mais nova). O index é a posição na lista (0-based):',
+      recent.map((m, i) => `[${i}] ${formatMessageLine(m)}`).join('\n') || '(sem mensagens)',
+      '',
+      'Perfil do contato:',
+      contactProfile || '(sem dados de contato)',
+    ].join('\n');
+
+    let result: GapsResult;
+    try {
+      const { data } = await this.anthropic.complete<GapsResult>({
+        interaction_type: 'diagnose',
+        org_id: orgId,
+        system: GAPS_SYSTEM_PROMPT,
+        user: userPrompt,
+        schema: GAPS_SCHEMA,
+        max_tokens: 768,
+        context: { conversation_id: conversationId },
+      });
+      result = {
+        unanswered_questions: Array.isArray(data?.unanswered_questions) ? data.unanswered_questions : [],
+        missing_profile_data: Array.isArray(data?.missing_profile_data) ? data.missing_profile_data : [],
+        suggested_actions: Array.isArray(data?.suggested_actions) ? data.suggested_actions : [],
+      };
+    } catch (err) {
+      this.logger.warn(
+        `detectGaps failed (returning empty): ${err instanceof Error ? err.message : String(err)}`,
+      );
+      result = { unanswered_questions: [], missing_profile_data: [], suggested_actions: [] };
+    }
+
+    this.gapsCache.set(cacheKey, { result, expiresAt: Date.now() + 5 * 60_000 });
+    return result;
+  }
+
+  /** Invalida cache de gaps — chamado quando uma nova mensagem entra. */
+  invalidateGapsCache(orgId: string, conversationId: string): void {
+    this.gapsCache.delete(`${orgId}::${conversationId}`);
   }
 
   // ──────────────────────────────────────────────────────────
@@ -761,6 +942,10 @@ export class AiService {
       if (conv && conv.message_count > 0 && conv.message_count % 5 === 0) {
         void this.summarizeConversation(orgId, conversationId).catch(() => {});
       }
+
+      // Invalida cache de gaps — a próxima leitura recalcula incluindo a
+      // nova mensagem (mantém atualizado sem custo a cada turn).
+      this.invalidateGapsCache(orgId, conversationId);
 
       // Bloco G PARTE 1 — coleta proativa de dados:
       // Se há deal vinculado e o stage tem required_fields, tenta extrair
