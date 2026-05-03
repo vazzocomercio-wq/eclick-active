@@ -13,6 +13,7 @@ import { AiPersonaService } from '../ai-persona/ai-persona.service';
 import { AiSkillsService } from '../ai-skills/ai-skills.service';
 import { AppointmentsService } from '../appointments/appointments.service';
 import { AnthropicClient } from './anthropic.client';
+import { AiConciergeService } from './ai-concierge.service';
 import { DataCollectionService } from './data-collection.service';
 import type { AiSkill } from '@eclick-active/shared';
 import {
@@ -51,6 +52,7 @@ export class AiService {
     private readonly skills: AiSkillsService,
     private readonly dataCollection: DataCollectionService,
     private readonly appointmentsLookup: AppointmentsService,
+    private readonly concierge: AiConciergeService,
   ) {}
 
   // ──────────────────────────────────────────────────────────
@@ -1026,6 +1028,16 @@ export class AiService {
       void this.tryExtractRequiredFields(orgId, conversationId, messageId).catch((err) => {
         this.logger.warn(
           `data-collection extract failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+
+      // AI Concierge — primeira camada de inteligência conversacional.
+      // Decide se manda saudação automática (1ª msg) ou roteia o lead pra
+      // pipeline+stage certo (2ª msg). Roda só quando ai_concierge.enabled
+      // está ligado nos settings da org.
+      void this.concierge.handle(orgId, conversationId, messageId).catch((err) => {
+        this.logger.warn(
+          `concierge handle failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`,
         );
       });
 
