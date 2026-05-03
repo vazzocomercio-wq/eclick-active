@@ -1,10 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { InboxItem, Conversation } from '@eclick-active/shared';
+import type { InboxItem, Conversation, Message } from '@eclick-active/shared';
 import { conversationsApi } from '@/lib/api/conversations';
 import { ApiError } from '@/lib/api/client';
-import { createClient } from '@/lib/supabase/client';
+import { getSocket } from '@/lib/realtime/socket-client';
 
 export type InboxFilter =
   | 'all'
@@ -66,78 +66,114 @@ export function useInbox(): UseInboxResult {
     void refetch();
   }, [refetch]);
 
-  // Realtime: escuta mudanças em active.conversations
+  // Realtime via Socket.IO (namespace /events da nossa api).
+  //
+  // ATENÇÃO: NÃO usamos Supabase Realtime aqui — o schema custom `active`
+  // exige publication configurada no Postgres que não temos. A api emite
+  // `message:new` e `conversation:updated` via socket.io quando webhook
+  // entra ou worker insere. Esse hook escuta esses eventos e atualiza o
+  // inbox local sem refresh.
   useEffect(() => {
-    let supabase;
-    try {
-      supabase = createClient();
-    } catch {
-      return; // Sem env Supabase, sem realtime
-    }
-    const channel = supabase
-      .channel('inbox-conversations')
-      .on(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        'postgres_changes' as any,
-        { event: 'INSERT', schema: 'active', table: 'conversations' },
-        () => {
-          void refetch();
-        },
-      )
-      .on(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        'postgres_changes' as any,
-        { event: 'UPDATE', schema: 'active', table: 'conversations' },
-        (payload: { new: Conversation }) => {
-          const updated = payload.new;
-          setItems((prev) => {
-            const idx = prev.findIndex((i) => i.id === updated.id);
-            if (idx === -1) {
-              // Item não está na lista atual. Se virou archived e estamos em
-              // 'archived', precisamos refetch pra ele aparecer (ou reverso).
-              // Disparamos refetch de fora desse setItems pra evitar loop.
-              return prev;
-            }
+    let cancelled = false;
+    let cleanup: (() => void) | null = null;
 
-            // Item virou archived e o filtro ativo não é 'archived' — remove
-            if (updated.status === 'archived' && filter !== 'archived') {
-              return prev.filter((_, i) => i !== idx);
-            }
-            // Inverso: item deixou de ser archived e estamos em 'archived' — remove
-            if (updated.status !== 'archived' && filter === 'archived') {
-              return prev.filter((_, i) => i !== idx);
-            }
+    void (async () => {
+      const socket = await getSocket();
+      if (!socket || cancelled) return;
 
-            const merged: InboxItem = {
-              ...prev[idx]!,
-              status: updated.status,
-              priority: updated.priority,
-              assigned_to: updated.assigned_to,
-              unread_count: updated.unread_count,
-              ai_summary: updated.ai_summary,
-              ai_sentiment: updated.ai_sentiment,
-              ai_intent: updated.ai_intent,
-              ai_temperature: updated.ai_temperature,
-              ai_next_action: updated.ai_next_action,
-              tags: updated.tags,
-              last_message_at: updated.last_message_at,
-              first_response_at: updated.first_response_at,
-            };
-            const next = [...prev];
-            next[idx] = merged;
-            // Re-sort by last_message_at desc
-            return next.sort((a, b) =>
-              (b.last_message_at ?? b.created_at).localeCompare(
-                a.last_message_at ?? a.created_at,
-              ),
-            );
-          });
-        },
-      )
-      .subscribe();
+      const onConvUpdated = (payload: { conversation: Conversation }) => {
+        const updated = payload.conversation;
+        setItems((prev) => {
+          const idx = prev.findIndex((i) => i.id === updated.id);
+          // Conversa nova (criada via outbound start ou primeira inbound)
+          // → trigger refetch pra puxar o InboxItem completo (com contact join)
+          if (idx === -1) {
+            void refetch();
+            return prev;
+          }
+
+          // Item virou archived e o filtro ativo não é 'archived' — remove
+          if (updated.status === 'archived' && filter !== 'archived') {
+            return prev.filter((_, i) => i !== idx);
+          }
+          // Inverso: item deixou de ser archived e estamos em 'archived' — remove
+          if (updated.status !== 'archived' && filter === 'archived') {
+            return prev.filter((_, i) => i !== idx);
+          }
+
+          const merged: InboxItem = {
+            ...prev[idx]!,
+            status: updated.status,
+            priority: updated.priority,
+            assigned_to: updated.assigned_to,
+            unread_count: updated.unread_count,
+            ai_summary: updated.ai_summary,
+            ai_sentiment: updated.ai_sentiment,
+            ai_intent: updated.ai_intent,
+            ai_temperature: updated.ai_temperature,
+            ai_next_action: updated.ai_next_action,
+            tags: updated.tags,
+            last_message_at: updated.last_message_at,
+            first_response_at: updated.first_response_at,
+          };
+          const next = [...prev];
+          next[idx] = merged;
+          // Re-sort por last_message_at desc
+          return next.sort((a, b) =>
+            (b.last_message_at ?? b.created_at).localeCompare(
+              a.last_message_at ?? a.created_at,
+            ),
+          );
+        });
+      };
+
+      const onMessageNew = (payload: {
+        conversation_id: string;
+        message: Message;
+      }) => {
+        // Atualização incremental — bumpa last_message_at e re-sort.
+        // unread_count e last_message_preview vêm depois via conversation:updated
+        // (trigger SQL atualiza conversa logo após insert da mensagem).
+        setItems((prev) => {
+          const idx = prev.findIndex((i) => i.id === payload.conversation_id);
+          if (idx === -1) {
+            // Conversa nova — refetch pra puxar o InboxItem
+            void refetch();
+            return prev;
+          }
+          const next = [...prev];
+          next[idx] = {
+            ...prev[idx]!,
+            last_message_at:
+              payload.message.created_at ??
+              prev[idx]!.last_message_at ??
+              new Date().toISOString(),
+            // Bump unread só se for inbound. Outbound (agent/bot) não conta.
+            unread_count:
+              payload.message.direction === 'inbound'
+                ? prev[idx]!.unread_count + 1
+                : prev[idx]!.unread_count,
+          };
+          return next.sort((a, b) =>
+            (b.last_message_at ?? b.created_at).localeCompare(
+              a.last_message_at ?? a.created_at,
+            ),
+          );
+        });
+      };
+
+      socket.on('conversation:updated', onConvUpdated);
+      socket.on('message:new', onMessageNew);
+
+      cleanup = () => {
+        socket.off('conversation:updated', onConvUpdated);
+        socket.off('message:new', onMessageNew);
+      };
+    })();
 
     return () => {
-      void channel.unsubscribe();
+      cancelled = true;
+      cleanup?.();
     };
   }, [refetch, filter]);
 
