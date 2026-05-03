@@ -31,6 +31,33 @@ export function MessageInput({
   const [sending, setSending] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
+  /**
+   * Foca o textarea de forma robusta. requestAnimationFrame garante que
+   * o foco rode DEPOIS do React aplicar o último render (caso esteja
+   * desabilitado durante envio, por ex). Usado em vários momentos:
+   * mount, depois de enviar, quando o input volta a estar habilitado.
+   */
+  function focusInput(): void {
+    requestAnimationFrame(() => {
+      const ta = taRef.current;
+      if (!ta || ta.disabled) return;
+      ta.focus();
+    });
+  }
+
+  // 1) Foca no mount (conversa abriu)
+  useEffect(() => {
+    focusInput();
+  }, []);
+
+  // 2) Foca quando o input volta a ficar habilitado (terminou de enviar,
+  //    ou conversa carregou e disabled passou de true → false)
+  useEffect(() => {
+    if (!disabled && !sending) {
+      focusInput();
+    }
+  }, [disabled, sending]);
+
   // Aplica prefill (sugestão IA → input)
   useEffect(() => {
     if (prefill !== undefined && prefill !== '') {
@@ -69,6 +96,10 @@ export function MessageInput({
       console.error('Failed to send:', err);
     } finally {
       setSending(false);
+      // Re-foca após enviar (sucesso ou erro). O useEffect [disabled,sending]
+      // também cobre, mas chamar explícito aqui torna o comportamento
+      // imediato e independente de mudança de prop.
+      focusInput();
     }
   }
 
