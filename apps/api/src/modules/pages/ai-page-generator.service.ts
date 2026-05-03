@@ -475,15 +475,20 @@ ESTRUTURA DOS BLOCOS:
   private async callClaude(
     system: string,
     user: string,
-    schema: object,
+    _schema: object,
     maxTokens: number,
   ): Promise<unknown> {
+    // Nota: deliberadamente NÃO usamos output_config.format.json_schema porque
+    // ele exige additionalProperties: false em todo objeto, o que engessa
+    // campos flexíveis (content/settings de blocos). Em vez disso, reforçamos
+    // no system prompt que a IA deve retornar APENAS JSON e usamos extractJson
+    // para parsear com fallback.
+    const reinforcedSystem = `${system}\n\nIMPORTANTE: Sua resposta deve ser EXCLUSIVAMENTE um objeto JSON válido, sem markdown, sem \`\`\`json, sem texto explicativo. Apenas o JSON puro começando com { e terminando com }.`;
     const params: Record<string, unknown> = {
       model: SONNET_MODEL_ID,
       max_tokens: maxTokens,
-      system,
+      system: reinforcedSystem,
       messages: [{ role: 'user', content: user }],
-      output_config: { format: { type: 'json_schema', schema } },
     };
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
