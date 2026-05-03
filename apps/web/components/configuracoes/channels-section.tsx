@@ -5,21 +5,17 @@ import { useSearchParams } from 'next/navigation';
 import {
   AlertCircle,
   Cable,
-  Instagram,
   Loader2,
-  Mail,
   MessageCircle,
-  Music2,
   Pause,
-  Plus,
   Play,
-  QrCode,
   Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { ChannelStatus } from '@eclick-active/shared';
 import { BaileysConnectDialog } from './baileys-connect-dialog';
 import { ConnectEmailDialog } from './connect-email-dialog';
+import { ChannelBrandButton } from './channel-brand-button';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -159,55 +155,35 @@ export function ChannelsSection() {
           <h2 className="text-sm font-semibold">Canais Conectados</h2>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            size="sm"
+          <ChannelBrandButton
+            brand="whatsapp"
+            label="WhatsApp"
+            sublabel="Gratuito"
             onClick={() => setBaileysDialogOpen(true)}
-          >
-            <QrCode className="mr-2 h-3.5 w-3.5" />
-            WhatsApp Gratuito
-          </Button>
-          <Button size="sm" onClick={() => setDialogOpen(true)}>
-            <Plus className="mr-2 h-3.5 w-3.5" />
-            WhatsApp (Z-API)
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
+          />
+          <ChannelBrandButton
+            brand="whatsapp-zapi"
+            label="WhatsApp"
+            sublabel="Z-API"
+            onClick={() => setDialogOpen(true)}
+          />
+          <ChannelBrandButton
+            brand="instagram"
+            label="Instagram"
             onClick={connectInstagram}
-            disabled={connectingInstagram}
-            className="border-pink-500/30 text-pink-500 hover:bg-pink-500/10 hover:text-pink-600"
-          >
-            {connectingInstagram ? (
-              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Instagram className="mr-2 h-3.5 w-3.5" />
-            )}
-            Instagram
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
+            loading={connectingInstagram}
+          />
+          <ChannelBrandButton
+            brand="email"
+            label="Email"
             onClick={() => setEmailDialogOpen(true)}
-            className="border-blue-500/30 text-blue-500 hover:bg-blue-500/10 hover:text-blue-600"
-          >
-            <Mail className="mr-2 h-3.5 w-3.5" />
-            Email
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
+          />
+          <ChannelBrandButton
+            brand="tiktok"
+            label="TikTok"
             onClick={connectTiktok}
-            disabled={connectingTiktok}
-            className="border-foreground/30 hover:bg-foreground/5"
-          >
-            {connectingTiktok ? (
-              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Music2 className="mr-2 h-3.5 w-3.5" />
-            )}
-            TikTok
-          </Button>
+            loading={connectingTiktok}
+          />
         </div>
       </div>
 
