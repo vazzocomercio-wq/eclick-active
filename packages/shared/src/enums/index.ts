@@ -160,7 +160,9 @@ export type AIInteractionType =
   | 'diagnose'
   | 'train'
   | 'auto_respond'
-  | 'generate_automation';
+  | 'generate_automation'
+  | 'concierge_greeting'
+  | 'concierge_route';
 
 export type AIProvider = 'anthropic' | 'openai';
 

@@ -13,6 +13,13 @@ import { AiPersonaService } from '../ai-persona/ai-persona.service';
 const SONNET_MODEL_ID = 'claude-sonnet-4-6';
 const HISTORY_MAX_MESSAGES = 6;
 
+/** Limite de delay por humanização — evita persona com delay maluco travar request */
+const MAX_DELAY_MS = 30_000;
+
+/** Pricing Sonnet 4.6 (USD por milhão de tokens) — pra calcular custo log */
+const SONNET_INPUT_PER_MTOK = 3.0;
+const SONNET_OUTPUT_PER_MTOK = 15.0;
+
 type ConciergeState = 'idle' | 'awaiting_response' | 'routed';
 
 interface ConciergeSettings {
@@ -44,6 +51,12 @@ interface RouteDecision {
   temperature: ContactTemperature;
   bridge_message: string | null;
   reasoning: string;
+  /** Stats da chamada IA pra logar em ai_interactions */
+  _usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    latencyMs: number;
+  };
 }
 
 /**
@@ -169,32 +182,124 @@ export class AiConciergeService {
   }): Promise<void> {
     const { orgId, conversationId, conversation, settings, persona } = args;
 
-    let greeting = persona.greeting_message?.trim() ?? '';
-    if (!greeting) {
+    let greeting: string;
+    let usedAi = false;
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let latencyMs = 0;
+
+    const customGreeting = persona.greeting_message?.trim() ?? '';
+    if (customGreeting) {
+      // Interpola {{contact.name}} se houver
+      const name = await this.fetchContactName(orgId, conversation.contact_id);
+      greeting = customGreeting.replaceAll('{{contact.name}}', name ?? '');
+    } else {
       // Sem greeting customizada — gera na hora baseada na persona.
-      greeting = await this.generateGreeting(
+      const generated = await this.generateGreeting(
         persona,
         settings.business_context,
         await this.fetchContactName(orgId, conversation.contact_id),
       );
-    } else {
-      // Interpola {{contact.name}} se houver
-      const name = await this.fetchContactName(orgId, conversation.contact_id);
-      greeting = greeting.replaceAll('{{contact.name}}', name ?? '');
+      greeting = generated.text;
+      usedAi = generated.aiGenerated;
+      inputTokens = generated.inputTokens;
+      outputTokens = generated.outputTokens;
+      latencyMs = generated.latencyMs;
+    }
+
+    // Log da interação (custo + tokens) — só quando IA foi de fato chamada
+    if (usedAi) {
+      void this.logInteraction({
+        orgId,
+        interactionType: 'concierge_greeting',
+        inputTokens,
+        outputTokens,
+        latencyMs,
+        conversationId,
+        contactId: conversation.contact_id,
+        resultSummary: greeting,
+        metadata: {
+          source: 'ai_concierge',
+          persona_name: persona.name,
+          tone: persona.tone ?? null,
+        },
+      });
     }
 
     if (settings.auto_reply) {
+      // Humanização: persona pode ter response_delay_seconds (0-60s) que
+      // simula tempo de digitação. Sem delay (0), envia na hora.
+      await this.applyResponseDelay(persona);
       await this.sendOutbound(orgId, conversation, greeting);
     }
 
     await this.setConciergeState(orgId, conversationId, 'awaiting_response');
   }
 
+  /**
+   * Sleep baseado em persona.response_delay_seconds (cap em MAX_DELAY_MS).
+   * Simula tempo de digitação humano. Quando 0/null, retorna imediato.
+   */
+  private async applyResponseDelay(persona: AiAgentPersona): Promise<void> {
+    const seconds = Number(persona.response_delay_seconds ?? 0);
+    if (!Number.isFinite(seconds) || seconds <= 0) return;
+    const ms = Math.min(seconds * 1000, MAX_DELAY_MS);
+    await new Promise<void>((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Loga interação de IA em active.ai_interactions com custo + tokens.
+   * Best-effort — falha aqui não derruba o concierge.
+   */
+  private async logInteraction(args: {
+    orgId: string;
+    interactionType: 'concierge_greeting' | 'concierge_route';
+    inputTokens: number;
+    outputTokens: number;
+    latencyMs: number;
+    conversationId: string;
+    contactId: string | null;
+    resultSummary: string;
+    metadata: Record<string, unknown>;
+  }): Promise<void> {
+    const cost =
+      (args.inputTokens * SONNET_INPUT_PER_MTOK +
+        args.outputTokens * SONNET_OUTPUT_PER_MTOK) /
+      1_000_000;
+    try {
+      await this.supabase.adminClient.from('ai_interactions').insert({
+        org_id: args.orgId,
+        interaction_type: args.interactionType,
+        model: SONNET_MODEL_ID,
+        provider: 'anthropic',
+        input_tokens: args.inputTokens,
+        output_tokens: args.outputTokens,
+        cost_usd: Math.round(cost * 1_000_000) / 1_000_000,
+        latency_ms: args.latencyMs,
+        conversation_id: args.conversationId,
+        contact_id: args.contactId,
+        user_id: null,
+        result_summary: args.resultSummary.slice(0, 200),
+        metadata: args.metadata,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `logInteraction concierge falhou (não fatal): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
   private async generateGreeting(
     persona: AiAgentPersona,
     businessContext: string,
     contactName: string | null,
-  ): Promise<string> {
+  ): Promise<{
+    text: string;
+    inputTokens: number;
+    outputTokens: number;
+    latencyMs: number;
+    aiGenerated: boolean;
+  }> {
     const tonePt = this.tonePt(persona.tone);
     const role = persona.role ?? 'assistant';
     const personality = persona.personality ?? '';
@@ -218,6 +323,7 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
       ? `Cliente: ${contactName}`
       : 'Cliente novo (sem nome conhecido)';
 
+    const start = performance.now();
     try {
       const res = await this.getClient().messages.create({
         model: SONNET_MODEL_ID,
@@ -229,17 +335,30 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
         (b): b is Anthropic.TextBlock => b.type === 'text',
       );
       const text = block?.text?.trim() ?? '';
-      if (text) return text;
+      if (text) {
+        return {
+          text,
+          inputTokens: res.usage.input_tokens,
+          outputTokens: res.usage.output_tokens,
+          latencyMs: Math.round(performance.now() - start),
+          aiGenerated: true,
+        };
+      }
     } catch (err) {
       this.logger.warn(
         `generateGreeting fallback to fallback_message: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
 
-    return (
-      persona.fallback_message?.trim() ||
-      'Olá! Como posso te ajudar hoje?'
-    );
+    const fallback =
+      persona.fallback_message?.trim() || 'Olá! Como posso te ajudar hoje?';
+    return {
+      text: fallback,
+      inputTokens: 0,
+      outputTokens: 0,
+      latencyMs: Math.round(performance.now() - start),
+      aiGenerated: false,
+    };
   }
 
   // ──────────────────────────────────────────────────────────
@@ -284,6 +403,28 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
       return;
     }
 
+    // Log da chamada IA de roteamento (custo + tokens)
+    if (decision._usage) {
+      void this.logInteraction({
+        orgId,
+        interactionType: 'concierge_route',
+        inputTokens: decision._usage.inputTokens,
+        outputTokens: decision._usage.outputTokens,
+        latencyMs: decision._usage.latencyMs,
+        conversationId,
+        contactId: conversation.contact_id,
+        resultSummary: `${decision.intent_label} → ${decision.temperature}`,
+        metadata: {
+          source: 'ai_concierge',
+          pipeline_id: decision.pipeline_id,
+          stage_id: decision.stage_id,
+          intent_label: decision.intent_label,
+          temperature: decision.temperature,
+          reasoning: decision.reasoning,
+        },
+      });
+    }
+
     // 4. Cria deal nesse pipeline+stage (se contato ainda não tem deal ativo)
     const dealCreated = await this.createDealIfMissing({
       orgId,
@@ -309,6 +450,7 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
       settings.auto_reply &&
       decision.bridge_message
     ) {
+      await this.applyResponseDelay(persona);
       await this.sendOutbound(orgId, conversation, decision.bridge_message);
     }
 
@@ -386,6 +528,7 @@ ${historyText || '(sem histórico anterior)'}
 
 Decida o roteamento.`;
 
+    const start = performance.now();
     try {
       const res = await this.getClient().messages.create({
         model: SONNET_MODEL_ID,
@@ -393,6 +536,11 @@ Decida o roteamento.`;
         system,
         messages: [{ role: 'user', content: user }],
       });
+      const usage = {
+        inputTokens: res.usage.input_tokens,
+        outputTokens: res.usage.output_tokens,
+        latencyMs: Math.round(performance.now() - start),
+      };
       const block = res.content.find(
         (b): b is Anthropic.TextBlock => b.type === 'text',
       );
@@ -439,6 +587,7 @@ Decida o roteamento.`;
             ? d.bridge_message.trim()
             : null,
         reasoning: d.reasoning ?? '',
+        _usage: usage,
       };
     } catch (err) {
       this.logger.warn(
