@@ -64,6 +64,10 @@ USER worker
 
 EXPOSE 3030
 ENV WORKER_INTERNAL_PORT=3030
+# Em prod (Railway/k8s/etc): API service alcança via private network.
+# Bind em 0.0.0.0 pra aceitar tráfego cross-container. Auth via header
+# X-Internal-Key (INTERNAL_API_KEY) protege de acesso indevido.
+ENV WORKER_INTERNAL_BIND=0.0.0.0
 
 # Workers escreve heartbeat — fallback healthcheck via process tree
 HEALTHCHECK --interval=60s --timeout=5s --start-period=30s --retries=3 \

@@ -42,12 +42,17 @@ export class InternalServer {
       });
     });
 
+    // Em dev local: bind em 127.0.0.1 (loopback) — não expor publicamente.
+    // Em Railway/prod: bind em 0.0.0.0 — API service precisa alcançar via
+    // private networking (`http://workers.railway.internal:3030`). Auth via
+    // X-Internal-Key (INTERNAL_API_KEY) protege de acesso não autorizado.
+    const bindHost = process.env.WORKER_INTERNAL_BIND ?? '127.0.0.1';
     await new Promise<void>((resolve, reject) => {
       this.server!.once('error', reject);
-      this.server!.listen(this.options.port, '127.0.0.1', () => {
+      this.server!.listen(this.options.port, bindHost, () => {
         // eslint-disable-next-line no-console
         console.log(
-          `[internal-server] ouvindo em http://127.0.0.1:${this.options.port}`,
+          `[internal-server] ouvindo em http://${bindHost}:${this.options.port}`,
         );
         resolve();
       });

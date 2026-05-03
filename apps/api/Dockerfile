@@ -69,9 +69,8 @@ USER nestjs
 EXPOSE 3001
 ENV PORT=3001
 
-# Healthcheck simples (Nest expõe / por default mas pode 404 — ajustar
-# se houver endpoint /health específico)
+# Healthcheck via endpoint dedicado /health (AppController.health).
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:'+process.env.PORT).then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"
+  CMD node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 CMD ["node", "apps/api/dist/main.js"]
