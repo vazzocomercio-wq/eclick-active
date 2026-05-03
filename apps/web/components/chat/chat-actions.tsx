@@ -6,6 +6,7 @@ import {
   BookOpenCheck,
   Check,
   CheckCircle2,
+  ListTodo,
   Loader2,
   Sparkles,
   UserPlus,
@@ -14,6 +15,13 @@ import { toast } from 'sonner';
 import type { ConversationDetail } from '@eclick-active/shared';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { NewTaskDialog } from '@/components/tarefas/new-task-dialog';
 import { aiApi } from '@/lib/api/ai';
 import { conversationsApi } from '@/lib/api/conversations';
 import { ApiError } from '@/lib/api/client';
@@ -21,12 +29,25 @@ import { useTeamMembers } from '@/hooks/use-team-members';
 import { InitialsAvatar } from '@/components/contacts/initials-avatar';
 import { cn } from '@/lib/utils';
 
+/** Ações que o ChatPanel pode propagar pro drawer pai reagir (ex: fechar drawer ao resolver). */
+export type ChatActionEvent =
+  | 'summarize'
+  | 'resolve'
+  | 'mark-read'
+  | 'assign'
+  | 'archive'
+  | 'create-task';
+
 interface ChatActionsProps {
   conversation: ConversationDetail | null;
   /** Disparado quando uma mutação altera a conversation row (resolve/assign). */
   onUpdated?: (patch: Partial<ConversationDetail>) => void;
   /** Disparado com o resumo gerado — ChatPanel mostra como mensagem especial. */
   onSummary?: (summary: string) => void;
+  /** Genérico — drawer pai pode reagir (ex: refresh do deal após resolve). */
+  onAction?: (event: ChatActionEvent) => void;
+  /** Modo compacto: pills só com ícone + tooltip (drawer narrow). */
+  compact?: boolean;
 }
 
 /**
@@ -40,7 +61,13 @@ interface ChatActionsProps {
  * Estilo: pills pequenas em row, fundo card, hover com borda primária,
  * ícones lucide 14px (`h-3.5 w-3.5`).
  */
-export function ChatActions({ conversation, onUpdated, onSummary }: ChatActionsProps) {
+export function ChatActions({
+  conversation,
+  onUpdated,
+  onSummary,
+  onAction,
+  compact = false,
+}: ChatActionsProps) {
   const [summarizing, setSummarizing] = useState(false);
   const [resolving, setResolving] = useState(false);
   const [marking, setMarking] = useState(false);
@@ -48,12 +75,15 @@ export function ChatActions({ conversation, onUpdated, onSummary }: ChatActionsP
   const [assigning, setAssigning] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [confirmArchiveOpen, setConfirmArchiveOpen] = useState(false);
+  const [createTaskOpen, setCreateTaskOpen] = useState(false);
 
   const conversationId = conversation?.id ?? null;
   const isResolved = conversation?.status === 'resolved' || conversation?.status === 'closed';
   const isArchived = conversation?.status === 'archived';
   const isUnread = (conversation?.unread_count ?? 0) > 0;
   const assignedTo = conversation?.assigned_to ?? null;
+  const contactId = conversation?.contact_id ?? null;
+  const contactName = conversation?.contact?.name ?? null;
 
   async function handleSummarize() {
     if (!conversationId) return;
@@ -69,6 +99,7 @@ export function ChatActions({ conversation, onUpdated, onSummary }: ChatActionsP
       }
       onSummary?.(r.summary);
       onUpdated?.({ ai_summary: r.summary });
+      onAction?.('summarize');
       toast.success('Resumo gerado', {
         description: 'A IA produziu um novo resumo da conversa.',
       });
@@ -85,6 +116,7 @@ export function ChatActions({ conversation, onUpdated, onSummary }: ChatActionsP
     try {
       const updated = await conversationsApi.update(conversationId, { status: 'resolved' });
       onUpdated?.(updated);
+      onAction?.('resolve');
       toast.success('Conversa resolvida');
     } catch (err) {
       toast.error('Falha ao resolver', { description: extractMessage(err) });
@@ -99,6 +131,7 @@ export function ChatActions({ conversation, onUpdated, onSummary }: ChatActionsP
     try {
       const updated = await conversationsApi.markAsRead(conversationId);
       onUpdated?.(updated);
+      onAction?.('mark-read');
       toast.success('Marcada como lida');
     } catch (err) {
       toast.error('Falha ao marcar', { description: extractMessage(err) });
@@ -113,6 +146,7 @@ export function ChatActions({ conversation, onUpdated, onSummary }: ChatActionsP
     try {
       const updated = await conversationsApi.update(conversationId, { status: 'archived' });
       onUpdated?.(updated);
+      onAction?.('archive');
       toast.success('Conversa arquivada');
     } catch (err) {
       toast.error('Falha ao arquivar', { description: extractMessage(err) });
@@ -130,6 +164,7 @@ export function ChatActions({ conversation, onUpdated, onSummary }: ChatActionsP
         assigned_to: userId,
       });
       onUpdated?.(updated);
+      onAction?.('assign');
       toast.success(userId ? 'Conversa atribuída' : 'Atribuição removida');
       setAssignOpen(false);
     } catch (err) {
@@ -142,53 +177,104 @@ export function ChatActions({ conversation, onUpdated, onSummary }: ChatActionsP
   if (!conversationId) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5 border-t border-border bg-card/50 px-3 py-2">
-      <Pill onClick={handleSummarize} disabled={summarizing} loading={summarizing}>
-        <Sparkles className="h-3.5 w-3.5 text-primary" />
-        Resumir
-      </Pill>
-
-      <Pill onClick={handleResolve} disabled={resolving || isResolved} loading={resolving}>
-        <CheckCircle2
-          className={cn('h-3.5 w-3.5', isResolved ? 'text-emerald-500' : 'text-muted-foreground')}
-        />
-        {isResolved ? 'Resolvida' : 'Resolver'}
-      </Pill>
-
-      <Pill onClick={handleMarkRead} disabled={marking || !isUnread} loading={marking}>
-        <BookOpenCheck className="h-3.5 w-3.5 text-muted-foreground" />
-        {isUnread ? `Marcar lida (${conversation?.unread_count})` : 'Lida'}
-      </Pill>
-
-      <AssignPill
-        open={assignOpen}
-        onOpenChange={setAssignOpen}
-        assignedTo={assignedTo}
-        assigning={assigning}
-        onAssign={handleAssign}
-      />
-
-      <Pill
-        onClick={() => setConfirmArchiveOpen(true)}
-        disabled={archiving || isArchived}
-        loading={archiving}
+    <TooltipProvider delayDuration={300}>
+      <div
+        className={cn(
+          'flex flex-wrap items-center gap-1.5 border-t border-border bg-card/50',
+          compact ? 'px-2 py-1.5' : 'px-3 py-2',
+        )}
       >
-        <Archive
-          className={cn('h-3.5 w-3.5', isArchived ? 'text-amber-500' : 'text-muted-foreground')}
-        />
-        {isArchived ? 'Arquivada' : 'Arquivar'}
-      </Pill>
+        <Pill
+          onClick={handleSummarize}
+          disabled={summarizing}
+          loading={summarizing}
+          compact={compact}
+          tooltip="Resumir conversa"
+        >
+          <Sparkles className="h-3.5 w-3.5 text-primary" />
+          {!compact && 'Resumir'}
+        </Pill>
 
-      <ConfirmDialog
-        open={confirmArchiveOpen}
-        onOpenChange={setConfirmArchiveOpen}
-        title="Arquivar conversa?"
-        description='A conversa some da inbox principal mas pode ser recuperada no filtro "Arquivadas". As mensagens são preservadas pra relatórios.'
-        confirmLabel="Arquivar"
-        icon={Archive}
-        onConfirm={handleArchiveConfirmed}
-      />
-    </div>
+        <Pill
+          onClick={handleResolve}
+          disabled={resolving || isResolved}
+          loading={resolving}
+          compact={compact}
+          tooltip={isResolved ? 'Já resolvida' : 'Resolver conversa'}
+        >
+          <CheckCircle2
+            className={cn('h-3.5 w-3.5', isResolved ? 'text-emerald-500' : 'text-muted-foreground')}
+          />
+          {!compact && (isResolved ? 'Resolvida' : 'Resolver')}
+        </Pill>
+
+        <Pill
+          onClick={handleMarkRead}
+          disabled={marking || !isUnread}
+          loading={marking}
+          compact={compact}
+          tooltip={isUnread ? `Marcar como lida (${conversation?.unread_count})` : 'Já lida'}
+        >
+          <BookOpenCheck className="h-3.5 w-3.5 text-muted-foreground" />
+          {!compact && (isUnread ? `Marcar lida (${conversation?.unread_count})` : 'Lida')}
+        </Pill>
+
+        <Pill
+          onClick={() => setCreateTaskOpen(true)}
+          compact={compact}
+          tooltip="Criar tarefa vinculada"
+        >
+          <ListTodo className="h-3.5 w-3.5 text-muted-foreground" />
+          {!compact && 'Criar tarefa'}
+        </Pill>
+
+        <AssignPill
+          open={assignOpen}
+          onOpenChange={setAssignOpen}
+          assignedTo={assignedTo}
+          assigning={assigning}
+          onAssign={handleAssign}
+          compact={compact}
+        />
+
+        <Pill
+          onClick={() => setConfirmArchiveOpen(true)}
+          disabled={archiving || isArchived}
+          loading={archiving}
+          compact={compact}
+          tooltip={isArchived ? 'Já arquivada' : 'Arquivar conversa'}
+        >
+          <Archive
+            className={cn('h-3.5 w-3.5', isArchived ? 'text-amber-500' : 'text-muted-foreground')}
+          />
+          {!compact && (isArchived ? 'Arquivada' : 'Arquivar')}
+        </Pill>
+
+        <ConfirmDialog
+          open={confirmArchiveOpen}
+          onOpenChange={setConfirmArchiveOpen}
+          title="Arquivar conversa?"
+          description='A conversa some da inbox principal mas pode ser recuperada no filtro "Arquivadas". As mensagens são preservadas pra relatórios.'
+          confirmLabel="Arquivar"
+          icon={Archive}
+          onConfirm={handleArchiveConfirmed}
+        />
+
+        <NewTaskDialog
+          open={createTaskOpen}
+          onOpenChange={setCreateTaskOpen}
+          {...(contactId ? { defaultContactId: contactId } : {})}
+          {...(conversationId ? { defaultConversationId: conversationId } : {})}
+          {...(contactName ? { defaultTitle: `Follow-up com ${contactName}` } : {})}
+          onCreated={() => {
+            onAction?.('create-task');
+            toast.success('Tarefa criada', {
+              description: 'Vinculada à conversa atual.',
+            });
+          }}
+        />
+      </div>
+    </TooltipProvider>
   );
 }
 
@@ -197,10 +283,12 @@ interface PillProps {
   disabled?: boolean;
   loading?: boolean;
   children: React.ReactNode;
+  compact?: boolean;
+  tooltip?: string;
 }
 
-function Pill({ onClick, disabled, loading, children }: PillProps) {
-  return (
+function Pill({ onClick, disabled, loading, children, compact = false, tooltip }: PillProps) {
+  const button = (
     <Button
       type="button"
       onClick={onClick}
@@ -208,7 +296,8 @@ function Pill({ onClick, disabled, loading, children }: PillProps) {
       variant="ghost"
       size="sm"
       className={cn(
-        'h-7 gap-1.5 rounded-full border border-transparent px-2.5 text-xs',
+        'gap-1.5 rounded-full border border-transparent text-xs',
+        compact ? 'h-7 w-7 p-0' : 'h-7 px-2.5',
         'hover:border-border hover:bg-card disabled:opacity-50',
       )}
     >
@@ -216,6 +305,14 @@ function Pill({ onClick, disabled, loading, children }: PillProps) {
       {!loading && children}
       {loading && <span className="opacity-60">{children}</span>}
     </Button>
+  );
+
+  if (!tooltip) return button;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{button}</TooltipTrigger>
+      <TooltipContent side="top">{tooltip}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -225,9 +322,10 @@ interface AssignPillProps {
   assignedTo: string | null;
   assigning: boolean;
   onAssign: (userId: string | null) => void;
+  compact?: boolean;
 }
 
-function AssignPill({ open, onOpenChange, assignedTo, assigning, onAssign }: AssignPillProps) {
+function AssignPill({ open, onOpenChange, assignedTo, assigning, onAssign, compact = false }: AssignPillProps) {
   const { members, loading } = useTeamMembers();
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -248,11 +346,21 @@ function AssignPill({ open, onOpenChange, assignedTo, assigning, onAssign }: Ass
 
   return (
     <div ref={containerRef} className="relative">
-      <Pill onClick={() => onOpenChange(!open)} disabled={assigning} loading={assigning}>
+      <Pill
+        onClick={() => onOpenChange(!open)}
+        disabled={assigning}
+        loading={assigning}
+        compact={compact}
+        tooltip={
+          current
+            ? `Atribuída a ${current.display_name ?? current.email ?? 'usuário'}`
+            : 'Atribuir conversa'
+        }
+      >
         <UserPlus className="h-3.5 w-3.5 text-muted-foreground" />
-        {current
+        {!compact && (current
           ? (current.display_name ?? current.email ?? 'Atribuído')
-          : 'Atribuir'}
+          : 'Atribuir')}
       </Pill>
 
       {open && (

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { MessageSquare, Sparkles, X } from 'lucide-react';
+import { MessageSquare } from 'lucide-react';
 import type { ConversationDetail } from '@eclick-active/shared';
 import { conversationsApi } from '@/lib/api/conversations';
 import { useChat } from '@/hooks/use-chat';
@@ -11,7 +11,8 @@ import { TransferBriefingBanner } from '@/components/inbox/transfer-briefing-ban
 import { MessageList } from '@/components/inbox/message-list';
 import { MessageInput } from '@/components/inbox/message-input';
 import { AISuggestionBar } from '@/components/inbox/ai-suggestion-bar';
-import { ChatActions } from './chat-actions';
+import { ChatActions, type ChatActionEvent } from './chat-actions';
+import { InlineAISummary } from './inline-ai-summary';
 import { cn } from '@/lib/utils';
 
 interface AISuggestion {
@@ -57,6 +58,12 @@ export interface ChatPanelProps {
    */
   onConversationLoad?: (c: ConversationDetail) => void;
 
+  /**
+   * Callback genérico pra ações do ChatActions (resolve/resumir/criar tarefa
+   * /etc.) — drawer pai pode reagir, ex: refresh do deal após resolve.
+   */
+  onAction?: (event: ChatActionEvent) => void;
+
   /** Classes extras no container raiz. */
   className?: string;
 }
@@ -85,6 +92,7 @@ export function ChatPanel({
   panelOpen,
   onTogglePanel,
   onConversationLoad,
+  onAction,
   className,
 }: ChatPanelProps) {
   // Default: header em full, sem header em compact (drawer já tem o seu)
@@ -94,10 +102,10 @@ export function ChatPanel({
   const [detailLoading, setDetailLoading] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState<AISuggestion | null>(null);
   const [prefill, setPrefill] = useState<string>('');
-  /** Resumo gerado pela IA — exibido como "mensagem especial" no chat
-   * (efêmero; é descartado ao trocar de conversa). A persistência fica
-   * em `conversation.ai_summary` no backend. */
-  const [aiSummaryEphemeral, setAiSummaryEphemeral] = useState<string | null>(null);
+  /** Resumo gerado AGORA via "Resumir" — toma precedência sobre `detail.ai_summary`. */
+  const [freshSummary, setFreshSummary] = useState<string | null>(null);
+  /** Permite o usuário dispensar o card de resumo até o próximo "Resumir" ou troca de conversa. */
+  const [summaryDismissed, setSummaryDismissed] = useState(false);
 
   const chat = useChat(conversationId);
 
@@ -105,11 +113,13 @@ export function ChatPanel({
   useEffect(() => {
     if (!conversationId) {
       setDetail(null);
-      setAiSummaryEphemeral(null);
+      setFreshSummary(null);
+      setSummaryDismissed(false);
       return;
     }
-    // Trocou de conversa — limpa resumo efêmero
-    setAiSummaryEphemeral(null);
+    // Trocou de conversa — limpa estado efêmero
+    setFreshSummary(null);
+    setSummaryDismissed(false);
     setDetailLoading(true);
     let cancelled = false;
     conversationsApi
@@ -200,20 +210,34 @@ export function ChatPanel({
         }}
       />
 
-      {aiSummaryEphemeral && (
-        <SummaryBubble
-          summary={aiSummaryEphemeral}
-          onDismiss={() => setAiSummaryEphemeral(null)}
+      {/* Card inline de resumo IA — aparece quando há ai_summary persistido
+          OU quando "Resumir" foi clicado. Posicionado entre as mensagens e
+          o input pra ficar sempre visível sem competir com a leitura. */}
+      {!summaryDismissed && (freshSummary ?? detail?.ai_summary) && (
+        <InlineAISummary
+          summary={freshSummary ?? detail?.ai_summary ?? ''}
+          fresh={!!freshSummary}
+          generatedAt={detail?.updated_at ?? null}
+          intent={detail?.ai_intent ?? null}
+          sentiment={detail?.ai_sentiment ?? null}
+          temperature={detail?.ai_temperature ?? null}
+          onDismiss={() => setSummaryDismissed(true)}
+          compact={compact}
         />
       )}
 
       {showActions && (
         <ChatActions
           conversation={detail}
+          compact={compact}
           onUpdated={(patch) => {
             setDetail((d) => (d ? ({ ...d, ...patch } as ConversationDetail) : d));
           }}
-          onSummary={(summary) => setAiSummaryEphemeral(summary)}
+          onSummary={(summary) => {
+            setFreshSummary(summary);
+            setSummaryDismissed(false);
+          }}
+          onAction={onAction}
         />
       )}
 
@@ -244,42 +268,6 @@ export function ChatPanel({
         onPrefillConsumed={() => setPrefill('')}
         compact={compact}
       />
-    </div>
-  );
-}
-
-/**
- * Bolha especial pro resumo gerado pela IA. Aparece imediatamente após o
- * `ChatActions.Resumir` retornar — visualmente é uma "mensagem do sistema"
- * dentro do fluxo do chat, com badge "✨ Resumo IA" e botão de dispensar.
- *
- * Não é persistida (a versão persistente vive em `conversation.ai_summary`).
- */
-function SummaryBubble({ summary, onDismiss }: { summary: string; onDismiss: () => void }) {
-  return (
-    <div className="border-t border-primary/30 bg-primary/5 px-4 py-3">
-      <div className="flex items-start gap-2">
-        <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
-          <Sparkles className="h-3 w-3" />
-        </span>
-        <div className="flex-1 min-w-0">
-          <div className="mb-1 flex items-center gap-2">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">
-              Resumo IA
-            </span>
-            <span className="text-[10px] text-muted-foreground">recém gerado</span>
-          </div>
-          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{summary}</p>
-        </div>
-        <button
-          type="button"
-          onClick={onDismiss}
-          aria-label="Dispensar resumo"
-          className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
     </div>
   );
 }

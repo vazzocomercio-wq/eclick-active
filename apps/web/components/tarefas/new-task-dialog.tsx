@@ -40,6 +40,10 @@ interface NewTaskDialogProps {
   defaultDueDate?: string;
   /** Pré-preenche a hora (HH:mm) — usado pelo calendário (visão Semana/Dia) */
   defaultDueTime?: string;
+  /** Pré-preenche o título (ex: "Follow-up com {nome do contato}") */
+  defaultTitle?: string;
+  /** Vincula a tarefa a uma conversa (preserva contexto pra histórico) */
+  defaultConversationId?: string;
   onCreated: () => void;
 }
 
@@ -76,6 +80,8 @@ export function NewTaskDialog({
   defaultDealId,
   defaultDueDate,
   defaultDueTime,
+  defaultTitle,
+  defaultConversationId,
   onCreated,
 }: NewTaskDialogProps) {
   const [form, setForm] = useState<FormState>(EMPTY);
@@ -88,6 +94,7 @@ export function NewTaskDialog({
     if (!open) return;
     setForm({
       ...EMPTY,
+      title: defaultTitle ?? '',
       contact_id: defaultContactId ?? null,
       deal_id: defaultDealId ?? null,
       due_date: defaultDueDate ?? '',
@@ -105,7 +112,7 @@ export function NewTaskDialog({
     void supabase.auth.getUser().then(({ data }) => {
       if (data.user) setCurrentUserId(data.user.id);
     });
-  }, [open, defaultContactId, defaultDealId, defaultDueDate, defaultDueTime]);
+  }, [open, defaultContactId, defaultDealId, defaultDueDate, defaultDueTime, defaultTitle]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -130,6 +137,7 @@ export function NewTaskDialog({
       ...(form.description.trim() ? { description: form.description.trim() } : {}),
       ...(form.contact_id ? { contact_id: form.contact_id } : {}),
       ...(form.deal_id ? { deal_id: form.deal_id } : {}),
+      ...(defaultConversationId ? { conversation_id: defaultConversationId } : {}),
       ...(dueIso ? { due_date: dueIso } : {}),
     };
 
