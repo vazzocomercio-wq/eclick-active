@@ -337,7 +337,7 @@ export class ConversationsService {
         sender_type: 'agent',
         sender_id: senderId,
         content_type: 'text',
-        content: { text: dto.message },
+        content: { body: dto.message },
         plain_text: dto.message,
         status: initialStatus,
         is_internal_note: isNote,
@@ -362,7 +362,7 @@ export class ConversationsService {
           channel_id: dto.channel_id,
           contact_id: dto.contact_id,
           content_type: 'text',
-          content: { text: dto.message },
+          content: { body: dto.message },
         });
         const { data: updated } = await this.supabase.adminClient
           .from('messages')

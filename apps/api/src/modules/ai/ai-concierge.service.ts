@@ -523,7 +523,7 @@ Decida o roteamento.`;
         direction: 'outbound',
         sender_type: 'bot',
         content_type: 'text',
-        content: { text },
+        content: { body: text },
         plain_text: text,
         status: 'pending',
         metadata: { source: 'ai_concierge' },
@@ -545,7 +545,7 @@ Decida o roteamento.`;
         channel_id: conversation.channel_id,
         contact_id: conversation.contact_id,
         content_type: 'text',
-        content: { text },
+        content: { body: text },
       });
       await this.supabase.adminClient
         .from('messages')
