@@ -144,6 +144,10 @@ export class ConversationsService {
       q = q.eq('assigned_to', filters.assigned_to);
     }
 
+    if (filters.starred === 'true') {
+      q = q.eq('is_starred', true);
+    }
+
     const { data, error, count } = await q;
     if (error) {
       this.logger.error(`getInbox failed: ${error.message}`);
@@ -156,6 +160,35 @@ export class ConversationsService {
       limit,
       total: count ?? 0,
     };
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // toggleStar (Melhoria 9) — alterna is_starred
+  // ──────────────────────────────────────────────────────────
+
+  async toggleStar(orgId: string, id: string): Promise<Conversation> {
+    const { data: current, error: fetchErr } = await this.supabase.adminClient
+      .from('conversations')
+      .select('is_starred')
+      .eq('org_id', orgId)
+      .eq('id', id)
+      .maybeSingle();
+    if (fetchErr) throw new InternalServerErrorException(fetchErr.message);
+    if (!current) throw new NotFoundException(`Conversation ${id} not found`);
+
+    const next = !(current as { is_starred: boolean }).is_starred;
+    const { data, error } = await this.supabase.adminClient
+      .from('conversations')
+      .update({ is_starred: next })
+      .eq('org_id', orgId)
+      .eq('id', id)
+      .select('*')
+      .single();
+    if (error || !data) {
+      this.logger.error(`toggleStar failed: ${error?.message}`);
+      throw new InternalServerErrorException(error?.message ?? 'Failed to toggle star');
+    }
+    return data as Conversation;
   }
 
   // ──────────────────────────────────────────────────────────

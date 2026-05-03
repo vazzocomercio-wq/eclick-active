@@ -5,11 +5,11 @@ import {
   Check,
   CheckCheck,
   Clock,
-  FileText,
   Lock,
   Sparkles,
 } from 'lucide-react';
 import type { Message, MessageDeliveryStatus } from '@eclick-active/shared';
+import { MessageMedia } from '@/components/chat/message-media';
 import { cn } from '@/lib/utils';
 
 interface MessageBubbleProps {
@@ -69,81 +69,9 @@ export function MessageBubble({ message }: MessageBubbleProps) {
 }
 
 function MessageContent({ message }: { message: Message }) {
-  const c = message.content as Record<string, unknown> | null;
-
-  switch (message.content_type) {
-    case 'text':
-      return (
-        <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
-          {typeof c?.body === 'string' ? c.body : message.plain_text}
-        </p>
-      );
-
-    case 'image':
-      return (
-        <div className="flex flex-col gap-1">
-          {typeof c?.url === 'string' && (
-            <img
-              src={c.url as string}
-              alt=""
-              className="max-h-64 max-w-full rounded-md object-cover"
-              loading="lazy"
-            />
-          )}
-          {typeof c?.caption === 'string' && (
-            <p className="whitespace-pre-wrap text-sm">{c.caption}</p>
-          )}
-        </div>
-      );
-
-    case 'audio':
-      return typeof c?.url === 'string' ? (
-        <audio src={c.url as string} controls className="max-w-full" />
-      ) : (
-        <span className="text-sm italic text-muted-foreground">áudio sem URL</span>
-      );
-
-    case 'video':
-      return typeof c?.url === 'string' ? (
-        <video src={c.url as string} controls className="max-h-64 max-w-full rounded-md" />
-      ) : null;
-
-    case 'document':
-      return typeof c?.url === 'string' ? (
-        <a
-          href={c.url as string}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-2 rounded-md border border-border bg-background/50 px-2 py-1.5 text-xs hover:bg-background"
-        >
-          <FileText className="h-3.5 w-3.5 shrink-0" />
-          <span className="truncate">
-            {typeof c?.filename === 'string' ? c.filename : 'documento'}
-          </span>
-        </a>
-      ) : null;
-
-    case 'location':
-      return (
-        <p className="text-sm italic text-muted-foreground">
-          📍 {typeof c?.name === 'string' ? c.name : 'localização'}
-        </p>
-      );
-
-    case 'system':
-      return (
-        <p className="text-xs italic text-muted-foreground">
-          {typeof c?.event === 'string' ? c.event : 'evento do sistema'}
-        </p>
-      );
-
-    default:
-      return (
-        <p className="text-xs italic text-muted-foreground">
-          [{message.content_type}] {message.plain_text ?? '—'}
-        </p>
-      );
-  }
+  // Toda renderização rica delegada a MessageMedia, que decide o tipo via
+  // content_type / metadata.type / auto-detect a partir de URL no texto.
+  return <MessageMedia message={message} />;
 }
 
 function DeliveryStatus({ status }: { status: MessageDeliveryStatus }) {

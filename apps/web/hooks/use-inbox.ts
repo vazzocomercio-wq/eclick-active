@@ -6,7 +6,13 @@ import { conversationsApi } from '@/lib/api/conversations';
 import { ApiError } from '@/lib/api/client';
 import { createClient } from '@/lib/supabase/client';
 
-export type InboxFilter = 'all' | 'mine' | 'unassigned' | 'resolved' | 'archived';
+export type InboxFilter =
+  | 'all'
+  | 'mine'
+  | 'unassigned'
+  | 'resolved'
+  | 'archived'
+  | 'starred';
 
 interface UseInboxResult {
   items: InboxItem[];
@@ -39,6 +45,7 @@ export function useInbox(): UseInboxResult {
         ...(filter === 'mine' ? { mine: true } : {}),
         ...(filter === 'resolved' ? { status: 'resolved' } : {}),
         ...(filter === 'archived' ? { status: 'archived' } : {}),
+        ...(filter === 'starred' ? { starred: true } : {}),
       });
       if (reqId !== reqIdRef.current) return;
       setItems(result.data);

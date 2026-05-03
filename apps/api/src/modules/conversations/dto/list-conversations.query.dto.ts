@@ -69,4 +69,9 @@ export class ListConversationsQueryDto {
   @IsOptional()
   @IsUUID()
   contact_id?: string;
+
+  /** Quando 'true', mostra só conversas favoritas (is_starred=true). */
+  @IsOptional()
+  @IsBooleanString()
+  starred?: string;
 }

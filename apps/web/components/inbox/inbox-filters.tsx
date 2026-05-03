@@ -1,6 +1,6 @@
 'use client';
 
-import { Search, X } from 'lucide-react';
+import { Search, Star, X, type LucideIcon } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import type { InboxFilter } from '@/hooks/use-inbox';
@@ -12,10 +12,11 @@ interface InboxFiltersProps {
   onSearchChange: (q: string) => void;
 }
 
-const FILTERS: Array<{ value: InboxFilter; label: string }> = [
+const FILTERS: Array<{ value: InboxFilter; label: string; icon?: LucideIcon }> = [
   { value: 'all', label: 'Todas' },
   { value: 'mine', label: 'Minhas' },
   { value: 'unassigned', label: 'Não atribuídas' },
+  { value: 'starred', label: 'Favoritas', icon: Star },
   { value: 'resolved', label: 'Resolvidas' },
   { value: 'archived', label: 'Arquivadas' },
 ];
@@ -51,21 +52,35 @@ export function InboxFilters({
 
       {/* Filtros */}
       <div className="flex flex-wrap gap-1">
-        {FILTERS.map((f) => (
-          <button
-            key={f.value}
-            type="button"
-            onClick={() => onFilterChange(f.value)}
-            className={cn(
-              'rounded-md px-2 py-1 text-xs font-medium transition-colors',
-              filter === f.value
-                ? 'bg-primary/15 text-primary'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-            )}
-          >
-            {f.label}
-          </button>
-        ))}
+        {FILTERS.map((f) => {
+          const Icon = f.icon;
+          const active = filter === f.value;
+          const isStar = f.value === 'starred';
+          return (
+            <button
+              key={f.value}
+              type="button"
+              onClick={() => onFilterChange(f.value)}
+              className={cn(
+                'inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors',
+                active
+                  ? isStar
+                    ? 'bg-yellow-400/15 text-yellow-500'
+                    : 'bg-primary/15 text-primary'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+              )}
+            >
+              {Icon && (
+                <Icon
+                  className="h-3 w-3"
+                  fill={active && isStar ? '#FFC107' : 'none'}
+                  strokeWidth={active && isStar ? 0 : 2}
+                />
+              )}
+              {f.label}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

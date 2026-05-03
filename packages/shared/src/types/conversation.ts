@@ -45,6 +45,8 @@ export interface Conversation {
   first_response_at: ISODateString | null;
   resolved_at: ISODateString | null;
   last_message_at: ISODateString | null;
+  /** Marcação rápida de favorito por agente (Melhoria 9). */
+  is_starred: boolean;
   created_at: ISODateString;
   updated_at: ISODateString;
 }
@@ -69,6 +71,7 @@ export interface InboxItem {
   tags: string[];
   last_message_at: ISODateString | null;
   first_response_at: ISODateString | null;
+  is_starred: boolean;
   created_at: ISODateString;
   channel_type: ChannelType;
   // Contact (join)

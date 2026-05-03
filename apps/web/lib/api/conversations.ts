@@ -21,6 +21,8 @@ export interface InboxParams {
   mine?: boolean;
   /** Filtra conversas de um contato específico (drawer do deal/contato). */
   contact_id?: string;
+  /** Filtra somente conversas favoritas (is_starred=true). */
+  starred?: boolean;
 }
 
 export interface CreateConversationInput {
@@ -43,6 +45,7 @@ export const conversationsApi = {
         assigned_to: params.assigned_to,
         contact_id: params.contact_id,
         mine: params.mine ? 'true' : undefined,
+        starred: params.starred ? 'true' : undefined,
       },
       signal,
     });
@@ -70,6 +73,11 @@ export const conversationsApi = {
 
   markAsRead(id: string) {
     return api.post<Conversation>(`/conversations/${id}/read`);
+  },
+
+  /** POST /conversations/:id/star — toggle favorito (Melhoria 9) */
+  toggleStar(id: string) {
+    return api.post<Conversation>(`/conversations/${id}/star`);
   },
 };
 

@@ -97,4 +97,14 @@ export class ConversationsController {
   ): Promise<Conversation> {
     return this.service.markAsRead(user.org_id, id);
   }
+
+  // POST /conversations/:id/star — alterna favorito (Melhoria 9)
+  @Post(':id/star')
+  @HttpCode(HttpStatus.OK)
+  toggleStar(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<Conversation> {
+    return this.service.toggleStar(user.org_id, id);
+  }
 }

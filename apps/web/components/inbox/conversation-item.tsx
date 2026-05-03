@@ -1,9 +1,14 @@
 'use client';
 
+import { useState } from 'react';
+import { Star } from 'lucide-react';
 import type { InboxItem } from '@eclick-active/shared';
+import { toast } from 'sonner';
 import { InitialsAvatar } from '@/components/contacts/initials-avatar';
 import { TemperatureBadge } from '@/components/contacts/temperature-badge';
-import { ChannelIcon } from './channel-icon';
+import { ChannelIcon } from '@/components/ui/channel-icon';
+import { conversationsApi } from '@/lib/api/conversations';
+import { ApiError } from '@/lib/api/client';
 import { formatRelativeTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
@@ -13,36 +18,96 @@ interface ConversationItemProps {
   onSelect: () => void;
   /** Preview da última mensagem — não vem no v_inbox; passar separado se cacheado. */
   preview?: string | null;
+  /** Disparado após toggleStar — pai pode atualizar a lista localmente. */
+  onStarChanged?: (id: string, nextStarred: boolean) => void;
 }
 
-export function ConversationItem({ item, active, onSelect, preview }: ConversationItemProps) {
+export function ConversationItem({
+  item,
+  active,
+  onSelect,
+  preview,
+  onStarChanged,
+}: ConversationItemProps) {
   const hasUnread = (item.unread_count ?? 0) > 0;
+  const [starred, setStarred] = useState(item.is_starred ?? false);
+  const [pulsing, setPulsing] = useState(false);
+
+  async function handleToggleStar(e: React.MouseEvent) {
+    e.stopPropagation();
+    const next = !starred;
+    // Optimistic update + animação
+    setStarred(next);
+    if (next) {
+      setPulsing(true);
+      setTimeout(() => setPulsing(false), 200);
+    }
+    onStarChanged?.(item.id, next);
+    try {
+      await conversationsApi.toggleStar(item.id);
+    } catch (err) {
+      // Revert on failure
+      setStarred(!next);
+      onStarChanged?.(item.id, !next);
+      toast.error('Falha ao favoritar', {
+        description: err instanceof ApiError ? err.message : 'Tente novamente',
+      });
+    }
+  }
 
   return (
-    <button
-      type="button"
+    <div
       onClick={onSelect}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') onSelect();
+      }}
       className={cn(
-        'flex w-full gap-3 border-b border-border/50 px-3 py-2.5 text-left transition-colors',
+        'group relative flex w-full cursor-pointer gap-3 border-b border-border/50 px-3 py-2.5 text-left transition-colors',
         active ? 'bg-card' : 'hover:bg-card/50',
         active && 'border-l-2 border-l-primary',
       )}
     >
-      {/* Avatar */}
+      {/* Estrela favorita — canto superior direito */}
+      <button
+        type="button"
+        onClick={handleToggleStar}
+        aria-label={starred ? 'Remover favorito' : 'Marcar como favorito'}
+        aria-pressed={starred}
+        className={cn(
+          'absolute right-2 top-2 z-10 inline-flex items-center justify-center rounded-md p-1 transition-all',
+          'hover:bg-muted',
+          starred
+            ? 'text-yellow-400 opacity-100'
+            : 'text-muted-foreground opacity-0 group-hover:opacity-100',
+        )}
+      >
+        <Star
+          className={cn(
+            'h-3.5 w-3.5 transition-transform duration-200',
+            pulsing && 'scale-[1.3]',
+          )}
+          fill={starred ? '#FFC107' : 'none'}
+          strokeWidth={starred ? 0 : 2}
+        />
+      </button>
+
+      {/* Avatar com badge de canal */}
       <div className="relative shrink-0">
         <InitialsAvatar
           name={item.contact_name}
           src={item.contact_avatar}
           className="h-10 w-10 text-xs"
         />
-        <span className="absolute -bottom-0.5 -right-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-background ring-1 ring-border">
-          <ChannelIcon type={item.channel_type} className="h-3 w-3" />
+        <span className="absolute -bottom-0.5 -right-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-background ring-2 ring-border">
+          <ChannelIcon type={item.channel_type} size="sm" tooltip className="h-2.5 w-2.5" />
         </span>
       </div>
 
       {/* Conteúdo */}
-      <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-        <div className="flex items-center justify-between gap-2">
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <div className="flex items-center justify-between gap-2 pr-6">
           <span
             className={cn(
               'truncate text-sm',
@@ -78,6 +143,6 @@ export function ConversationItem({ item, active, onSelect, preview }: Conversati
           </div>
         )}
       </div>
-    </button>
+    </div>
   );
 }
