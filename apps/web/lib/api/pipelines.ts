@@ -86,6 +86,7 @@ export interface CreatePipelineInput {
 
 export interface UpdatePipelineInput {
   name?: string;
+  description?: string;
   is_default?: boolean;
 }
 
@@ -98,6 +99,7 @@ export interface CreateStageInput {
 
 export interface UpdateStageInput {
   name?: string;
+  description?: string;
   color?: string;
   probability?: number;
   sla_hours?: number | null;

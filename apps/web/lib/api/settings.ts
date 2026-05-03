@@ -28,12 +28,32 @@ export interface AutoCreateDealSetting {
   ai_position?: boolean;
 }
 
+/**
+ * Setting do AI Concierge (em organizations.settings.ai_concierge).
+ *
+ * Quando enabled, em cada msg inbound a IA atua como recepcionista:
+ *   1. Cumprimenta o cliente com pergunta de sondagem (se auto_reply)
+ *   2. Aguarda resposta
+ *   3. Classifica a resposta e DECIDE qual pipeline+stage encaixar o lead
+ *      lendo as descrições dos pipelines da org + business_context.
+ */
+export interface AiConciergeSetting {
+  enabled: boolean;
+  /** Se false, concierge não envia mensagem (modo silent até habilitar). */
+  auto_reply: boolean;
+  /** Envia mensagem de transição ao rotear o lead. Default true. */
+  send_bridge_message: boolean;
+  /** Texto livre que descreve o negócio (vai pro prompt da IA). */
+  business_context: string;
+}
+
 export interface UpdateOrgInput {
   name?: string;
   slug?: string;
   /** Mergeado em settings (raso). Use shape conhecido como `auto_create_deal`. */
   settings?: {
     auto_create_deal?: AutoCreateDealSetting;
+    ai_concierge?: AiConciergeSetting;
     [key: string]: unknown;
   };
 }

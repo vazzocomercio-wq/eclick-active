@@ -165,6 +165,7 @@ export class PipelinesService {
 
     const patch: Record<string, unknown> = {};
     if (dto.name !== undefined) patch.name = dto.name;
+    if (dto.description !== undefined) patch.description = dto.description;
     if (dto.is_default !== undefined) patch.is_default = dto.is_default;
     if (dto.settings !== undefined) patch.settings = dto.settings;
 

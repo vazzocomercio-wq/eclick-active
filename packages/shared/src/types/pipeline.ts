@@ -10,6 +10,11 @@ export interface Pipeline {
   org_id: UUID;
   workspace_id: UUID | null;
   name: string;
+  /**
+   * Descrição livre do pipeline (texto). Usada pela IA do AI Concierge
+   * pra rotear leads inteligentemente entre os pipelines da org. Migration 028.
+   */
+  description: string | null;
   is_default: boolean;
   settings: Json;
   /**
@@ -29,6 +34,11 @@ export interface PipelineStage {
   id: UUID;
   pipeline_id: UUID;
   name: string;
+  /**
+   * Descrição livre do stage (texto). Usada pela IA do AI Concierge pra
+   * escolher onde encaixar o lead. Migration 028.
+   */
+  description: string | null;
   /** Ordem visual no Kanban (0-indexed) */
   position: number;
   /** Hex color (ex: "#00E5FF") usado no Kanban */

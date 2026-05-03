@@ -11,6 +11,7 @@ import {
   ChevronRight,
   Settings,
   Sliders,
+  Sparkles,
   Webhook as WebhookIcon,
   Workflow,
 } from 'lucide-react';
@@ -23,6 +24,7 @@ import { CustomFieldsAdminSection } from '@/components/configuracoes/custom-fiel
 import { AutoLeadSection } from '@/components/configuracoes/auto-lead-section';
 import { WebhooksSection } from '@/components/configuracoes/webhooks-section';
 import { CalendarIntegrationsSection } from '@/components/configuracoes/calendar-integrations-section';
+import { ConciergeSection } from '@/components/configuracoes/concierge-section';
 import { cn } from '@/lib/utils';
 
 type Section =
@@ -30,6 +32,7 @@ type Section =
   | 'channels'
   | 'ai'
   | 'agente-ia'
+  | 'concierge'
   | 'agenda'
   | 'custom-fields'
   | 'webhooks'
@@ -49,6 +52,12 @@ const SECTIONS: Array<{
     label: 'Agente de IA',
     icon: BotMessageSquare,
     description: 'Persona, horário, teste',
+  },
+  {
+    id: 'concierge',
+    label: 'Concierge IA',
+    icon: Sparkles,
+    description: 'Saudação + roteamento de leads',
   },
   {
     id: 'agenda',
@@ -190,6 +199,10 @@ export default function ConfiguracoesPage() {
             {section === 'agenda' && <CalendarIntegrationsSection />}
 
             {section === 'agente-ia' && <AgenteIaLink />}
+
+            {section === 'concierge' && (
+              <ConciergeSection org={org} onSaved={reloadOrg} />
+            )}
 
             {section === 'custom-fields' && <CustomFieldsAdminSection />}
 

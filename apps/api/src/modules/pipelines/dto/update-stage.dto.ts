@@ -19,6 +19,16 @@ export class UpdateStageDto {
   @MaxLength(100)
   name?: string;
 
+  /**
+   * Descrição livre do stage. Usada pela IA do AI Concierge pra escolher
+   * onde encaixar o lead. Ex: "Cliente já demonstrou interesse e tem
+   * orçamento aprovado".
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+
   @IsOptional()
   @IsString()
   @Matches(HEX_COLOR, { message: 'color deve estar no formato #RRGGBB' })

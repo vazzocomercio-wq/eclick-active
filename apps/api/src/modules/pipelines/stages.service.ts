@@ -74,6 +74,7 @@ export class StagesService {
 
     const patch: Record<string, unknown> = {};
     if (dto.name !== undefined) patch.name = dto.name;
+    if (dto.description !== undefined) patch.description = dto.description;
     if (dto.color !== undefined) patch.color = dto.color;
     if (dto.probability !== undefined) patch.probability = dto.probability;
     if (dto.sla_hours !== undefined) patch.sla_hours = dto.sla_hours; // null permitido

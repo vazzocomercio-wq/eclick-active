@@ -7,6 +7,16 @@ export class UpdatePipelineDto {
   @MaxLength(100)
   name?: string;
 
+  /**
+   * Descrição livre do pipeline. Usada pela IA do AI Concierge pra rotear
+   * leads inteligentemente. Ex: "Pipeline para clientes B2B enterprise,
+   * ticket > 50k, ciclo longo".
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+
   @IsOptional()
   @IsBoolean()
   is_default?: boolean;
