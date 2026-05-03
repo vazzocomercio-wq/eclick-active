@@ -225,7 +225,24 @@ export class BaileysSession {
     const candidates = brPhoneCandidates(digits);
     for (const candidate of candidates) {
       const r = await this.checkSingle(candidate);
-      if (r.exists) return r;
+      if (r.exists) {
+        // Workaround pra "shadow accounts" BR: quando o input é formato
+        // moderno (13 dig com 9), forçar o JID construído com o 9 mesmo
+        // que onWhatsApp tenha retornado JID legacy (12 dig sem 9). Em
+        // alguns casos a conta legacy existe no servidor do WhatsApp com
+        // foto/dados antigos preservados, mas o usuário ATIVO está só no
+        // JID moderno — mensagens pro legacy "vão" mas não entregam.
+        //
+        // Critério: candidate tem 13 dig começando com 55 e 9 após DDD.
+        if (
+          candidate.length === 13 &&
+          candidate.startsWith('55') &&
+          candidate[4] === '9'
+        ) {
+          return { ...r, jid: `${candidate}@s.whatsapp.net` };
+        }
+        return r;
+      }
     }
     return { exists: false };
   }
