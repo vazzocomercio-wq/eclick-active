@@ -20,6 +20,16 @@ interface BroadcastInput {
   payload: unknown;
 }
 
+interface InboundProcessedInput {
+  org_id: string;
+  conversation_id: string;
+  contact_id: string;
+  message_id: string;
+  channel_id: string;
+  channel_type: string;
+  message_text: string;
+}
+
 export async function broadcastRealtime(input: BroadcastInput): Promise<boolean> {
   const url = process.env.INTERNAL_API_URL;
   const key = process.env.INTERNAL_API_KEY;
@@ -59,6 +69,58 @@ export async function broadcastRealtime(input: BroadcastInput): Promise<boolean>
     // eslint-disable-next-line no-console
     console.warn(
       `[internal-api] broadcast event=${input.event} erro: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return false;
+  }
+}
+
+/**
+ * Avisa a api que uma mensagem inbound foi persistida pelo worker.
+ * A api dispara: ai.processInbound (classify+suggest+concierge) e
+ * automations.checkTriggers (trigger=message_received).
+ *
+ * Best-effort: erro aqui não bloqueia o processamento da próxima mensagem.
+ */
+export async function notifyInboundProcessed(
+  input: InboundProcessedInput,
+): Promise<boolean> {
+  const url = process.env.INTERNAL_API_URL;
+  const key = process.env.INTERNAL_API_KEY;
+  if (!url || !key) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[internal-api] env ausente: URL=${!!url} KEY=${!!key} — inbound-processed descartado`,
+    );
+    return false;
+  }
+  try {
+    // eslint-disable-next-line no-console
+    console.log(
+      `[internal-api] → POST ${url}/internal/inbound-processed conv=${input.conversation_id} msg=${input.message_id}`,
+    );
+    const res = await fetch(`${url}/internal/inbound-processed`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Internal-Key': key,
+      },
+      body: JSON.stringify(input),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[internal-api] inbound-processed falhou: ${res.status} ${res.statusText} body=${body.slice(0, 200)}`,
+      );
+      return false;
+    }
+    // eslint-disable-next-line no-console
+    console.log('[internal-api] ✓ inbound-processed OK');
+    return true;
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[internal-api] inbound-processed erro: ${err instanceof Error ? err.message : String(err)}`,
     );
     return false;
   }

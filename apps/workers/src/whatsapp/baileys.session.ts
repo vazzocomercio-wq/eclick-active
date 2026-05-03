@@ -10,7 +10,10 @@ import {
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import { getSupabase } from '../supabase.js';
-import { broadcastRealtime } from './internal-api-client.js';
+import {
+  broadcastRealtime,
+  notifyInboundProcessed,
+} from './internal-api-client.js';
 import { loadAuthState, type BaileysAuthHandle } from './baileys-auth-state.js';
 
 interface SessionContext {
@@ -342,6 +345,22 @@ export class BaileysSession {
       event: 'message:new',
       payload: { conversation_id: conversationId, message: inserted },
     });
+
+    // 5) Avisa a api pra rodar o pipeline de IA (classify + concierge) e
+    //    automations (trigger=message_received). Sem isso, mensagens
+    //    do WhatsApp Gratuito não disparam nada do lado da api.
+    const insertedMessageId = (inserted as { id?: string } | null)?.id;
+    if (insertedMessageId) {
+      void notifyInboundProcessed({
+        org_id: this.ctx.orgId,
+        conversation_id: conversationId,
+        contact_id: contactId,
+        message_id: insertedMessageId,
+        channel_id: this.ctx.channelId,
+        channel_type: 'whatsapp_free',
+        message_text: parsed.kind === 'text' ? parsed.body : '',
+      });
+    }
   }
 
   // ──────────────────────────────────────────────────────────
