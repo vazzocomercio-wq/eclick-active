@@ -371,31 +371,21 @@ export class ConversationsService {
           content_type: 'text',
           content: { body: dto.message },
         });
-        const { data: updated } = await this.supabase.adminClient
-          .from('messages')
-          .update({
-            status: 'sent',
-            channel_message_id: result.channel_message_id,
-            delivered_at: new Date().toISOString(),
-          })
-          .eq('id', message.id)
-          .select('*')
-          .single();
-        if (updated) message = updated as Message;
+        message = await this.updateMessageStatus(message, {
+          status: 'sent',
+          channel_message_id: result.channel_message_id,
+          delivered_at: new Date().toISOString(),
+          error_code: null,
+          error_message: null,
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         this.logger.warn(`startConversation dispatch failed: ${msg}`);
-        const { data: failed } = await this.supabase.adminClient
-          .from('messages')
-          .update({
-            status: 'failed',
-            error_code: 'start_dispatch_error',
-            error_message: msg,
-          })
-          .eq('id', message.id)
-          .select('*')
-          .single();
-        if (failed) message = failed as Message;
+        message = await this.updateMessageStatus(message, {
+          status: 'failed',
+          error_code: 'start_dispatch_error',
+          error_message: msg,
+        });
         // NÃO joga exception — devolve a mensagem com status=failed pra UI
         // mostrar erro inline no toast/feedback.
       }
@@ -408,6 +398,37 @@ export class ConversationsService {
     });
 
     return { conversation, message, reused };
+  }
+
+  /**
+   * Update de status em active.messages com partition pruning.
+   *
+   * `messages` é PARTITION BY RANGE (created_at) — o WHERE precisa
+   * incluir `created_at` pra o planner achar a partição correta. Sem
+   * isso, o `.update().select().single()` do PostgREST retorna null
+   * silenciosamente e a mensagem fica pra sempre no status original.
+   *
+   * Mesmo padrão de MessagesService.updateStatus.
+   */
+  private async updateMessageStatus(
+    persisted: Message,
+    patch: Record<string, unknown>,
+  ): Promise<Message> {
+    const { data, error } = await this.supabase.adminClient
+      .from('messages')
+      .update(patch)
+      .eq('org_id', persisted.org_id)
+      .eq('id', persisted.id)
+      .eq('created_at', persisted.created_at)
+      .select('*')
+      .single();
+    if (error || !data) {
+      this.logger.error(
+        `startConversation update message status falhou: ${error?.message ?? 'sem dados retornados'}`,
+      );
+      return persisted;
+    }
+    return data as Message;
   }
 
   private async fetchContact(orgId: string, contactId: string): Promise<Contact> {

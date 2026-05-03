@@ -663,7 +663,9 @@ Decida o roteamento.`;
       return;
     }
 
-    // Persiste a mensagem outbound como sender_type=bot
+    // Persiste a mensagem outbound como sender_type=bot. Retornamos id +
+    // created_at — created_at é necessário pro partition pruning no UPDATE
+    // de status (active.messages é PARTITION BY RANGE created_at).
     const { data: persisted, error: persistErr } = await this.supabase.adminClient
       .from('messages')
       .insert({
@@ -677,7 +679,7 @@ Decida o roteamento.`;
         status: 'pending',
         metadata: { source: 'ai_concierge' },
       })
-      .select('id')
+      .select('id, created_at')
       .single();
 
     if (persistErr || !persisted) {
@@ -686,7 +688,10 @@ Decida o roteamento.`;
       );
       return;
     }
-    const messageId = (persisted as { id: string }).id;
+    const { id: messageId, created_at: messageCreatedAt } = persisted as {
+      id: string;
+      created_at: string;
+    };
 
     try {
       const result = await this.dispatcher.send({
@@ -696,25 +701,35 @@ Decida o roteamento.`;
         content_type: 'text',
         content: { body: text },
       });
-      await this.supabase.adminClient
+      const { error: updErr } = await this.supabase.adminClient
         .from('messages')
         .update({
           status: 'sent',
           channel_message_id: result.channel_message_id,
           delivered_at: new Date().toISOString(),
         })
-        .eq('id', messageId);
+        .eq('org_id', orgId)
+        .eq('id', messageId)
+        .eq('created_at', messageCreatedAt);
+      if (updErr) {
+        this.logger.warn(`concierge: mark sent falhou: ${updErr.message}`);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.warn(`concierge: dispatch falhou: ${msg}`);
-      await this.supabase.adminClient
+      const { error: updErr } = await this.supabase.adminClient
         .from('messages')
         .update({
           status: 'failed',
           error_code: 'concierge_dispatch_error',
           error_message: msg,
         })
-        .eq('id', messageId);
+        .eq('org_id', orgId)
+        .eq('id', messageId)
+        .eq('created_at', messageCreatedAt);
+      if (updErr) {
+        this.logger.warn(`concierge: mark failed falhou: ${updErr.message}`);
+      }
     }
   }
 
