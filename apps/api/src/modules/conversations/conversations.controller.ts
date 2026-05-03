@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -126,5 +127,18 @@ export class ConversationsController {
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<Conversation> {
     return this.service.toggleStar(user.org_id, id);
+  }
+
+  /**
+   * DELETE /conversations/:id — exclui PERMANENTEMENTE a conversa
+   * e todas as mensagens (FK CASCADE). Não é recuperável.
+   */
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  delete(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<void> {
+    return this.service.delete(user.org_id, id);
   }
 }

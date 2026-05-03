@@ -553,6 +553,36 @@ export class ConversationsService {
   // MARK AS READ
   // ──────────────────────────────────────────────────────────
 
+  // ──────────────────────────────────────────────────────────
+  // DELETE — exclui conversa + mensagens (CASCADE no banco)
+  // ──────────────────────────────────────────────────────────
+
+  async delete(orgId: string, id: string): Promise<void> {
+    // Confirma que existe e pertence à org antes de deletar
+    await this.findByIdRaw(orgId, id);
+
+    const { error } = await this.supabase.adminClient
+      .from('conversations')
+      .delete()
+      .eq('org_id', orgId)
+      .eq('id', id);
+
+    if (error) {
+      this.logger.error(`delete failed: ${error.message}`);
+      throw new InternalServerErrorException(
+        error.message ?? 'Failed to delete conversation',
+      );
+    }
+
+    // Emit pra inbox remover de todas as sessões abertas
+    this.events.emitToOrg(orgId, 'conversation:updated', {
+      conversation: { id, status: 'archived', org_id: orgId } as unknown as Conversation,
+    });
+    // ATENÇÃO: messages FK em conversations tem ON DELETE CASCADE no schema —
+    // todas as mensagens da conversa são removidas junto. Idem deals que
+    // tinham conversation_id (esse vira null por ON DELETE SET NULL).
+  }
+
   async markAsRead(orgId: string, id: string): Promise<Conversation> {
     await this.findByIdRaw(orgId, id);
 

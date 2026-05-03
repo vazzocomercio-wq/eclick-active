@@ -122,9 +122,18 @@ export default function ConversasPage() {
                 if (ev === 'archive') {
                   if (inbox.filter !== 'archived') inbox.removeLocal(selectedId);
                   setSelectedId(null);
+                } else if (ev === 'unarchive') {
+                  // Volta pra 'open' — sai do filtro 'archived' se estiver lá
+                  if (inbox.filter === 'archived') inbox.removeLocal(selectedId);
+                  setSelectedId(null);
                 } else if (ev === 'resolve') {
                   if (inbox.filter !== 'resolved') inbox.removeLocal(selectedId);
                   setSelectedId(null);
+                } else if (ev === 'delete') {
+                  // Excluído permanentemente — remove de qualquer filtro e fecha
+                  inbox.removeLocal(selectedId);
+                  setSelectedId(null);
+                  setActiveDetail(null);
                 } else if (ev === 'mark-read') {
                   inbox.patchLocal(selectedId, { unread_count: 0 });
                 }

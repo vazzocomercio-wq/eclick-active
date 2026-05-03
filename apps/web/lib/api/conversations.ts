@@ -103,6 +103,14 @@ export const conversationsApi = {
   toggleStar(id: string) {
     return api.post<Conversation>(`/conversations/${id}/star`);
   },
+
+  /**
+   * DELETE /conversations/:id — exclui permanentemente. Mensagens vão
+   * junto via FK CASCADE no banco. Irreversível.
+   */
+  remove(id: string) {
+    return api.delete<void>(`/conversations/${id}`);
+  },
 };
 
 export type {

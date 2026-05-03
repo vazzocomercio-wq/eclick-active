@@ -9,6 +9,7 @@ import {
   ListTodo,
   Loader2,
   Sparkles,
+  Trash2,
   UserPlus,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -36,6 +37,8 @@ export type ChatActionEvent =
   | 'mark-read'
   | 'assign'
   | 'archive'
+  | 'unarchive'
+  | 'delete'
   | 'create-task';
 
 interface ChatActionsProps {
@@ -75,6 +78,8 @@ export function ChatActions({
   const [assigning, setAssigning] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [confirmArchiveOpen, setConfirmArchiveOpen] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
 
   const conversationId = conversation?.id ?? null;
@@ -153,6 +158,44 @@ export function ChatActions({
       throw err; // ConfirmDialog mantém aberto se rejeitar
     } finally {
       setArchiving(false);
+    }
+  }
+
+  /**
+   * Desarquivar — volta status pra 'open'. Sem confirmação porque é
+   * ação reversível e barata (oposto de arquivar).
+   */
+  async function handleUnarchive() {
+    if (!conversationId || !isArchived) return;
+    setArchiving(true);
+    try {
+      const updated = await conversationsApi.update(conversationId, { status: 'open' });
+      onUpdated?.(updated);
+      onAction?.('unarchive');
+      toast.success('Conversa desarquivada');
+    } catch (err) {
+      toast.error('Falha ao desarquivar', { description: extractMessage(err) });
+    } finally {
+      setArchiving(false);
+    }
+  }
+
+  /**
+   * Excluir permanentemente — DELETE /conversations/:id. Cascade no banco
+   * remove todas as mensagens. Irreversível, daí o confirm destructive.
+   */
+  async function handleDeleteConfirmed() {
+    if (!conversationId) return;
+    setDeleting(true);
+    try {
+      await conversationsApi.remove(conversationId);
+      onAction?.('delete');
+      toast.success('Conversa excluída permanentemente');
+    } catch (err) {
+      toast.error('Falha ao excluir', { description: extractMessage(err) });
+      throw err;
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -238,26 +281,48 @@ export function ChatActions({
         />
 
         <Pill
-          onClick={() => setConfirmArchiveOpen(true)}
-          disabled={archiving || isArchived}
+          onClick={isArchived ? handleUnarchive : () => setConfirmArchiveOpen(true)}
+          disabled={archiving}
           loading={archiving}
           compact={compact}
-          tooltip={isArchived ? 'Já arquivada' : 'Arquivar conversa'}
+          tooltip={isArchived ? 'Desarquivar (volta pra inbox)' : 'Arquivar conversa'}
         >
           <Archive
             className={cn('h-3.5 w-3.5', isArchived ? 'text-amber-500' : 'text-muted-foreground')}
           />
-          {!compact && (isArchived ? 'Arquivada' : 'Arquivar')}
+          {!compact && (isArchived ? 'Desarquivar' : 'Arquivar')}
+        </Pill>
+
+        <Pill
+          onClick={() => setConfirmDeleteOpen(true)}
+          disabled={deleting}
+          loading={deleting}
+          compact={compact}
+          tooltip="Excluir permanentemente"
+        >
+          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+          {!compact && 'Excluir'}
         </Pill>
 
         <ConfirmDialog
           open={confirmArchiveOpen}
           onOpenChange={setConfirmArchiveOpen}
           title="Arquivar conversa?"
-          description='A conversa some da inbox principal mas pode ser recuperada no filtro "Arquivadas". As mensagens são preservadas pra relatórios.'
+          description='A conversa some da inbox principal mas pode ser recuperada no filtro "Arquivadas". Quando o cliente mandar uma nova mensagem, a conversa volta automaticamente pra inbox.'
           confirmLabel="Arquivar"
           icon={Archive}
           onConfirm={handleArchiveConfirmed}
+        />
+
+        <ConfirmDialog
+          open={confirmDeleteOpen}
+          onOpenChange={setConfirmDeleteOpen}
+          title="Excluir conversa permanentemente?"
+          description="Esta ação é IRREVERSÍVEL. Todas as mensagens dessa conversa também serão removidas. O contato em si NÃO é afetado — só esta conversa."
+          confirmLabel="Sim, excluir"
+          variant="destructive"
+          icon={Trash2}
+          onConfirm={handleDeleteConfirmed}
         />
 
         <NewTaskDialog
