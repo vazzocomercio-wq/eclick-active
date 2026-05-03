@@ -1,211 +1,291 @@
 # HANDOFF — eclick-active
 
-> Documento de continuidade entre sessões do Claude Code. Lê isso primeiro ao começar nova sessão.
-> Última atualização: 2026-05-02
+> Documento de continuidade entre sessões. Lê isso primeiro ao começar nova sessão.
+> Última atualização: **2026-05-03** (sessão extensa de fixes + features)
 
 ---
 
-## Estado atual
+## Bug ativo no momento do handoff (PRIORIDADE)
 
-**Última migration**: `014_ai_persona_and_business_hours.sql` (criada — usuário precisa rodar no Studio)
-**Próxima migration**: `015_*.sql`
+**Sintoma**: mensagens outbound enviadas via `/conversations/start` (botão "Nova conversa" no Inbox) **não chegam ao destinatário** mesmo com Baileys retornando `OK + channel_message_id`.
 
-**Branches**: `main` no eclick-active (não master).
+**Onde paramos**:
+- Caso de teste real: contato **Deiselene** (`Deise`), número `+55 71 99409-5636`
+- Confirmado que Vazzo (canal pareado) e Deiselene **conversam normalmente via WhatsApp manual** (não é bloqueio nem número errado)
+- Confirmado que via CRM as mensagens nunca chegam (testado várias vezes)
+- JID **finalmente** salvo correto após múltiplos fixes: `5571994095636@s.whatsapp.net` (com o 9)
 
-**Type-check status** (último validado): ✅ tsc 5/5 packages limpos após Bloco E.
+**Fixes já entregues nessa cadeia (commits dessa sessão)**:
+- `34e36fd` — content shape `{ body }` em vez de `{ text }`
+- `69d77ca` — partition pruning no UPDATE de messages (eq created_at + org_id)
+- `bed92ba` — remove coluna `delivered_at` fantasma
+- `198f228` — helper `brPhoneCandidates` pra normalizar phone BR (preferir 9 inicial)
+- `a405b50` — força JID com 9 quando candidate é formato moderno (workaround "shadow account" WhatsApp BR)
+- **(WIP, não commitado)** — log explícito do JID final no `sendMessage` do worker (já adicionado em `apps/workers/src/whatsapp/baileys.session.ts`, falta commit)
 
----
-
-## Blocos entregues
-
-### Bloco A — Custom fields + numeração de leads (concluído)
-- Migration 009: `custom_field_groups`, `custom_field_definitions`, `deal_number` sequence
-- Backend: `custom-fields.service.ts`, integração com deals/contacts
-- Frontend: admin UI em `/configuracoes/campos-personalizados`, dynamic renderer
-- `deal_number` auto-incremental por org (ex: `#0042`)
-
-### Bloco B — Funil inteligente (concluído)
-- Migration 010: `pipelines.archived_at`
-- Quick-add deal (form simplificado no board)
-- Auto-leads (criação de deal a partir de mensagem inbound sem deal aberto)
-- Pipeline templates (clonar pipeline pronto)
-- AI fill-field (sugestões via Anthropic)
-- SLA pulse (animação visual em deals com SLA estourado)
-- Won/Lost columns colapsíveis
-- WebSocket toasts (deals criados/movidos)
-- Move-and-delete stage dialog (move deals antes de deletar)
-
-### Bloco E — Agente de IA configurável (concluído — mais recente)
-- **Migration 014**: `ai_agent_personas`, `organizations.business_hours` jsonb, `ai_test_conversations` (TTL 24h via pg_cron quando habilitado)
-- **Migration 013**: `conversations.status` ganhou `'archived'` (soft-delete de conversas)
-- **Migration 012**: REPLICA IDENTITY FULL nas partições de messages + função `create_messages_partition` atualizada + `create_ai_interactions_partition` (nova)
-- **Shared**: tipos `AiAgentPersona`, `BusinessHoursConfig`, `AiTestConversation`, `AiTestMessage` em `packages/shared/src/types/ai-persona.ts`
-- **API**:
-  - `apps/api/src/modules/ai-persona/` — service + controller; `buildSystemPrompt()` é o coração: transforma persona em system prompt rico (role, tone, length, language, guidelines, forbidden_topics, fallback)
-  - `apps/api/src/modules/business-hours/` — `isWithinBusinessHours()`, `nextOpenAt()`, `update()`, endpoints `GET/PATCH /settings/business-hours`
-  - `apps/api/src/modules/ai-test/` — sessão sandbox com TTL 24h. `sendMessage()` roda classify + RAG + reply com persona, retorna metadata (intent, sentiment, KB sources, ações hipotéticas, latência). Não toca em contatos/deals reais.
-  - Integrações: `ai.service.suggestResponse` e `copilot.service` agora prepend persona system prompt antes do system específico da feature
-  - Endpoint novo: `POST /automations/to-text` (reverse de `generate`) — converte automação estruturada em descrição PT-BR
-- **Frontend**:
-  - Rota nova `/configuracoes/agente-ia` com 4 abas: Persona, Horário Comercial, Modo Teste, Estatísticas
-  - **Persona tab** completa: form com nome, papel, personalidade, tom (4 opções com exemplos), tamanho, idioma, delay slider, list editors pra guidelines + forbidden_topics, mensagens de saudação/fallback, toggle is_default
-  - **Business Hours tab** completa: master toggle, timezone select, grade semanal com toggle por dia + inputs HH:mm + barra visual proporcional
-  - **Modo Teste tab** completo: chat com seleção de persona, sugestões pré-definidas (preço/reclamação/agendamento/saudação), bubbles com metadata (intent, sentiment, temperature, KB sources, ações hipotéticas, latência)
-  - **Estatísticas tab** placeholder (depende de novo endpoint /ai/stats — TODO)
-  - Entry "Agente de IA" adicionado ao sidebar de `/configuracoes`
-  - API clients: `ai-persona.ts`, `business-hours.ts`, `ai-test.ts`
-- **TODOs pendentes** (Bloco E não cobriu):
-  - Webhook auto-respond fora do horário (zapi/baileys → check business hours → gerar resposta com persona → enviar). Requer wiring em zapi-webhook.service.ts e baileys.session.ts
-  - Briefing matinal: function `generateMorningBriefing()` + cron job (15min antes da abertura) + UI card no /central-de-acao
-  - Stats endpoint `GET /ai/stats?period=...` + frontend com recharts
-  - Dual builder UI no frontend de automações (split-view com sync bidirecional). Backend já pronto (`POST /automations/to-text`)
-  - Avatar uploader (galeria de ícones ou upload custom)
-
-### Bloco D — Calendário nativo (anterior)
-- **Sem migration** (reusa `active.tasks` com seus campos `due_date`, `task_type`, etc.)
-- **Backend**:
-  - `apps/api/src/modules/tasks/dto/calendar-tasks.query.dto.ts` — `from`, `to`, `user_id?`, `task_type[]?` (csv ou repeat)
-  - `apps/api/src/modules/tasks/tasks.service.ts` — `getCalendar(orgId, filters)` retorna `CalendarDay[]` agrupado por `YYYY-MM-DD` (timezone do servidor)
-  - `apps/api/src/modules/tasks/tasks.controller.ts` — `GET /tasks/calendar` (declarado antes de `:id`)
-  - Tipos exportados: `CalendarDay`, `CalendarTask` (shape slim para o calendário)
-- **Frontend**:
-  - `apps/web/app/(dashboard)/calendario/page.tsx` — rota
-  - `apps/web/components/calendario/calendar-utils.ts` — helpers de data (start/end of week/month, monthGridRange), color map por `task_type`, `HOUR_RANGE` (8-20), `HOUR_HEIGHT_PX = 56`
-  - `apps/web/components/calendario/calendar-page.tsx` — orquestrador (DnD context, view switching, realtime, swipe mobile, popover, NewTaskDialog wire)
-  - `apps/web/components/calendario/calendar-header.tsx` — nav (< | label | >), Hoje, Dia/Semana/Mês toggle (escondido em mobile), filtro "Só minhas" + multi-select de tipos
-  - `apps/web/components/calendario/month-view.tsx` — grid 7×N, dia com até 3 pills + overflow `+N mais`, droppable por dia, click célula vazia → criar tarefa
-  - `apps/web/components/calendario/week-view.tsx` — gutter de horas + 7 colunas, all-day strip, blocos posicionados por hora, NowLine vermelha
-  - `apps/web/components/calendario/day-view.tsx` — coluna principal + sidebar à direita com lista checkable
-  - `apps/web/components/calendario/task-pill.tsx` — pill draggable (mês)
-  - `apps/web/components/calendario/task-block.tsx` — bloco draggable (semana/dia) com barra lateral colorida
-  - `apps/web/components/calendario/task-popover.tsx` — popover com Concluir/Editar
-  - `apps/web/components/sidebar.tsx` — entry "Calendário" entre "Tarefas" e "Copiloto IA"
-  - `apps/web/components/tarefas/new-task-dialog.tsx` — props novas `defaultDueDate`, `defaultDueTime`
-  - `apps/web/lib/api/tasks.ts` — `tasksApi.calendar()` + tipos `CalendarTask`/`CalendarDay`/`CalendarTasksParams`
-- **Realtime**: subscription `active.tasks` com refetch debounced (250ms)
-- **Drag-and-drop**: `@dnd-kit/core` (já instalado), `useDraggable` em pills/blocks + `useDroppable` por dia. PATCH `due_date` preservando hora. Optimistic + revert em erro.
-- **Mobile**: media-query `max-width: 767px` força visão Dia + swipe horizontal (60px threshold) navega entre dias
-- **Sem dependência nova**
-
-### Bloco C — Motor de automações expandido (anterior)
-- Migration 011:
-  - `automations.stage_id` (nullable, FK pipeline_stages)
-  - `webhook_endpoints` (org_id, name, url, events[], secret, is_active, failure_count)
-  - `webhook_deliveries` (endpoint_id, event_type, payload, response_status, response_body, attempt, status)
-  - Reafirma `email` no enum CHECK de `channels.channel_type`
-
-- **Shared**:
-  - `packages/shared/src/utils/placeholder-resolver.ts` — `resolvePlaceholders()` + `PLACEHOLDER_CATALOG` (20 placeholders, 5 categorias)
-  - `packages/shared/src/types/webhook.ts` — `WebhookEventType` (18 events), `WebhookEndpoint`, `WebhookDelivery`
-
-- **Backend**:
-  - `apps/api/src/common/placeholder/placeholder.service.ts` (`@Global` module) — `buildContext({orgId, dealId?, contactId?, companyId?, userId?})`
-  - `apps/api/src/common/channels/providers/email/email.provider.ts` — STUB (lança `NotImplementedException`)
-  - `apps/api/src/modules/webhooks/outbound/outbound-webhook.service.ts` — CRUD + `deliver()` com HMAC + retry setTimeout
-  - `apps/api/src/modules/webhooks/outbound/outbound-webhook.controller.ts` — endpoints `/webhooks/endpoints` + `/webhooks/deliveries/:id/retry`
-  - `apps/api/src/modules/webhooks/webhooks.module.ts` — marcado `@Global`
-  - `apps/api/src/modules/automations/automations.service.ts` — usa PlaceholderService; novo método `interpolateRich`; filter `stage_id` no `checkTriggers`
-  - `apps/api/src/modules/automations/dto/automation.dto.ts` — `stage_id?: string | null`
-  - `apps/api/src/modules/automations/automations.controller.ts` — `GET /automations?stage_id=X&global_only=true`
-  - `apps/api/src/modules/deals/deals.service.ts` — chama `webhooks.deliver` em created/updated/stage_changed/won/lost
-  - `apps/api/src/modules/contacts/contacts.service.ts` — chama `webhooks.deliver('contact.created')`
-
-- **Frontend**:
-  - `apps/web/lib/api/outbound-webhooks.ts` — client API
-  - `apps/web/lib/api/automations.ts` — `list({stageId, globalOnly}, signal?)`
-  - `apps/web/components/configuracoes/webhooks-section.tsx` — UI completa (cards, dialog criar/editar com auto-secret, sheet detalhe com timeline de deliveries + retry)
-  - `apps/web/components/ui/placeholder-input.tsx` — textarea com dropdown ao digitar `{{`, navegação ↑↓ Enter Esc, preview live
-  - `apps/web/components/funis/stage-automations-sheet.tsx` — Sheet com lista + toggle + delete + form criação
-  - `apps/web/components/funis/pipeline-config-sheet.tsx` — botão `⚡` por stage abre `<StageAutomationsSheet>`
-  - `apps/web/app/(dashboard)/configuracoes/page.tsx` — seção "Webhooks" na sidebar
+**Próximos passos pra debugar (próxima sessão)**:
+1. **Commit do log de debug** que está no working tree:
+   ```ts
+   // apps/workers/src/whatsapp/baileys.session.ts linha ~140
+   console.log(`[baileys ${channelId}] sendMessage → input="..." normalized="..." jid="..." kind=...`);
+   ```
+2. **Testar manual no celular do Vazzo**: confirmar se msg manual chega na Deiselene (separar bug Baileys de bug WhatsApp)
+3. **Pegar logs do `active-workers`** durante envio CRM, ver:
+   - JID exato sendo enviado pra `sock.sendMessage`
+   - Resposta do `sock.sendMessage` (msg_id, status)
+4. **Hipóteses ainda em aberto**:
+   - JID com 9 ainda não é o "correto" — talvez a Deiselene esteja com JID `lid` (`...@lid`) em vez de `@s.whatsapp.net`
+   - Sessão Baileys pode ter cache antigo do contato — testar `sock.assertSessions` ou re-pareamento
+   - Versão do `@whiskeysockets/baileys` (^6.7.18) pode ter bug específico — considerar atualizar
+   - WhatsApp pode ter aplicado restrição silenciosa ao número Vazzo (fingerprinting de bot)
+5. **Plan B**: implementar action `send_via_workspace_baileys_send_raw` que aceita JID custom direto, pra testar diferentes formatos sem passar pelo resolveRecipient.
 
 ---
 
-## TODOs flagados (não pedidos pelo user, mas óbvios pra próximos blocos)
+## Estado geral
 
-### Email
-- [ ] Implementar email provider real (nodemailer + SMTP) substituindo o stub
-- [ ] Action `send_email` no automations runner (paralela a `send_message`)
-- [ ] UI de configuração SMTP em `/configuracoes/canais`
+**Última migration**: `031_contacts_search_ilike.sql`
+**Próxima migration**: `032_*.sql`
 
-### Placeholders
-- [ ] Wirar `<PlaceholderInput>` em pontos de uso reais:
-  - `MessageInput` em `/conversas` (para envio manual com placeholders)
-  - Form de criação de automação em `<StageAutomationsSheet>` (campo "Mensagem a enviar")
-  - Templates de mensagem (se virar feature)
+**Migrations dessa sessão (precisam estar aplicadas no Supabase Studio)**:
+- `028_ai_concierge.sql` — pipelines/stages ganham coluna `description` (pra IA usar no roteamento)
+- `029_whatsapp_validation.sql` — campos whatsapp_verified/jid/profile_* em contacts + tabela whatsapp_validation_queue
+- `030_unarchive_on_inbound.sql` — trigger SQL: msg inbound desarquiva conversa automaticamente
+- `031_contacts_search_ilike.sql` — `search_contacts` reescrito com ILIKE (busca por substring "Dei" acha "Deise")
 
-### Webhooks
-- [ ] Disparar `webhooks.deliver` em outros services:
-  - `tasks.service.ts` → `task.created`, `task.completed`
-  - `conversations.service.ts` → `conversation.opened`, `conversation.closed`
-  - `ai/copilot.service.ts` → `ai.response_generated`
-- [ ] Migrar retry de setTimeout pra BullMQ/Redis quando volume aumentar
-- [ ] Particionamento mensal de `webhook_deliveries` (segue o padrão de `messages`/`ai_interactions`)
+**Branches**: `main` no eclick-active.
 
-### Stage automations UX
-- [ ] Form completo (não só send_message): suporte a múltiplas actions encadeadas
-- [ ] Botão "Descrever com IA" (já existe `automacoesApi.generate` no shared)
-- [ ] Templates pré-prontos ("Saudação ao receber lead", "Notificar fechamento", etc.)
+**Type-check status**: ✅ tsc 4/4 limpo (api, web, workers, shared) no último commit deployado.
+
+**Último commit no main**: `a405b50` (BR phone shadow account workaround)
+**Working tree**: alterações não commitadas em `apps/workers/src/whatsapp/baileys.session.ts` (log de debug do JID).
 
 ---
 
-## Próximo bloco — sugestões plausíveis
+## Features novas dessa sessão
 
-User não pediu ainda. Hipóteses pelo padrão dos blocos anteriores:
+### Bloco AI Concierge (concluído A+B+C+D)
+**Migration 028** + 4 commits.
 
-1. **Bloco D — Email + canais expandidos**: implementar email real (nodemailer), wire de `send_email` action, UI SMTP, talvez stub de Telegram/Instagram providers.
+Saudação + roteamento automático de leads com IA:
+1. Cliente manda 1ª msg → IA cumprimenta com pergunta de sondagem (custom da persona OU gerada na hora)
+2. Cliente responde → IA lê pipelines/stages com descrições + business_context da org → escolhe pipeline+stage dinamicamente
+3. Cria deal no pipeline correto + atualiza temperatura do contato + manda bridge message
 
-2. **Bloco D — Tarefas + agenda**: módulo `tasks` ainda básico, daria pra expandir com lembretes, atribuições, integração com agenda visual.
+Settings em `organizations.settings.ai_concierge`:
+```json
+{ "enabled": false, "auto_reply": false, "send_bridge_message": true, "business_context": "" }
+```
 
-3. **Bloco D — Relatórios + dashboards**: cards de métricas no `/dashboard` (deals criados/fechados, MRR, conversion rate, lead time por stage), gráficos com recharts.
+Polimento (Bloco D):
+- `response_delay_seconds` da persona aplicado antes de cada outbound (humanização, cap 30s)
+- Log estruturado em `ai_interactions` com tipos `concierge_greeting` / `concierge_route`, custo USD calculado, tokens reais
 
-4. **Bloco D — Refinamentos do C**: amarrar os TODOs flagados (placeholder input em pontos reais, webhooks em mais services, stage automations multi-action).
+UI: `/configuracoes/concierge` — toggle, business_context textarea, lista de pipelines/stages com descrições editáveis inline.
 
-Sem confirmar qual o user quer — perguntar no início da sessão.
+Arquivos chave:
+- `apps/api/src/modules/ai/ai-concierge.service.ts` (810+ linhas, helper `applyResponseDelay`, `logInteraction`, `askIaToRoute`, `generateGreeting`, `sendOutbound`)
+- `apps/web/components/configuracoes/concierge-section.tsx`
+
+### Bloco Conversa Ativa (concluído A+B+C+D+E+F+G)
+**Migration 029** + múltiplos commits.
+
+Vendedor inicia conversa do CRM (não precisa cliente mandar primeiro):
+- Validação de número WhatsApp via Baileys/Z-API (badges visuais ✅/❓/❌)
+- `WhatsappValidatorService` com `validatePhone`, `enqueue` (pra batch), `getStats`
+- Auto-validate ao criar/atualizar contato com phone
+- `ConversationsService.startConversation` (WIP — bug ativo)
+- UI: botão "Nova" no Inbox + dialog com ContactPicker
+- Atalho no Contact/Deal Detail Sheet (estado vazio da aba Conversas)
+- Bulk actions em `/contatos`: seleção em massa + verificar WhatsApp + excluir
+- Trigger automation `whatsapp_verified` (transição não→verified dispara checkTriggers)
+
+Arquivos chave:
+- `apps/api/src/modules/contacts/whatsapp-validator.service.ts`
+- `apps/workers/src/whatsapp/baileys.session.ts` (`checkNumber`, `checkSingle`, helper `brPhoneCandidates`)
+- `apps/api/src/modules/conversations/conversations.service.ts` (`startConversation`, `delete`, `updateMessageStatus`)
+- `apps/web/components/inbox/start-conversation-dialog.tsx`
+- `apps/web/components/contacts/whatsapp-verified-badge.tsx`
+- `apps/web/components/contacts/bulk-actions-bar.tsx`
+- `apps/web/components/contacts/avatar-with-channel.tsx` — badge do canal sobreposto no avatar (✅ funcionando em conversation-item, chat-header, contact-panel)
+
+### Realtime triple defesa (commit `0f4288d`)
+useInbox tem 3 camadas:
+1. **Optimistic update** — agente arquiva/resolve/marca lida → remove/atualiza local na hora (chamado pelo `onAction` do ChatPanel)
+2. **Polling 30s silencioso** — refetch sem mostrar loading enquanto aba visível
+3. **Refetch ao voltar pra aba** — visibility/focus dispara refresh imediato
+
+Plus: `conversation:updated` agora emite em `create`, `update`, `markAsRead`, `toggleStar`, `delete` (não só nos webhooks).
+
+### Outras features pequenas
+- Auto-unarchive de conversa quando msg inbound chega (trigger SQL `unarchive_on_inbound`, migration 030)
+- Ações novas no chat: **Desarquivar** (toggle) + **Excluir permanentemente** (DELETE /conversations/:id)
+- Cursor sempre ativo no `MessageInput` (mount, depois de enviar, ao trocar conversa)
+- Badges de canal sobrepostos no avatar (chat-header + lista + painel direito)
+- `search_contacts` agora ILIKE em vez de tsvector (digitar "De" acha "Deise")
+- Socket.IO renova token a cada reconnect (callback `auth` em vez de estático) — corrige loop de "WebSocket closed before established"
 
 ---
 
-## Arquivos críticos de contexto
+## Bugs corrigidos nessa sessão (cronológico)
 
-Caso precise refrescar entendimento de padrões:
+| # | Bug | Commit |
+|---|---|---|
+| 1 | TikTokProvider não registrado em ChannelsModule (DI runtime, tsc não pega) | (sessão anterior) |
+| 2 | Worker bind 127.0.0.1 não funciona em Railway → fix WORKER_INTERNAL_BIND=0.0.0.0 | (sessão anterior) |
+| 3 | `INTERNAL_API_URL` errada apontando pra api.eclick.app.br (SaaS) em vez de api.active. | (env Railway) |
+| 4 | `EventsGateway.emitToOrg` crashava com TypeError 'rooms' undefined (namespace vs server) | `431c783` |
+| 5 | Canal `whatsapp_free` entrava 'active' em vez de 'pending' (truthy credentials) | `d11a849` |
+| 6 | Canais pending órfãos quando user fechava dialog | `0d89876` |
+| 7 | `output_config.format.json_schema` requer additionalProperties=false (rejeita) | `501eace` |
+| 8 | content shape `{ text }` em vez de `{ body }` no startConversation | `34e36fd` |
+| 9 | Inbox sem realtime — Supabase realtime do schema active não tem publication | `daec89c` |
+| 10 | Mutators de conversation não emitiam `conversation:updated` | `3f9d6ab` |
+| 11 | Socket.IO loop "closed before established" — token Supabase estático expirava | `abddfb9` |
+| 12 | Botão MoreVertical do Contact Sheet sobrepondo X de fechar | `abddfb9` |
+| 13 | Tela `/contatos` sem realtime — manda mensagem nova, contato novo não aparecia | `10629d9` |
+| 14 | search_contacts com tsvector não fazia substring ("De" não achava "Deise") | `52ae645` (migration) |
+| 15 | Update de messages sem partition pruning silenciava | `69d77ca` |
+| 16 | Coluna fantasma `delivered_at` no update (não existe em schema) | `bed92ba` |
+| 17 | onWhatsApp BR retorna JID legacy sem 9 (formato pré-2012) | `198f228` |
+| 18 | Shadow account: foto/dados existem mas conta ativa é só no JID com 9 | `a405b50` |
 
-| Pra entender | Ler |
-|---|---|
-| Cross-process Baileys | `apps/api/src/common/channels/providers/baileys/baileys.provider.ts` + `apps/workers/src/internal-server.ts` |
-| Automations engine | `apps/api/src/modules/automations/automations.service.ts` |
-| Webhook delivery | `apps/api/src/modules/webhooks/outbound/outbound-webhook.service.ts` |
-| Placeholder resolver | `packages/shared/src/utils/placeholder-resolver.ts` |
-| Multi-tenant pattern | qualquer service do api — sempre filtra `org_id` no admin client |
-| Migrations | `supabase/migrations/011_*.sql` (último exemplo de policies + tabelas novas) |
+---
+
+## Migrations da sessão (precisam estar aplicadas)
+
+```bash
+ls supabase/migrations/02*.sql 03*.sql
+028_ai_concierge.sql           ← pipelines/stages.description (pra Concierge)
+029_whatsapp_validation.sql    ← contacts.whatsapp_* + queue
+030_unarchive_on_inbound.sql   ← trigger desarquiva ao receber msg
+031_contacts_search_ilike.sql  ← search_contacts com ILIKE
+```
+
+User confirmou ter aplicado todas no Supabase Studio.
+
+---
+
+## Variáveis de ambiente críticas (Railway)
+
+### `active-api`
+```
+INTERNAL_API_KEY=<secret compartilhado>
+WORKER_INTERNAL_URL=http://active-workers.railway.internal:3030
+ANTHROPIC_API_KEY=...
+SUPABASE_URL=https://hzhrkfdwzxalaromcffn.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=...
+```
+
+### `active-workers`
+```
+INTERNAL_API_KEY=<MESMO da api>
+INTERNAL_API_URL=https://api.active.eclick.app.br  ← PRESTAR ATENÇÃO: com "active." (não confundir com api.eclick.app.br do SaaS)
+WORKER_INTERNAL_PORT=3030
+WORKER_INTERNAL_BIND=0.0.0.0  (Dockerfile já seta)
+SUPABASE_URL=...
+SUPABASE_SERVICE_ROLE_KEY=...
+```
+
+---
+
+## Snippet de teste/diagnóstico (Console DevTools)
+
+Pra retomar testando rápido:
+
+```js
+// Pega session token e bate em endpoints de diagnóstico
+const projectRef = 'hzhrkfdwzxalaromcffn';
+const baseName = `sb-${projectRef}-auth-token`;
+const cookies = Object.fromEntries(
+  document.cookie.split('; ').map(c => {
+    const i = c.indexOf('=');
+    return [c.slice(0, i), decodeURIComponent(c.slice(i + 1))];
+  })
+);
+let raw = cookies[baseName] ?? '';
+if (!raw) {
+  let i = 0;
+  while (cookies[`${baseName}.${i}`]) raw += cookies[`${baseName}.${i++}`];
+}
+if (raw.startsWith('base64-')) raw = atob(raw.slice(7));
+const session = JSON.parse(raw);
+const auth = { Authorization: 'Bearer ' + session.access_token };
+window._auth = auth; // pra reusar
+
+// Health
+fetch('https://api.active.eclick.app.br/health?_=' + Date.now(), { cache: 'no-store' })
+  .then(r => r.json()).then(d => console.log('commit:', d.commit));
+
+// Pega última conversa + mensagens
+async function debugLast() {
+  const inbox = await (await fetch('https://api.active.eclick.app.br/conversations?limit=1', { headers: auth })).json();
+  const conv = inbox.data?.[0];
+  console.log('Conv:', conv?.id, '·', conv?.contact_name);
+  const msgs = await (await fetch('https://api.active.eclick.app.br/conversations/' + conv.id + '/messages?limit=5', { headers: auth })).json();
+  console.log(JSON.stringify((msgs.data ?? msgs).map(m => ({
+    direction: m.direction, status: m.status, text: m.plain_text?.slice(0, 30),
+    error_code: m.error_code, error_message: m.error_message
+  })), null, 2));
+}
+window.debugLast = debugLast;
+
+// Re-verifica WhatsApp do contato da conversa atual
+async function reverify() {
+  const inbox = await (await fetch('https://api.active.eclick.app.br/conversations?limit=1', { headers: auth })).json();
+  const contactId = inbox.data?.[0]?.contact_id;
+  const r = await (await fetch('https://api.active.eclick.app.br/contacts/' + contactId + '/verify-whatsapp', {
+    method: 'POST',
+    headers: auth,
+  })).json();
+  console.log(JSON.stringify(r.result, null, 2));
+}
+window.reverify = reverify;
+
+console.log('Helpers prontos: debugLast(), reverify()');
+```
+
+---
+
+## Como retomar com o Claude (próxima sessão)
+
+Primeira mensagem sugerida:
+
+> Lê `HANDOFF.md` em `C:\Users\ECLICK 1\eclick-active\` e a memory. Continuando bug ativo do "Nova conversa" — mensagem outbound não chega na Deiselene mesmo com JID `5571994095636@s.whatsapp.net`. Bug 18 da lista. Já temos log de debug não-commitado em `apps/workers/src/whatsapp/baileys.session.ts`. Próximos passos no início do HANDOFF (commit do log + teste manual + investigar JID `@lid` ou cache Baileys).
+
+Ou se quiser começar features novas:
+
+> Lê `HANDOFF.md`. Quero começar bloco novo: [descrição]. AI Concierge + Conversa Ativa estão em produção (com bug ativo no envio outbound).
 
 ---
 
 ## Comandos úteis
 
 ```bash
-# rodar tudo
-npm run dev
+# Type-check 4/4 (sempre rodar antes de commit)
+node node_modules/typescript/bin/tsc --noEmit -p packages/shared/tsconfig.json
+node node_modules/typescript/bin/tsc --noEmit -p apps/api/tsconfig.json
+node node_modules/typescript/bin/tsc --noEmit -p apps/web/tsconfig.json
+node node_modules/typescript/bin/tsc --noEmit -p apps/workers/tsconfig.json
 
-# só type-check (preferido ao final de bloco)
-npm run type-check
+# Status git
+git status --short
+git log --oneline -10
 
-# build completo
-npm run build
+# Diagnóstico Concierge
+curl -s "https://api.active.eclick.app.br/health?_=$(date +%s)" | jq
 
-# lint
-npm run lint
+# Subir migration manualmente
+cat supabase/migrations/0XX_*.sql  # cola no Supabase Studio
 ```
 
 ---
 
-## Como retomar com o Claude
+## TODOs flagados (próximos blocos plausíveis)
 
-Na próxima sessão, primeira mensagem:
-
-> "Lê HANDOFF.md em eclick-active e a memory. Continuando o trabalho — quero começar o Bloco D: [descrição]"
-
-Ou se for fix/refinamento de Bloco C:
-
-> "Lê HANDOFF.md. Quero amarrar o TODO X do Bloco C: [especificar]"
-
-A memory captura padrões duráveis (Baileys cross-process, stage-bound automations, etc.). Este HANDOFF captura estado específico do trabalho em curso (TODOs ativos, último bloco entregue).
+1. **Resolver bug do envio outbound** (PRIORIDADE 1)
+2. **Métricas visuais do AI Concierge** no dashboard (custo total, latência, leads roteados, taxa de sucesso por intent)
+3. **Indicador "digitando..." real** via Baileys (`sock.sendPresenceUpdate('composing', jid)`) durante o response_delay
+4. **UI editor de automações estilo Kommo** (drag-drop blocks, mais visual que o atual)
+5. **Email provider real** (nodemailer + SMTP, hoje é stub)
+6. **Page builder com IA** + páginas publicadas (commit `9519764` da sessão anterior — testado parcialmente)

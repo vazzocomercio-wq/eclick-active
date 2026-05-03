@@ -137,6 +137,10 @@ export class BaileysSession {
       ? phone
       : (brPhoneCandidates(phone.replace(/\D/g, ''))[0] ?? phone.replace(/\D/g, ''));
     const jid = normalized.includes('@') ? normalized : `${normalized}@s.whatsapp.net`;
+    // eslint-disable-next-line no-console
+    console.log(
+      `[baileys ${this.ctx.channelId}] sendMessage → input="${phone}" normalized="${normalized}" jid="${jid}" kind=${content.kind}`,
+    );
 
     let payload: Parameters<WASocket['sendMessage']>[1];
     switch (content.kind) {
