@@ -129,7 +129,14 @@ export class BaileysSession {
       throw new Error('session_terminated: sessão encerrada');
     }
 
-    const jid = phone.includes('@') ? phone : `${phone}@s.whatsapp.net`;
+    // Pra BR: normaliza o telefone antes de virar JID (adiciona DDI 55
+    // se não tiver, garante o 9 inicial em DDD móvel). Sem isso, números
+    // como "71994095636" ficavam ambíguos e o WhatsApp roteava pro JID
+    // legacy de 8 dígitos (conta de outra pessoa com número antigo).
+    const normalized = phone.includes('@')
+      ? phone
+      : (brPhoneCandidates(phone.replace(/\D/g, ''))[0] ?? phone.replace(/\D/g, ''));
+    const jid = normalized.includes('@') ? normalized : `${normalized}@s.whatsapp.net`;
 
     let payload: Parameters<WASocket['sendMessage']>[1];
     switch (content.kind) {
@@ -189,6 +196,11 @@ export class BaileysSession {
    * em formato internacional (ex: 5571999999999) ou já um JID. Retorna
    * o JID canônico (`...@s.whatsapp.net` ou `...@lid`) quando existe, e
    * tenta buscar foto de perfil e profile name (best-effort).
+   *
+   * Pra brasileiros, prefere o JID com o 9 inicial (formato moderno).
+   * sock.onWhatsApp pode retornar JID sem 9 (formato pré-2012) mesmo
+   * quando o número moderno também existe — daí mandaríamos pra outra
+   * pessoa. Tenta na ordem: com 9 → sem 9 (fallback pra contas legacy).
    */
   async checkNumber(phoneOrJid: string): Promise<{
     exists: boolean;
@@ -199,27 +211,46 @@ export class BaileysSession {
     if (!this.sock || this.terminated) {
       throw new Error('session_not_ready');
     }
-    // Sanitiza: aceita +55..., (55)..., ou 55... — Baileys.onWhatsApp espera
-    // telefone canônico sem espaços/símbolos.
-    const cleaned = phoneOrJid.includes('@')
-      ? phoneOrJid
-      : phoneOrJid.replace(/\D/g, '');
-    if (!cleaned) return { exists: false };
 
-    // sock.onWhatsApp aceita lista. Pegamos o primeiro retorno.
-    const results = await this.sock.onWhatsApp(cleaned).catch(() => []);
+    if (phoneOrJid.includes('@')) {
+      // JID direto — só consulta
+      return this.checkSingle(phoneOrJid);
+    }
+
+    const digits = phoneOrJid.replace(/\D/g, '');
+    if (!digits) return { exists: false };
+
+    // Pra BR: tenta candidates em ordem (preferindo formato moderno c/ 9).
+    // Pra outros países: usa o input direto sem chutar.
+    const candidates = brPhoneCandidates(digits);
+    for (const candidate of candidates) {
+      const r = await this.checkSingle(candidate);
+      if (r.exists) return r;
+    }
+    return { exists: false };
+  }
+
+  /**
+   * Faz UMA consulta no onWhatsApp + busca foto/nome. Helper interno.
+   */
+  private async checkSingle(input: string): Promise<{
+    exists: boolean;
+    jid?: string;
+    profile_name?: string;
+    profile_pic_url?: string;
+  }> {
+    if (!this.sock) return { exists: false };
+
+    const results = await this.sock.onWhatsApp(input).catch(() => []);
     const first = results?.[0];
     if (!first?.exists || !first.jid) {
       return { exists: false };
     }
 
-    // Foto de perfil — best-effort. Se contato bloqueia foto, retorna 401/404
-    // → pic = undefined. NÃO falhar a verificação por causa disso.
     const profilePicUrl = await this.sock
       .profilePictureUrl(first.jid, 'image')
       .catch(() => undefined);
 
-    // Profile name pode vir do store (se Baileys conhece) ou via lid mapping
     let profileName: string | undefined;
     try {
       const stored = (
@@ -694,4 +725,72 @@ function extractContent(m: WAMessageContent): ParsedContent | null {
     };
   }
   return null;
+}
+
+// ──────────────────────────────────────────────────────────
+// Normalização de telefone BR
+// ──────────────────────────────────────────────────────────
+
+/**
+ * Gera candidates de telefone BR pra consulta no onWhatsApp/sendMessage.
+ *
+ * Brasil tem dois formatos de celular válidos:
+ *   - Moderno (pós-2012): 55 + DDD + 9 + 8 dígitos = 13 dígitos
+ *   - Legacy (pré-2012, ainda existe): 55 + DDD + 8 dígitos = 12 dígitos
+ *
+ * O sock.onWhatsApp pode retornar JID em QUALQUER um dos dois formatos
+ * mesmo quando ambas as contas existem — daí "5571994095636" pode
+ * resolver pra "557194095636@s.whatsapp.net" (legacy de outra pessoa).
+ *
+ * Estratégia: tentar PRIMEIRO o formato moderno (com 9), DEPOIS o legacy
+ * como fallback. Aplicado em checkNumber e em sendMessage.
+ *
+ * Aceita inputs:
+ *   - 11 dígitos (DDD + 9 + 8)        → adiciona 55, mantém com 9
+ *   - 10 dígitos (DDD + 8 sem 9)      → adiciona 55, gera versão com 9
+ *   - 12 dígitos (55 + DDD + 8 sem 9) → mantém + gera versão com 9
+ *   - 13 dígitos (55 + DDD + 9 + 8)   → mantém + gera versão sem 9 (fallback)
+ *
+ * Retorna array vazio se input não parecer BR (deixa caller usar input cru).
+ */
+function brPhoneCandidates(digits: string): string[] {
+  if (!digits) return [];
+  const candidates: string[] = [];
+
+  // 11 dígitos: DDD (2) + 9 (1) + 8 dígitos = celular moderno sem DDI
+  if (digits.length === 11 && digits[2] === '9') {
+    candidates.push('55' + digits);
+    // Fallback legacy: tira o 9
+    candidates.push('55' + digits.slice(0, 2) + digits.slice(3));
+    return candidates;
+  }
+
+  // 10 dígitos: DDD (2) + 8 dígitos = celular legacy ou fixo sem DDI
+  if (digits.length === 10) {
+    // Adiciona 9 (assumindo celular)
+    candidates.push('55' + digits.slice(0, 2) + '9' + digits.slice(2));
+    // Fallback sem 9 (fixo ou legacy)
+    candidates.push('55' + digits);
+    return candidates;
+  }
+
+  // 13 dígitos: 55 + DDD + 9 + 8 = celular moderno completo
+  if (digits.length === 13 && digits.startsWith('55') && digits[4] === '9') {
+    candidates.push(digits);
+    // Fallback legacy: 55 + DDD + 8
+    candidates.push(digits.slice(0, 4) + digits.slice(5));
+    return candidates;
+  }
+
+  // 12 dígitos: 55 + DDD + 8 = legacy completo
+  if (digits.length === 12 && digits.startsWith('55')) {
+    // Tenta primeiro com 9 (preferido moderno)
+    candidates.push(digits.slice(0, 4) + '9' + digits.slice(4));
+    candidates.push(digits);
+    return candidates;
+  }
+
+  // Outros formatos (estrangeiros, números curtos, etc): mantém como veio
+  candidates.push(digits);
+  return candidates;
 }
