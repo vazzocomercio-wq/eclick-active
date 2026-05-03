@@ -277,9 +277,16 @@ export class LiveSourcesService {
   private async fetchOne(
     source: KnowledgeLiveSource,
   ): Promise<{ content: string; hash: string }> {
-    // Pra agora, todas as fontes (webpage/api_endpoint/rss_feed) usam o
-    // scraper de HTML — JSON/RSS também viram texto (cheerio é tolerante).
-    // Quando precisar de parsing específico, ramificar aqui por source_type.
+    // Roadmap de fetchers (atual: só HTML scraper):
+    //   - webpage        → UrlScraperService (HTML + URLs)         ✓ implementado
+    //   - api_endpoint   → JSON / GraphQL (ML, Instagram, WPP Catalog, TikTok Shop, Meta Commerce, e-Click SaaS)  TODO
+    //   - rss_feed       → parser RSS                               TODO
+    //
+    // Quando adicionar integrações (ML API, Instagram Graph, etc.), criar
+    // pasta `fetchers/` com uma classe por integração implementando
+    // `fetch(source): Promise<{ content; products?: StructuredProduct[] }>`,
+    // e ramificar aqui por source_type ou por host pattern (URL contém
+    // mercadolivre.com.br → MercadoLivreFetcher, etc.).
     const scraped = await Promise.race([
       this.scraper.scrape(source.url),
       new Promise<never>((_, reject) =>

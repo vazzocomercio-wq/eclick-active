@@ -346,7 +346,9 @@ export class AiTestService {
     }
 
     if (liveContent) {
-      lines.push('DADOS ATUALIZADOS DE FONTES EXTERNAS (consultados agora — informação fresca, prefira essa quando houver conflito com a base local):');
+      lines.push(
+        'DADOS ATUALIZADOS DE FONTES EXTERNAS (consultados agora — informação fresca, prefira essa quando houver conflito com a base local). IMPORTANTE: quando houver URLs no formato [texto](url) ou após " → ", INCLUA-AS DIRETO na resposta ao cliente (não prometa enviar "em poucos segundos" — você JÁ tem os links agora):',
+      );
       lines.push(liveContent.length > 4000 ? `${liveContent.slice(0, 4000)}…` : liveContent);
       lines.push('');
     }

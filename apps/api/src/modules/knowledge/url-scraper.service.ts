@@ -193,14 +193,14 @@ export class UrlScraperService {
 
     root.find('h1, h2, h3, p, li').each((_, el) => {
       const tag = (el as { tagName?: string }).tagName?.toLowerCase() ?? '';
-      const text = this.cleanText($(el).text());
-      if (!text) return;
+      const formatted = this.formatElementWithLinks($, el, url);
+      if (!formatted) return;
       if (tag.startsWith('h')) {
-        parts.push(`\n## ${text}\n`);
+        parts.push(`\n## ${formatted}\n`);
       } else if (tag === 'li') {
-        parts.push(`- ${text}`);
+        parts.push(`- ${formatted}`);
       } else {
-        parts.push(text);
+        parts.push(formatted);
       }
     });
 
@@ -212,7 +212,7 @@ export class UrlScraperService {
         .each((_, tr) => {
           const cells = $(tr)
             .find('th, td')
-            .map((_, c) => this.cleanText($(c).text()))
+            .map((_, c) => this.formatElementWithLinks($, c, url))
             .get()
             .filter(Boolean);
           if (cells.length > 0) rows.push(cells.join(' | '));
@@ -243,6 +243,79 @@ export class UrlScraperService {
       token_estimate: Math.ceil(content.length / 4),
       truncated,
     };
+  }
+
+  // ────────────────────────────────────────────
+  // Link-aware extraction (crítico pra catálogos/marketplaces — preserva
+  // URLs de produtos junto com título/preço pra IA poder citar)
+  // ────────────────────────────────────────────
+
+  /**
+   * Extrai texto de um elemento + URLs de `<a href>` dentro/em volta dele.
+   * Retorna formato:
+   *   - 1 URL: `[texto](url)` (markdown link — fácil pro LLM parsear)
+   *   - 2-3 URLs: `texto → url1 | url2`
+   *   - 0 URLs: texto puro
+   *
+   * Resolve URLs relativas usando `baseUrl`. Filtra anchors (#), javascript:,
+   * mailto:, tel:, data:.
+   */
+  private formatElementWithLinks(
+    $: cheerio.CheerioAPI,
+    el: unknown,
+    baseUrl: string,
+  ): string {
+    const $el = $(el as never);
+    const text = this.cleanText($el.text());
+    if (!text) return '';
+
+    const seen = new Set<string>();
+    const urls: string[] = [];
+
+    // Caso 1: o próprio elemento é descendente de um <a> envolvente
+    // (ex: <a href><li>...</li></a> — comum em listings de marketplace)
+    const wrapping = $el.closest('a[href]');
+    if (wrapping.length > 0) {
+      const resolved = this.resolveUrl(wrapping.attr('href'), baseUrl);
+      if (resolved && !seen.has(resolved)) {
+        seen.add(resolved);
+        urls.push(resolved);
+      }
+    }
+
+    // Caso 2: <a href> descendentes do elemento
+    $el.find('a[href]').each((_, a) => {
+      const resolved = this.resolveUrl($(a).attr('href'), baseUrl);
+      if (resolved && !seen.has(resolved)) {
+        seen.add(resolved);
+        urls.push(resolved);
+      }
+    });
+
+    // Limita a 3 URLs por elemento (evita bloat em pages com muitos links)
+    const finalUrls = urls.slice(0, 3);
+    if (finalUrls.length === 0) return text;
+    if (finalUrls.length === 1) return `[${text}](${finalUrls[0]})`;
+    return `${text} → ${finalUrls.join(' | ')}`;
+  }
+
+  /**
+   * Resolve href relativo → absoluto e filtra protocolos não-navegáveis.
+   * Retorna null se inválido/incompatível.
+   */
+  private resolveUrl(href: string | undefined, baseUrl: string): string | null {
+    if (!href) return null;
+    const trimmed = href.trim();
+    if (!trimmed) return null;
+    if (trimmed.startsWith('#')) return null;
+    if (/^(javascript|mailto|tel|data):/i.test(trimmed)) return null;
+    try {
+      const u = new URL(trimmed, baseUrl);
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+      return u.toString();
+    } catch {
+      return null;
+    }
   }
 
   // ────────────────────────────────────────────
