@@ -561,7 +561,7 @@ export class AppointmentsService {
       '*',
       'contact:contacts(id, name, phone, avatar_url)',
       'deal:deals(id, title, value, currency)',
-      'agent:org_members!appointments_assigned_to_fkey(id, display_name, email, avatar_url)',
+      'agent:org_members!appointments_assigned_to_fkey(id, display_name, avatar_url)',
       'type:appointment_types(id, name, color, duration_minutes, location_type)',
     ].join(', ');
   }

@@ -81,7 +81,7 @@ export interface Appointment {
 export interface AppointmentDetail extends Appointment {
   contact: { id: UUID; name: string | null; phone: string | null; avatar_url: string | null } | null;
   deal: { id: UUID; title: string; value: number | null; currency: string } | null;
-  agent: { id: UUID; display_name: string | null; email: string | null; avatar_url: string | null } | null;
+  agent: { id: UUID; display_name: string | null; avatar_url: string | null } | null;
   type: Pick<AppointmentType, 'id' | 'name' | 'color' | 'duration_minutes' | 'location_type'> | null;
 }
 

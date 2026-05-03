@@ -203,7 +203,7 @@ export function AppointmentDetailSheet({
                   Responsável
                 </span>
                 <span className="text-sm font-medium">
-                  {appointment.agent.display_name ?? appointment.agent.email}
+                  {appointment.agent.display_name ?? 'Sem nome'}
                 </span>
               </div>
             </div>
