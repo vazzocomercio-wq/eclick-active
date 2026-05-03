@@ -162,17 +162,37 @@ export class ChannelsService {
   async create(orgId: string, dto: CreateChannelDto): Promise<ChannelView> {
     await this.assertWithinPlanLimit(orgId);
 
+    // Status inicial:
+    // - whatsapp_free (Baileys) SEMPRE entra pending — worker tem que parear
+    //   via QR e só então salvar baileys_auth e marcar active. O frontend
+    //   manda { provider: 'baileys' } como marcador, mas isso não é uma
+    //   credencial real.
+    // - Outros providers (zapi/email/instagram/tiktok) entram active se
+    //   tem credentials porque o que o frontend manda já é o segredo real.
+    const creds = dto.credentials ?? {};
+    const credsHasRealAuth = Object.keys(creds).some(
+      (k) => k !== 'provider',
+    );
+    const initialStatus: 'active' | 'pending' =
+      dto.channel_type === 'whatsapp_free'
+        ? credsHasRealAuth
+          ? 'active'
+          : 'pending'
+        : credsHasRealAuth
+          ? 'active'
+          : 'pending';
+
     const { data, error } = await this.supabase.adminClient
       .from('channels')
       .insert({
         org_id: orgId,
         channel_type: dto.channel_type,
         name: dto.name,
-        credentials: dto.credentials ?? {},
+        credentials: creds,
         phone_number: dto.phone_number ?? null,
         external_id: dto.external_id ?? null,
         config: dto.config ?? {},
-        status: dto.credentials ? 'active' : 'pending',
+        status: initialStatus,
       })
       .select(SAFE_COLUMNS)
       .single();
