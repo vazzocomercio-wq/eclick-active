@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { InitialsAvatar } from '@/components/contacts/initials-avatar';
+import { AvatarWithChannel } from '@/components/contacts/avatar-with-channel';
 import { TemperatureBadge } from '@/components/contacts/temperature-badge';
+import { channelLabel } from '@/components/ui/channel-icon';
 import { ScoreBar } from '@/components/contacts/score-bar';
 import { TagPills } from '@/components/contacts/tag-pills';
 import { formatPhone } from '@/lib/format';
@@ -50,10 +51,11 @@ export function ContactPanel({ conversation, loading, onOpenFullProfile }: Conta
       <div className="flex flex-col gap-4 p-4">
         {/* Cabeçalho */}
         <div className="flex flex-col items-center gap-2 text-center">
-          <InitialsAvatar
+          <AvatarWithChannel
             name={contact.name}
             src={contact.avatar_url}
-            className="h-16 w-16 text-base"
+            channelType={conversation?.channel_type}
+            size="lg"
           />
           <div>
             <h3 className="text-base font-semibold">
@@ -62,6 +64,11 @@ export function ContactPanel({ conversation, loading, onOpenFullProfile }: Conta
             <p className="text-xs text-muted-foreground">
               {contact.phone ? formatPhone(contact.phone) : '—'}
             </p>
+            {conversation?.channel_type && (
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                via {channelLabel(conversation.channel_type)}
+              </p>
+            )}
           </div>
         </div>
 

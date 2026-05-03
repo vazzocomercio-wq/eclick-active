@@ -4,9 +4,8 @@ import { useState } from 'react';
 import { Star } from 'lucide-react';
 import type { InboxItem } from '@eclick-active/shared';
 import { toast } from 'sonner';
-import { InitialsAvatar } from '@/components/contacts/initials-avatar';
+import { AvatarWithChannel } from '@/components/contacts/avatar-with-channel';
 import { TemperatureBadge } from '@/components/contacts/temperature-badge';
-import { ChannelIcon } from '@/components/ui/channel-icon';
 import { conversationsApi } from '@/lib/api/conversations';
 import { ApiError } from '@/lib/api/client';
 import { formatRelativeTime } from '@/lib/format';
@@ -93,17 +92,13 @@ export function ConversationItem({
         />
       </button>
 
-      {/* Avatar com badge de canal */}
-      <div className="relative shrink-0">
-        <InitialsAvatar
-          name={item.contact_name}
-          src={item.contact_avatar}
-          className="h-10 w-10 text-xs"
-        />
-        <span className="absolute -bottom-0.5 -right-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-background ring-2 ring-border">
-          <ChannelIcon type={item.channel_type} size="sm" tooltip className="h-2.5 w-2.5" />
-        </span>
-      </div>
+      {/* Avatar com badge de canal — WhatsApp / Instagram / TikTok / etc */}
+      <AvatarWithChannel
+        name={item.contact_name}
+        src={item.contact_avatar}
+        channelType={item.channel_type}
+        size="md"
+      />
 
       {/* Conteúdo */}
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">

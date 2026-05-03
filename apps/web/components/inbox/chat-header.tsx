@@ -3,9 +3,9 @@
 import { CheckCheck, MoreVertical, PanelRightClose, PanelRightOpen, UserPlus } from 'lucide-react';
 import type { ConversationDetail } from '@eclick-active/shared';
 import { Button } from '@/components/ui/button';
-import { InitialsAvatar } from '@/components/contacts/initials-avatar';
+import { AvatarWithChannel } from '@/components/contacts/avatar-with-channel';
 import { TemperatureBadge } from '@/components/contacts/temperature-badge';
-import { ChannelIcon } from './channel-icon';
+import { channelLabel } from '@/components/ui/channel-icon';
 import { formatPhone } from '@/lib/format';
 
 interface ChatHeaderProps {
@@ -33,17 +33,23 @@ export function ChatHeader({
   return (
     <header className="flex h-16 items-center justify-between gap-3 border-b border-border px-4">
       <div className="flex items-center gap-3 min-w-0">
-        <InitialsAvatar name={contact?.name ?? null} src={contact?.avatar_url} className="h-9 w-9 text-xs" />
+        <AvatarWithChannel
+          name={contact?.name ?? null}
+          src={contact?.avatar_url}
+          channelType={conversation.channel_type}
+          size="md"
+        />
         <div className="flex flex-col min-w-0">
           <div className="flex items-center gap-2 min-w-0">
             <span className="truncate text-sm font-semibold">
               {contact?.name ?? <span className="italic text-muted-foreground">sem nome</span>}
             </span>
-            <ChannelIcon type={conversation.channel_type} />
             {contact?.temperature && <TemperatureBadge temperature={contact.temperature} />}
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span>{contact?.phone ? formatPhone(contact.phone) : '—'}</span>
+            <span>·</span>
+            <span>{channelLabel(conversation.channel_type)}</span>
             <span>·</span>
             <span className="capitalize">{conversation.status}</span>
           </div>
