@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { WhatsAppCheckResult } from '@eclick-active/shared';
 import { SupabaseService } from '../../common/supabase/supabase.service';
+import { AutomationsService } from '../automations/automations.service';
 
 interface ChannelRow {
   id: string;
@@ -29,7 +30,10 @@ interface ChannelRow {
 export class WhatsappValidatorService {
   private readonly logger = new Logger(WhatsappValidatorService.name);
 
-  constructor(private readonly supabase: SupabaseService) {}
+  constructor(
+    private readonly supabase: SupabaseService,
+    private readonly automations: AutomationsService,
+  ) {}
 
   // ──────────────────────────────────────────────────────────
   // Public API
@@ -258,6 +262,17 @@ export class WhatsappValidatorService {
     contactId: string,
     result: WhatsAppCheckResult,
   ): Promise<void> {
+    // Lê estado anterior pra detectar transição (evita disparar trigger
+    // quando contato JÁ era verified=true e foi re-validado)
+    const { data: before } = await this.supabase.adminClient
+      .from('contacts')
+      .select('whatsapp_verified')
+      .eq('org_id', orgId)
+      .eq('id', contactId)
+      .maybeSingle();
+    const wasVerified = (before as { whatsapp_verified?: boolean | null } | null)
+      ?.whatsapp_verified === true;
+
     const patch: Record<string, unknown> = {
       whatsapp_verified: result.exists,
       whatsapp_verified_at: new Date().toISOString(),
@@ -279,6 +294,26 @@ export class WhatsappValidatorService {
       .eq('id', contactId);
     if (error) {
       this.logger.warn(`persistResult falhou: ${error.message}`);
+      return;
+    }
+
+    // Dispara automation trigger só na TRANSIÇÃO pra verified=true.
+    // Best-effort: erros aqui não bloqueiam a verificação em si.
+    if (result.exists && !wasVerified) {
+      void this.automations
+        .checkTriggers({
+          event: 'whatsapp_verified',
+          org_id: orgId,
+          contact_id: contactId,
+          jid: result.jid ?? null,
+          profile_name: result.profile_name ?? null,
+          provider: result.provider,
+        })
+        .catch((err) => {
+          this.logger.warn(
+            `whatsapp_verified checkTriggers falhou: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        });
     }
   }
 }

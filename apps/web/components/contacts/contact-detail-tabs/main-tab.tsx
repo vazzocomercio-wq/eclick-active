@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { TagPills } from '@/components/contacts/tag-pills';
+import { WhatsAppVerifiedBadge } from '@/components/contacts/whatsapp-verified-badge';
 import { AIGapsCard } from '@/components/ai/ai-gaps-card';
 import { CustomFieldsSection } from '@/components/custom-fields/custom-fields-section';
 import { contactsApi, type UpdateContactDto } from '@/lib/api/contacts';
@@ -113,12 +114,19 @@ function ContactInfoCard({
             inputMode="tel"
           />
           {contact.phone && (
-            <a
-              href={`tel:${contact.phone.replace(/\D/g, '')}`}
-              className="mt-1 inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
-            >
-              {formatPhone(contact.phone)}
-            </a>
+            <div className="mt-1 inline-flex items-center gap-1.5">
+              <a
+                href={`tel:${contact.phone.replace(/\D/g, '')}`}
+                className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+              >
+                {formatPhone(contact.phone)}
+              </a>
+              <WhatsAppVerifiedBadge
+                contactId={contact.id}
+                verified={contact.whatsapp_verified}
+                size="sm"
+              />
+            </div>
           )}
         </Field>
 

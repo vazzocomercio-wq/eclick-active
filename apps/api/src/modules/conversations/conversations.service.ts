@@ -226,7 +226,8 @@ export class ConversationsService {
         `
         *,
         contact:contacts (
-          id, name, phone, email, avatar_url, temperature, score, tags
+          id, name, phone, email, avatar_url, temperature, score, tags,
+          whatsapp_verified, whatsapp_jid, whatsapp_profile_name, whatsapp_profile_pic_url
         )
       `,
       )

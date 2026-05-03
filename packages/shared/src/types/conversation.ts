@@ -104,5 +104,9 @@ export interface ConversationDetail extends Conversation {
     | 'temperature'
     | 'score'
     | 'tags'
+    | 'whatsapp_verified'
+    | 'whatsapp_jid'
+    | 'whatsapp_profile_name'
+    | 'whatsapp_profile_pic_url'
   > | null;
 }

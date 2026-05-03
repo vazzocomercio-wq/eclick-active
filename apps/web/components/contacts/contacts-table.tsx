@@ -14,6 +14,7 @@ import { InitialsAvatar } from './initials-avatar';
 import { TemperatureBadge } from './temperature-badge';
 import { ScoreBar } from './score-bar';
 import { TagPills } from './tag-pills';
+import { WhatsAppVerifiedBadge } from './whatsapp-verified-badge';
 import { formatPhone, formatRelativeTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
@@ -97,7 +98,18 @@ export function ContactsTable({
                       {c.name ?? <span className="text-muted-foreground">sem nome</span>}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {c.phone ? formatPhone(c.phone) : '—'}
+                      {c.phone ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          {formatPhone(c.phone)}
+                          <WhatsAppVerifiedBadge
+                            contactId={c.id}
+                            verified={c.whatsapp_verified}
+                            size="sm"
+                          />
+                        </span>
+                      ) : (
+                        '—'
+                      )}
                     </TableCell>
                     <TableCell className="text-muted-foreground">{c.email ?? '—'}</TableCell>
                     <TableCell>

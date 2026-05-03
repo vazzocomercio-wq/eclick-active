@@ -194,11 +194,24 @@ export interface ContactCreatedEvent extends TriggerEventBase {
   source: string | null;
 }
 
+export interface WhatsAppVerifiedEvent extends TriggerEventBase {
+  event: 'whatsapp_verified';
+  org_id: string;
+  contact_id: string;
+  /** JID canônico retornado pelo provider (Baileys/Z-API) */
+  jid: string | null;
+  /** Nome do perfil WhatsApp se disponível */
+  profile_name: string | null;
+  /** 'baileys' | 'zapi' — qual provider validou */
+  provider: string;
+}
+
 export type AnyTriggerEvent =
   | MessageReceivedEvent
   | DealCreatedEvent
   | DealStageChangedEvent
-  | ContactCreatedEvent;
+  | ContactCreatedEvent
+  | WhatsAppVerifiedEvent;
 
 // ──────────────────────────────────────────────────────────
 // Log de execução
@@ -239,6 +252,7 @@ export const GENERATE_SCHEMA = {
         'deal_created',
         'deal_stage_changed',
         'contact_created',
+        'whatsapp_verified',
         'task_overdue',
         'manual',
       ],
@@ -305,6 +319,7 @@ Triggers disponíveis:
 - deal_created: novo deal criado.
 - deal_stage_changed: deal mudou de etapa. Config: from_stage_id, to_stage_id (UUIDs — não invente).
 - contact_created: novo contato. Config: source (whatsapp/import/etc).
+- whatsapp_verified: contato foi verificado como WhatsApp ativo. Use pra disparar boas-vindas, criar tarefa de primeiro contato, ou marcar tag.
 - task_overdue: tarefa atrasou. Config: task_type.
 - manual: dispara manualmente.
 

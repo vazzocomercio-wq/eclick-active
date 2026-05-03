@@ -2,6 +2,7 @@ import {
   Bell,
   Briefcase,
   CalendarClock,
+  CheckCircle2,
   Clock,
   type LucideIcon,
   MessageCircle,
@@ -51,6 +52,12 @@ export const TRIGGER_VISUALS: Record<AutomationTriggerType, TriggerVisual> = {
     bg: 'bg-cyan-500/15',
     label: 'Contato criado',
   },
+  whatsapp_verified: {
+    icon: CheckCircle2,
+    color: 'text-emerald-500',
+    bg: 'bg-emerald-500/15',
+    label: 'WhatsApp verificado',
+  },
   task_overdue: {
     icon: CalendarClock,
     color: 'text-orange-400',
@@ -82,6 +89,7 @@ export const TRIGGER_OPTIONS: AutomationTriggerType[] = [
   'deal_created',
   'deal_stage_changed',
   'contact_created',
+  'whatsapp_verified',
   'task_overdue',
   'manual',
 ];

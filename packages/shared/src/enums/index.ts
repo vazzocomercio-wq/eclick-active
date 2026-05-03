@@ -127,6 +127,7 @@ export type AutomationTriggerType =
   | 'deal_created'
   | 'deal_stage_changed'
   | 'contact_created'
+  | 'whatsapp_verified'
   | 'task_overdue'
   | 'time_based'
   | 'manual'
