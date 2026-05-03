@@ -44,6 +44,7 @@ import {
   type CreateWebhookEndpointInput,
 } from '@/lib/api/outbound-webhooks';
 import { ApiError } from '@/lib/api/client';
+import { useConfirm } from '@/components/ui/confirm-provider';
 import { formatRelativeTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
@@ -76,6 +77,7 @@ export function WebhooksSection() {
   const [editingEndpoint, setEditingEndpoint] = useState<WebhookEndpoint | null>(null);
 
   const [detailEndpoint, setDetailEndpoint] = useState<WebhookEndpoint | null>(null);
+  const confirm = useConfirm();
 
   async function reload() {
     setLoading(true);
@@ -133,7 +135,14 @@ export function WebhooksSection() {
               setDialogOpen(true);
             }}
             onDelete={async () => {
-              if (!confirm(`Excluir webhook "${ep.name}"?`)) return;
+              const ok = await confirm({
+                title: `Excluir webhook "${ep.name}"?`,
+                description: 'Os eventos não serão mais disparados pra esse endpoint.',
+                variant: 'destructive',
+                confirmLabel: 'Excluir',
+                icon: Trash2,
+              });
+              if (!ok) return;
               try {
                 await outboundWebhooksApi.remove(ep.id);
                 toast.success('Webhook excluído');

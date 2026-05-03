@@ -21,6 +21,7 @@ import {
 import { ApiError } from '@/lib/api/client';
 import { PipelineConfigSheet } from '@/components/funis/pipeline-config-sheet';
 import { NewPipelineDialog } from '@/components/funis/new-pipeline-dialog';
+import { useConfirm } from '@/components/ui/confirm-provider';
 import { cn } from '@/lib/utils';
 
 export default function PipelineSettingsPage() {
@@ -29,6 +30,7 @@ export default function PipelineSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [editingPipeline, setEditingPipeline] = useState<PipelineWithStages | null>(null);
   const [newDialogOpen, setNewDialogOpen] = useState(false);
+  const confirm = useConfirm();
 
   const reload = useCallback(async () => {
     setError(null);
@@ -57,9 +59,13 @@ export default function PipelineSettingsPage() {
   }, [reload]);
 
   async function handleArchive(p: PipelineWithStages) {
-    if (!confirm(`Arquivar "${p.name}"? Não aparece no board, dados ficam preservados.`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: `Arquivar "${p.name}"?`,
+      description: 'Não aparece no board, mas todos os dados ficam preservados. Pode restaurar depois.',
+      confirmLabel: 'Arquivar',
+      icon: Archive,
+    });
+    if (!ok) return;
     try {
       await pipelinesApi.archive(p.id);
       toast.success('Pipeline arquivado');
@@ -84,7 +90,14 @@ export default function PipelineSettingsPage() {
   }
 
   async function handleDeletePipeline(id: string) {
-    if (!confirm('Excluir esse pipeline? Essa ação é irreversível.')) return;
+    const ok = await confirm({
+      title: 'Excluir esse pipeline?',
+      description: 'Essa ação é irreversível e remove todos os deals associados.',
+      variant: 'destructive',
+      confirmLabel: 'Excluir',
+      icon: Trash2,
+    });
+    if (!ok) return;
     setError(null);
     try {
       await pipelinesApi.remove(id);

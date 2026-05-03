@@ -33,6 +33,7 @@ import { Button } from '@/components/ui/button';
 import { InitialsAvatar } from '@/components/contacts/initials-avatar';
 import { appointmentsApi } from '@/lib/api/appointments';
 import { ApiError } from '@/lib/api/client';
+import { usePrompt } from '@/components/ui/confirm-provider';
 import { cn } from '@/lib/utils';
 
 interface AppointmentDetailSheetProps {
@@ -74,6 +75,7 @@ export function AppointmentDetailSheet({
   onChanged,
 }: AppointmentDetailSheetProps) {
   const [busy, setBusy] = useState<string | null>(null);
+  const prompt = usePrompt();
 
   if (!appointment) return null;
 
@@ -266,9 +268,20 @@ export function AppointmentDetailSheet({
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => {
-                  const reason = window.prompt('Motivo do cancelamento (opcional):') ?? undefined;
-                  void action('cancel', () => appointmentsApi.cancel(appointment.id, reason));
+                onClick={async () => {
+                  const reason = await prompt({
+                    title: 'Cancelar agendamento',
+                    description: 'Motivo do cancelamento (opcional).',
+                    placeholder: 'Ex: cliente desmarcou',
+                    confirmLabel: 'Cancelar agendamento',
+                    cancelLabel: 'Voltar',
+                    allowEmpty: true,
+                    multiline: true,
+                  });
+                  if (reason === null) return;
+                  void action('cancel', () =>
+                    appointmentsApi.cancel(appointment.id, reason || undefined),
+                  );
                 }}
                 disabled={busy !== null}
               >
@@ -282,12 +295,28 @@ export function AppointmentDetailSheet({
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => {
-                  const ans = window.prompt(
-                    'Reagendar para (ISO 8601, ex: 2026-05-12T15:00:00-03:00):',
-                  );
+                onClick={async () => {
+                  const ans = await prompt({
+                    title: 'Reagendar',
+                    description:
+                      'Informe a nova data/hora (ISO 8601, ex: 2026-05-12T15:00:00-03:00).',
+                    placeholder: '2026-05-12T15:00:00-03:00',
+                    confirmLabel: 'Reagendar',
+                    type: 'datetime-local',
+                    validate: (v) => {
+                      if (!v) return null;
+                      // datetime-local browser-formatado vem como "YYYY-MM-DDTHH:mm"
+                      const d = new Date(v);
+                      if (isNaN(d.getTime())) return 'Data inválida';
+                      return null;
+                    },
+                  });
                   if (!ans) return;
-                  void action('reschedule', () => appointmentsApi.reschedule(appointment.id, ans));
+                  // datetime-local não tem timezone — assume local (offset BR)
+                  const iso = new Date(ans).toISOString();
+                  void action('reschedule', () =>
+                    appointmentsApi.reschedule(appointment.id, iso),
+                  );
                 }}
                 disabled={busy !== null}
               >

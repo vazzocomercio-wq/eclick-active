@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { History, MessageSquare, Sparkles, User } from 'lucide-react';
+import { History, MessageSquare, Sparkles, Trash2, User } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Sheet,
@@ -24,6 +24,7 @@ import { dealsApi } from '@/lib/api/deals';
 import { ApiError } from '@/lib/api/client';
 import type { PipelineWithStages } from '@/lib/api/pipelines';
 import { createClient } from '@/lib/supabase/client';
+import { useConfirm } from '@/components/ui/confirm-provider';
 
 interface DealDetailSheetProps {
   dealId: string | null;
@@ -60,6 +61,7 @@ export function DealDetailSheet({
   const [tab, setTab] = useState<TabKey>('main');
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const confirm = useConfirm();
   const [showLostDialog, setShowLostDialog] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
@@ -146,7 +148,14 @@ export function DealDetailSheet({
 
   async function handleDelete() {
     if (!detail) return;
-    if (!window.confirm('Excluir este deal? A ação não pode ser desfeita.')) return;
+    const ok = await confirm({
+      title: 'Excluir este deal?',
+      description: 'A ação não pode ser desfeita.',
+      variant: 'destructive',
+      confirmLabel: 'Excluir',
+      icon: Trash2,
+    });
+    if (!ok) return;
     setDeleting(true);
     try {
       await dealsApi.remove(detail.id);

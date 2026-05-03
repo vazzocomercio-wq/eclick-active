@@ -38,6 +38,7 @@ import {
   type CreateGroupInput,
 } from '@/lib/api/custom-fields';
 import { ApiError } from '@/lib/api/client';
+import { useConfirm } from '@/components/ui/confirm-provider';
 import { cn } from '@/lib/utils';
 
 const ENTITIES: { value: CustomFieldEntityType; label: string }[] = [
@@ -105,6 +106,7 @@ function EntityAdmin({ entityType }: { entityType: CustomFieldEntityType }) {
   const [defs, setDefs] = useState<CustomFieldDefinition[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const confirm = useConfirm();
 
   // Dialogs
   const [groupDialog, setGroupDialog] = useState<{
@@ -182,9 +184,14 @@ function EntityAdmin({ entityType }: { entityType: CustomFieldEntityType }) {
   }
 
   async function deleteGroup(g: CustomFieldGroup) {
-    if (!window.confirm(`Excluir grupo "${g.name}"? Os campos voltam pra "Sem grupo".`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: `Excluir grupo "${g.name}"?`,
+      description: 'Os campos voltam pra "Sem grupo".',
+      variant: 'destructive',
+      confirmLabel: 'Excluir',
+      icon: Trash2,
+    });
+    if (!ok) return;
     try {
       await customFieldsApi.removeGroup(g.id);
       toast.success('Grupo excluído');
@@ -195,13 +202,14 @@ function EntityAdmin({ entityType }: { entityType: CustomFieldEntityType }) {
   }
 
   async function deleteField(d: CustomFieldDefinition) {
-    if (
-      !window.confirm(
-        `Excluir campo "${d.name}"? Valores existentes nos registros ficam órfãos no jsonb.`,
-      )
-    ) {
-      return;
-    }
+    const ok = await confirm({
+      title: `Excluir campo "${d.name}"?`,
+      description: 'Valores existentes nos registros ficam órfãos no jsonb.',
+      variant: 'destructive',
+      confirmLabel: 'Excluir',
+      icon: Trash2,
+    });
+    if (!ok) return;
     try {
       await customFieldsApi.remove(d.id);
       toast.success('Campo excluído');

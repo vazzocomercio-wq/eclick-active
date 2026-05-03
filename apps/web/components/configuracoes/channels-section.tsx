@@ -17,6 +17,7 @@ import { BaileysConnectDialog } from './baileys-connect-dialog';
 import { ConnectEmailDialog } from './connect-email-dialog';
 import { ChannelBrandButton } from './channel-brand-button';
 import { Button } from '@/components/ui/button';
+import { useConfirm } from '@/components/ui/confirm-provider';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -56,6 +57,7 @@ export function ChannelsSection() {
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [connectingInstagram, setConnectingInstagram] = useState(false);
   const [connectingTiktok, setConnectingTiktok] = useState(false);
+  const confirm = useConfirm();
 
   // Lê callback do OAuth Instagram (?channel=success&provider=instagram)
   const search = useSearchParams();
@@ -137,8 +139,14 @@ export function ChannelsSection() {
   }
 
   async function disconnect(channel: ChannelView) {
-    if (!confirm(`Desconectar "${channel.name}"? Mensagens não serão recebidas.`))
-      return;
+    const ok = await confirm({
+      title: `Desconectar "${channel.name}"?`,
+      description: 'Mensagens não serão mais recebidas por esse canal.',
+      variant: 'destructive',
+      confirmLabel: 'Desconectar',
+      icon: Trash2,
+    });
+    if (!ok) return;
     try {
       await channelsApi.remove(channel.id);
       void reload();

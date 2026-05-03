@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { History, MessageSquare, Sparkles, Target, User } from 'lucide-react';
+import { History, MessageSquare, Sparkles, Target, Trash2, User } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Contact } from '@eclick-active/shared';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
@@ -15,6 +15,7 @@ import { ContactAITab } from './contact-detail-tabs/ai-tab';
 import { ContactHistoryTab } from './contact-detail-tabs/history-tab';
 import { contactsApi } from '@/lib/api/contacts';
 import { ApiError } from '@/lib/api/client';
+import { useConfirm } from '@/components/ui/confirm-provider';
 
 interface ContactDetailSheetProps {
   contact: Contact | null;
@@ -53,6 +54,7 @@ export function ContactDetailSheet({
   const [contact, setContact] = useState<Contact | null>(initialContact);
   const [tab, setTab] = useState<TabKey>('main');
   const [deleting, setDeleting] = useState(false);
+  const confirm = useConfirm();
 
   useEffect(() => {
     setContact(initialContact);
@@ -76,9 +78,14 @@ export function ContactDetailSheet({
 
   async function handleDelete() {
     if (!contact) return;
-    if (!window.confirm('Excluir este contato? A ação não pode ser desfeita.')) {
-      return;
-    }
+    const ok = await confirm({
+      title: 'Excluir este contato?',
+      description: 'A ação não pode ser desfeita.',
+      variant: 'destructive',
+      confirmLabel: 'Excluir',
+      icon: Trash2,
+    });
+    if (!ok) return;
     setDeleting(true);
     try {
       await contactsApi.remove(contact.id);

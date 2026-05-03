@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { calendarIntegrationsApi } from '@/lib/api/calendar-integrations';
 import { ApiError } from '@/lib/api/client';
+import { useConfirm } from '@/components/ui/confirm-provider';
 import { formatRelativeTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
@@ -206,6 +207,7 @@ function ConnectedState({
   onChanged: () => void | Promise<void>;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
+  const confirm = useConfirm();
   const isCalendly = integration.provider === 'calendly';
   const schedulingUrl = isCalendly
     ? ((integration.metadata as { scheduling_url?: string } | null)?.scheduling_url ?? null)
@@ -355,8 +357,15 @@ function ConnectedState({
           variant="ghost"
           size="sm"
           className="ml-auto text-red-600 hover:text-red-700"
-          onClick={() => {
-            if (!confirm('Desconectar essa integração? Os tokens serão removidos.')) return;
+          onClick={async () => {
+            const ok = await confirm({
+              title: 'Desconectar integração?',
+              description: 'Os tokens OAuth serão removidos. Você precisará reautorizar pra reconectar.',
+              variant: 'destructive',
+              confirmLabel: 'Desconectar',
+              icon: Trash2,
+            });
+            if (!ok) return;
             void action(
               'disconnect',
               () => calendarIntegrationsApi.disconnect(integration.id),

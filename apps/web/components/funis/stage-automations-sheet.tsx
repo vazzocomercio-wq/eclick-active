@@ -19,6 +19,7 @@ import {
   type AutomationAction,
 } from '@/lib/api/automations';
 import { ApiError } from '@/lib/api/client';
+import { useConfirm } from '@/components/ui/confirm-provider';
 import { cn } from '@/lib/utils';
 
 interface StageAutomationsSheetProps {
@@ -47,6 +48,7 @@ export function StageAutomationsSheet({
 }: StageAutomationsSheetProps) {
   const [items, setItems] = useState<Automation[]>([]);
   const [loading, setLoading] = useState(false);
+  const confirm = useConfirm();
   const [creating, setCreating] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
 
@@ -82,7 +84,14 @@ export function StageAutomationsSheet({
   }
 
   async function handleDelete(a: Automation) {
-    if (!confirm(`Excluir automação "${a.name}"?`)) return;
+    const ok = await confirm({
+      title: `Excluir automação "${a.name}"?`,
+      description: 'Essa automação não vai mais executar pra esse stage.',
+      variant: 'destructive',
+      confirmLabel: 'Excluir',
+      icon: Trash2,
+    });
+    if (!ok) return;
     try {
       await automationsApi.remove(a.id);
       toast.success('Automação excluída');

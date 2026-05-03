@@ -22,6 +22,7 @@ import { ApiError } from '@/lib/api/client';
 import type { Form } from '@eclick-active/shared';
 import { TemplatesDialog } from '@/components/formularios/templates-dialog';
 import { PublishDialog } from '@/components/formularios/publish-dialog';
+import { useConfirm } from '@/components/ui/confirm-provider';
 import { formatRelativeTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
@@ -47,6 +48,7 @@ export default function FormulariosPage() {
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [publishing, setPublishing] = useState<Form | null>(null);
   const [creating, setCreating] = useState(false);
+  const confirm = useConfirm();
 
   const reload = useCallback(async () => {
     setError(null);
@@ -107,13 +109,15 @@ export default function FormulariosPage() {
   }
 
   async function remove(form: Form) {
-    if (
-      !window.confirm(
-        `Excluir "${form.name}"? Submissões já recebidas não serão apagadas dos contatos.`,
-      )
-    ) {
-      return;
-    }
+    const ok = await confirm({
+      title: `Excluir "${form.name}"?`,
+      description:
+        'Submissões já recebidas não serão apagadas dos contatos.',
+      variant: 'destructive',
+      confirmLabel: 'Excluir',
+      icon: Trash2,
+    });
+    if (!ok) return;
     try {
       await formsApi.remove(form.id);
       setForms((curr) => curr.filter((f) => f.id !== form.id));

@@ -17,6 +17,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { knowledgeApi } from '@/lib/api/knowledge';
 import { ApiError } from '@/lib/api/client';
+import { useConfirm } from '@/components/ui/confirm-provider';
 import { cn } from '@/lib/utils';
 import { formatRelativeTime } from '@/lib/format';
 
@@ -44,6 +45,7 @@ export function EditLiveSourceSheet({ open, onOpenChange, source, onChanged }: E
   const [isActive, setIsActive] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const confirm = useConfirm();
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; content?: string; error?: string } | null>(null);
 
@@ -84,7 +86,14 @@ export function EditLiveSourceSheet({ open, onOpenChange, source, onChanged }: E
 
   async function handleDelete() {
     if (!source) return;
-    if (!confirm(`Deletar fonte "${source.name}"? Essa ação não pode ser desfeita.`)) return;
+    const ok = await confirm({
+      title: `Deletar fonte "${source.name}"?`,
+      description: 'Essa ação não pode ser desfeita.',
+      variant: 'destructive',
+      confirmLabel: 'Deletar',
+      icon: Trash2,
+    });
+    if (!ok) return;
     setDeleting(true);
     try {
       await knowledgeApi.deleteLiveSource(source.id);

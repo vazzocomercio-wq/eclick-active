@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Toaster } from 'sonner';
+import { ConfirmProvider } from '@/components/ui/confirm-provider';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -33,7 +34,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body className="min-h-screen bg-background font-sans antialiased">
-        {children}
+        <ConfirmProvider>{children}</ConfirmProvider>
         <Toaster
           position="bottom-right"
           theme="dark"
