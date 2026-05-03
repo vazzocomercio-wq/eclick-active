@@ -383,7 +383,6 @@ export class ConversationsService {
         message = await this.updateMessageStatus(message, {
           status: 'sent',
           channel_message_id: result.channel_message_id,
-          delivered_at: new Date().toISOString(),
           error_code: null,
           error_message: null,
         });

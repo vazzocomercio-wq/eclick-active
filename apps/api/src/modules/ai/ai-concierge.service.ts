@@ -706,7 +706,6 @@ Decida o roteamento.`;
         .update({
           status: 'sent',
           channel_message_id: result.channel_message_id,
-          delivered_at: new Date().toISOString(),
         })
         .eq('org_id', orgId)
         .eq('id', messageId)
