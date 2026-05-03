@@ -5,6 +5,8 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  InternalServerErrorException,
+  Logger,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -28,6 +30,8 @@ import { EventsGateway } from '../../gateways/events.gateway';
 @UseGuards(AuthGuard)
 @Controller('channels')
 export class ChannelsController {
+  private readonly logger = new Logger(ChannelsController.name);
+
   constructor(
     private readonly service: ChannelsService,
     private readonly events: EventsGateway,
@@ -45,9 +49,23 @@ export class ChannelsController {
   async diagnostics(
     @CurrentUser() user: AuthUser,
   ): Promise<WhatsAppFreeDiagnostics & { sockets_connected: number }> {
-    const data = await this.service.getWhatsAppFreeDiagnostics(user.org_id);
-    const sockets_connected = this.events.countSocketsForOrg(user.org_id);
-    return { ...data, sockets_connected };
+    try {
+      const data = await this.service.getWhatsAppFreeDiagnostics(user.org_id);
+      let sockets_connected = 0;
+      try {
+        sockets_connected = this.events.countSocketsForOrg(user.org_id);
+      } catch (err) {
+        this.logger.warn(
+          `countSocketsForOrg falhou (não fatal): ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+      return { ...data, sockets_connected };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const stack = err instanceof Error ? err.stack : undefined;
+      this.logger.error(`diagnostics handler crashed: ${msg}\n${stack}`);
+      throw new InternalServerErrorException(`diagnostics: ${msg}`);
+    }
   }
 
   @Get()
