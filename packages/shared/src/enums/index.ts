@@ -21,6 +21,7 @@ export type ContactSource =
   | 'whatsapp'
   | 'instagram'
   | 'email'
+  | 'tiktok'
   | 'website'
   | 'import'
   | 'manual'

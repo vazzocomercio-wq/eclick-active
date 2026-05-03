@@ -26,6 +26,7 @@ export * from './types/knowledge-live-source';
 export * from './types/appointment';
 export * from './types/calendar-integration';
 export * from './types/email-thread';
+export * from './types/tiktok-interaction';
 
 // Enum union types
 export * from './enums';

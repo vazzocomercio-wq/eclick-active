@@ -204,6 +204,28 @@ export class ContactsService {
     });
   }
 
+  /**
+   * Busca/cria contato por TikTok open_id. Mesmo padrão do Instagram PSID:
+   * usa phone='tt:<open_id>' como discriminador único.
+   */
+  async findOrCreateByTikTokOpenId(
+    orgId: string,
+    openId: string,
+    username?: string,
+    avatarUrl?: string,
+  ): Promise<Contact> {
+    const phoneEquivalent = `tt:${openId}`;
+    const existing = await this.findByPhone(orgId, phoneEquivalent);
+    if (existing) return existing;
+
+    return this.create(orgId, {
+      phone: phoneEquivalent,
+      name: username ? `@${username}` : undefined,
+      ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
+      source: 'tiktok',
+    });
+  }
+
   // ──────────────────────────────────────────────────────────
   // UPDATE
   // ──────────────────────────────────────────────────────────

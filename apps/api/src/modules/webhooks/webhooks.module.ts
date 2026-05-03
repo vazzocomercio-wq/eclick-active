@@ -7,6 +7,10 @@ import { InstagramOAuthController } from './instagram/instagram-oauth.controller
 import { EmailWebhookService } from './email/email-webhook.service';
 import { EmailPollerService } from './email/email-poller.service';
 import { EmailConnectController } from './email/email-connect.controller';
+import { TikTokWebhookController } from './tiktok/tiktok-webhook.controller';
+import { TikTokWebhookService } from './tiktok/tiktok-webhook.service';
+import { TikTokOAuthController } from './tiktok/tiktok-oauth.controller';
+import { TikTokTokenRefreshWorker } from './tiktok/tiktok-token-refresh.worker';
 import { AutoLeadService } from './auto-lead.service';
 import { OutboundWebhookController } from './outbound/outbound-webhook.controller';
 import { OutboundWebhookService } from './outbound/outbound-webhook.service';
@@ -29,6 +33,8 @@ import { AutomationsModule } from '../automations/automations.module';
     InstagramWebhookController,
     InstagramOAuthController,
     EmailConnectController,
+    TikTokWebhookController,
+    TikTokOAuthController,
   ],
   providers: [
     ZapiWebhookService,
@@ -37,6 +43,8 @@ import { AutomationsModule } from '../automations/automations.module';
     InstagramWebhookService,
     EmailWebhookService,
     EmailPollerService,
+    TikTokWebhookService,
+    TikTokTokenRefreshWorker,
   ],
   exports: [AutoLeadService, OutboundWebhookService],
 })

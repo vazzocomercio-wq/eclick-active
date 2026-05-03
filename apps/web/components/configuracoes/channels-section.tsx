@@ -9,6 +9,7 @@ import {
   Loader2,
   Mail,
   MessageCircle,
+  Music2,
   Pause,
   Plus,
   Play,
@@ -58,6 +59,7 @@ export function ChannelsSection() {
   const [baileysDialogOpen, setBaileysDialogOpen] = useState(false);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [connectingInstagram, setConnectingInstagram] = useState(false);
+  const [connectingTiktok, setConnectingTiktok] = useState(false);
 
   // Lê callback do OAuth Instagram (?channel=success&provider=instagram)
   const search = useSearchParams();
@@ -69,6 +71,8 @@ export function ChannelsSection() {
       toast.success('Instagram conectado!', {
         description: count ? `${count} conta(s) ativa(s)` : undefined,
       });
+    } else if (result === 'success' && provider === 'tiktok') {
+      toast.success('TikTok conectado!');
     } else if (result === 'error') {
       toast.error('Falha ao conectar canal', {
         description: search.get('reason') ?? 'erro',
@@ -86,6 +90,19 @@ export function ChannelsSection() {
         description: err instanceof ApiError ? err.message : 'erro',
       });
       setConnectingInstagram(false);
+    }
+  }
+
+  async function connectTiktok() {
+    setConnectingTiktok(true);
+    try {
+      const { url } = await api.get<{ url: string }>('/channels/tiktok/auth');
+      window.location.href = url;
+    } catch (err) {
+      toast.error('Falha ao iniciar conexão TikTok', {
+        description: err instanceof ApiError ? err.message : 'erro',
+      });
+      setConnectingTiktok(false);
     }
   }
 
@@ -176,6 +193,20 @@ export function ChannelsSection() {
           >
             <Mail className="mr-2 h-3.5 w-3.5" />
             Email
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={connectTiktok}
+            disabled={connectingTiktok}
+            className="border-foreground/30 hover:bg-foreground/5"
+          >
+            {connectingTiktok ? (
+              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Music2 className="mr-2 h-3.5 w-3.5" />
+            )}
+            TikTok
           </Button>
         </div>
       </div>
