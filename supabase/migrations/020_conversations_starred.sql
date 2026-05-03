@@ -13,8 +13,11 @@ CREATE INDEX IF NOT EXISTS idx_conversations_starred
   ON active.conversations (org_id, is_starred, last_message_at DESC NULLS LAST)
   WHERE is_starred = true;
 
--- Recria v_inbox incluindo is_starred (frontend mostra estrela na lista)
-CREATE OR REPLACE VIEW active.v_inbox AS
+-- Recria v_inbox incluindo is_starred. Postgres não aceita CREATE OR REPLACE
+-- VIEW se a ordem das colunas mudar — por isso DROP + CREATE.
+DROP VIEW IF EXISTS active.v_inbox;
+
+CREATE VIEW active.v_inbox AS
 SELECT
   c.id,
   c.org_id,
