@@ -360,10 +360,16 @@ export class ConversationsService {
       );
     }
     let message = persisted as Message;
+    this.logger.log(
+      `[startConversation] msg persisted id=${message.id} conv=${conversation.id} channel=${dto.channel_id} isNote=${isNote}`,
+    );
 
     // 5. Dispatch (pula se for nota interna)
     if (!isNote) {
       try {
+        this.logger.log(
+          `[startConversation] calling dispatcher.send channel=${dto.channel_id} contact=${dto.contact_id}`,
+        );
         const result = await this.dispatcher.send({
           org_id: orgId,
           channel_id: dto.channel_id,
@@ -371,6 +377,9 @@ export class ConversationsService {
           content_type: 'text',
           content: { body: dto.message },
         });
+        this.logger.log(
+          `[startConversation] dispatcher.send OK channel_message_id=${result.channel_message_id}`,
+        );
         message = await this.updateMessageStatus(message, {
           status: 'sent',
           channel_message_id: result.channel_message_id,
@@ -378,9 +387,13 @@ export class ConversationsService {
           error_code: null,
           error_message: null,
         });
+        this.logger.log(`[startConversation] marked as sent`);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        this.logger.warn(`startConversation dispatch failed: ${msg}`);
+        const stack = err instanceof Error ? err.stack : '';
+        this.logger.error(
+          `[startConversation] dispatch failed: ${msg}\n${stack}`,
+        );
         message = await this.updateMessageStatus(message, {
           status: 'failed',
           error_code: 'start_dispatch_error',
