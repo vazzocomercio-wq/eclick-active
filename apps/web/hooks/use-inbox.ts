@@ -23,9 +23,16 @@ interface UseInboxResult {
   search: string;
   setSearch: (q: string) => void;
   refetch: () => Promise<void>;
+  /** Optimistic update: aplica patch local sem esperar socket/refetch. */
+  patchLocal: (conversationId: string, patch: Partial<InboxItem>) => void;
+  /** Remove imediatamente da lista (pra arquivar/resolver com feedback instantâneo). */
+  removeLocal: (conversationId: string) => void;
 }
 
 const PAGE_LIMIT = 50;
+/** Polling de backup — refetch silencioso enquanto a aba está visível.
+ * Funciona como rede de segurança caso o socket caia ou eventos sejam perdidos. */
+const POLL_INTERVAL_MS = 30_000;
 
 export function useInbox(): UseInboxResult {
   const [items, setItems] = useState<InboxItem[]>([]);
@@ -35,36 +42,117 @@ export function useInbox(): UseInboxResult {
   const [search, setSearch] = useState('');
   const reqIdRef = useRef(0);
 
-  const refetch = useCallback(async () => {
-    const reqId = ++reqIdRef.current;
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await conversationsApi.getInbox({
-        limit: PAGE_LIMIT,
-        ...(filter === 'mine' ? { mine: true } : {}),
-        ...(filter === 'resolved' ? { status: 'resolved' } : {}),
-        ...(filter === 'archived' ? { status: 'archived' } : {}),
-        ...(filter === 'starred' ? { starred: true } : {}),
-      });
-      if (reqId !== reqIdRef.current) return;
-      setItems(result.data);
-    } catch (err) {
-      if (reqId !== reqIdRef.current) return;
-      if (err instanceof ApiError) {
-        setError({ status: err.status, message: err.message });
-      } else {
-        setError({ status: 0, message: err instanceof Error ? err.message : 'Erro' });
+  /**
+   * Fetch interno — pode ser silencioso (não muda loading) pra polling
+   * de backup que não atrapalha UX.
+   */
+  const fetchInbox = useCallback(
+    async (silent = false) => {
+      const reqId = ++reqIdRef.current;
+      if (!silent) {
+        setLoading(true);
+        setError(null);
       }
-      setItems([]);
-    } finally {
-      if (reqId === reqIdRef.current) setLoading(false);
-    }
-  }, [filter]);
+      try {
+        const result = await conversationsApi.getInbox({
+          limit: PAGE_LIMIT,
+          ...(filter === 'mine' ? { mine: true } : {}),
+          ...(filter === 'resolved' ? { status: 'resolved' } : {}),
+          ...(filter === 'archived' ? { status: 'archived' } : {}),
+          ...(filter === 'starred' ? { starred: true } : {}),
+        });
+        if (reqId !== reqIdRef.current) return;
+        setItems(result.data);
+        if (silent) setError(null);
+      } catch (err) {
+        if (reqId !== reqIdRef.current) return;
+        if (err instanceof ApiError) {
+          setError({ status: err.status, message: err.message });
+        } else {
+          setError({ status: 0, message: err instanceof Error ? err.message : 'Erro' });
+        }
+        if (!silent) setItems([]);
+      } finally {
+        if (reqId === reqIdRef.current && !silent) setLoading(false);
+      }
+    },
+    [filter],
+  );
 
+  const refetch = useCallback(() => fetchInbox(false), [fetchInbox]);
+
+  /**
+   * Optimistic update: aplica mudanças locais imediatamente sem esperar
+   * round-trip da api. Usado quando o agente arquiva/resolve/atribui:
+   * em vez de esperar o emit conversation:updated voltar pelo socket,
+   * já remove/atualiza na hora pra UX ficar instantânea. Polling de
+   * backup garante consistência em alguns segundos.
+   */
+  const patchLocal = useCallback(
+    (conversationId: string, patch: Partial<InboxItem>) => {
+      setItems((prev) => prev.map((it) => (it.id === conversationId ? { ...it, ...patch } : it)));
+    },
+    [],
+  );
+
+  const removeLocal = useCallback((conversationId: string) => {
+    setItems((prev) => prev.filter((it) => it.id !== conversationId));
+  }, []);
+
+  // Fetch inicial + ao mudar filter
   useEffect(() => {
-    void refetch();
-  }, [refetch]);
+    void fetchInbox(false);
+  }, [fetchInbox]);
+
+  /**
+   * Polling de backup (silencioso) + refetch ao voltar pra aba.
+   *
+   * Sem isso, se o socket cair (token expirado, rede ruim, server reboot),
+   * o inbox congela até o user dar F5. Com polling de 30s + refetch on
+   * focus/visibility, garantimos que mensagens novas e mudanças de status
+   * apareçam mesmo que o realtime esteja "mudo".
+   */
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    let timer: ReturnType<typeof setInterval> | null = null;
+
+    function startPolling() {
+      if (timer) return;
+      timer = setInterval(() => {
+        if (document.visibilityState === 'visible') {
+          void fetchInbox(true);
+        }
+      }, POLL_INTERVAL_MS);
+    }
+
+    function stopPolling() {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+    }
+
+    function onVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        // User voltou pra aba — força refetch imediato pra recuperar
+        // qualquer evento perdido enquanto estava em background.
+        void fetchInbox(true);
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    }
+
+    if (document.visibilityState === 'visible') startPolling();
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('focus', onVisibilityChange);
+
+    return () => {
+      stopPolling();
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('focus', onVisibilityChange);
+    };
+  }, [fetchInbox]);
 
   // Realtime via Socket.IO (namespace /events da nossa api).
   //
@@ -200,5 +288,7 @@ export function useInbox(): UseInboxResult {
     search,
     setSearch,
     refetch,
+    patchLocal,
+    removeLocal,
   };
 }

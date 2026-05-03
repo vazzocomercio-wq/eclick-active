@@ -114,6 +114,23 @@ export default function ConversasPage() {
               panelOpen={panelOpen}
               onTogglePanel={() => setPanelOpen((v) => !v)}
               onConversationLoad={handleConversationLoad}
+              onAction={(ev) => {
+                // Optimistic update no inbox — não espera socket retornar
+                // o conversation:updated. Remove/atualiza na hora pra UX
+                // ficar instantânea, mesmo se realtime estiver off.
+                if (!selectedId) return;
+                if (ev === 'archive') {
+                  if (inbox.filter !== 'archived') inbox.removeLocal(selectedId);
+                  setSelectedId(null);
+                } else if (ev === 'resolve') {
+                  if (inbox.filter !== 'resolved') inbox.removeLocal(selectedId);
+                  setSelectedId(null);
+                } else if (ev === 'mark-read') {
+                  inbox.patchLocal(selectedId, { unread_count: 0 });
+                }
+                // Outras ações (assign, create-task, summarize) não impactam
+                // a posição na lista, o socket/polling cobre.
+              }}
             />
           </main>
 
