@@ -197,6 +197,26 @@ export class BaileysSession {
       }
     }
 
+    // Antes do envio, força fetch de pre-keys do destinatário e
+    // estabelecimento de sessão Signal. Sem isso, mensagens iniciadas
+    // pelo nosso lado (sem inbound prévio do lead) ficam com sessão
+    // criptográfica inválida — WhatsApp aceita o ciphertext mas o
+    // device do destinatário descarta silenciosamente. Quando o lead
+    // manda primeiro, o pre-key bundle dele vem junto e a sessão é
+    // estabelecida automaticamente, daí msgs subsequentes chegam.
+    // assertSessions é idempotente: se sessão já existe, no-op.
+    try {
+      await this.sock.assertSessions([jid], true);
+      // eslint-disable-next-line no-console
+      console.log(`[baileys ${this.ctx.channelId}] assertSessions ok jid=${jid}`);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[baileys ${this.ctx.channelId}] assertSessions falhou jid=${jid}:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+
     let result: Awaited<ReturnType<WASocket['sendMessage']>>;
     try {
       result = await this.sock.sendMessage(jid, payload);
