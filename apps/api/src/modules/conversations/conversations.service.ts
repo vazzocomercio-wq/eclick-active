@@ -1,26 +1,44 @@
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
 import type {
+  Channel,
+  Contact,
   Conversation,
   ConversationDetail,
   InboxItem,
   ChannelType,
+  Message,
 } from '@eclick-active/shared';
 import { SupabaseService } from '../../common/supabase/supabase.service';
+import { ChannelDispatcherService } from '../../common/channels/channel-dispatcher.service';
+import { EventsGateway } from '../../gateways/events.gateway';
 import { CreateConversationDto } from './dto/create-conversation.dto';
+import { StartConversationDto } from './dto/start-conversation.dto';
 import { UpdateConversationDto } from './dto/update-conversation.dto';
 import { ListConversationsQueryDto } from './dto/list-conversations.query.dto';
 import type { PaginatedResult } from '../contacts/contacts.service';
+
+export interface StartConversationResult {
+  conversation: Conversation;
+  message: Message;
+  /** True se a conversa já existia e foi reaproveitada em vez de criar nova. */
+  reused: boolean;
+}
 
 @Injectable()
 export class ConversationsService {
   private readonly logger = new Logger(ConversationsService.name);
 
-  constructor(private readonly supabase: SupabaseService) {}
+  constructor(
+    private readonly supabase: SupabaseService,
+    private readonly dispatcher: ChannelDispatcherService,
+    private readonly events: EventsGateway,
+  ) {}
 
   // ──────────────────────────────────────────────────────────
   // CREATE
@@ -236,6 +254,208 @@ export class ConversationsService {
       throw new NotFoundException(`Conversation ${id} not found`);
     }
     return data as Conversation;
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // START CONVERSATION — vendedor inicia conversa do zero
+  // ──────────────────────────────────────────────────────────
+
+  /**
+   * Cria conversa outbound + envia primeira mensagem pelo canal escolhido.
+   *
+   * Regras:
+   *  1. Contato existe e tem identificador pro canal (phone pra WhatsApp,
+   *     email pra Email, etc — validado pelo dispatcher).
+   *  2. Se canal whatsapp_free e contato tem `whatsapp_verified=false`,
+   *     bloqueia com 400 "número não é WhatsApp" (avisa o vendedor).
+   *     Se whatsapp_verified=null (não validado), permite mas registra
+   *     warning — pode falhar no envio.
+   *  3. Se já existe conversa ativa pro mesmo (contato, canal), REUTILIZA
+   *     em vez de criar nova. Retorna `reused: true` pra UI mostrar toast
+   *     "Conversa existente — abrindo".
+   *  4. Persiste mensagem outbound (sender_type=agent) e tenta dispatch.
+   *     Sucesso → status='sent'. Falha → status='failed' + error_code.
+   *  5. Emit Socket.IO: `conversation:created` (se nova) + `message:new`.
+   */
+  async startConversation(
+    orgId: string,
+    senderId: string,
+    dto: StartConversationDto,
+  ): Promise<StartConversationResult> {
+    // 1. Carrega contato e canal
+    const [contact, channel] = await Promise.all([
+      this.fetchContact(orgId, dto.contact_id),
+      this.fetchChannel(orgId, dto.channel_id),
+    ]);
+
+    if (channel.status !== 'active') {
+      throw new BadRequestException(
+        `Canal "${channel.name}" não está ativo (status=${channel.status})`,
+      );
+    }
+
+    // 2. Verifica que contato é alcançável pelo canal
+    this.assertReachable(contact, channel);
+
+    // 3. Reaproveita conversa existente se houver
+    let conversation = await this.findByContactAndChannel(
+      orgId,
+      dto.contact_id,
+      dto.channel_id,
+    );
+    const reused = !!conversation;
+
+    if (!conversation) {
+      conversation = await this.create(orgId, {
+        contact_id: dto.contact_id,
+        channel_id: dto.channel_id,
+        channel_type: channel.channel_type,
+      });
+      // Marca como outbound-initiated em metadata pra futuras analytics
+      await this.supabase.adminClient
+        .from('conversations')
+        .update({
+          metadata: {
+            ...(conversation.metadata ?? {}),
+            initiated_by: 'agent',
+            initiated_at: new Date().toISOString(),
+          },
+        })
+        .eq('id', conversation.id);
+      this.events.emitToOrg(orgId, 'conversation:updated', { conversation });
+    }
+
+    // 4. Persiste mensagem outbound
+    const isNote = dto.is_internal_note === true;
+    const initialStatus = isNote ? 'sent' : 'pending';
+    const { data: persisted, error: persistErr } = await this.supabase.adminClient
+      .from('messages')
+      .insert({
+        org_id: orgId,
+        conversation_id: conversation.id,
+        direction: 'outbound',
+        sender_type: 'agent',
+        sender_id: senderId,
+        content_type: 'text',
+        content: { text: dto.message },
+        plain_text: dto.message,
+        status: initialStatus,
+        is_internal_note: isNote,
+        metadata: { source: 'start_conversation' },
+      })
+      .select('*')
+      .single();
+
+    if (persistErr || !persisted) {
+      this.logger.error(`startConversation persist failed: ${persistErr?.message}`);
+      throw new InternalServerErrorException(
+        persistErr?.message ?? 'Falha ao persistir mensagem',
+      );
+    }
+    let message = persisted as Message;
+
+    // 5. Dispatch (pula se for nota interna)
+    if (!isNote) {
+      try {
+        const result = await this.dispatcher.send({
+          org_id: orgId,
+          channel_id: dto.channel_id,
+          contact_id: dto.contact_id,
+          content_type: 'text',
+          content: { text: dto.message },
+        });
+        const { data: updated } = await this.supabase.adminClient
+          .from('messages')
+          .update({
+            status: 'sent',
+            channel_message_id: result.channel_message_id,
+            delivered_at: new Date().toISOString(),
+          })
+          .eq('id', message.id)
+          .select('*')
+          .single();
+        if (updated) message = updated as Message;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`startConversation dispatch failed: ${msg}`);
+        const { data: failed } = await this.supabase.adminClient
+          .from('messages')
+          .update({
+            status: 'failed',
+            error_code: 'start_dispatch_error',
+            error_message: msg,
+          })
+          .eq('id', message.id)
+          .select('*')
+          .single();
+        if (failed) message = failed as Message;
+        // NÃO joga exception — devolve a mensagem com status=failed pra UI
+        // mostrar erro inline no toast/feedback.
+      }
+    }
+
+    // 6. Emit pro frontend (todos os agentes da org veem a conversa nova)
+    this.events.emitToOrg(orgId, 'message:new', {
+      conversation_id: conversation.id,
+      message,
+    });
+
+    return { conversation, message, reused };
+  }
+
+  private async fetchContact(orgId: string, contactId: string): Promise<Contact> {
+    const { data, error } = await this.supabase.adminClient
+      .from('contacts')
+      .select('*')
+      .eq('org_id', orgId)
+      .eq('id', contactId)
+      .maybeSingle();
+    if (error) throw new InternalServerErrorException(error.message);
+    if (!data) throw new NotFoundException('Contato não encontrado');
+    return data as Contact;
+  }
+
+  private async fetchChannel(orgId: string, channelId: string): Promise<Channel> {
+    const { data, error } = await this.supabase.adminClient
+      .from('channels')
+      .select('*')
+      .eq('org_id', orgId)
+      .eq('id', channelId)
+      .maybeSingle();
+    if (error) throw new InternalServerErrorException(error.message);
+    if (!data) throw new NotFoundException('Canal não encontrado');
+    return data as Channel;
+  }
+
+  private assertReachable(contact: Contact, channel: Channel): void {
+    const t = channel.channel_type;
+    if (t === 'whatsapp' || t === 'whatsapp_free') {
+      if (!contact.phone) {
+        throw new BadRequestException(
+          'Contato não tem telefone — adicione antes de enviar WhatsApp',
+        );
+      }
+      if (t === 'whatsapp_free' && contact.whatsapp_verified === false) {
+        throw new BadRequestException(
+          'Este número não é WhatsApp (verificado). Não é possível enviar.',
+        );
+      }
+      // whatsapp_verified=null (não validado) é permitido — pode falhar no envio
+    } else if (t === 'email') {
+      if (!contact.email) {
+        throw new BadRequestException(
+          'Contato não tem e-mail — adicione antes de enviar mensagem por e-mail',
+        );
+      }
+    } else if (t === 'instagram') {
+      const profile = (contact.channel_profiles ?? {})['instagram'];
+      const igId = (profile as { ig_id?: string } | undefined)?.ig_id;
+      if (!igId) {
+        throw new BadRequestException(
+          'Contato não tem perfil do Instagram vinculado',
+        );
+      }
+    }
   }
 
   // ──────────────────────────────────────────────────────────

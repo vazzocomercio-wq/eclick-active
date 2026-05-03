@@ -19,8 +19,12 @@ import type {
 import { AuthGuard } from '../../common/auth/auth.guard';
 import { CurrentUser } from '../../common/auth/current-user.decorator';
 import type { AuthUser } from '../../common/auth/auth.types';
-import { ConversationsService } from './conversations.service';
+import {
+  ConversationsService,
+  type StartConversationResult,
+} from './conversations.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
+import { StartConversationDto } from './dto/start-conversation.dto';
 import { UpdateConversationDto } from './dto/update-conversation.dto';
 import { ListConversationsQueryDto } from './dto/list-conversations.query.dto';
 import { InitiateTransferDto } from './dto/transfer.dto';
@@ -67,6 +71,22 @@ export class ConversationsController {
     @Body() dto: CreateConversationDto,
   ): Promise<Conversation> {
     return this.service.create(user.org_id, dto);
+  }
+
+  /**
+   * Iniciar conversa outbound — vendedor escolhe contato + canal + msg.
+   * Cria conversa (ou reaproveita ativa) e envia primeira mensagem.
+   *
+   * Resposta inclui `reused: boolean` pra UI distinguir nova vs existente
+   * (mostra toast "Conversa existente — abrindo" quando reused).
+   */
+  @Post('start')
+  @HttpCode(HttpStatus.OK)
+  start(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: StartConversationDto,
+  ): Promise<StartConversationResult> {
+    return this.service.startConversation(user.org_id, user.id, dto);
   }
 
   // GET /conversations/:id

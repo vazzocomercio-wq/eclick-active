@@ -75,8 +75,51 @@ export interface Contact {
   channel_profiles: ChannelProfiles;
   /** Marcado como opt-out global (LGPD) */
   opted_out: boolean;
+  // Validação WhatsApp (migration 029)
+  /** NULL = não validado, TRUE = é WhatsApp, FALSE = não é WhatsApp */
+  whatsapp_verified: boolean | null;
+  /** JID canônico (ex: 5571999999999@s.whatsapp.net) usado pra envio direto */
+  whatsapp_jid: string | null;
+  whatsapp_verified_at: ISODateString | null;
+  /** Nome do perfil WhatsApp do contato (display name) */
+  whatsapp_profile_name: string | null;
+  /** URL da foto de perfil WhatsApp — usada como fallback se avatar_url for null */
+  whatsapp_profile_pic_url: string | null;
   created_at: ISODateString;
   updated_at: ISODateString;
+}
+
+/**
+ * Linha da fila de validação WhatsApp. Worker processa em batch respeitando
+ * rate limit (30/min Baileys, 20/min Z-API). Migration 029.
+ * Tabela: active.whatsapp_validation_queue
+ */
+export interface WhatsAppValidationQueueItem {
+  id: UUID;
+  org_id: UUID;
+  contact_id: UUID;
+  phone: string;
+  status: 'pending' | 'validating' | 'valid' | 'invalid' | 'error';
+  provider: 'baileys' | 'zapi' | null;
+  result: Json | null;
+  error_message: string | null;
+  attempts: number;
+  created_at: ISODateString;
+  processed_at: ISODateString | null;
+}
+
+/**
+ * Resultado de uma chamada de verificação. Retornado pelo endpoint
+ * `/internal/baileys/check-number` do worker e usado pelo
+ * WhatsappValidatorService.
+ */
+export interface WhatsAppCheckResult {
+  exists: boolean;
+  jid?: string;
+  profile_name?: string;
+  profile_pic_url?: string;
+  /** Provider usado pra essa verificação. */
+  provider: 'baileys' | 'zapi';
 }
 
 /**

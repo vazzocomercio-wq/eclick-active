@@ -87,6 +87,36 @@ export class BaileysManager {
     return { message_id: messageId };
   }
 
+  /**
+   * Pergunta ao Baileys se um telefone tem WhatsApp ativo. Retorna o JID
+   * canônico, foto de perfil e nome (quando disponíveis).
+   *
+   * Usa a primeira sessão ativa da org pra fazer a verificação. Se não tem
+   * sessão ativa pra essa org, lança `no_active_session`.
+   *
+   * Lança erros tipados (similar a sendMessage) pra que o HTTP handler
+   * possa traduzir em status code:
+   *   - `no_active_session`: 503 (worker não tem nenhuma sessão pareada)
+   */
+  async checkNumber(
+    orgId: string,
+    phone: string,
+  ): Promise<{
+    exists: boolean;
+    jid?: string;
+    profile_name?: string;
+    profile_pic_url?: string;
+  }> {
+    // Pega qualquer sessão pareada da org pra fazer a checagem
+    const session = Array.from(this.sessions.values()).find(
+      (s) => s.orgId === orgId && s.isReady(),
+    );
+    if (!session) {
+      throw new Error(`no_active_session: org=${orgId}`);
+    }
+    return session.checkNumber(phone);
+  }
+
   // ──────────────────────────────────────────────────────────
 
   private async syncOnce(): Promise<void> {

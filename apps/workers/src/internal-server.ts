@@ -91,7 +91,47 @@ export class InternalServer {
       return;
     }
 
+    if (req.method === 'POST' && url === '/internal/baileys/check-number') {
+      await this.handleCheckNumber(req, res);
+      return;
+    }
+
     this.json(res, 404, { error: 'not_found' });
+  }
+
+  private async handleCheckNumber(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: CheckNumberBody;
+    try {
+      body = await this.parseJsonBody<CheckNumberBody>(req);
+    } catch (err) {
+      this.json(res, 400, { error: 'invalid_json', detail: String(err) });
+      return;
+    }
+
+    if (!body || typeof body.org_id !== 'string' || typeof body.phone !== 'string') {
+      this.json(res, 400, {
+        error: 'invalid_body',
+        detail: 'org_id e phone são obrigatórios',
+      });
+      return;
+    }
+
+    try {
+      const result = await this.manager.checkNumber(body.org_id, body.phone);
+      this.json(res, 200, result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.startsWith('no_active_session')) {
+        this.json(res, 503, { error: 'no_active_session', detail: message });
+      } else {
+        // eslint-disable-next-line no-console
+        console.error('[internal-server] checkNumber falhou:', err);
+        this.json(res, 500, { error: 'check_failed', detail: message });
+      }
+    }
   }
 
   private async handleSend(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
@@ -175,6 +215,13 @@ interface SendBody {
   content_type: 'text' | 'image' | 'audio' | 'video' | 'document';
   /** Shape específico do content_type — validado por `normalizeContent`. */
   content: Record<string, unknown>;
+}
+
+interface CheckNumberBody {
+  /** Org dona da sessão Baileys que vai ser usada pra perguntar. */
+  org_id: string;
+  /** Telefone canônico (ex: 5571999999999) ou JID completo. */
+  phone: string;
 }
 
 function normalizeContent(

@@ -12,6 +12,7 @@ import type {
 } from '@eclick-active/shared';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { OutboundWebhookService } from '../webhooks/outbound/outbound-webhook.service';
+import { WhatsappValidatorService } from './whatsapp-validator.service';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
 import { ListContactsQueryDto } from './dto/list-contacts.query.dto';
@@ -30,6 +31,7 @@ export class ContactsService {
   constructor(
     private readonly supabase: SupabaseService,
     private readonly webhooks: OutboundWebhookService,
+    private readonly whatsappValidator: WhatsappValidatorService,
   ) {}
 
   // ──────────────────────────────────────────────────────────
@@ -49,6 +51,13 @@ export class ContactsService {
     }
     const contact = data as Contact;
     void this.webhooks.deliver(orgId, 'contact.created', contact as unknown as Record<string, unknown>);
+
+    // Auto-validar WhatsApp em background se o contato tem telefone e a
+    // org tem provider disponível. Não bloqueia a criação.
+    if (contact.phone) {
+      void this.whatsappValidator.enqueue(orgId, contact.id, contact.phone);
+    }
+
     return contact;
   }
 
@@ -232,7 +241,7 @@ export class ContactsService {
 
   async update(orgId: string, id: string, dto: UpdateContactDto): Promise<Contact> {
     // Garante que o contato existe e pertence à org antes de atualizar
-    await this.findById(orgId, id);
+    const before = await this.findById(orgId, id);
 
     const { data, error } = await this.supabase.adminClient
       .from('contacts')
@@ -246,7 +255,14 @@ export class ContactsService {
       this.logger.error(`update failed: ${error?.message}`);
       throw new InternalServerErrorException(error?.message ?? 'Failed to update contact');
     }
-    return data as Contact;
+    const after = data as Contact;
+
+    // Re-validar WhatsApp se o telefone mudou (ou foi adicionado)
+    if (after.phone && after.phone !== before.phone) {
+      void this.whatsappValidator.enqueue(orgId, after.id, after.phone);
+    }
+
+    return after;
   }
 
   // ──────────────────────────────────────────────────────────

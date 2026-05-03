@@ -16,16 +16,24 @@ import { AuthGuard } from '../../common/auth/auth.guard';
 import { CurrentUser } from '../../common/auth/current-user.decorator';
 import type { AuthUser } from '../../common/auth/auth.types';
 import { ContactsService, PaginatedResult } from './contacts.service';
+import { WhatsappValidatorService } from './whatsapp-validator.service';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
 import { ListContactsQueryDto } from './dto/list-contacts.query.dto';
 import { SearchContactsQueryDto } from './dto/search-contacts.query.dto';
-import type { Contact } from '@eclick-active/shared';
+import type { Contact, WhatsAppCheckResult } from '@eclick-active/shared';
+
+interface VerifyBatchDto {
+  contact_ids: string[];
+}
 
 @UseGuards(AuthGuard)
 @Controller('contacts')
 export class ContactsController {
-  constructor(private readonly service: ContactsService) {}
+  constructor(
+    private readonly service: ContactsService,
+    private readonly whatsappValidator: WhatsappValidatorService,
+  ) {}
 
   // GET /contacts/search?q=...&limit=...
   // Definido ANTES de /:id pra não colidir com a rota dinâmica.
@@ -35,6 +43,62 @@ export class ContactsController {
     @Query() query: SearchContactsQueryDto,
   ): Promise<Contact[]> {
     return this.service.search(user.org_id, query.q, query.limit);
+  }
+
+  // GET /contacts/whatsapp-stats — métricas de validação
+  // Antes de /:id pra não cair no ParseUUIDPipe
+  @Get('whatsapp-stats')
+  whatsappStats(@CurrentUser() user: AuthUser) {
+    return this.whatsappValidator.getStats(user.org_id);
+  }
+
+  /**
+   * Validação sob demanda — usuário clicou no badge "?" do contato.
+   * Síncrono: faz a checagem agora e retorna o resultado.
+   */
+  @Post(':id/verify-whatsapp')
+  async verifyWhatsapp(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<{ ok: boolean; result: WhatsAppCheckResult | null }> {
+    const contact = await this.service.findById(user.org_id, id);
+    if (!contact.phone) {
+      return { ok: false, result: null };
+    }
+    const result = await this.whatsappValidator.validatePhone(
+      user.org_id,
+      id,
+      contact.phone,
+    );
+    return { ok: !!result, result };
+  }
+
+  /**
+   * Validação em batch — enfileira N contatos pra serem validados em
+   * background respeitando rate limit do provider.
+   */
+  @Post('verify-whatsapp/batch')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async verifyWhatsappBatch(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: VerifyBatchDto,
+  ): Promise<{ enqueued: number }> {
+    if (!Array.isArray(dto?.contact_ids) || dto.contact_ids.length === 0) {
+      return { enqueued: 0 };
+    }
+    let enqueued = 0;
+    for (const id of dto.contact_ids) {
+      try {
+        const c = await this.service.findById(user.org_id, id);
+        if (c.phone) {
+          await this.whatsappValidator.enqueue(user.org_id, id, c.phone);
+          enqueued += 1;
+        }
+      } catch {
+        // contato inexistente / outra org — ignora silenciosamente
+      }
+    }
+    return { enqueued };
   }
 
   // GET /contacts?page=&limit=&search=&temperature=&tags=

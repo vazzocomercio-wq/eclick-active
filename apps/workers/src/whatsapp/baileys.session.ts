@@ -184,6 +184,63 @@ export class BaileysSession {
     return !!this.sock && !this.terminated;
   }
 
+  /**
+   * Pergunta ao Baileys se um número tem WhatsApp ativo. Aceita telefone
+   * em formato internacional (ex: 5571999999999) ou já um JID. Retorna
+   * o JID canônico (`...@s.whatsapp.net` ou `...@lid`) quando existe, e
+   * tenta buscar foto de perfil e profile name (best-effort).
+   */
+  async checkNumber(phoneOrJid: string): Promise<{
+    exists: boolean;
+    jid?: string;
+    profile_name?: string;
+    profile_pic_url?: string;
+  }> {
+    if (!this.sock || this.terminated) {
+      throw new Error('session_not_ready');
+    }
+    // Sanitiza: aceita +55..., (55)..., ou 55... — Baileys.onWhatsApp espera
+    // telefone canônico sem espaços/símbolos.
+    const cleaned = phoneOrJid.includes('@')
+      ? phoneOrJid
+      : phoneOrJid.replace(/\D/g, '');
+    if (!cleaned) return { exists: false };
+
+    // sock.onWhatsApp aceita lista. Pegamos o primeiro retorno.
+    const results = await this.sock.onWhatsApp(cleaned).catch(() => []);
+    const first = results?.[0];
+    if (!first?.exists || !first.jid) {
+      return { exists: false };
+    }
+
+    // Foto de perfil — best-effort. Se contato bloqueia foto, retorna 401/404
+    // → pic = undefined. NÃO falhar a verificação por causa disso.
+    const profilePicUrl = await this.sock
+      .profilePictureUrl(first.jid, 'image')
+      .catch(() => undefined);
+
+    // Profile name pode vir do store (se Baileys conhece) ou via lid mapping
+    let profileName: string | undefined;
+    try {
+      const stored = (
+        this.sock as unknown as {
+          store?: { contacts?: Record<string, { name?: string; notify?: string }> };
+        }
+      ).store?.contacts?.[first.jid];
+      if (stored?.name) profileName = stored.name;
+      else if (stored?.notify) profileName = stored.notify;
+    } catch {
+      /* sem store, sem nome */
+    }
+
+    return {
+      exists: true,
+      jid: first.jid,
+      ...(profileName ? { profile_name: profileName } : {}),
+      ...(profilePicUrl ? { profile_pic_url: profilePicUrl } : {}),
+    };
+  }
+
   // ──────────────────────────────────────────────────────────
   // Event handlers
   // ──────────────────────────────────────────────────────────
