@@ -65,7 +65,10 @@ export class ConversationsService {
         error?.message ?? 'Failed to create conversation',
       );
     }
-    return data as Conversation;
+    const created = data as Conversation;
+    // Emit pra inbox de todos os agentes da org atualizar em tempo real
+    this.events.emitToOrg(orgId, 'conversation:updated', { conversation: created });
+    return created;
   }
 
   // ──────────────────────────────────────────────────────────
@@ -206,7 +209,10 @@ export class ConversationsService {
       this.logger.error(`toggleStar failed: ${error?.message}`);
       throw new InternalServerErrorException(error?.message ?? 'Failed to toggle star');
     }
-    return data as Conversation;
+    const updated = data as Conversation;
+    // Emit pra refletir o toggle em outras sessões/abas abertas
+    this.events.emitToOrg(orgId, 'conversation:updated', { conversation: updated });
+    return updated;
   }
 
   // ──────────────────────────────────────────────────────────
@@ -536,7 +542,11 @@ export class ConversationsService {
         error?.message ?? 'Failed to update conversation',
       );
     }
-    return data as Conversation;
+    const updated = data as Conversation;
+    // Emit pra inbox dos agentes atualizar em tempo real (arquivar,
+    // resolver, atribuir, mudar prioridade, etc precisam aparecer sem F5).
+    this.events.emitToOrg(orgId, 'conversation:updated', { conversation: updated });
+    return updated;
   }
 
   // ──────────────────────────────────────────────────────────
@@ -560,6 +570,9 @@ export class ConversationsService {
         error?.message ?? 'Failed to mark as read',
       );
     }
-    return data as Conversation;
+    const updated = data as Conversation;
+    // Emit pra zerar o contador de não lidas em todas as sessões abertas
+    this.events.emitToOrg(orgId, 'conversation:updated', { conversation: updated });
+    return updated;
   }
 }
