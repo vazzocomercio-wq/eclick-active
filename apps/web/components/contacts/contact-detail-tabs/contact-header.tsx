@@ -46,7 +46,9 @@ export function ContactHeader({
   }, [menuOpen]);
 
   return (
-    <div className="flex flex-col gap-3 border-b border-border bg-card/30 px-5 py-4">
+    // pr-12 reserva espaço pro botão "X" de fechar do Sheet (absolute right-4
+    // top-4) — sem isso, o menu MoreVertical fica sobrepondo o X.
+    <div className="flex flex-col gap-3 border-b border-border bg-card/30 px-5 py-4 pr-12">
       <div className="flex items-start gap-3">
         <InitialsAvatar
           name={contact.name}
