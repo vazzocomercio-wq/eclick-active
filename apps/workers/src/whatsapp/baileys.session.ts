@@ -97,6 +97,20 @@ export class BaileysSession {
           });
         }
       });
+
+      // Loga evolução de status de mensagens outbound: PENDING(1) →
+      // SERVER_ACK(2) → DELIVERY_ACK(3) → READ(4) → PLAYED(5). Se uma
+      // msg para em SERVER_ACK e nunca avança, o WhatsApp servidor
+      // recebeu mas o device do destinatário não confirmou — sintoma
+      // típico de bad session/missing pre-keys no protocolo Signal.
+      this.sock.ev.on('messages.update', (updates) => {
+        for (const u of updates) {
+          // eslint-disable-next-line no-console
+          console.log(
+            `[baileys ${this.ctx.channelId}] messages.update keyId=${u.key.id} jid=${u.key.remoteJid} status=${u.update?.status}`,
+          );
+        }
+      });
     } finally {
       this.connecting = false;
     }
@@ -183,7 +197,21 @@ export class BaileysSession {
       }
     }
 
-    const result = await this.sock.sendMessage(jid, payload);
+    let result: Awaited<ReturnType<WASocket['sendMessage']>>;
+    try {
+      result = await this.sock.sendMessage(jid, payload);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `[baileys ${this.ctx.channelId}] sendMessage threw jid=${jid}:`,
+        err instanceof Error ? err.message : err,
+      );
+      throw err;
+    }
+    // eslint-disable-next-line no-console
+    console.log(
+      `[baileys ${this.ctx.channelId}] sendMessage result keyId=${result?.key?.id} status=${result?.status} fromMe=${result?.key?.fromMe}`,
+    );
     if (!result?.key?.id) {
       throw new Error('send_failed: Baileys não retornou messageId');
     }
