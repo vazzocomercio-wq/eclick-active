@@ -10,6 +10,8 @@ import { SupabaseService } from '../../common/supabase/supabase.service';
 import { KnowledgeService } from '../knowledge/knowledge.service';
 import { LiveSourcesService } from '../knowledge/live-sources.service';
 import { AiPersonaService } from '../ai-persona/ai-persona.service';
+import { AppointmentsService } from '../appointments/appointments.service';
+import { AppointmentTypesService } from '../appointments/appointment-types.service';
 import {
   COPILOT_SYSTEM_PROMPT,
   MAX_HISTORY_MESSAGES,
@@ -74,6 +76,8 @@ export class CopilotService implements OnModuleInit {
     private readonly knowledge: KnowledgeService,
     private readonly liveSources: LiveSourcesService,
     private readonly persona: AiPersonaService,
+    private readonly appointments: AppointmentsService,
+    private readonly appointmentTypes: AppointmentTypesService,
   ) {}
 
   onModuleInit(): void {
@@ -367,9 +371,111 @@ export class CopilotService implements OnModuleInit {
         return this.toolSearchKnowledge(input, ctx);
       case 'search_live_sources':
         return this.toolSearchLiveSources(input, ctx);
+      case 'check_available_slots':
+        return this.toolCheckAvailableSlots(input, ctx);
+      case 'schedule_appointment':
+        return this.toolScheduleAppointment(input, ctx);
       default:
         throw new Error(`Tool desconhecida: ${name}`);
     }
+  }
+
+  private async toolCheckAvailableSlots(
+    input: Record<string, unknown>,
+    ctx: ToolContext,
+  ): Promise<{ result: unknown; record: ToolCallRecord }> {
+    const date =
+      typeof input.date === 'string' && input.date.length > 0
+        ? input.date
+        : new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+
+    const slots = await this.appointments.getAvailableSlots(ctx.orgId, {
+      date,
+      ...(input.agent_id ? { agent_id: String(input.agent_id) } : {}),
+      ...(input.type_id ? { type_id: String(input.type_id) } : {}),
+    });
+    const top = slots.slice(0, 12);
+
+    return {
+      result: {
+        date,
+        slots_count: slots.length,
+        slots: top.map((s) => ({
+          start_time: s.start_time,
+          end_time: s.end_time,
+          agent: s.agent_name ?? 'Agente',
+        })),
+      },
+      record: {
+        tool: 'check_available_slots',
+        summary: `${slots.length} horário${slots.length === 1 ? '' : 's'} disponível${slots.length === 1 ? '' : 'eis'} em ${date}`,
+        result_count: slots.length,
+      },
+    };
+  }
+
+  private async toolScheduleAppointment(
+    input: Record<string, unknown>,
+    ctx: ToolContext,
+  ): Promise<{ result: unknown; record: ToolCallRecord }> {
+    const title = String(input.title ?? '').trim();
+    if (!title) throw new Error('title é obrigatório');
+    const startStr = String(input.start_time ?? '').trim();
+    if (!startStr) throw new Error('start_time é obrigatório');
+
+    let durationMinutes = Number(input.duration_minutes);
+    if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+      if (input.appointment_type_id) {
+        const t = await this.appointmentTypes
+          .findById(ctx.orgId, String(input.appointment_type_id))
+          .catch(() => null);
+        durationMinutes = t?.duration_minutes ?? 30;
+      } else {
+        durationMinutes = 30;
+      }
+    }
+
+    const start = new Date(startStr);
+    const end = new Date(start.getTime() + durationMinutes * 60_000);
+
+    const { data: memberRow } = await this.supabase.adminClient
+      .from('org_members')
+      .select('id')
+      .eq('org_id', ctx.orgId)
+      .eq('user_id', ctx.userId)
+      .maybeSingle();
+    const memberId = (memberRow as { id: string } | null)?.id ?? null;
+
+    const appt = await this.appointments.create(
+      ctx.orgId,
+      {
+        title,
+        start_time: start.toISOString(),
+        end_time: end.toISOString(),
+        ...(input.contact_id ? { contact_id: String(input.contact_id) } : {}),
+        ...(input.deal_id ? { deal_id: String(input.deal_id) } : {}),
+        ...(input.appointment_type_id
+          ? { appointment_type_id: String(input.appointment_type_id) }
+          : {}),
+        ...(memberId ? { assigned_to: memberId } : {}),
+        ...(input.notes ? { notes: String(input.notes) } : {}),
+      },
+      true, // created_by_ai
+    );
+
+    return {
+      result: {
+        id: appt.id,
+        title: appt.title,
+        start_time: appt.start_time,
+        end_time: appt.end_time,
+      },
+      record: {
+        tool: 'schedule_appointment',
+        summary: `Agendado: ${appt.title} em ${new Date(appt.start_time).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}`,
+        resource_id: appt.id,
+      },
+    };
   }
 
   private async toolSearchLiveSources(

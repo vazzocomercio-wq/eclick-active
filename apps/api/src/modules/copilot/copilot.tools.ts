@@ -213,6 +213,53 @@ export const COPILOT_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: 'check_available_slots',
+    description:
+      'Verifica horários disponíveis para agendamento. Use quando o vendedor pergunta "quais horários tenho na quarta?", "qual a próxima data livre pra reunião?", etc.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        date: {
+          type: 'string',
+          description: 'Data alvo no formato YYYY-MM-DD. Se omitido, usa amanhã.',
+        },
+        agent_id: {
+          type: 'string',
+          description: 'UUID do agente. Se omitido, retorna slots de todos os agentes ativos.',
+        },
+        type_id: {
+          type: 'string',
+          description: 'UUID do appointment_type pra usar duração/buffer corretos.',
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'schedule_appointment',
+    description:
+      'Cria um agendamento (appointment) pra um contato. Use quando o vendedor pedir "agende reunião com João pra terça às 14h", "marca uma ligação amanhã 10h", etc. Cria o appointment direto — não pede confirmação.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Título do agendamento (ex: "Reunião — apresentação Vazzo").' },
+        contact_id: { type: 'string', description: 'UUID do contato.' },
+        deal_id: { type: 'string', description: 'UUID do deal vinculado (opcional).' },
+        appointment_type_id: { type: 'string', description: 'UUID do tipo (reunião/ligação/visita).' },
+        start_time: {
+          type: 'string',
+          description: 'ISO 8601 com timezone (ex: 2026-05-12T14:00:00-03:00).',
+        },
+        duration_minutes: {
+          type: 'number',
+          description: 'Duração em minutos. Default = duração do tipo (ou 30).',
+        },
+        notes: { type: 'string', description: 'Observações opcionais sobre o agendamento.' },
+      },
+      required: ['title', 'start_time'],
+    },
+  },
+  {
     name: 'create_deal',
     description:
       'Cria um novo negócio (deal) no funil. Use quando o usuário pedir para criar oportunidade ou registrar venda em andamento.',
@@ -242,4 +289,6 @@ export type CopilotToolName =
   | 'create_task'
   | 'create_deal'
   | 'search_knowledge'
-  | 'search_live_sources';
+  | 'search_live_sources'
+  | 'check_available_slots'
+  | 'schedule_appointment';

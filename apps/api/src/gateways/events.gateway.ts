@@ -99,11 +99,34 @@ export interface WhatsappDisconnectedPayload {
   needs_reauth: boolean;
 }
 
+export interface AppointmentReminderPayload {
+  appointment_id: string;
+  contact_id: string | null;
+  contact_name?: string | null;
+  agent_id: string | null;
+  title: string;
+  start_time?: string;
+}
+
+export interface AppointmentNoShowPayload {
+  appointment_id: string;
+  contact_id: string | null;
+  agent_id: string | null;
+  title: string;
+}
+
+export interface SchedulingSuggestionPayload {
+  conversation_id: string;
+  slots: Array<{ start_time: string; end_time: string; agent_id: string; agent_name: string | null }>;
+  appointment_type_guess: string | null;
+}
+
 export type EventName =
   | 'message:new'
   | 'message:updated'
   | 'conversation:updated'
   | 'ai:suggestion'
+  | 'ai:scheduling-suggestion'
   | 'notification'
   | 'deal:created'
   | 'deal:moved'
@@ -111,13 +134,17 @@ export type EventName =
   | 'deal:activity_added'
   | 'whatsapp:qr'
   | 'whatsapp:connected'
-  | 'whatsapp:disconnected';
+  | 'whatsapp:disconnected'
+  | 'appointment:reminder-24h'
+  | 'appointment:reminder-1h'
+  | 'appointment:no-show';
 
 export interface EventPayloadMap {
   'message:new': MessageNewPayload;
   'message:updated': MessageUpdatedPayload;
   'conversation:updated': ConversationUpdatedPayload;
   'ai:suggestion': AISuggestionPayload;
+  'ai:scheduling-suggestion': SchedulingSuggestionPayload;
   notification: Notification;
   'deal:created': DealCreatedPayload;
   'deal:moved': DealMovedPayload;
@@ -126,6 +153,9 @@ export interface EventPayloadMap {
   'whatsapp:qr': WhatsappQrPayload;
   'whatsapp:connected': WhatsappConnectedPayload;
   'whatsapp:disconnected': WhatsappDisconnectedPayload;
+  'appointment:reminder-24h': AppointmentReminderPayload;
+  'appointment:reminder-1h': AppointmentReminderPayload;
+  'appointment:no-show': AppointmentNoShowPayload;
 }
 
 const ROOM_PREFIX = 'org';

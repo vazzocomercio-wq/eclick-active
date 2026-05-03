@@ -291,6 +291,51 @@ export const GAPS_SCHEMA = {
   additionalProperties: false,
 } as const;
 
+// ──────────────────────────────────────────────────────────
+// Scheduling intent detection (Bloco Agendamentos)
+// ──────────────────────────────────────────────────────────
+
+export interface SchedulingIntentResult {
+  wants_scheduling: boolean;
+  appointment_type_guess: string | null;
+  preferred_date: string | null;
+  preferred_time: string | null;
+  urgency: 'low' | 'medium' | 'high';
+  extracted_text: string;
+}
+
+export const SCHEDULING_INTENT_SCHEMA = {
+  type: 'object',
+  properties: {
+    wants_scheduling: { type: 'boolean' },
+    appointment_type_guess: { type: ['string', 'null'] },
+    preferred_date: { type: ['string', 'null'] },
+    preferred_time: { type: ['string', 'null'] },
+    urgency: { type: 'string', enum: ['low', 'medium', 'high'] },
+    extracted_text: { type: 'string' },
+  },
+  required: [
+    'wants_scheduling',
+    'appointment_type_guess',
+    'preferred_date',
+    'preferred_time',
+    'urgency',
+    'extracted_text',
+  ],
+  additionalProperties: false,
+} as const;
+
+export const SCHEDULING_INTENT_SYSTEM_PROMPT =
+  'Você analisa mensagens comerciais brasileiras pra detectar intenção de agendamento. ' +
+  'Sinais: "agendar", "marcar", "horário", "disponibilidade", "quando posso", "tem agenda", ' +
+  '"reunião", "visita", "consulta", "ligar mais tarde". ' +
+  'Se a mensagem indica desejo de agendar, retorne wants_scheduling=true e extraia: ' +
+  'appointment_type_guess (reunion/call/visit ou null se não claro), preferred_date ' +
+  '(YYYY-MM-DD se mencionada hoje/amanhã/dia da semana, senão null — interprete relativo a HOJE), ' +
+  'preferred_time (HH:mm 24h ou null), urgency (low|medium|high — alta se "urgente"/"agora"). ' +
+  'extracted_text é o trecho exato da mensagem que sinalizou. Se NÃO há intenção clara, ' +
+  'retorne wants_scheduling=false e os outros campos null. Retorne APENAS JSON válido.';
+
 export const GAPS_SYSTEM_PROMPT =
   'Você é um analista de conversas comerciais brasileiras. Analise a conversa e o perfil do contato fornecidos. Identifique TRÊS coisas e retorne APENAS JSON válido contra o schema:\n' +
   '1) unanswered_questions: perguntas FEITAS PELO CLIENTE que o vendedor não respondeu adequadamente (ou ignorou). Use o message_index da pergunta original.\n' +

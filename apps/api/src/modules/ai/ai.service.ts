@@ -11,6 +11,7 @@ import { KnowledgeService } from '../knowledge/knowledge.service';
 import { LiveSourcesService } from '../knowledge/live-sources.service';
 import { AiPersonaService } from '../ai-persona/ai-persona.service';
 import { AiSkillsService } from '../ai-skills/ai-skills.service';
+import { AppointmentsService } from '../appointments/appointments.service';
 import { AnthropicClient } from './anthropic.client';
 import { DataCollectionService } from './data-collection.service';
 import type { AiSkill } from '@eclick-active/shared';
@@ -27,6 +28,9 @@ import {
   GAPS_SCHEMA,
   GAPS_SYSTEM_PROMPT,
   GapsResult,
+  SCHEDULING_INTENT_SCHEMA,
+  SCHEDULING_INTENT_SYSTEM_PROMPT,
+  SchedulingIntentResult,
   SUGGEST_SCHEMA,
   SUGGEST_SYSTEM_PROMPT,
   SUMMARIZE_SYSTEM_PROMPT,
@@ -46,6 +50,7 @@ export class AiService {
     private readonly persona: AiPersonaService,
     private readonly skills: AiSkillsService,
     private readonly dataCollection: DataCollectionService,
+    private readonly appointmentsLookup: AppointmentsService,
   ) {}
 
   // ──────────────────────────────────────────────────────────
@@ -840,6 +845,67 @@ export class AiService {
   }
 
   // ──────────────────────────────────────────────────────────
+  // Scheduling intent detection (Bloco Agendamentos)
+  // ──────────────────────────────────────────────────────────
+
+  /**
+   * Analisa a última mensagem inbound + contexto e decide se o cliente
+   * quer agendar algo. Retorna detalhes pra o orchestrator decidir
+   * quais slots oferecer.
+   *
+   * Best-effort: erro retorna `wants_scheduling=false` (não bloqueia o
+   * pipeline normal de suggestResponse).
+   */
+  async detectSchedulingIntent(
+    orgId: string,
+    conversationId: string,
+    messageText: string,
+  ): Promise<SchedulingIntentResult> {
+    const recent = await this.fetchRecentMessages(orgId, conversationId, 6);
+    const today = new Date().toISOString().slice(0, 10);
+    const userPrompt = [
+      `HOJE é ${today} (use como referência pra "amanhã", "depois de amanhã", dias da semana).`,
+      '',
+      'Conversa recente (cronológica):',
+      recent.map((m, i) => `${i + 1}. ${formatMessageLine(m)}`).join('\n') || '(sem mensagens anteriores)',
+      '',
+      `Mensagem ATUAL do cliente a analisar: "${messageText}"`,
+    ].join('\n');
+
+    try {
+      const { data } = await this.anthropic.complete<SchedulingIntentResult>({
+        interaction_type: 'classify_intent',
+        org_id: orgId,
+        system: SCHEDULING_INTENT_SYSTEM_PROMPT,
+        user: userPrompt,
+        schema: SCHEDULING_INTENT_SCHEMA,
+        max_tokens: 256,
+        context: { conversation_id: conversationId },
+      });
+      return {
+        wants_scheduling: !!data.wants_scheduling,
+        appointment_type_guess: data.appointment_type_guess ?? null,
+        preferred_date: data.preferred_date ?? null,
+        preferred_time: data.preferred_time ?? null,
+        urgency: ['low', 'medium', 'high'].includes(data.urgency) ? data.urgency : 'medium',
+        extracted_text: data.extracted_text ?? messageText,
+      };
+    } catch (err) {
+      this.logger.warn(
+        `detectSchedulingIntent failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return {
+        wants_scheduling: false,
+        appointment_type_guess: null,
+        preferred_date: null,
+        preferred_time: null,
+        urgency: 'low',
+        extracted_text: messageText,
+      };
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────
   // GET /ai/unanswered/:conversationId — perguntas inbound sem resposta
   // ──────────────────────────────────────────────────────────
 
@@ -947,6 +1013,13 @@ export class AiService {
       // nova mensagem (mantém atualizado sem custo a cada turn).
       this.invalidateGapsCache(orgId, conversationId);
 
+      // Bloco Agendamentos — detecta intenção de agendar e emite slots
+      void this.tryDetectSchedulingIntent(orgId, conversationId, messageId).catch((err) => {
+        this.logger.warn(
+          `scheduling intent detect failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+
       // Bloco G PARTE 1 — coleta proativa de dados:
       // Se há deal vinculado e o stage tem required_fields, tenta extrair
       // dados da última mensagem inbound. Best-effort.
@@ -964,6 +1037,77 @@ export class AiService {
         `processInbound failed: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
+  }
+
+  /**
+   * Heurística leve: regex de keywords pra evitar custo de Haiku quando
+   * a mensagem claramente não tem nada a ver com agendamento.
+   */
+  private readonly SCHEDULING_KEYWORDS_RE =
+    /\b(agend(ar|amento)|marcar|hor[áa]rio|disponibilidade|quando posso|tem agenda|reuni[ãa]o|visita|consulta|encontrar|ligar|call|videoconfer[êe]ncia)\b/i;
+
+  /**
+   * Detecta intenção de agendamento na última mensagem inbound. Se positiva,
+   * busca slots disponíveis (próximos 3 dias úteis ou data preferida) e
+   * emite `ai:scheduling-suggestion` via WebSocket pra UI mostrar botões
+   * clicáveis na barra de sugestão.
+   *
+   * Best-effort: erros são logados mas não bloqueiam o pipeline.
+   */
+  private async tryDetectSchedulingIntent(
+    orgId: string,
+    conversationId: string,
+    messageId: string,
+  ): Promise<void> {
+    // 1. Pega texto da mensagem inbound
+    const { data: msg } = await this.supabase.adminClient
+      .from('messages')
+      .select('plain_text, direction')
+      .eq('org_id', orgId)
+      .eq('id', messageId)
+      .maybeSingle();
+    const m = msg as { plain_text: string | null; direction: string } | null;
+    if (!m || m.direction !== 'inbound' || !m.plain_text) return;
+
+    // 2. Filtro de keyword cheap pra evitar Haiku desnecessário
+    if (!this.SCHEDULING_KEYWORDS_RE.test(m.plain_text)) return;
+
+    // 3. Roda Haiku
+    const intent = await this.detectSchedulingIntent(orgId, conversationId, m.plain_text);
+    if (!intent.wants_scheduling) return;
+
+    // 4. Resolve data preferida (ou amanhã se não especificada)
+    const targetDate = intent.preferred_date ?? this.nextBusinessDay();
+
+    // 5. Busca slots — emite evento mesmo se vazios pra UI mostrar fallback
+    try {
+      const slots = await this.appointmentsLookup.getAvailableSlots(orgId, {
+        date: targetDate,
+      });
+      const top = slots.slice(0, 6); // top 6 pra não poluir UI
+      this.events.emitToOrg(orgId, 'ai:scheduling-suggestion', {
+        conversation_id: conversationId,
+        slots: top.map((s) => ({
+          start_time: s.start_time,
+          end_time: s.end_time,
+          agent_id: s.agent_id,
+          agent_name: s.agent_name,
+        })),
+        appointment_type_guess: intent.appointment_type_guess,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `getAvailableSlots failed (scheduling intent): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  /** Próximo dia útil (segunda a sexta) em formato YYYY-MM-DD. */
+  private nextBusinessDay(): string {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+    return d.toISOString().slice(0, 10);
   }
 
   /**

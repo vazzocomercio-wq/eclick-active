@@ -9,6 +9,7 @@ import { AiModule } from './modules/ai/ai.module';
 import { AiPersonaModule } from './modules/ai-persona/ai-persona.module';
 import { AiSkillsModule } from './modules/ai-skills/ai-skills.module';
 import { AiTestModule } from './modules/ai-test/ai-test.module';
+import { AppointmentsModule } from './modules/appointments/appointments.module';
 import { AutomationsModule } from './modules/automations/automations.module';
 import { BusinessHoursModule } from './modules/business-hours/business-hours.module';
 import { ChannelsModule } from './modules/channels/channels.module';
@@ -51,6 +52,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     BusinessHoursModule,
     AiModule,
     AiTestModule,
+    AppointmentsModule,
     CopilotModule,
     ChannelsModule,
     SettingsModule,
