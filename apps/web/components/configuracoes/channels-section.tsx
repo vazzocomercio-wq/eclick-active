@@ -1,9 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   AlertCircle,
   Cable,
+  Instagram,
   Loader2,
   MessageCircle,
   Pause,
@@ -12,6 +14,7 @@ import {
   QrCode,
   Trash2,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import type { ChannelStatus } from '@eclick-active/shared';
 import { BaileysConnectDialog } from './baileys-connect-dialog';
 import { Button } from '@/components/ui/button';
@@ -30,6 +33,7 @@ import {
   type ChannelView,
   type CreateChannelInput,
 } from '@/lib/api/channels';
+import { api } from '@/lib/api/client';
 import { ApiError } from '@/lib/api/client';
 import { formatRelativeTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -50,6 +54,37 @@ export function ChannelsSection() {
   const [error, setError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [baileysDialogOpen, setBaileysDialogOpen] = useState(false);
+  const [connectingInstagram, setConnectingInstagram] = useState(false);
+
+  // Lê callback do OAuth Instagram (?channel=success&provider=instagram)
+  const search = useSearchParams();
+  useEffect(() => {
+    const result = search.get('channel');
+    const provider = search.get('provider');
+    if (result === 'success' && provider === 'instagram') {
+      const count = search.get('count');
+      toast.success('Instagram conectado!', {
+        description: count ? `${count} conta(s) ativa(s)` : undefined,
+      });
+    } else if (result === 'error') {
+      toast.error('Falha ao conectar canal', {
+        description: search.get('reason') ?? 'erro',
+      });
+    }
+  }, [search]);
+
+  async function connectInstagram() {
+    setConnectingInstagram(true);
+    try {
+      const { url } = await api.get<{ url: string }>('/channels/instagram/auth');
+      window.location.href = url;
+    } catch (err) {
+      toast.error('Falha ao iniciar conexão Instagram', {
+        description: err instanceof ApiError ? err.message : 'erro',
+      });
+      setConnectingInstagram(false);
+    }
+  }
 
   const reload = useCallback(async () => {
     setError(null);
@@ -103,7 +138,7 @@ export function ChannelsSection() {
           <Cable className="h-4 w-4 text-primary" />
           <h2 className="text-sm font-semibold">Canais Conectados</h2>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -115,6 +150,20 @@ export function ChannelsSection() {
           <Button size="sm" onClick={() => setDialogOpen(true)}>
             <Plus className="mr-2 h-3.5 w-3.5" />
             WhatsApp (Z-API)
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={connectInstagram}
+            disabled={connectingInstagram}
+            className="border-pink-500/30 text-pink-500 hover:bg-pink-500/10 hover:text-pink-600"
+          >
+            {connectingInstagram ? (
+              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Instagram className="mr-2 h-3.5 w-3.5" />
+            )}
+            Instagram
           </Button>
         </div>
       </div>

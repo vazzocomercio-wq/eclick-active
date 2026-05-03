@@ -157,6 +157,30 @@ export class ContactsService {
     });
   }
 
+  /**
+   * Busca/cria contato por PSID (Page-Scoped ID) do Instagram. PSIDs são
+   * únicos por par (page_id, user_id) — guardamos prefixados em phone
+   * pra reutilizar a constraint UNIQUE existente. UI já mostra ícone do
+   * canal, então o "phone" prefixado nunca é exibido pro user.
+   */
+  async findOrCreateByInstagramPsid(
+    orgId: string,
+    psid: string,
+    name?: string,
+    avatarUrl?: string,
+  ): Promise<Contact> {
+    const phoneEquivalent = `ig:${psid}`;
+    const existing = await this.findByPhone(orgId, phoneEquivalent);
+    if (existing) return existing;
+
+    return this.create(orgId, {
+      phone: phoneEquivalent,
+      name,
+      ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
+      source: 'instagram',
+    });
+  }
+
   // ──────────────────────────────────────────────────────────
   // UPDATE
   // ──────────────────────────────────────────────────────────

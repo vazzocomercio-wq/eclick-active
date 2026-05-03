@@ -135,6 +135,27 @@ export class ChannelDispatcherService {
     return (data as Channel | null) ?? null;
   }
 
+  /**
+   * Resolve channel pelo ig_user_id (Instagram business account ID) que
+   * vem em entry.id dos webhooks do Meta. Procura entre canais ativos.
+   */
+  async findChannelByInstagramIgUserId(igUserId: string): Promise<Channel | null> {
+    const { data, error } = await this.supabase.adminClient
+      .from('channels')
+      .select('*')
+      .eq('channel_type', 'instagram')
+      .eq('status', 'active')
+      .filter('credentials->>ig_user_id', 'eq', igUserId)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      this.logger.error(`findChannelByInstagramIgUserId failed: ${error.message}`);
+      return null;
+    }
+    return (data as Channel | null) ?? null;
+  }
+
   /** Resolve o ID externo do destinatário (wa_id, ig_id, etc.). */
   private async resolveRecipient(
     orgId: string,

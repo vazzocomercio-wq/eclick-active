@@ -1,6 +1,9 @@
 import { Global, Module } from '@nestjs/common';
 import { ZapiWebhookController } from './zapi/zapi-webhook.controller';
 import { ZapiWebhookService } from './zapi/zapi-webhook.service';
+import { InstagramWebhookController } from './instagram/instagram-webhook.controller';
+import { InstagramWebhookService } from './instagram/instagram-webhook.service';
+import { InstagramOAuthController } from './instagram/instagram-oauth.controller';
 import { AutoLeadService } from './auto-lead.service';
 import { OutboundWebhookController } from './outbound/outbound-webhook.controller';
 import { OutboundWebhookService } from './outbound/outbound-webhook.service';
@@ -17,8 +20,18 @@ import { AutomationsModule } from '../automations/automations.module';
 @Global()
 @Module({
   imports: [ContactsModule, ConversationsModule, AiModule, AutomationsModule],
-  controllers: [ZapiWebhookController, OutboundWebhookController],
-  providers: [ZapiWebhookService, AutoLeadService, OutboundWebhookService],
+  controllers: [
+    ZapiWebhookController,
+    OutboundWebhookController,
+    InstagramWebhookController,
+    InstagramOAuthController,
+  ],
+  providers: [
+    ZapiWebhookService,
+    AutoLeadService,
+    OutboundWebhookService,
+    InstagramWebhookService,
+  ],
   exports: [AutoLeadService, OutboundWebhookService],
 })
 export class WebhooksModule {}
