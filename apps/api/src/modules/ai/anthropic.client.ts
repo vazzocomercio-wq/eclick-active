@@ -72,18 +72,20 @@ export class AnthropicClient implements OnModuleInit {
   async complete<T>(input: CompleteInput): Promise<CompleteResult<T>> {
     const start = performance.now();
 
-    // O SDK valida output_config quando passamos schema; sem schema, output é texto livre.
+    // Nota: deliberadamente NÃO usamos output_config.format.json_schema porque
+    // a API Anthropic exige additionalProperties: false em todo type:object,
+    // o que engessa schemas com campos flexíveis. Em vez disso, reforçamos
+    // no system prompt que o modelo deve retornar APENAS JSON puro e parseamos
+    // a resposta com fallback regex.
+    const systemFinal = input.schema
+      ? `${input.system}\n\nIMPORTANTE: Sua resposta deve ser EXCLUSIVAMENTE um objeto JSON válido, sem markdown, sem \`\`\`json, sem texto explicativo. Apenas o JSON puro começando com { e terminando com }.`
+      : input.system;
     const params: Record<string, unknown> = {
       model: HAIKU_MODEL_ID,
       max_tokens: input.max_tokens ?? 512,
-      system: input.system,
+      system: systemFinal,
       messages: [{ role: 'user', content: input.user }],
     };
-    if (input.schema) {
-      params.output_config = {
-        format: { type: 'json_schema', schema: input.schema },
-      };
-    }
 
     let response: Anthropic.Message;
     try {
@@ -117,15 +119,33 @@ export class AnthropicClient implements OnModuleInit {
 
     let data: T;
     if (input.schema) {
+      // Strip markdown fences se vierem (raro, mas o prompt pode falhar)
+      const cleaned = textBlock.text
+        .trim()
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/```\s*$/, '');
       try {
-        data = JSON.parse(textBlock.text) as T;
-      } catch (err) {
-        this.logger.error(
-          `JSON inválido do modelo: ${textBlock.text.slice(0, 200)}`,
-        );
-        throw new Error(
-          `Modelo retornou JSON inválido: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        data = JSON.parse(cleaned) as T;
+      } catch {
+        // Fallback: tenta achar o primeiro {...} no meio do texto
+        const m = cleaned.match(/\{[\s\S]*\}/);
+        if (m) {
+          try {
+            data = JSON.parse(m[0]) as T;
+          } catch (err) {
+            this.logger.error(
+              `JSON inválido do modelo: ${textBlock.text.slice(0, 200)}`,
+            );
+            throw new Error(
+              `Modelo retornou JSON inválido: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+        } else {
+          this.logger.error(
+            `JSON inválido do modelo: ${textBlock.text.slice(0, 200)}`,
+          );
+          throw new Error('Modelo retornou JSON inválido');
+        }
       }
     } else {
       data = textBlock.text as unknown as T;

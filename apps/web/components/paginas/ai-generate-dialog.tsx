@@ -49,6 +49,35 @@ const PAGE_TYPE_OPTIONS: { value: PageType; label: string; description: string }
   },
 ];
 
+/**
+ * Pega o melhor texto possível de um erro pra mostrar no UI.
+ * Lida com:
+ *  - Erro contendo JSON do Anthropic embedado: "Falha ao gerar com IA: 400 {...}"
+ *  - Erro NestJS estruturado { message, error, statusCode }
+ *  - Error genérico com .message
+ */
+function humanizeError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  // Tenta achar JSON dentro do texto e extrair a mensagem do Anthropic
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[0]) as {
+        error?: { message?: string; type?: string };
+        message?: string;
+      };
+      const inner = parsed.error?.message ?? parsed.message;
+      if (typeof inner === 'string' && inner.length > 0) {
+        const prefix = raw.slice(0, jsonMatch.index).trim();
+        return prefix ? `${prefix.replace(/[:.\s]+$/, '')}: ${inner}` : inner;
+      }
+    } catch {
+      /* não era JSON limpo */
+    }
+  }
+  return raw.length > 0 ? raw : 'Erro ao gerar página. Tente novamente.';
+}
+
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -118,16 +147,14 @@ export function AiGenerateDialog({
       });
       onCreated(page);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Erro ao gerar página. Tente novamente.',
-      );
+      setError(humanizeError(err));
       setGenerating(false);
     }
   }
 
   return (
     <Dialog open={open} onOpenChange={(o) => !generating && onOpenChange(o)}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-blue-500 text-white">
@@ -226,7 +253,7 @@ export function AiGenerateDialog({
           </div>
 
           {error && (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+            <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive break-words whitespace-pre-wrap">
               {error}
             </div>
           )}
