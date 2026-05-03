@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ChatPanel } from '@/components/chat/chat-panel';
 import { CopilotPanel } from '@/components/copilot/copilot-panel';
+import { StartConversationDialog } from '@/components/inbox/start-conversation-dialog';
 import { conversationsApi } from '@/lib/api/conversations';
 import { dealsApi } from '@/lib/api/deals';
 import { ApiError } from '@/lib/api/client';
@@ -359,62 +360,50 @@ function EmptyConversationState({
   deal: DealConversationTabProps['deal'];
   onCreated: (conversationId: string) => void | Promise<void>;
 }) {
-  const [creating, setCreating] = useState(false);
+  const [startOpen, setStartOpen] = useState(false);
 
-  async function handleCreate() {
+  function handleClick() {
     if (!deal.contact_id) {
       toast.error('Sem contato vinculado', {
         description: 'Vincule um contato ao deal antes de iniciar uma conversa.',
       });
       return;
     }
-    setCreating(true);
-    try {
-      const conv = await conversationsApi.create({
-        contact_id: deal.contact_id,
-        // WhatsApp Free é o canal default que não exige `channel_id`.
-        channel_type: 'whatsapp_free',
-      });
-      toast.success('Conversa criada');
-      await onCreated(conv.id);
-    } catch (err) {
-      toast.error('Falha ao iniciar conversa', {
-        description:
-          err instanceof ApiError
-            ? `${err.status}: ${err.message}`
-            : err instanceof Error
-              ? err.message
-              : 'Erro desconhecido',
-      });
-    } finally {
-      setCreating(false);
-    }
+    setStartOpen(true);
   }
 
   return (
-    <Card className="flex h-full items-center justify-center border-dashed">
-      <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
-          <MessageCircle className="h-6 w-6" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <p className="text-sm font-medium">Nenhuma conversa</p>
-          <p className="max-w-xs text-xs text-muted-foreground">
-            {deal.contact_id
-              ? 'Esse deal e o contato ainda não têm conversa registrada.'
-              : 'Vincule um contato ao deal pra iniciar uma conversa.'}
-          </p>
-        </div>
-        <Button onClick={handleCreate} disabled={creating || !deal.contact_id} size="sm">
-          {creating ? (
-            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-          ) : (
+    <>
+      <Card className="flex h-full items-center justify-center border-dashed">
+        <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+            <MessageCircle className="h-6 w-6" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <p className="text-sm font-medium">Nenhuma conversa</p>
+            <p className="max-w-xs text-xs text-muted-foreground">
+              {deal.contact_id
+                ? 'Esse deal e o contato ainda não têm conversa registrada.'
+                : 'Vincule um contato ao deal pra iniciar uma conversa.'}
+            </p>
+          </div>
+          <Button onClick={handleClick} disabled={!deal.contact_id} size="sm">
             <MessageCircle className="mr-1.5 h-3.5 w-3.5" />
-          )}
-          Iniciar conversa
-        </Button>
-      </CardContent>
-    </Card>
+            Iniciar conversa
+          </Button>
+        </CardContent>
+      </Card>
+      {deal.contact_id && (
+        <StartConversationDialog
+          open={startOpen}
+          onOpenChange={setStartOpen}
+          initialContactId={deal.contact_id}
+          onStarted={(resp) => {
+            void onCreated(resp.conversation.id);
+          }}
+        />
+      )}
+    </>
   );
 }
 

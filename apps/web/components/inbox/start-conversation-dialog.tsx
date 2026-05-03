@@ -37,6 +37,11 @@ interface StartConversationDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Disparado quando a conversa é criada/reusada — recebe a resposta. */
   onStarted: (resp: StartConversationResponse) => void;
+  /**
+   * Se vier, pula a etapa de busca e já carrega esse contato direto.
+   * Usado quando o dialog é aberto a partir de um Contact/Deal Sheet.
+   */
+  initialContactId?: string;
 }
 
 interface CompatibleChannel {
@@ -60,6 +65,7 @@ export function StartConversationDialog({
   open,
   onOpenChange,
   onStarted,
+  initialContactId,
 }: StartConversationDialogProps) {
   const [searchQ, setSearchQ] = useState('');
   const [searchResults, setSearchResults] = useState<Contact[]>([]);
@@ -88,10 +94,31 @@ export function StartConversationDialog({
       setMessage('');
       setSubmitting(false);
       setVerifying(false);
-      // Foca o input depois do dialog renderizar
-      setTimeout(() => inputRef.current?.focus(), 100);
+      // Foca o input depois do dialog renderizar (só se não tem contato pré-selecionado)
+      if (!initialContactId) {
+        setTimeout(() => inputRef.current?.focus(), 100);
+      }
     }
-  }, [open]);
+  }, [open, initialContactId]);
+
+  // Pré-carrega contato quando initialContactId vem preenchido
+  useEffect(() => {
+    if (!open || !initialContactId) return;
+    let cancelled = false;
+    contactsApi
+      .get(initialContactId)
+      .then((c) => {
+        if (!cancelled) setSelectedContact(c);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          toast.error('Falha ao carregar contato');
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, initialContactId]);
 
   // Carrega canais (1x ao montar)
   useEffect(() => {

@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { ArrowLeft, Loader2, MessageCircle } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { ArrowLeft, Loader2, MessageCircle, MessageSquarePlus } from 'lucide-react';
 import type { ChannelType, InboxItem } from '@eclick-active/shared';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ChatPanel } from '@/components/chat/chat-panel';
+import { StartConversationDialog } from '@/components/inbox/start-conversation-dialog';
 import { conversationsApi } from '@/lib/api/conversations';
 import { ApiError } from '@/lib/api/client';
 import { ChannelIcon } from '@/components/inbox/channel-icon';
@@ -28,31 +29,40 @@ export function ContactConversationsTab({ contactId }: ContactConversationsTabPr
   const [selected, setSelected] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [startOpen, setStartOpen] = useState(false);
+
+  const fetchConversations = useCallback(
+    (signal?: AbortSignal) => {
+      setLoading(true);
+      setError(null);
+      return conversationsApi
+        .getByContactId(contactId, signal)
+        .then((r) => {
+          setConversations(r.data);
+          if (r.data.length === 1) setSelected(r.data[0]!.id);
+          return r.data;
+        })
+        .catch((err) => {
+          if ((err as { name?: string })?.name === 'AbortError') return [] as InboxItem[];
+          setError(
+            err instanceof ApiError
+              ? `${err.status}: ${err.message}`
+              : err instanceof Error
+                ? err.message
+                : 'Erro ao buscar conversas',
+          );
+          return [] as InboxItem[];
+        })
+        .finally(() => setLoading(false));
+    },
+    [contactId],
+  );
 
   useEffect(() => {
     const ctrl = new AbortController();
-    setLoading(true);
-    setError(null);
-    conversationsApi
-      .getByContactId(contactId, ctrl.signal)
-      .then((r) => {
-        setConversations(r.data);
-        // Auto-select se só tiver 1 conversa
-        if (r.data.length === 1) setSelected(r.data[0]!.id);
-      })
-      .catch((err) => {
-        if ((err as { name?: string })?.name === 'AbortError') return;
-        setError(
-          err instanceof ApiError
-            ? `${err.status}: ${err.message}`
-            : err instanceof Error
-              ? err.message
-              : 'Erro ao buscar conversas',
-        );
-      })
-      .finally(() => setLoading(false));
+    void fetchConversations(ctrl.signal);
     return () => ctrl.abort();
-  }, [contactId]);
+  }, [fetchConversations]);
 
   if (loading) {
     return (
@@ -72,18 +82,37 @@ export function ContactConversationsTab({ contactId }: ContactConversationsTabPr
 
   if (!conversations || conversations.length === 0) {
     return (
-      <Card className="m-4 border-dashed">
-        <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
-            <MessageCircle className="h-6 w-6" />
-          </div>
-          <p className="text-sm font-medium">Nenhuma conversa registrada</p>
-          <p className="max-w-xs text-xs text-muted-foreground">
-            As conversas aparecem aqui quando esse contato envia uma mensagem por
-            qualquer canal vinculado.
-          </p>
-        </CardContent>
-      </Card>
+      <>
+        <Card className="m-4 border-dashed">
+          <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+              <MessageCircle className="h-6 w-6" />
+            </div>
+            <p className="text-sm font-medium">Nenhuma conversa registrada</p>
+            <p className="max-w-xs text-xs text-muted-foreground">
+              Inicie uma conversa enviando a primeira mensagem ou aguarde o contato
+              chegar por algum canal.
+            </p>
+            <Button
+              size="sm"
+              onClick={() => setStartOpen(true)}
+              className="mt-1 gap-1.5"
+            >
+              <MessageSquarePlus className="h-3.5 w-3.5" />
+              Iniciar conversa
+            </Button>
+          </CardContent>
+        </Card>
+        <StartConversationDialog
+          open={startOpen}
+          onOpenChange={setStartOpen}
+          initialContactId={contactId}
+          onStarted={(resp) => {
+            // Recarrega a lista e auto-seleciona a conversa recém-criada
+            void fetchConversations().then(() => setSelected(resp.conversation.id));
+          }}
+        />
+      </>
     );
   }
 
