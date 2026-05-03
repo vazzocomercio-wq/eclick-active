@@ -24,6 +24,7 @@ import { DealsModule } from './modules/deals/deals.module';
 import { InternalModule } from './modules/internal/internal.module';
 import { KnowledgeModule } from './modules/knowledge/knowledge.module';
 import { MessagesModule } from './modules/messages/messages.module';
+import { PagesModule } from './modules/pages/pages.module';
 import { PipelinesModule } from './modules/pipelines/pipelines.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { SettingsModule } from './modules/settings/settings.module';
@@ -63,6 +64,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     TeamModule,
     ReportsModule,
     AutomationsModule,
+    PagesModule,
     WebhooksModule,
     InternalModule,
   ],
