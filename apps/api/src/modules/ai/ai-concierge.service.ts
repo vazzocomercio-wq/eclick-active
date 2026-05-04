@@ -310,9 +310,14 @@ export class AiConciergeService {
 
     const customGreeting = persona.greeting_message?.trim() ?? '';
     if (customGreeting) {
-      // Interpola {{contact.name}} se houver
+      // Interpola {{contact.name}} (nome completo) e {{contact.first_name}}
+      // (só primeiro nome, mais natural pra cumprimento) — usa pushName
+      // do WhatsApp quando contato vem de inbound do Baileys.
       const name = await this.fetchContactName(orgId, conversation.contact_id);
-      greeting = customGreeting.replaceAll('{{contact.name}}', name ?? '');
+      const firstName = name ? (name.trim().split(/\s+/)[0] ?? name) : '';
+      greeting = customGreeting
+        .replaceAll('{{contact.name}}', name ?? '')
+        .replaceAll('{{contact.first_name}}', firstName);
     } else {
       // Sem greeting customizada — gera na hora baseada na persona.
       const generated = await this.generateGreeting(
@@ -531,7 +536,12 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
         ?.qualifying_turns ?? 0);
     const forceRoute = qualifyingTurns >= MAX_QUALIFYING_TURNS;
 
-    // 5. IA decide: qualifica mais OU roteia agora
+    // 5. Pega o nome do contato (pushName do WhatsApp ou cadastro) pra IA
+    //    poder personalizar respostas — torna a conversa mais conectada e
+    //    menos genérica/robótica.
+    const contactName = await this.fetchContactName(orgId, conversation.contact_id);
+
+    // 6. IA decide: qualifica mais OU roteia agora
     const decision = await this.askIaToRoute({
       pipelines,
       history,
@@ -541,6 +551,7 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
       qualifyingTurns,
       forceRoute,
       tagCatalog,
+      contactName,
     });
 
     if (!decision) {
@@ -704,8 +715,14 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
     qualifyingTurns: number;
     forceRoute: boolean;
     tagCatalog: TagDefinition[];
+    contactName: string | null;
   }): Promise<RouteDecision | null> {
-    const { pipelines, history, latestMessage, persona, businessContext, qualifyingTurns, forceRoute, tagCatalog } = args;
+    const { pipelines, history, latestMessage, persona, businessContext, qualifyingTurns, forceRoute, tagCatalog, contactName } = args;
+
+    // Pega só o primeiro nome pra IA usar de forma natural
+    // ("Maria Silva" → "Maria"), sem soar formal demais.
+    const getFirstName = (full: string): string =>
+      full.trim().split(/\s+/)[0] ?? full;
 
     const pipelinesText = pipelines
       .map((p) => {
@@ -757,6 +774,8 @@ ${persona.personality || '(sem personalidade detalhada)'}
 DIRETRIZES DA PERSONA (use isso pra saber QUAIS informações coletar e COMO conduzir):
 ${guidelinesText || '(sem guidelines explícitas — use senso comum no tom da persona)'}
 ═══════════════════════════════════════════
+
+CLIENTE: ${contactName ? `${contactName} (use o primeiro nome com naturalidade — ex: "Tudo bem, ${getFirstName(contactName)}?", sem repetir em toda mensagem)` : '(sem nome cadastrado — não invente nome, use linguagem neutra)'}
 
 CONTEXTO DA EMPRESA:
 ${businessContext || '(sem contexto detalhado)'}
