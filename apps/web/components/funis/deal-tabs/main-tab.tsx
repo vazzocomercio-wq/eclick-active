@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Building2, Mail, Phone } from 'lucide-react';
+import { Building2, CalendarPlus, Mail, Phone } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Deal } from '@eclick-active/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,6 +16,8 @@ import { dealsApi, type UpdateDealInput } from '@/lib/api/deals';
 import { ApiError } from '@/lib/api/client';
 import { formatPhone } from '@/lib/format';
 import { TagPicker } from '@/components/tags/tag-picker';
+import { NewAppointmentDialog } from '@/components/agenda/new-appointment-dialog';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 /**
@@ -62,8 +64,24 @@ export function DealMainTab({
   onAskClient,
   onChanged,
 }: DealMainTabProps) {
+  const [appointmentOpen, setAppointmentOpen] = useState(false);
+
   return (
     <div className="flex flex-col gap-3 p-4">
+      {/* Ações rápidas */}
+      <div className="flex justify-end">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setAppointmentOpen(true)}
+          disabled={!deal.contact_id}
+          title={deal.contact_id ? 'Criar agendamento pra esse contato' : 'Deal sem contato — agendamento exige contato'}
+        >
+          <CalendarPlus className="mr-1.5 h-3.5 w-3.5" />
+          Novo agendamento
+        </Button>
+      </div>
+
       {/* Contato */}
       {deal.contact ? (
         <ContactCard contact={deal.contact} companyName={deal.company?.name ?? null} />
@@ -97,6 +115,20 @@ export function DealMainTab({
         conversationId={conversationId ?? null}
         onAskClient={onAskClient}
       />
+
+      {deal.contact_id && (
+        <NewAppointmentDialog
+          open={appointmentOpen}
+          onOpenChange={setAppointmentOpen}
+          defaultContactId={deal.contact_id}
+          defaultDealId={deal.id}
+          onCreated={() => {
+            setAppointmentOpen(false);
+            toast.success('Agendamento criado');
+            void onChanged();
+          }}
+        />
+      )}
     </div>
   );
 }

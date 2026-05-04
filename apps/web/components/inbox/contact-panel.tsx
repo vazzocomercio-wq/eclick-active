@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ExternalLink, Mail, Phone, Sparkles } from 'lucide-react';
+import { CalendarPlus, ExternalLink, Mail, Phone, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import type { ConversationDetail } from '@eclick-active/shared';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,7 @@ import { WhatsAppVerifiedBadge } from '@/components/contacts/whatsapp-verified-b
 import { channelLabel } from '@/components/ui/channel-icon';
 import { ScoreBar } from '@/components/contacts/score-bar';
 import { TagPicker } from '@/components/tags/tag-picker';
+import { NewAppointmentDialog } from '@/components/agenda/new-appointment-dialog';
 import { contactsApi } from '@/lib/api/contacts';
 import { ApiError } from '@/lib/api/client';
 import { formatPhone } from '@/lib/format';
@@ -30,6 +31,8 @@ interface ContactPanelProps {
 }
 
 export function ContactPanel({ conversation, loading, onOpenFullProfile }: ContactPanelProps) {
+  const [appointmentOpen, setAppointmentOpen] = useState(false);
+
   if (loading) {
     return (
       <div className="flex h-full flex-col gap-3 p-4">
@@ -82,6 +85,16 @@ export function ContactPanel({ conversation, loading, onOpenFullProfile }: Conta
               </p>
             )}
           </div>
+          {/* Ação rápida: agendar */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={() => setAppointmentOpen(true)}
+          >
+            <CalendarPlus className="mr-1.5 h-3.5 w-3.5" />
+            Novo agendamento
+          </Button>
         </div>
 
         {/* Info */}
@@ -201,6 +214,17 @@ export function ContactPanel({ conversation, loading, onOpenFullProfile }: Conta
           </Button>
         )}
       </div>
+
+      <NewAppointmentDialog
+        open={appointmentOpen}
+        onOpenChange={setAppointmentOpen}
+        defaultContactId={contact.id}
+        defaultConversationId={conversation?.id}
+        onCreated={() => {
+          setAppointmentOpen(false);
+          toast.success('Agendamento criado');
+        }}
+      />
     </ScrollArea>
   );
 }

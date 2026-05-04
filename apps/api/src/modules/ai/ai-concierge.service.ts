@@ -694,6 +694,16 @@ REGRAS:
 
 3. **Se já tem info suficiente OU está em forceRoute:**
    - "needs_more_info": false
+   - **AGENDAMENTO**: se o cliente PEDIU agendamento explicitamente
+     ("quero agendar", "tem horário?", "vagas pra X", "marcar consulta",
+     "agendar tratamento", "quando posso ir", etc.):
+     • SEMPRE inclua a tag "AGENDAMENTO_SOLICITADO" em "tags"
+     • Prefira stages avançados ("Aguardando agendamento", "Agendado",
+       ou similar conforme as descrições)
+     • A bridge_message DEVE indicar que a equipe humana entrará em
+       contato pra propor data/horário concreto (NUNCA prometa horário
+       específico — você não tem acesso à agenda real do profissional)
+     • Aumente a temperatura pra "hot" (cliente quer agir)
    - "pipeline_id": ID do pipeline que melhor encaixa
    - "stage_id": ID de UM stage DISPONÍVEL desse pipeline.
 
