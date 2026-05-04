@@ -7,13 +7,13 @@ import type { Contact, ContactSource } from '@eclick-active/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { TagPills } from '@/components/contacts/tag-pills';
+import { TagPicker } from '@/components/tags/tag-picker';
 import { WhatsAppVerifiedBadge } from '@/components/contacts/whatsapp-verified-badge';
 import { AIGapsCard } from '@/components/ai/ai-gaps-card';
 import { CustomFieldsSection } from '@/components/custom-fields/custom-fields-section';
 import { contactsApi, type UpdateContactDto } from '@/lib/api/contacts';
 import { ApiError } from '@/lib/api/client';
-import { formatPhone, parseTagsInput } from '@/lib/format';
+import { formatPhone } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 interface ContactMainTabProps {
@@ -68,7 +68,7 @@ function ContactInfoCard({
   const [phone, setPhone] = useState(contact.phone ?? '');
   const [email, setEmail] = useState(contact.email ?? '');
   const [source, setSource] = useState<ContactSource | ''>(contact.source ?? '');
-  const [tags, setTags] = useState((contact.tags ?? []).join(', '));
+  const [tags, setTags] = useState<string[]>(contact.tags ?? []);
   const [savingField, setSavingField] = useState<string | null>(null);
 
   // Sync quando o contato é recarregado. Usamos id+updated_at como sentinel
@@ -77,7 +77,7 @@ function ContactInfoCard({
     setPhone(contact.phone ?? '');
     setEmail(contact.email ?? '');
     setSource(contact.source ?? '');
-    setTags((contact.tags ?? []).join(', '));
+    setTags(contact.tags ?? []);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contact.id, contact.updated_at]);
 
@@ -177,27 +177,23 @@ function ContactInfoCard({
           </select>
         </Field>
 
-        <Field label="Tags" hint="Separe com vírgula">
-          <Input
+        <Field label="Tags do contato" hint="Falam sobre o perfil. Use o catálogo configurado em Configurações > Tags ou crie inline.">
+          <TagPicker
+            entityType="contact"
             value={tags}
-            onChange={(e) => setTags(e.target.value)}
-            onBlur={() => {
-              const parsed = parseTagsInput(tags);
+            onChange={(next) => {
+              setTags(next);
               const current = contact.tags ?? [];
               if (
-                parsed.length === current.length &&
-                parsed.every((t, i) => t === current[i])
+                next.length === current.length &&
+                next.every((t, i) => t === current[i])
               ) {
                 return;
               }
-              void commit({ tags: parsed }, 'tags', 'Tags salvas');
+              void commit({ tags: next }, 'tags', 'Tags salvas');
             }}
-            placeholder="lead-quente, b2b"
-            disabled={savingField === 'tags'}
+            placeholder="Adicionar tag…"
           />
-          {(contact.tags ?? []).length > 0 && (
-            <TagPills tags={contact.tags} max={10} className="mt-1" />
-          )}
         </Field>
       </CardContent>
     </Card>

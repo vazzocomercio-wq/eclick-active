@@ -12,6 +12,7 @@ import {
   Settings,
   Sliders,
   Sparkles,
+  Tags as TagsIcon,
   Webhook as WebhookIcon,
   Workflow,
 } from 'lucide-react';
@@ -25,6 +26,7 @@ import { AutoLeadSection } from '@/components/configuracoes/auto-lead-section';
 import { WebhooksSection } from '@/components/configuracoes/webhooks-section';
 import { CalendarIntegrationsSection } from '@/components/configuracoes/calendar-integrations-section';
 import { ConciergeSection } from '@/components/configuracoes/concierge-section';
+import { TagsSection } from '@/components/configuracoes/tags-section';
 import { cn } from '@/lib/utils';
 
 type Section =
@@ -35,6 +37,7 @@ type Section =
   | 'concierge'
   | 'agenda'
   | 'custom-fields'
+  | 'tags'
   | 'webhooks'
   | 'pipelines';
 
@@ -70,6 +73,12 @@ const SECTIONS: Array<{
     label: 'Campos Personalizados',
     icon: Sliders,
     description: 'Deals, contatos, empresas',
+  },
+  {
+    id: 'tags',
+    label: 'Tags',
+    icon: TagsIcon,
+    description: 'Catálogo pra contatos e cards',
   },
   {
     id: 'webhooks',
@@ -205,6 +214,8 @@ export default function ConfiguracoesPage() {
             )}
 
             {section === 'custom-fields' && <CustomFieldsAdminSection />}
+
+            {section === 'tags' && <TagsSection />}
 
             {section === 'webhooks' && <WebhooksSection />}
 

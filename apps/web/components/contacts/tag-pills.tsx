@@ -1,3 +1,4 @@
+import type { TagDefinition } from '@eclick-active/shared';
 import { cn } from '@/lib/utils';
 
 interface TagPillsProps {
@@ -10,6 +11,12 @@ interface TagPillsProps {
    * com mais respiro (sheets, painéis).
    */
   size?: 'xs' | 'sm';
+  /**
+   * Catálogo de tag definitions pra override de cor/label. Quando passado,
+   * cada slug tenta resolver pela definition (cor manual configurada). Sem
+   * definition, cai pro hash automático da paleta.
+   */
+  definitions?: TagDefinition[];
 }
 
 /**
@@ -45,7 +52,38 @@ export function tagColor(tag: string): { border: string; bg: string; text: strin
   return TAG_PALETTE[hash % TAG_PALETTE.length]!;
 }
 
-export function TagPills({ tags, max = 3, className, size = 'xs' }: TagPillsProps) {
+/**
+ * Resolve cor manual configurada no catálogo (definition.color) pra
+ * estilo CSS. Aceita nome da paleta ("amber", "emerald") ou hex (#RRGGBB).
+ */
+function resolveDefinitionColor(color: string): { className?: string; style?: React.CSSProperties } | null {
+  const palette = TAG_PALETTE.find(
+    (p) => p.border.includes(color) || p.bg.includes(color),
+  );
+  // Match por nome curto ("amber", "emerald", etc)
+  const byName: Record<string, (typeof TAG_PALETTE)[number]> = {
+    amber: TAG_PALETTE[0]!, emerald: TAG_PALETTE[1]!, sky: TAG_PALETTE[2]!,
+    violet: TAG_PALETTE[3]!, rose: TAG_PALETTE[4]!, cyan: TAG_PALETTE[5]!,
+    fuchsia: TAG_PALETTE[6]!, orange: TAG_PALETTE[7]!,
+  };
+  const found = palette ?? byName[color];
+  if (found) {
+    return { className: cn(found.border, found.bg, found.text) };
+  }
+  // Hex livre
+  if (/^#[0-9A-Fa-f]{6}$/.test(color)) {
+    return {
+      style: {
+        background: `${color}26`, // ~15% alpha
+        borderColor: `${color}66`, // ~40% alpha
+        color,
+      },
+    };
+  }
+  return null;
+}
+
+export function TagPills({ tags, max = 3, className, size = 'xs', definitions }: TagPillsProps) {
   if (!tags || tags.length === 0) {
     return <span className="text-xs text-muted-foreground">—</span>;
   }
@@ -57,22 +95,32 @@ export function TagPills({ tags, max = 3, className, size = 'xs' }: TagPillsProp
       ? 'px-2.5 py-1 text-xs'
       : 'px-2 py-0.5 text-[11px]';
 
+  // Build map slug → definition pra lookup O(1)
+  const defBySlug = new Map<string, TagDefinition>();
+  if (definitions) {
+    for (const d of definitions) defBySlug.set(d.slug, d);
+  }
+
   return (
     <div className={cn('flex flex-wrap items-center gap-1', className)}>
       {visible.map((tag) => {
-        const c = tagColor(tag);
+        const def = defBySlug.get(tag);
+        const displayLabel = def?.label ?? tag;
+        const overrideColor = def?.color ? resolveDefinitionColor(def.color) : null;
+        const fallback = tagColor(tag);
         return (
           <span
             key={tag}
             className={cn(
               'inline-flex items-center rounded-full border font-medium',
               pillBase,
-              c.border,
-              c.bg,
-              c.text,
+              overrideColor?.className ??
+                (overrideColor ? '' : cn(fallback.border, fallback.bg, fallback.text)),
             )}
+            style={overrideColor?.style}
+            title={def?.description ?? undefined}
           >
-            {tag}
+            {displayLabel}
           </span>
         );
       })}

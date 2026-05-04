@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Building2, Mail, Phone, Tag as TagIcon } from 'lucide-react';
+import { Building2, Mail, Phone } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Deal } from '@eclick-active/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,7 +14,8 @@ import { CustomFieldsSection } from '@/components/custom-fields/custom-fields-se
 import { useTeamMembers } from '@/hooks/use-team-members';
 import { dealsApi, type UpdateDealInput } from '@/lib/api/deals';
 import { ApiError } from '@/lib/api/client';
-import { formatPhone, parseTagsInput } from '@/lib/format';
+import { formatPhone } from '@/lib/format';
+import { TagPicker } from '@/components/tags/tag-picker';
 import { cn } from '@/lib/utils';
 
 /**
@@ -175,13 +176,13 @@ function DealDataCard({
 }) {
   const { members } = useTeamMembers();
   const [closeDate, setCloseDate] = useState(deal.expected_close_date ?? '');
-  const [tags, setTags] = useState((deal.tags ?? []).join(', '));
+  const [tags, setTags] = useState<string[]>(deal.tags ?? []);
   const [savingField, setSavingField] = useState<string | null>(null);
 
   // Sync state quando o deal muda (após reload)
   useEffect(() => {
     setCloseDate(deal.expected_close_date ?? '');
-    setTags((deal.tags ?? []).join(', '));
+    setTags(deal.tags ?? []);
   }, [deal.expected_close_date, deal.tags]);
 
   async function commitField(patch: UpdateDealInput, key: string, label: string) {
@@ -245,38 +246,23 @@ function DealDataCard({
           </select>
         </Field>
 
-        <Field label="Tags" hint="Vírgula entre">
-          <Input
+        <Field label="Tags do card" hint="Falam sobre qualificações e necessidades. IA sugere automaticamente — você pode editar.">
+          <TagPicker
+            entityType="deal"
             value={tags}
-            onChange={(e) => setTags(e.target.value)}
-            onBlur={() => {
-              const parsed = parseTagsInput(tags);
+            onChange={(next) => {
+              setTags(next);
               const current = deal.tags ?? [];
               if (
-                parsed.length === current.length &&
-                parsed.every((t, i) => t === current[i])
+                next.length === current.length &&
+                next.every((t, i) => t === current[i])
               ) {
                 return;
               }
-              void commitField({ tags: parsed }, 'tags', 'Tags salvas');
+              void commitField({ tags: next }, 'tags', 'Tags salvas');
             }}
-            placeholder="lead-quente, b2b"
-            disabled={savingField === 'tags'}
-            inputMode="text"
+            placeholder="Adicionar tag…"
           />
-          {(deal.tags ?? []).length > 0 && (
-            <div className="mt-1 flex flex-wrap gap-1">
-              {(deal.tags ?? []).map((t) => (
-                <span
-                  key={t}
-                  className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px]"
-                >
-                  <TagIcon className="h-2.5 w-2.5" />
-                  {t}
-                </span>
-              ))}
-            </div>
-          )}
         </Field>
       </CardContent>
     </Card>
