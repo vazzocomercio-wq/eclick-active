@@ -71,6 +71,13 @@ interface RouteDecision {
   temperature: ContactTemperature | null;
   bridge_message: string | null;
   reasoning: string;
+  /**
+   * Tags semânticas curtas extraídas do qualifying — viram tags
+   * estáveis no deal e no contato. Ex: ['NOVO_PACIENTE',
+   * 'TRATAMENTO_INFUSAO', 'CONVENIO_GAMA']. Só preenchidas quando
+   * needs_more_info=false (no momento do route).
+   */
+  tags: string[];
   /** Stats da chamada IA pra logar em ai_interactions */
   _usage?: {
     inputTokens: number;
@@ -507,7 +514,8 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
       });
     }
 
-    // Cria deal nesse pipeline+stage (se contato ainda não tem deal ativo)
+    // Cria deal nesse pipeline+stage (se contato ainda não tem deal ativo).
+    // Passa as tags semânticas extraídas pra ficarem visíveis no card.
     const dealCreated = await this.createDealIfMissing({
       orgId,
       contactId: conversation.contact_id,
@@ -515,13 +523,30 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
       stageId: decision.stage_id,
       reasoning: decision.reasoning,
       intentLabel: decision.intent_label ?? 'sem_label',
+      tags: decision.tags,
     });
 
-    // Atualiza temperatura do contato
-    if (decision.temperature) {
+    // Atualiza temperatura + propaga as tags semânticas pro CONTATO também.
+    // Tags do contato são merge (preserva tags pre-existentes), de-dup, cap 12.
+    if (decision.temperature || decision.tags.length > 0) {
+      const patch: Record<string, unknown> = {};
+      if (decision.temperature) patch.temperature = decision.temperature;
+      if (decision.tags.length > 0) {
+        const { data: c } = await this.supabase.adminClient
+          .from('contacts')
+          .select('tags')
+          .eq('org_id', orgId)
+          .eq('id', conversation.contact_id)
+          .maybeSingle();
+        const existing = ((c?.tags as string[] | null) ?? []).filter(
+          (t): t is string => typeof t === 'string',
+        );
+        const merged = Array.from(new Set([...existing, ...decision.tags])).slice(0, 12);
+        patch.tags = merged;
+      }
       await this.supabase.adminClient
         .from('contacts')
-        .update({ temperature: decision.temperature })
+        .update(patch)
         .eq('org_id', orgId)
         .eq('id', conversation.contact_id);
     }
@@ -626,10 +651,25 @@ REGRAS:
 3. **Se já tem info suficiente OU está em forceRoute:**
    - "needs_more_info": false
    - "pipeline_id": ID do pipeline que melhor encaixa
-   - "stage_id": ID de UM stage DISPONÍVEL desse pipeline
+   - "stage_id": ID de UM stage DISPONÍVEL desse pipeline.
+
+     ⚠️ **Escolha o stage que reflete o ESTADO ATUAL DO LEAD**, NÃO "onde ele começa".
+     - Lead que só disse "oi" e nada mais → stage inicial (ex: Primeiro Contato).
+     - Lead que JÁ TEM intenção clara + 1-2 dados-chave (tipo de tratamento, convênio,
+       prazo, urgência, especialidade, etc.) → stage de QUALIFICAÇÃO ATIVA
+       ou superior (ex: Qualificação inicial, Documento pendente).
+     - Lead que JÁ ENVIOU documentos / propostas / dados completos → stage avançado.
+     - Use as descrições dos stages pra escolher o encaixe certo. Não seja conservador —
+       escolha o stage real, não o "seguro".
+
    - "temperature": "cold" (curiosidade) | "warm" (interesse genuíno) | "hot" (pronto/qualificado) | "very_hot" (urgência)
    - "intent_label": label curto descritivo (ex: "consulta_oncologia_convenio_bradesco")
    - "bridge_message": frase CURTA (máx 200 chars) no tom ${tonePt} avisando próximo passo. NULL se não fizer sentido enviar.
+   - "tags": array de **3 a 6 tags semânticas curtas** representando os dados-chave
+     coletados durante a qualificação. Use UPPERCASE_SNAKE_CASE, sem acento.
+     Exemplos pra clínica: ["NOVO_PACIENTE", "TRATAMENTO_INFUSAO", "CONVENIO_GAMA"].
+     Exemplos pra outros negócios: ["INTERESSE_PREMIUM", "FAIXA_ALTA"], ["VAREJO", "URGENTE"].
+     **NÃO inclua** "AI_CONCIERGE" (já é adicionada automaticamente).
 
 4. "reasoning": SEMPRE preencha. Frase curta explicando o porquê (de qualificar mais OU de rotear pra esse pipeline/stage).
 
@@ -644,6 +684,7 @@ Retorne APENAS JSON puro com este shape exato:
   "intent_label": "<string ou null>",
   "temperature": "cold|warm|hot|very_hot ou null",
   "bridge_message": "<string ou null>",
+  "tags": ["TAG_1", "TAG_2", ...] (vazio quando needs_more_info=true),
   "reasoning": "<string>"
 }`;
 
@@ -710,6 +751,7 @@ Decida o roteamento.`;
           intent_label: null,
           temperature: null,
           bridge_message: null,
+          tags: [],
           reasoning: d.reasoning ?? '',
           _usage: usage,
         };
@@ -733,6 +775,25 @@ Decida o roteamento.`;
         return null;
       }
 
+      // Tags semânticas — sluga pra UPPERCASE_SNAKE_CASE, remove duplicatas
+      // e cap em 6 tags pra não poluir o card.
+      const rawTags = Array.isArray(d.tags) ? d.tags : [];
+      const tags = Array.from(
+        new Set(
+          rawTags
+            .filter((t): t is string => typeof t === 'string')
+            .map((t) =>
+              t
+                .normalize('NFD')
+                .replace(/[̀-ͯ]/g, '')
+                .toUpperCase()
+                .replace(/[^A-Z0-9]+/g, '_')
+                .replace(/^_+|_+$/g, ''),
+            )
+            .filter((t) => t.length > 0 && t !== 'AI_CONCIERGE'),
+        ),
+      ).slice(0, 6);
+
       return {
         needs_more_info: false,
         next_question: null,
@@ -744,6 +805,7 @@ Decida o roteamento.`;
           typeof d.bridge_message === 'string' && d.bridge_message.trim()
             ? d.bridge_message.trim()
             : null,
+        tags,
         reasoning: d.reasoning ?? '',
         _usage: usage,
       };
@@ -762,8 +824,9 @@ Decida o roteamento.`;
     stageId: string;
     reasoning: string;
     intentLabel: string;
+    tags: string[];
   }): Promise<boolean> {
-    const { orgId, contactId, pipelineId, stageId, reasoning, intentLabel } = args;
+    const { orgId, contactId, pipelineId, stageId, reasoning, intentLabel, tags } = args;
 
     // Já tem deal aberto?
     const { data: existing } = await this.supabase.adminClient
@@ -785,6 +848,7 @@ Decida o roteamento.`;
     // e seguem o padrão usado em `auto-lead.service.ts`. Sem isso o
     // INSERT falhava com 42703 (column does not exist) e o Concierge
     // marcava state=routed sem deal criado.
+    const dealTags = Array.from(new Set(['ai-concierge', ...tags]));
     const { error } = await this.supabase.adminClient
       .from('deals')
       .insert({
@@ -793,12 +857,13 @@ Decida o roteamento.`;
         pipeline_id: pipelineId,
         stage_id: stageId,
         title: contactName ?? 'Novo lead',
-        tags: ['ai-concierge'],
+        tags: dealTags,
         custom_fields: {
           ai_concierge: {
             intent_label: intentLabel,
             reasoning,
             routed_at: new Date().toISOString(),
+            tags,
           },
         },
       });
