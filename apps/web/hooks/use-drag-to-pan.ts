@@ -77,6 +77,13 @@ export function useDragToPan<T extends HTMLElement = HTMLElement>(
         }
         el!.style.cursor = 'grabbing';
         document.body.style.userSelect = 'none';
+        // Limpa qualquer seleção de texto que tenha começado nos primeiros
+        // px antes de exceder o threshold
+        try {
+          window.getSelection()?.removeAllRanges();
+        } catch {
+          /* noop */
+        }
       }
       el!.scrollLeft = startScroll - dx;
       // Previne text selection durante drag
@@ -105,18 +112,22 @@ export function useDragToPan<T extends HTMLElement = HTMLElement>(
       }
     }
 
-    el.addEventListener('pointerdown', onPointerDown);
-    el.addEventListener('pointermove', onPointerMove);
-    el.addEventListener('pointerup', release);
-    el.addEventListener('pointercancel', release);
-    el.addEventListener('pointerleave', release);
+    // capture: true pra pegar pointer events ANTES de filhos que tenham
+    // listeners próprios (Radix ScrollArea, dnd-kit, etc.). Sem isso o
+    // ScrollArea de cada coluna interceptaria e o pan nunca ativava.
+    const opts = { capture: true } as const;
+    el.addEventListener('pointerdown', onPointerDown, opts);
+    el.addEventListener('pointermove', onPointerMove, opts);
+    el.addEventListener('pointerup', release, opts);
+    el.addEventListener('pointercancel', release, opts);
+    el.addEventListener('pointerleave', release, opts);
 
     return () => {
-      el.removeEventListener('pointerdown', onPointerDown);
-      el.removeEventListener('pointermove', onPointerMove);
-      el.removeEventListener('pointerup', release);
-      el.removeEventListener('pointercancel', release);
-      el.removeEventListener('pointerleave', release);
+      el.removeEventListener('pointerdown', onPointerDown, opts);
+      el.removeEventListener('pointermove', onPointerMove, opts);
+      el.removeEventListener('pointerup', release, opts);
+      el.removeEventListener('pointercancel', release, opts);
+      el.removeEventListener('pointerleave', release, opts);
       // Reset estilos caso o componente desmonte mid-drag
       el.style.cursor = '';
       document.body.style.userSelect = '';
