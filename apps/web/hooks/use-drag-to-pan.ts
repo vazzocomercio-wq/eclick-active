@@ -45,11 +45,11 @@ export function useDragToPan<T extends HTMLElement = HTMLElement>(
     const el = ref.current;
     if (!el) {
       // eslint-disable-next-line no-console
-      console.debug('[pan] mount — ref.current null, hook não atachou');
+      console.log('[pan] mount — ref.current null, hook não atachou');
       return;
     }
     // eslint-disable-next-line no-console
-    console.debug('[pan] mount — listeners atachados em', el.tagName, el.className);
+    console.log('[pan] mount — listeners atachados em', el.tagName, el.className);
 
     let active = false;
     let pointerId: number | null = null;
@@ -61,14 +61,14 @@ export function useDragToPan<T extends HTMLElement = HTMLElement>(
       // Mouse: só botão primário. Touch/pen: qualquer.
       if (e.pointerType === 'mouse' && e.button !== 0) {
         // eslint-disable-next-line no-console
-        console.debug('[pan] skip — non-primary button', e.button);
+        console.log('[pan] skip — non-primary button', e.button);
         return;
       }
       const target = e.target as HTMLElement | null;
       const matched = target && target.closest(ignore);
       if (matched) {
         // eslint-disable-next-line no-console
-        console.debug('[pan] skip — matched ignore selector', matched.tagName, (matched as HTMLElement).className);
+        console.log('[pan] skip — matched ignore selector', matched.tagName, (matched as HTMLElement).className);
         return;
       }
       active = true;
@@ -77,7 +77,7 @@ export function useDragToPan<T extends HTMLElement = HTMLElement>(
       startScroll = el!.scrollLeft;
       exceededThreshold = false;
       // eslint-disable-next-line no-console
-      console.debug('[pan] pointerdown OK', { type: e.pointerType, x: e.clientX, scrollLeft: startScroll });
+      console.log('[pan] pointerdown OK', { type: e.pointerType, x: e.clientX, scrollLeft: startScroll });
     }
 
     function onPointerMove(e: PointerEvent) {
@@ -87,7 +87,7 @@ export function useDragToPan<T extends HTMLElement = HTMLElement>(
         if (Math.abs(dx) < threshold) return;
         exceededThreshold = true;
         // eslint-disable-next-line no-console
-        console.debug('[pan] threshold exceeded — pan ATIVADO', { dx });
+        console.log('[pan] threshold exceeded — pan ATIVADO', { dx });
         // Captura o pointer pra continuar recebendo moves mesmo se sair
         try {
           el!.setPointerCapture(pointerId);
