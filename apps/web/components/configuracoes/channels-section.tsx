@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { ChannelStatus } from '@eclick-active/shared';
+import { getSocket } from '@/lib/realtime/socket-client';
 import { BaileysConnectDialog } from './baileys-connect-dialog';
 import { ConnectEmailDialog } from './connect-email-dialog';
 import { ChannelBrandButton } from './channel-brand-button';
@@ -124,6 +125,35 @@ export function ChannelsSection() {
 
   useEffect(() => {
     void reload();
+  }, [reload]);
+
+  // Realtime: assina eventos de canal pra refletir status em todas as abas
+  // sem precisar F5. Cobre o caso "user pareou em outra aba" + o caso "user
+  // pareou nesta aba mas não fechou o dialog ainda" (a list já atualiza).
+  useEffect(() => {
+    let cancelled = false;
+    let cleanup: (() => void) | null = null;
+
+    void (async () => {
+      const socket = await getSocket();
+      if (!socket || cancelled) return;
+
+      const onChange = () => void reload();
+      socket.on('whatsapp:connected', onChange);
+      socket.on('whatsapp:disconnected', onChange);
+      // qr não muda lista (só status visual no dialog), mas dá pra incluir
+      // se quisermos animar "Aguardando QR" no card. Fora de escopo agora.
+
+      cleanup = () => {
+        socket.off('whatsapp:connected', onChange);
+        socket.off('whatsapp:disconnected', onChange);
+      };
+    })();
+
+    return () => {
+      cancelled = true;
+      cleanup?.();
+    };
   }, [reload]);
 
   async function togglePause(channel: ChannelView) {
