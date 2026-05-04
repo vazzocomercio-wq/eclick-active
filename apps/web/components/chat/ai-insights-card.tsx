@@ -134,7 +134,7 @@ export function AIInsightsCard({
           </span>
         )}
         <span className="ml-auto flex items-center gap-1 text-muted-foreground">
-          {open ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          {open ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
         </span>
       </button>
 

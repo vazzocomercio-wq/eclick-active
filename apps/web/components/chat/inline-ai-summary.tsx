@@ -148,7 +148,7 @@ export function InlineAISummary({
               <X className={compact ? 'h-3 w-3' : 'h-3.5 w-3.5'} />
             </span>
           )}
-          {open ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          {open ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
         </span>
       </button>
 
