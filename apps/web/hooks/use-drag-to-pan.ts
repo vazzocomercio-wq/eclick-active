@@ -127,19 +127,24 @@ export function useDragToPan<T extends HTMLElement = HTMLElement>(
       // capture: true pra pegar pointer events ANTES de filhos que tenham
       // listeners próprios (Radix ScrollArea, dnd-kit, etc.). Sem isso o
       // ScrollArea de cada coluna interceptaria e o pan nunca ativava.
+      //
+      // Não escutamos `pointerleave`: isso encerrava o pan quando o
+      // cursor passava em cima de elementos internos que capturam o
+      // pointer brevemente (cards, ScrollArea), fazendo o drag quebrar
+      // em vários pequenos pedaços. O `setPointerCapture` chamado após
+      // exceder o threshold já garante que continuamos recebendo moves
+      // mesmo se o pointer sair fisicamente do container.
       const listenerOpts = { capture: true } as const;
       el.addEventListener('pointerdown', onPointerDown, listenerOpts);
       el.addEventListener('pointermove', onPointerMove, listenerOpts);
       el.addEventListener('pointerup', release, listenerOpts);
       el.addEventListener('pointercancel', release, listenerOpts);
-      el.addEventListener('pointerleave', release, listenerOpts);
 
       cleanupRef.current = () => {
         el.removeEventListener('pointerdown', onPointerDown, listenerOpts);
         el.removeEventListener('pointermove', onPointerMove, listenerOpts);
         el.removeEventListener('pointerup', release, listenerOpts);
         el.removeEventListener('pointercancel', release, listenerOpts);
-        el.removeEventListener('pointerleave', release, listenerOpts);
         // Reset estilos caso o componente desmonte mid-drag
         el.style.cursor = '';
         document.body.style.userSelect = '';
