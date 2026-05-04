@@ -54,13 +54,7 @@ export function useDragToPan<T extends HTMLElement = HTMLElement>(
         cleanupRef.current();
         cleanupRef.current = null;
       }
-      if (!el) {
-        // eslint-disable-next-line no-console
-        console.log('[pan] callback ref — elemento desmontou');
-        return;
-      }
-      // eslint-disable-next-line no-console
-      console.log('[pan] callback ref — listeners atachados em', el.tagName, el.className);
+      if (!el) return;
 
       let active = false;
       let pointerId: number | null = null;
@@ -70,25 +64,14 @@ export function useDragToPan<T extends HTMLElement = HTMLElement>(
 
       function onPointerDown(e: PointerEvent) {
         // Mouse: só botão primário. Touch/pen: qualquer.
-        if (e.pointerType === 'mouse' && e.button !== 0) {
-          // eslint-disable-next-line no-console
-          console.log('[pan] skip — non-primary button', e.button);
-          return;
-        }
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
         const target = e.target as HTMLElement | null;
-        const matched = target && target.closest(ignore);
-        if (matched) {
-          // eslint-disable-next-line no-console
-          console.log('[pan] skip — matched ignore selector', matched.tagName, (matched as HTMLElement).className);
-          return;
-        }
+        if (target && target.closest(ignore)) return;
         active = true;
         pointerId = e.pointerId;
         startX = e.clientX;
         startScroll = el!.scrollLeft;
         exceededThreshold = false;
-        // eslint-disable-next-line no-console
-        console.log('[pan] pointerdown OK', { type: e.pointerType, x: e.clientX, scrollLeft: startScroll });
       }
 
       function onPointerMove(e: PointerEvent) {
@@ -97,8 +80,6 @@ export function useDragToPan<T extends HTMLElement = HTMLElement>(
         if (!exceededThreshold) {
           if (Math.abs(dx) < threshold) return;
           exceededThreshold = true;
-          // eslint-disable-next-line no-console
-          console.log('[pan] threshold exceeded — pan ATIVADO', { dx });
           // Captura o pointer pra continuar recebendo moves mesmo se sair
           try {
             el!.setPointerCapture(pointerId);
