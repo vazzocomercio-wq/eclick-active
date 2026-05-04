@@ -53,9 +53,12 @@ export class ContactsService {
     void this.webhooks.deliver(orgId, 'contact.created', contact as unknown as Record<string, unknown>);
 
     // Auto-validar WhatsApp em background se o contato tem telefone e a
-    // org tem provider disponível. Não bloqueia a criação.
+    // org tem provider disponível. Fire-and-forget: chama validatePhone
+    // (síncrono no provider, persiste resultado, dispara trigger) sem
+    // await pra não bloquear o response. enqueue não é usado aqui porque
+    // a queue não tem consumer — pendentes ficavam pra sempre.
     if (contact.phone) {
-      void this.whatsappValidator.enqueue(orgId, contact.id, contact.phone);
+      void this.whatsappValidator.validatePhone(orgId, contact.id, contact.phone);
     }
 
     return contact;
@@ -257,9 +260,10 @@ export class ContactsService {
     }
     const after = data as Contact;
 
-    // Re-validar WhatsApp se o telefone mudou (ou foi adicionado)
+    // Re-validar WhatsApp se o telefone mudou (ou foi adicionado).
+    // Fire-and-forget: validatePhone síncrono no provider mas sem await.
     if (after.phone && after.phone !== before.phone) {
-      void this.whatsappValidator.enqueue(orgId, after.id, after.phone);
+      void this.whatsappValidator.validatePhone(orgId, after.id, after.phone);
     }
 
     return after;
