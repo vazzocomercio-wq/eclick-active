@@ -43,7 +43,13 @@ export function useDragToPan<T extends HTMLElement = HTMLElement>(
 
   useEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!el) {
+      // eslint-disable-next-line no-console
+      console.debug('[pan] mount — ref.current null, hook não atachou');
+      return;
+    }
+    // eslint-disable-next-line no-console
+    console.debug('[pan] mount — listeners atachados em', el.tagName, el.className);
 
     let active = false;
     let pointerId: number | null = null;
@@ -53,14 +59,25 @@ export function useDragToPan<T extends HTMLElement = HTMLElement>(
 
     function onPointerDown(e: PointerEvent) {
       // Mouse: só botão primário. Touch/pen: qualquer.
-      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (e.pointerType === 'mouse' && e.button !== 0) {
+        // eslint-disable-next-line no-console
+        console.debug('[pan] skip — non-primary button', e.button);
+        return;
+      }
       const target = e.target as HTMLElement | null;
-      if (target && target.closest(ignore)) return;
+      const matched = target && target.closest(ignore);
+      if (matched) {
+        // eslint-disable-next-line no-console
+        console.debug('[pan] skip — matched ignore selector', matched.tagName, (matched as HTMLElement).className);
+        return;
+      }
       active = true;
       pointerId = e.pointerId;
       startX = e.clientX;
       startScroll = el!.scrollLeft;
       exceededThreshold = false;
+      // eslint-disable-next-line no-console
+      console.debug('[pan] pointerdown OK', { type: e.pointerType, x: e.clientX, scrollLeft: startScroll });
     }
 
     function onPointerMove(e: PointerEvent) {
@@ -69,6 +86,8 @@ export function useDragToPan<T extends HTMLElement = HTMLElement>(
       if (!exceededThreshold) {
         if (Math.abs(dx) < threshold) return;
         exceededThreshold = true;
+        // eslint-disable-next-line no-console
+        console.debug('[pan] threshold exceeded — pan ATIVADO', { dx });
         // Captura o pointer pra continuar recebendo moves mesmo se sair
         try {
           el!.setPointerCapture(pointerId);
