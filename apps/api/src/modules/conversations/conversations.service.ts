@@ -593,7 +593,29 @@ export class ConversationsService {
 
   async delete(orgId: string, id: string): Promise<void> {
     // Confirma que existe e pertence à org antes de deletar
-    await this.findByIdRaw(orgId, id);
+    const before = await this.findByIdRaw(orgId, id);
+
+    // Log defensivo — várias deleções acidentais foram detectadas em prod
+    // (msgs ficam órfãs porque CASCADE não funciona em partições). Estes
+    // logs ajudam a rastrear quem/quando dispara.
+    this.logger.warn(
+      `[conversations] DELETE conv=${id} org=${orgId} contact=${before.contact_id} channel=${before.channel_id} status=${before.status} msg_count=${before.message_count}`,
+    );
+
+    // Antes de deletar a conversa, apaga manualmente as messages dela.
+    // A FK ON DELETE CASCADE definida na tabela parent NÃO cascata para
+    // partições — bug conhecido do Postgres com partition+FK. Sem isso
+    // as messages ficam órfãs após o delete da conversation.
+    const { error: msgErr } = await this.supabase.adminClient
+      .from('messages')
+      .delete()
+      .eq('org_id', orgId)
+      .eq('conversation_id', id);
+    if (msgErr) {
+      this.logger.warn(
+        `[conversations] cleanup messages órfãs falhou (não fatal): ${msgErr.message}`,
+      );
+    }
 
     const { error } = await this.supabase.adminClient
       .from('conversations')

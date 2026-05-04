@@ -790,6 +790,24 @@ export class BaileysSession {
 
     if (existing?.id) return existing.id as string;
 
+    // Detector defensivo: se vai criar conv NOVA mas o contato JÁ tem
+    // mensagens com conversation_id distinto, é sinal de conv "fantasma"
+    // (deletada mas msgs órfãs). Loga avisando — útil pra rastrear bug
+    // de cleanup acidental + ajuda no diagnóstico do greeting duplicado.
+    const { data: orphans } = await supabase
+      .from('messages')
+      .select('conversation_id, created_at')
+      .eq('org_id', this.ctx.orgId)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    const lastOrphan = (orphans as { conversation_id?: string; created_at?: string }[] | null)?.[0];
+    if (lastOrphan?.conversation_id) {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[baileys ${this.ctx.channelId}] criando conv NOVA pra contact=${contactId} — última msg recente foi conv=${lastOrphan.conversation_id} (${lastOrphan.created_at})`,
+      );
+    }
+
     const { data: created, error } = await supabase
       .from('conversations')
       .insert({
