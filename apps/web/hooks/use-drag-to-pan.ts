@@ -5,15 +5,18 @@ import { useEffect, useRef } from 'react';
 interface UseDragToPanOptions {
   /**
    * Selector CSS de elementos que NÃO devem disparar pan ao receber
-   * pointerdown. Default cobre: botões, links, inputs, e qualquer coisa
-   * com role="button" (dnd-kit aplica isso nos itens draggable).
+   * pointerdown. Default cobre só elementos interativos NATIVOS — não
+   * filtra `[role="button"]` porque alguns containers internos (Radix
+   * ScrollArea, etc.) podem ter esse role e bloqueariam pan demais.
+   * Cards do dnd-kit não conflitam porque dnd-kit ativa drag em 6px e
+   * nosso threshold default é 10px — dá ao dnd-kit prioridade.
    * Adicione `[data-no-pan]` em algum filho pra escape manual.
    */
   ignore?: string;
   /**
    * Distância em px que o pointer precisa percorrer antes do pan ativar.
-   * Default: 8 (maior que activation distance do dnd-kit PointerSensor=6
-   * pra evitar conflito quando o pointer começa num card).
+   * Default: 10 (margem confortável > activation distance do dnd-kit
+   * PointerSensor=6 pra evitar conflito quando o pointer começa num card).
    */
   threshold?: number;
 }
@@ -35,8 +38,8 @@ export function useDragToPan<T extends HTMLElement = HTMLElement>(
   const ref = useRef<T | null>(null);
   const ignore =
     opts.ignore ??
-    'button, a, input, textarea, select, [data-no-pan], [role="button"]';
-  const threshold = opts.threshold ?? 8;
+    'button, a, input, textarea, select, [contenteditable="true"], [data-no-pan]';
+  const threshold = opts.threshold ?? 10;
 
   useEffect(() => {
     const el = ref.current;

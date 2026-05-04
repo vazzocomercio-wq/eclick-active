@@ -345,7 +345,7 @@ export default function FunisPage() {
         >
           <div
             ref={panRef}
-            className="flex-1 cursor-grab overflow-x-auto overflow-y-hidden"
+            className="flex-1 cursor-grab overflow-x-auto overflow-y-hidden [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             <div className="flex h-full gap-3 px-6 py-4">
               {board.stages.map((stage) => (
