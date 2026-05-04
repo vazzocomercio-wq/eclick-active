@@ -11,6 +11,7 @@ import { dealsApi } from '@/lib/api/deals';
 import { ApiError } from '@/lib/api/client';
 import { useDebounce } from '@/lib/use-debounce';
 import { cn } from '@/lib/utils';
+import { TagPicker } from '@/components/tags/tag-picker';
 
 export interface QuickAddDealProps {
   pipelineId: string;
@@ -45,6 +46,7 @@ export function QuickAddDeal({
   const [valueStr, setValueStr] = useState('');
   const [contactQuery, setContactQuery] = useState('');
   const [pickedContact, setPickedContact] = useState<Contact | null>(null);
+  const [tags, setTags] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   const titleRef = useRef<HTMLInputElement>(null);
@@ -81,6 +83,7 @@ export function QuickAddDeal({
         stage_id: stageId,
         value: parseValueBRL(valueStr),
         ...(contactId ? { contact_id: contactId } : {}),
+        ...(tags.length > 0 ? { tags } : {}),
       });
 
       toast.success('Negócio criado');
@@ -152,6 +155,13 @@ export function QuickAddDeal({
           setContactQuery('');
         }}
         disabled={submitting}
+      />
+
+      <TagPicker
+        entityType="deal"
+        value={tags}
+        onChange={setTags}
+        placeholder="Tags do card (opcional)"
       />
 
       <div className="flex items-center justify-end gap-1.5 pt-1">
