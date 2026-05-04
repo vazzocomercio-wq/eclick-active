@@ -172,9 +172,36 @@ export default function FunisPage() {
     },
     onDealCreated: (payload) => {
       const tags = payload.deal.tags ?? [];
-      if (tags.includes('lead-automatico')) {
+      const dealPipeline = pipelines.find((p) => p.id === payload.deal.pipeline_id);
+      const inOtherPipeline =
+        selectedId && payload.deal.pipeline_id !== selectedId && dealPipeline;
+
+      if (tags.includes('ai-concierge')) {
+        // Concierge criou — sempre destaca, indicando o funil
+        if (inOtherPipeline) {
+          toast.info(`🤖 IA criou lead em outro funil: ${payload.deal.title}`, {
+            description: `Funil: ${dealPipeline.name}`,
+            action: {
+              label: 'Abrir funil',
+              onClick: () => setSelectedId(payload.deal.pipeline_id),
+            },
+            duration: 8000,
+          });
+        } else {
+          toast.info(`🤖 IA criou: ${payload.deal.title}`);
+        }
+        void refetch();
+      } else if (tags.includes('lead-automatico')) {
         toast.info(`✨ Novo lead automático: ${payload.deal.title}`);
         void refetch();
+      } else if (inOtherPipeline) {
+        // Deal manual em outro funil também merece toast discreto
+        toast.info(`Novo deal em "${dealPipeline.name}": ${payload.deal.title}`, {
+          action: {
+            label: 'Abrir funil',
+            onClick: () => setSelectedId(payload.deal.pipeline_id),
+          },
+        });
       }
     },
   });

@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, Sparkles } from 'lucide-react';
 import type { ConversationDetail } from '@eclick-active/shared';
 import { conversationsApi } from '@/lib/api/conversations';
 import { useChat } from '@/hooks/use-chat';
 import { useEvents } from '@/hooks/use-events';
+import { getSocket } from '@/lib/realtime/socket-client';
 import { ChatHeader } from '@/components/inbox/chat-header';
 import { TransferBriefingBanner } from '@/components/inbox/transfer-briefing-banner';
 import { MessageList } from '@/components/inbox/message-list';
@@ -167,6 +168,46 @@ export function ChatPanel({
     },
   });
 
+  // Indicador "IA está digitando…" — Concierge emite typing:true ao
+  // começar processamento e typing:false no final. Reduz percepção de
+  // latência (user vê feedback imediato em vez de re-mandar msg).
+  const [typing, setTyping] = useState<{ active: boolean; personaName?: string }>({ active: false });
+  useEffect(() => {
+    if (!conversationId) return;
+    let cancelled = false;
+    let cleanup: (() => void) | null = null;
+    let safetyTimer: ReturnType<typeof setTimeout> | null = null;
+
+    void (async () => {
+      const socket = await getSocket();
+      if (!socket || cancelled) return;
+
+      const onTyping = (payload: { conversation_id: string; typing: boolean; persona_name?: string }) => {
+        if (payload.conversation_id !== conversationId) return;
+        if (safetyTimer) clearTimeout(safetyTimer);
+        setTyping({
+          active: payload.typing,
+          ...(payload.persona_name ? { personaName: payload.persona_name } : {}),
+        });
+        // Safety: força typing=false após 30s caso evento de fim seja perdido
+        if (payload.typing) {
+          safetyTimer = setTimeout(() => {
+            setTyping({ active: false });
+          }, 30_000);
+        }
+      };
+      socket.on('concierge:typing', onTyping);
+      cleanup = () => socket.off('concierge:typing', onTyping);
+    })();
+
+    return () => {
+      cancelled = true;
+      if (safetyTimer) clearTimeout(safetyTimer);
+      cleanup?.();
+      setTyping({ active: false });
+    };
+  }, [conversationId]);
+
   // Debounced refresh dos gaps quando o número de mensagens muda — 30s
   // pra evitar chamada de IA a cada mensagem (cache backend é 5min, mas o
   // refreshKey força invalidação do componente quando há contexto novo).
@@ -225,6 +266,19 @@ export function ChatPanel({
           void chat.loadMore();
         }}
       />
+
+      {/* Indicador "IA está digitando…" (Concierge processando) */}
+      {typing.active && (
+        <div className="flex items-center gap-2 border-t border-border bg-cyan-500/5 px-4 py-2 text-xs text-cyan-700 dark:text-cyan-300 animate-in fade-in">
+          <Sparkles className="h-3.5 w-3.5 shrink-0" />
+          <span className="font-medium">{typing.personaName ?? 'IA'} está digitando</span>
+          <span className="inline-flex gap-0.5">
+            <span className="h-1 w-1 animate-bounce rounded-full bg-cyan-500 [animation-delay:0ms]" />
+            <span className="h-1 w-1 animate-bounce rounded-full bg-cyan-500 [animation-delay:150ms]" />
+            <span className="h-1 w-1 animate-bounce rounded-full bg-cyan-500 [animation-delay:300ms]" />
+          </span>
+        </div>
+      )}
 
       {/* Card inline de resumo IA — aparece quando há ai_summary persistido
           OU quando "Resumir" foi clicado. Posicionado entre as mensagens e

@@ -10,6 +10,7 @@ import { SupabaseService } from '../../common/supabase/supabase.service';
 import { ChannelDispatcherService } from '../../common/channels/channel-dispatcher.service';
 import { AiPersonaService } from '../ai-persona/ai-persona.service';
 import { TagsService } from '../tags/tags.service';
+import { EventsGateway } from '../../gateways/events.gateway';
 import type { TagDefinition } from '@eclick-active/shared';
 
 const SONNET_MODEL_ID = 'claude-sonnet-4-6';
@@ -140,6 +141,7 @@ export class AiConciergeService {
     private readonly dispatcher: ChannelDispatcherService,
     private readonly persona: AiPersonaService,
     private readonly tags: TagsService,
+    private readonly events: EventsGateway,
   ) {}
 
   private getClient(): Anthropic {
@@ -173,9 +175,23 @@ export class AiConciergeService {
     this.inFlightHandlers.set(conversationId, { pendingRerun: false });
 
     const start = performance.now();
+    let typingSignaled = false;
     try {
       const settings = await this.loadSettings(orgId);
       if (!settings.enabled) return;
+
+      // Sinaliza "IA está digitando…" pro frontend ANTES de carregar
+      // contexto pesado (loadHistory + Anthropic call). Reduz percepção
+      // de latência — user vê feedback imediato em vez de re-mandar msg.
+      const personaActive = await this.persona.getDefault(orgId).catch(() => null);
+      if (settings.auto_reply) {
+        this.events.emitToOrg(orgId, 'concierge:typing', {
+          conversation_id: conversationId,
+          typing: true,
+          ...(personaActive?.name ? { persona_name: personaActive.name } : {}),
+        });
+        typingSignaled = true;
+      }
 
       const conv = await this.loadConversation(orgId, conversationId);
       if (!conv) return;
@@ -193,7 +209,6 @@ export class AiConciergeService {
         return;
       }
 
-      const personaActive = await this.persona.getDefault(orgId).catch(() => null);
       if (!personaActive) {
         this.logger.debug(
           `concierge: org ${orgId} sem persona default — nada a fazer`,
@@ -228,6 +243,14 @@ export class AiConciergeService {
         `concierge handler crashed (não fatal): ${err instanceof Error ? err.message : String(err)}`,
       );
     } finally {
+      // Sinaliza fim do typing pro frontend (limpa indicador "IA digitando…")
+      if (typingSignaled) {
+        this.events.emitToOrg(orgId, 'concierge:typing', {
+          conversation_id: conversationId,
+          typing: false,
+        });
+      }
+
       const final = this.inFlightHandlers.get(conversationId);
       this.inFlightHandlers.delete(conversationId);
       // Se chegou msg nova durante o processamento, re-roda com a última

@@ -121,6 +121,14 @@ export interface SchedulingSuggestionPayload {
   appointment_type_guess: string | null;
 }
 
+export interface ConciergeTypingPayload {
+  conversation_id: string;
+  /** True quando IA começou a processar; false quando terminou (ou crashou). */
+  typing: boolean;
+  /** Nome da persona pra UI exibir "Lia está digitando…" */
+  persona_name?: string;
+}
+
 export type EventName =
   | 'message:new'
   | 'message:updated'
@@ -137,7 +145,8 @@ export type EventName =
   | 'whatsapp:disconnected'
   | 'appointment:reminder-24h'
   | 'appointment:reminder-1h'
-  | 'appointment:no-show';
+  | 'appointment:no-show'
+  | 'concierge:typing';
 
 export interface EventPayloadMap {
   'message:new': MessageNewPayload;
@@ -156,6 +165,7 @@ export interface EventPayloadMap {
   'appointment:reminder-24h': AppointmentReminderPayload;
   'appointment:reminder-1h': AppointmentReminderPayload;
   'appointment:no-show': AppointmentNoShowPayload;
+  'concierge:typing': ConciergeTypingPayload;
 }
 
 const ROOM_PREFIX = 'org';
