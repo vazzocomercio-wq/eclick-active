@@ -123,7 +123,7 @@ export function ConversationItem({
               hasUnread ? 'text-foreground/80' : 'text-muted-foreground',
             )}
           >
-            {preview ?? item.ai_summary ?? 'Sem mensagens'}
+            {preview ?? formatLastMessage(item) ?? item.ai_summary ?? 'Sem mensagens'}
           </span>
           {hasUnread && (
             <span className="inline-flex h-4 min-w-[16px] shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
@@ -140,4 +140,16 @@ export function ConversationItem({
       </div>
     </div>
   );
+}
+
+/**
+ * Formata o preview da última mensagem. Prefixa com "Você:" quando outbound,
+ * e mostra "[mídia]" quando plain_text é null mas direction está setado
+ * (mensagens de imagem/audio/video/documento).
+ */
+function formatLastMessage(item: InboxItem): string | null {
+  if (!item.last_message_direction) return null;
+  const text = item.last_message_text?.trim() ?? '[mídia]';
+  const prefix = item.last_message_direction === 'outbound' ? 'Você: ' : '';
+  return prefix + text;
 }

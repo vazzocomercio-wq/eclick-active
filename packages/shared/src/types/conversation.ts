@@ -87,6 +87,11 @@ export interface InboxItem {
   // Agent (join)
   agent_name: string | null;
   agent_avatar: string | null;
+  // Última mensagem (preview na lista de conversas) — vem via LATERAL JOIN
+  // na v_inbox. plain_text é null em mensagens de mídia (UI deve mostrar
+  // fallback "[mídia]" quando direction está setado mas text não).
+  last_message_text: string | null;
+  last_message_direction: 'inbound' | 'outbound' | null;
 }
 
 /**
