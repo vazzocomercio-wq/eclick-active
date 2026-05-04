@@ -24,6 +24,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ChannelIcon } from '@/components/ui/channel-icon';
 import { contactsApi } from '@/lib/api/contacts';
+import { VerifyWhatsAppButton } from '@/components/contacts/verify-whatsapp-button';
 import { channelsApi, type ChannelView } from '@/lib/api/channels';
 import {
   conversationsApi,
@@ -79,8 +80,6 @@ export function StartConversationDialog({
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const [verifying, setVerifying] = useState(false);
-
   const inputRef = useRef<HTMLInputElement | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -93,7 +92,6 @@ export function StartConversationDialog({
       setSelectedChannelId(null);
       setMessage('');
       setSubmitting(false);
-      setVerifying(false);
       // Foca o input depois do dialog renderizar (só se não tem contato pré-selecionado)
       if (!initialContactId) {
         setTimeout(() => inputRef.current?.focus(), 100);
@@ -197,35 +195,6 @@ export function StartConversationDialog({
     const first = compatible.find((c) => c.reason === 'ok');
     setSelectedChannelId(first ? first.channel.id : null);
   }, [compatible]);
-
-  async function handleVerifyWhatsApp() {
-    if (!selectedContact) return;
-    setVerifying(true);
-    try {
-      const res = await contactsApi.verifyWhatsapp(selectedContact.id);
-      if (res.ok && res.result) {
-        // Atualiza contato local com resultado fresco
-        setSelectedContact({
-          ...selectedContact,
-          whatsapp_verified: res.result.exists,
-          whatsapp_jid: res.result.jid ?? null,
-          whatsapp_profile_name: res.result.profile_name ?? null,
-          whatsapp_profile_pic_url: res.result.profile_pic_url ?? null,
-        });
-        toast.success(
-          res.result.exists ? 'Número verificado como WhatsApp' : 'Número não é WhatsApp',
-        );
-      } else {
-        toast.warning('Não foi possível verificar agora. Conecte um canal WhatsApp.');
-      }
-    } catch (err) {
-      toast.error('Falha ao verificar', {
-        description: err instanceof ApiError ? err.message : undefined,
-      });
-    } finally {
-      setVerifying(false);
-    }
-  }
 
   async function handleStart(e: React.FormEvent) {
     e.preventDefault();
@@ -345,8 +314,7 @@ export function StartConversationDialog({
                 setSelectedContact(null);
                 setSearchQ('');
               }}
-              onVerify={handleVerifyWhatsApp}
-              verifying={verifying}
+              onContactUpdate={(next) => setSelectedContact(next)}
             />
           )}
 
@@ -522,13 +490,11 @@ function WhatsAppDot({ verified }: { verified: boolean | null }) {
 function SelectedContactCard({
   contact,
   onClear,
-  onVerify,
-  verifying,
+  onContactUpdate,
 }: {
   contact: Contact;
   onClear: () => void;
-  onVerify: () => void;
-  verifying: boolean;
+  onContactUpdate: (next: Contact) => void;
 }) {
   return (
     <div className="flex items-start gap-3 rounded-md border border-border bg-background/40 p-3">
@@ -536,19 +502,33 @@ function SelectedContactCard({
       <div className="flex-1 min-w-0">
         <div className="text-sm font-semibold">{contact.name ?? 'Sem nome'}</div>
         {contact.phone && (
-          <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
             <span>{contact.phone}</span>
-            <WhatsAppDot verified={contact.whatsapp_verified} />
-            {contact.whatsapp_verified === null && (
-              <button
-                type="button"
-                onClick={onVerify}
-                disabled={verifying}
-                className="text-[10px] underline hover:text-foreground"
-              >
-                {verifying ? 'verificando…' : 'verificar agora'}
-              </button>
-            )}
+            <VerifyWhatsAppButton
+              mode="contact"
+              contactId={contact.id}
+              initialResult={
+                contact.whatsapp_verified === null
+                  ? null
+                  : {
+                      exists: contact.whatsapp_verified,
+                      jid: contact.whatsapp_jid ?? undefined,
+                      profile_name: contact.whatsapp_profile_name ?? undefined,
+                      profile_pic_url: contact.whatsapp_profile_pic_url ?? undefined,
+                      provider: 'baileys',
+                    }
+              }
+              onResult={(r) => {
+                if (!r) return;
+                onContactUpdate({
+                  ...contact,
+                  whatsapp_verified: r.exists,
+                  whatsapp_jid: r.jid ?? null,
+                  whatsapp_profile_name: r.profile_name ?? null,
+                  whatsapp_profile_pic_url: r.profile_pic_url ?? null,
+                });
+              }}
+            />
           </div>
         )}
         {contact.email && (

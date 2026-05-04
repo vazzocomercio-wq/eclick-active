@@ -86,6 +86,23 @@ export const contactsApi = {
     }>(`/contacts/${id}/verify-whatsapp`);
   },
 
+  /**
+   * POST /contacts/verify-whatsapp-by-phone — preview da validação
+   * checando phone solto, sem persistir. Usado no form de cadastro.
+   */
+  verifyWhatsappByPhone(phone: string) {
+    return api.post<{
+      ok: boolean;
+      result: {
+        exists: boolean;
+        jid?: string;
+        profile_name?: string;
+        profile_pic_url?: string;
+        provider: 'baileys' | 'zapi';
+      } | null;
+    }>('/contacts/verify-whatsapp-by-phone', { phone });
+  },
+
   /** GET /contacts/whatsapp-stats — métricas de validação */
   whatsappStats(signal?: AbortSignal) {
     return api.get<{

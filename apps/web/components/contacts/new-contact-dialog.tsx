@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { contactsApi, type CreateContactDto } from '@/lib/api/contacts';
+import { VerifyWhatsAppButton } from '@/components/contacts/verify-whatsapp-button';
 import { parseTagsInput } from '@/lib/format';
 import { ApiError } from '@/lib/api/client';
 
@@ -144,6 +145,9 @@ export function NewContactDialog({ open, onOpenChange, onCreated }: NewContactDi
                 placeholder="+55 71 99999-9999"
                 inputMode="tel"
               />
+              <div className="mt-1">
+                <VerifyWhatsAppButton mode="phone" phone={form.phone} hideWhenEmpty />
+              </div>
             </Field>
             <Field label="Email" error={errors.email} className="sm:col-span-2">
               <Input

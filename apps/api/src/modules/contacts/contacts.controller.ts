@@ -27,6 +27,10 @@ interface VerifyBatchDto {
   contact_ids: string[];
 }
 
+interface VerifyByPhoneDto {
+  phone: string;
+}
+
 @UseGuards(AuthGuard)
 @Controller('contacts')
 export class ContactsController {
@@ -70,6 +74,24 @@ export class ContactsController {
       id,
       contact.phone,
     );
+    return { ok: !!result, result };
+  }
+
+  /**
+   * Preview de validação por phone solto (sem contactId). Usado pelo
+   * form de cadastro pra checar se o número é WhatsApp ANTES de criar
+   * o contato. Não persiste nada — só consulta o provider.
+   */
+  @Post('verify-whatsapp-by-phone')
+  async verifyWhatsappByPhone(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: VerifyByPhoneDto,
+  ): Promise<{ ok: boolean; result: WhatsAppCheckResult | null }> {
+    const phone = (dto?.phone ?? '').trim();
+    if (!phone || phone.replace(/\D/g, '').length < 8) {
+      return { ok: false, result: null };
+    }
+    const result = await this.whatsappValidator.previewByPhone(user.org_id, phone);
     return { ok: !!result, result };
   }
 

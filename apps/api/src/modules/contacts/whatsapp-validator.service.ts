@@ -76,6 +76,36 @@ export class WhatsappValidatorService {
   }
 
   /**
+   * Preview da validação — checa um phone solto SEM persistir. Usado
+   * pelo form de cadastro de contato pra mostrar resultado antes de
+   * salvar (e pra "atualizar" a validação on-demand quando user já
+   * sabe o telefone mas o contato ainda não existe). Mesma lógica de
+   * provider do validatePhone, só que não toca em DB nem dispara
+   * trigger de automation.
+   */
+  async previewByPhone(
+    orgId: string,
+    phone: string,
+  ): Promise<WhatsAppCheckResult | null> {
+    const provider = await this.pickProvider(orgId);
+    if (!provider) {
+      this.logger.debug(`previewByPhone: org ${orgId} sem provider — skip`);
+      return null;
+    }
+    try {
+      if (provider === 'baileys') {
+        return await this.checkViaBaileys(orgId, phone);
+      }
+      return await this.checkViaZapi(orgId, phone);
+    } catch (err) {
+      this.logger.warn(
+        `previewByPhone provider=${provider} falhou: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return null;
+    }
+  }
+
+  /**
    * Enfileira um contato pra validação assíncrona. Não bloqueia o caller.
    * Usado pelo `ContactsService.create` (auto-validate) e pelo endpoint
    * de batch.
