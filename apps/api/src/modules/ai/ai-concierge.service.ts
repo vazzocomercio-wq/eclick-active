@@ -9,6 +9,8 @@ import type {
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { ChannelDispatcherService } from '../../common/channels/channel-dispatcher.service';
 import { AiPersonaService } from '../ai-persona/ai-persona.service';
+import { TagsService } from '../tags/tags.service';
+import type { TagDefinition } from '@eclick-active/shared';
 
 const SONNET_MODEL_ID = 'claude-sonnet-4-6';
 const HISTORY_MAX_MESSAGES = 6;
@@ -119,6 +121,7 @@ export class AiConciergeService {
     private readonly supabase: SupabaseService,
     private readonly dispatcher: ChannelDispatcherService,
     private readonly persona: AiPersonaService,
+    private readonly tags: TagsService,
   ) {}
 
   private getClient(): Anthropic {
@@ -413,14 +416,20 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
     // 2. Carrega histórico curto pra IA ter contexto
     const history = await this.loadHistory(orgId, conversationId);
 
-    // 3. Conta turnos de qualificação já gastos. Se atingiu o teto,
+    // 3. Carrega catálogo de tags da org (deal) — IA usa pra reusar tags
+    //    existentes em vez de criar variações ("CONVENIO_GAMA" vs "GAMA").
+    const tagCatalog = await this.tags
+      .list(orgId, { entity_type: 'deal' })
+      .catch(() => [] as TagDefinition[]);
+
+    // 4. Conta turnos de qualificação já gastos. Se atingiu o teto,
     //    força roteamento mesmo com info parcial pra evitar loop infinito.
     const qualifyingTurns =
       ((conversation.metadata as { qualifying_turns?: number } | null)
         ?.qualifying_turns ?? 0);
     const forceRoute = qualifyingTurns >= MAX_QUALIFYING_TURNS;
 
-    // 4. IA decide: qualifica mais OU roteia agora
+    // 5. IA decide: qualifica mais OU roteia agora
     const decision = await this.askIaToRoute({
       pipelines,
       history,
@@ -429,6 +438,7 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
       businessContext: settings.business_context,
       qualifyingTurns,
       forceRoute,
+      tagCatalog,
     });
 
     if (!decision) {
@@ -515,6 +525,18 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
       });
     }
 
+    // Registra/incrementa tags no catálogo (cria as inéditas, soma usage_count
+    // nas existentes). Best-effort — falha aqui não bloqueia criação do deal.
+    if (decision.tags.length > 0) {
+      void this.tags
+        .upsertMany(orgId, 'deal', decision.tags)
+        .catch((err: unknown) =>
+          this.logger.warn(
+            `concierge: upsertMany tags falhou: ${err instanceof Error ? err.message : String(err)}`,
+          ),
+        );
+    }
+
     // Cria deal nesse pipeline+stage (se contato ainda não tem deal ativo).
     // Passa as tags semânticas extraídas pra ficarem visíveis no card.
     const dealCreated = await this.createDealIfMissing({
@@ -577,8 +599,9 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
     businessContext: string;
     qualifyingTurns: number;
     forceRoute: boolean;
+    tagCatalog: TagDefinition[];
   }): Promise<RouteDecision | null> {
-    const { pipelines, history, latestMessage, persona, businessContext, qualifyingTurns, forceRoute } = args;
+    const { pipelines, history, latestMessage, persona, businessContext, qualifyingTurns, forceRoute, tagCatalog } = args;
 
     const pipelinesText = pipelines
       .map((p) => {
@@ -603,6 +626,18 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
     const tonePt = this.tonePt(persona.tone);
     const guidelinesText = (persona.guidelines ?? []).join('\n').trim();
 
+    // Catálogo de tags existentes — IA prioriza reuso pra manter taxonomia
+    // estável e evitar variações ("CONVENIO_GAMA" vs "GAMA_CONV"). Limita
+    // por usage_count pra caber no prompt sem inflacionar tokens.
+    const topTags = [...tagCatalog]
+      .sort((a, b) => b.usage_count - a.usage_count)
+      .slice(0, 50);
+    const tagCatalogText = topTags.length === 0
+      ? '(catálogo vazio — fique livre pra criar tags inéditas)'
+      : topTags
+          .map((t) => `  • ${t.slug}${t.description ? ` — ${t.description}` : ''}${t.category ? ` [${t.category}]` : ''}`)
+          .join('\n');
+
     const system = `Você é um sistema de QUALIFICAÇÃO e roteamento inteligente de leads num CRM. Em cada turno você decide UMA de duas coisas:
 (a) ainda falta informação importante pra qualificar o lead → faz a próxima pergunta natural;
 (b) já tem informação suficiente → roteia o lead pro pipeline+stage correto.
@@ -625,6 +660,14 @@ ${businessContext || '(sem contexto detalhado)'}
 ═══════════════════════════════════════════
 PIPELINES DISPONÍVEIS NESTA ORG (use SÓ se for rotear):
 ${pipelinesText}
+═══════════════════════════════════════════
+
+CATÁLOGO DE TAGS DA ORG (já existentes — REUSE quando bater no caso!):
+${tagCatalogText}
+
+⚠️ Sempre que o caso já bater com uma tag do catálogo acima, USE A MESMA
+slug exata. Só crie tag inédita quando NENHUMA do catálogo cobrir o caso —
+isso mantém taxonomia consistente entre leads e facilita filtros futuros.
 ═══════════════════════════════════════════
 
 ESTADO ATUAL DA QUALIFICAÇÃO: turno ${qualifyingTurns + 1} de no máximo ${MAX_QUALIFYING_TURNS}.
@@ -740,11 +783,6 @@ Decida o roteamento.`;
       }
 
       const d = json as Partial<RouteDecision>;
-      // Log temporário pra debug das tags geradas pela IA — remover após
-      // confirmar que tags estão sendo retornadas consistentemente.
-      this.logger.log(
-        `[concierge route IA] tags=${JSON.stringify(d.tags)} needs_more_info=${d.needs_more_info} intent=${d.intent_label}`,
-      );
 
       // Caminho A: IA pede mais info — precisa de needs_more_info=true E
       // next_question com "?" (caso contrário a IA tipicamente gerou
