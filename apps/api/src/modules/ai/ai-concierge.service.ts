@@ -490,7 +490,7 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
       return;
     }
 
-    // Log da chamada IA de roteamento (custo + tokens)
+    // Log da chamada IA de roteamento (custo + tokens + tags pra observabilidade)
     if (decision._usage) {
       void this.logInteraction({
         orgId,
@@ -508,6 +508,7 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
           intent_label: decision.intent_label,
           temperature: decision.temperature,
           reasoning: decision.reasoning,
+          tags: decision.tags,
           qualifying_turns_used: qualifyingTurns,
           force_routed: forceRoute,
         },
@@ -665,11 +666,24 @@ REGRAS:
    - "temperature": "cold" (curiosidade) | "warm" (interesse genuíno) | "hot" (pronto/qualificado) | "very_hot" (urgência)
    - "intent_label": label curto descritivo (ex: "consulta_oncologia_convenio_bradesco")
    - "bridge_message": frase CURTA (máx 200 chars) no tom ${tonePt} avisando próximo passo. NULL se não fizer sentido enviar.
-   - "tags": array de **3 a 6 tags semânticas curtas** representando os dados-chave
-     coletados durante a qualificação. Use UPPERCASE_SNAKE_CASE, sem acento.
-     Exemplos pra clínica: ["NOVO_PACIENTE", "TRATAMENTO_INFUSAO", "CONVENIO_GAMA"].
-     Exemplos pra outros negócios: ["INTERESSE_PREMIUM", "FAIXA_ALTA"], ["VAREJO", "URGENTE"].
+   - "tags": array OBRIGATÓRIO com **3 a 6 tags semânticas** representando
+     CADA dado-chave coletado durante a qualificação. **NUNCA retorne array
+     vazio quando needs_more_info=false** — pelo menos 3 tags são esperadas.
+     Use UPPERCASE_SNAKE_CASE, sem acento, palavras curtas.
+     Como gerar:
+     • Para CADA aspecto qualificado, gere 1 tag específica.
+     • Exemplos pra clínica/saúde:
+       - "NOVO_PACIENTE" ou "PACIENTE_RECORRENTE"
+       - "TRATAMENTO_INFUSAO" ou "CONSULTA" ou "EXAME"
+       - "CONVENIO_GAMA" ou "PARTICULAR"
+       - "ESPECIALIDADE_ONCOLOGIA"
+       - "URGENTE" ou "ELETIVO"
+     • Exemplos pra vendas/imobiliário/varejo:
+       - "INTERESSE_PREMIUM", "FAIXA_ALTA", "DECISOR", "URGENTE"
+       - "VAREJO_FINAL", "PROFISSIONAL_B2B"
      **NÃO inclua** "AI_CONCIERGE" (já é adicionada automaticamente).
+     Se for "forceRoute" e quase não tem info, gere ao menos 1 tag genérica
+     (ex: "INFO_PARCIAL" ou "PRIMEIRO_CONTATO").
 
 4. "reasoning": SEMPRE preencha. Frase curta explicando o porquê (de qualificar mais OU de rotear pra esse pipeline/stage).
 
@@ -684,7 +698,7 @@ Retorne APENAS JSON puro com este shape exato:
   "intent_label": "<string ou null>",
   "temperature": "cold|warm|hot|very_hot ou null",
   "bridge_message": "<string ou null>",
-  "tags": ["TAG_1", "TAG_2", ...] (vazio quando needs_more_info=true),
+  "tags": ["TAG_1", "TAG_2", "TAG_3"] (3-6 itens; vazio APENAS quando needs_more_info=true),
   "reasoning": "<string>"
 }`;
 
@@ -726,6 +740,11 @@ Decida o roteamento.`;
       }
 
       const d = json as Partial<RouteDecision>;
+      // Log temporário pra debug das tags geradas pela IA — remover após
+      // confirmar que tags estão sendo retornadas consistentemente.
+      this.logger.log(
+        `[concierge route IA] tags=${JSON.stringify(d.tags)} needs_more_info=${d.needs_more_info} intent=${d.intent_label}`,
+      );
 
       // Caminho A: IA pede mais info — precisa de needs_more_info=true E
       // next_question com "?" (caso contrário a IA tipicamente gerou
