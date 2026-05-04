@@ -26,6 +26,7 @@ import { pipelinesApi } from '@/lib/api/pipelines';
 import { dealsApi } from '@/lib/api/deals';
 import { ApiError } from '@/lib/api/client';
 import { useBoard } from '@/hooks/use-board';
+import { useDragToPan } from '@/hooks/use-drag-to-pan';
 import { useEvents } from '@/hooks/use-events';
 import { BoardHeader } from '@/components/funis/board-header';
 import { BoardColumn } from '@/components/funis/board-column';
@@ -290,6 +291,11 @@ export default function FunisPage() {
     setPendingLostMove(null);
   }
 
+  // Drag-to-pan: clicar no fundo do board e arrastar move o scroll
+  // horizontal. Threshold=8px > activation distance do dnd-kit (6px),
+  // evitando conflito ao começar drag em cima de um card.
+  const panRef = useDragToPan<HTMLDivElement>();
+
   // ── Render ──
   return (
     <div className="flex h-full flex-col">
@@ -337,7 +343,10 @@ export default function FunisPage() {
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <div className="flex-1 overflow-x-auto overflow-y-hidden">
+          <div
+            ref={panRef}
+            className="flex-1 cursor-grab overflow-x-auto overflow-y-hidden"
+          >
             <div className="flex h-full gap-3 px-6 py-4">
               {board.stages.map((stage) => (
                 <BoardColumn
