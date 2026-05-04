@@ -28,6 +28,7 @@ import { PagesModule } from './modules/pages/pages.module';
 import { PipelinesModule } from './modules/pipelines/pipelines.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { SettingsModule } from './modules/settings/settings.module';
+import { TagsModule } from './modules/tags/tags.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { TeamModule } from './modules/team/team.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
@@ -49,6 +50,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     CustomFieldsModule,
     DashboardModule,
     TasksModule,
+    TagsModule,
     KnowledgeModule,
     AiPersonaModule,
     AiSkillsModule,

@@ -29,6 +29,7 @@ export * from './types/email-thread';
 export * from './types/tiktok-interaction';
 export * from './types/form';
 export * from './types/page';
+export * from './types/tag-definition';
 
 // Enum union types
 export * from './enums';
