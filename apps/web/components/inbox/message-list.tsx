@@ -41,6 +41,34 @@ export function MessageList({
     }
   }, [messages]);
 
+  // Mantém última mensagem visível quando o container encolhe (banners
+  // "Resumo da IA" / "Atenção da IA" abrindo após a render inicial).
+  // Só rescrola se o user já estava no fim — evita atrapalhar leitura
+  // de mensagens antigas quando o banner expande durante scroll up.
+  useEffect(() => {
+    const c = containerRef.current;
+    if (c === null) return;
+
+    let userAtBottom = true;
+    const updateAtBottom = () => {
+      userAtBottom = c.scrollHeight - c.scrollTop - c.clientHeight < 80;
+    };
+    c.addEventListener('scroll', updateAtBottom, { passive: true });
+
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => {
+      if (userAtBottom) {
+        c.scrollTop = c.scrollHeight;
+      }
+    });
+    ro.observe(c);
+
+    return () => {
+      ro.disconnect();
+      c.removeEventListener('scroll', updateAtBottom);
+    };
+  }, []);
+
   // IntersectionObserver no topo: dispara loadMore quando sentinel entra na viewport
   useEffect(() => {
     if (!hasMore) return;
