@@ -44,11 +44,31 @@ interface PipelineWithStages {
   }>;
 }
 
+/**
+ * Limite de turnos de qualificação antes de forçar roteamento. Evita
+ * loop infinito caso a IA fique pedindo info que o cliente não responde.
+ */
+const MAX_QUALIFYING_TURNS = 6;
+
 interface RouteDecision {
-  pipeline_id: string;
-  stage_id: string;
-  intent_label: string;
-  temperature: ContactTemperature;
+  /**
+   * Se true, ainda falta info pra qualificar o lead — IA gerou
+   * `next_question` em vez de pipeline+stage. handleRoute vai enviar
+   * essa pergunta, incrementar contador e manter state em
+   * awaiting_response (loop continua).
+   *
+   * Se false, IA tem confiança pra rotear: pipeline_id, stage_id,
+   * temperature e intent_label são preenchidos.
+   */
+  needs_more_info: boolean;
+  /** Próxima pergunta natural a fazer (só preenchido quando needs_more_info=true). */
+  next_question: string | null;
+  /** ID do pipeline escolhido (preenchido quando needs_more_info=false). */
+  pipeline_id: string | null;
+  /** ID do stage escolhido (preenchido quando needs_more_info=false). */
+  stage_id: string | null;
+  intent_label: string | null;
+  temperature: ContactTemperature | null;
   bridge_message: string | null;
   reasoning: string;
   /** Stats da chamada IA pra logar em ai_interactions */
@@ -253,7 +273,7 @@ export class AiConciergeService {
    */
   private async logInteraction(args: {
     orgId: string;
-    interactionType: 'concierge_greeting' | 'concierge_route';
+    interactionType: 'concierge_greeting' | 'concierge_route' | 'concierge_qualify';
     inputTokens: number;
     outputTokens: number;
     latencyMs: number;
@@ -386,18 +406,78 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
     // 2. Carrega histórico curto pra IA ter contexto
     const history = await this.loadHistory(orgId, conversationId);
 
-    // 3. IA decide pipeline + stage + bridge message
+    // 3. Conta turnos de qualificação já gastos. Se atingiu o teto,
+    //    força roteamento mesmo com info parcial pra evitar loop infinito.
+    const qualifyingTurns =
+      ((conversation.metadata as { qualifying_turns?: number } | null)
+        ?.qualifying_turns ?? 0);
+    const forceRoute = qualifyingTurns >= MAX_QUALIFYING_TURNS;
+
+    // 4. IA decide: qualifica mais OU roteia agora
     const decision = await this.askIaToRoute({
       pipelines,
       history,
       latestMessage: messageText,
       persona,
       businessContext: settings.business_context,
+      qualifyingTurns,
+      forceRoute,
     });
 
     if (!decision) {
       this.logger.warn(
         `concierge: IA não conseguiu decidir rota pra conv ${conversationId}`,
+      );
+      await this.setConciergeState(orgId, conversationId, 'routed');
+      return;
+    }
+
+    // 5. Caminho A — IA quer mais info. Manda próxima pergunta e fica
+    //    em awaiting_response (loop continua na próxima inbound).
+    if (decision.needs_more_info && decision.next_question && !forceRoute) {
+      // Log do turno de qualificação
+      if (decision._usage) {
+        void this.logInteraction({
+          orgId,
+          interactionType: 'concierge_qualify',
+          inputTokens: decision._usage.inputTokens,
+          outputTokens: decision._usage.outputTokens,
+          latencyMs: decision._usage.latencyMs,
+          conversationId,
+          contactId: conversation.contact_id,
+          resultSummary: `turno ${qualifyingTurns + 1}: ${decision.next_question.slice(0, 120)}`,
+          metadata: {
+            source: 'ai_concierge',
+            qualifying_turn: qualifyingTurns + 1,
+            next_question: decision.next_question,
+            reasoning: decision.reasoning,
+          },
+        });
+      }
+
+      // Envia a pergunta com response delay humanizado
+      if (settings.auto_reply) {
+        await this.applyResponseDelay(persona);
+        await this.sendOutbound(orgId, conversation, decision.next_question);
+      }
+
+      // Persiste contador + mantém state em awaiting_response
+      await this.updateConciergeMetadata(orgId, conversationId, {
+        concierge_state: 'awaiting_response',
+        qualifying_turns: qualifyingTurns + 1,
+      });
+
+      this.logger.log(
+        `concierge: qualifying turn ${qualifyingTurns + 1}/${MAX_QUALIFYING_TURNS} conv=${conversationId}`,
+      );
+      return;
+    }
+
+    // 6. Caminho B — roteamento normal. IA tem info suficiente (ou
+    //    estamos forçando porque atingiu o teto de turnos).
+    if (!decision.pipeline_id || !decision.stage_id) {
+      this.logger.warn(
+        `concierge: routing sem pipeline_id/stage_id (forceRoute=${forceRoute}) — abortando`,
       );
       await this.setConciergeState(orgId, conversationId, 'routed');
       return;
@@ -421,21 +501,23 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
           intent_label: decision.intent_label,
           temperature: decision.temperature,
           reasoning: decision.reasoning,
+          qualifying_turns_used: qualifyingTurns,
+          force_routed: forceRoute,
         },
       });
     }
 
-    // 4. Cria deal nesse pipeline+stage (se contato ainda não tem deal ativo)
+    // Cria deal nesse pipeline+stage (se contato ainda não tem deal ativo)
     const dealCreated = await this.createDealIfMissing({
       orgId,
       contactId: conversation.contact_id,
       pipelineId: decision.pipeline_id,
       stageId: decision.stage_id,
       reasoning: decision.reasoning,
-      intentLabel: decision.intent_label,
+      intentLabel: decision.intent_label ?? 'sem_label',
     });
 
-    // 5. Atualiza temperatura do contato
+    // Atualiza temperatura do contato
     if (decision.temperature) {
       await this.supabase.adminClient
         .from('contacts')
@@ -444,7 +526,7 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
         .eq('id', conversation.contact_id);
     }
 
-    // 6. Bridge message — se IA gerou e setting ligado
+    // Bridge message — se IA gerou e setting ligado
     if (
       settings.send_bridge_message &&
       settings.auto_reply &&
@@ -457,7 +539,7 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
     await this.setConciergeState(orgId, conversationId, 'routed');
 
     this.logger.log(
-      `concierge: roteou conv=${conversationId} → pipeline=${decision.pipeline_id} stage=${decision.stage_id} intent=${decision.intent_label} temp=${decision.temperature} deal_created=${dealCreated}`,
+      `concierge: roteou conv=${conversationId} → pipeline=${decision.pipeline_id} stage=${decision.stage_id} intent=${decision.intent_label} temp=${decision.temperature} deal_created=${dealCreated} turns=${qualifyingTurns}`,
     );
   }
 
@@ -467,8 +549,10 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
     latestMessage: string;
     persona: AiAgentPersona;
     businessContext: string;
+    qualifyingTurns: number;
+    forceRoute: boolean;
   }): Promise<RouteDecision | null> {
-    const { pipelines, history, latestMessage, persona, businessContext } = args;
+    const { pipelines, history, latestMessage, persona, businessContext, qualifyingTurns, forceRoute } = args;
 
     const pipelinesText = pipelines
       .map((p) => {
@@ -491,31 +575,64 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
       .join('\n');
 
     const tonePt = this.tonePt(persona.tone);
+    const guidelinesText = (persona.guidelines ?? []).join('\n').trim();
 
-    const system = `Você é um sistema de roteamento inteligente de leads para um CRM. Sua tarefa: ler a conversa, classificar a intenção do cliente e decidir QUAL pipeline e stage do CRM é o melhor encaixe.
+    const system = `Você é um sistema de QUALIFICAÇÃO e roteamento inteligente de leads num CRM. Em cada turno você decide UMA de duas coisas:
+(a) ainda falta informação importante pra qualificar o lead → faz a próxima pergunta natural;
+(b) já tem informação suficiente → roteia o lead pro pipeline+stage correto.
+
+NUNCA pareça um robô ou interrogatório. Cada pergunta deve fluir naturalmente como uma conversa humana, no tom ${tonePt}, no estilo da persona descrita abaixo.
+
+═══════════════════════════════════════════
+PERSONA QUE INTERAGE COM O CLIENTE: ${persona.name} (${persona.role ?? 'assistant'}, tom ${tonePt})
+
+PERSONALIDADE:
+${persona.personality || '(sem personalidade detalhada)'}
+
+DIRETRIZES DA PERSONA (use isso pra saber QUAIS informações coletar e COMO conduzir):
+${guidelinesText || '(sem guidelines explícitas — use senso comum no tom da persona)'}
+═══════════════════════════════════════════
 
 CONTEXTO DA EMPRESA:
 ${businessContext || '(sem contexto detalhado)'}
 
-PIPELINES DISPONÍVEIS NESTA ORG (você DEVE escolher um):
+═══════════════════════════════════════════
+PIPELINES DISPONÍVEIS NESTA ORG (use SÓ se for rotear):
 ${pipelinesText}
+═══════════════════════════════════════════
 
-PERSONA QUE INTERAGE COM O CLIENTE: ${persona.name} (${persona.role ?? 'assistant'}, tom ${tonePt})
+ESTADO ATUAL DA QUALIFICAÇÃO: turno ${qualifyingTurns + 1} de no máximo ${MAX_QUALIFYING_TURNS}.
+${forceRoute ? '⚠️ ATINGIU O LIMITE DE TURNOS — VOCÊ DEVE ROTEAR AGORA mesmo com info parcial. Ignore needs_more_info e escolha o melhor pipeline+stage com o que tem.' : ''}
 
 REGRAS:
-1. Escolha O ID do pipeline que faz mais sentido pra esse lead, baseado nas descrições.
-2. Escolha O ID de UM stage DISPONÍVEL desse pipeline (não pode ser de outro pipeline).
-3. Classifique a temperatura do lead: "cold" (curiosidade), "warm" (interesse genuíno), "hot" (pronto pra comprar), "very_hot" (urgência/objeção próxima).
-4. Dê um intent_label curto descritivo (ex: "interesse_planos_premium", "duvida_tecnica", "reclamacao_produto").
-5. Gere um "bridge_message" CURTO (1-2 frases, máx 200 chars) no tom ${tonePt} pra avisar o cliente da próxima etapa. NULL se não fizer sentido enviar nada.
-6. "reasoning": frase curta explicando POR QUE escolheu esse pipeline.
+
+1. **Avalie o histórico + última mensagem.** A persona tem diretrizes sobre quais informações coletar (ex: convênio vs particular, tipo de tratamento, especialidade, etc.). Cheque o que JÁ FOI dito vs o que FALTA.
+
+2. **Se ainda falta info importante e qualifying_turns < ${MAX_QUALIFYING_TURNS}:**
+   - "needs_more_info": true
+   - "next_question": **UMA** pergunta natural (máx 200 chars), no tom ${tonePt}, abordando UM ASPECTO por vez (não amontoe perguntas). Faça ela soar fluida — pode incluir confirmação do que o cliente disse antes, empatia, ou contexto curto. **Nunca** numere as perguntas nem pareça um formulário.
+   - Os outros campos (pipeline_id, stage_id, etc.) podem ser null.
+
+3. **Se já tem info suficiente OU está em forceRoute:**
+   - "needs_more_info": false
+   - "pipeline_id": ID do pipeline que melhor encaixa
+   - "stage_id": ID de UM stage DISPONÍVEL desse pipeline
+   - "temperature": "cold" (curiosidade) | "warm" (interesse genuíno) | "hot" (pronto/qualificado) | "very_hot" (urgência)
+   - "intent_label": label curto descritivo (ex: "consulta_oncologia_convenio_bradesco")
+   - "bridge_message": frase CURTA (máx 200 chars) no tom ${tonePt} avisando próximo passo. NULL se não fizer sentido enviar.
+
+4. "reasoning": SEMPRE preencha. Frase curta explicando o porquê (de qualificar mais OU de rotear pra esse pipeline/stage).
+
+5. **NÃO precisa esgotar todas as diretrizes da persona** — quando você tiver clareza MÍNIMA da intenção principal + 1-2 dados-chave, pode rotear.
 
 Retorne APENAS JSON puro com este shape exato:
 {
-  "pipeline_id": "<uuid>",
-  "stage_id": "<uuid>",
-  "intent_label": "<string>",
-  "temperature": "cold|warm|hot|very_hot",
+  "needs_more_info": <true|false>,
+  "next_question": "<string ou null>",
+  "pipeline_id": "<uuid ou null>",
+  "stage_id": "<uuid ou null>",
+  "intent_label": "<string ou null>",
+  "temperature": "cold|warm|hot|very_hot ou null",
   "bridge_message": "<string ou null>",
   "reasoning": "<string>"
 }`;
@@ -558,12 +675,31 @@ Decida o roteamento.`;
       }
 
       const d = json as Partial<RouteDecision>;
-      if (!d.pipeline_id || !d.stage_id || !d.intent_label || !d.temperature) {
-        this.logger.warn(`concierge IA retornou JSON incompleto: ${cleaned.slice(0, 200)}`);
-        return null;
+
+      // Caminho A: IA pede mais info — só precisa de needs_more_info=true e next_question
+      if (d.needs_more_info === true) {
+        if (typeof d.next_question !== 'string' || !d.next_question.trim()) {
+          this.logger.warn(`concierge IA needs_more_info=true mas sem next_question: ${cleaned.slice(0, 200)}`);
+          return null;
+        }
+        return {
+          needs_more_info: true,
+          next_question: d.next_question.trim(),
+          pipeline_id: null,
+          stage_id: null,
+          intent_label: null,
+          temperature: null,
+          bridge_message: null,
+          reasoning: d.reasoning ?? '',
+          _usage: usage,
+        };
       }
 
-      // Validação: o stage_id pertence ao pipeline_id?
+      // Caminho B: IA roteia — precisa de pipeline+stage+intent+temperature
+      if (!d.pipeline_id || !d.stage_id || !d.intent_label || !d.temperature) {
+        this.logger.warn(`concierge IA roteamento incompleto: ${cleaned.slice(0, 200)}`);
+        return null;
+      }
       const pipeline = pipelines.find((p) => p.id === d.pipeline_id);
       if (!pipeline) {
         this.logger.warn(`concierge IA escolheu pipeline_id inexistente: ${d.pipeline_id}`);
@@ -578,6 +714,8 @@ Decida o roteamento.`;
       }
 
       return {
+        needs_more_info: false,
+        next_question: null,
         pipeline_id: d.pipeline_id,
         stage_id: d.stage_id,
         intent_label: d.intent_label,
@@ -869,13 +1007,16 @@ Decida o roteamento.`;
   // State helpers
   // ──────────────────────────────────────────────────────────
 
-  private async setConciergeState(
+  /**
+   * Merge shallow num conjunto de chaves no JSONB metadata (fetch+update,
+   * não-atômico — ok pra MVP). Usado tanto pra state quanto pra contadores
+   * de qualificação.
+   */
+  private async updateConciergeMetadata(
     orgId: string,
     conversationId: string,
-    state: ConciergeState,
+    patch: Record<string, unknown>,
   ): Promise<void> {
-    // Merge no JSONB metadata via fetch + update (Supabase JS não tem `||`
-    // direto). Pra evitar race entre handlers concorrentes, ok pra MVP.
     const { data } = await this.supabase.adminClient
       .from('conversations')
       .select('metadata')
@@ -884,12 +1025,22 @@ Decida o roteamento.`;
       .maybeSingle();
 
     const current = (data?.metadata as Record<string, unknown> | null) ?? {};
-    const next = { ...current, concierge_state: state };
+    const next = { ...current, ...patch };
     await this.supabase.adminClient
       .from('conversations')
       .update({ metadata: next })
       .eq('org_id', orgId)
       .eq('id', conversationId);
+  }
+
+  private async setConciergeState(
+    orgId: string,
+    conversationId: string,
+    state: ConciergeState,
+  ): Promise<void> {
+    return this.updateConciergeMetadata(orgId, conversationId, {
+      concierge_state: state,
+    });
   }
 
   private tonePt(tone: AiPersonaTone | undefined): string {
