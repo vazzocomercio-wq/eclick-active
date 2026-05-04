@@ -124,6 +124,14 @@ export function useDragToPan<T extends HTMLElement = HTMLElement>(
         }
       }
 
+      // Bloqueia o native HTML5 drag (que cria text-drag image fantasma
+      // quando o user clica em texto e arrasta). Pointer events não
+      // suprimem o DragEvent automaticamente — preciso preventDefault
+      // explícito aqui pra eliminar o ghost visual.
+      function onDragStart(e: DragEvent) {
+        e.preventDefault();
+      }
+
       // capture: true pra pegar pointer events ANTES de filhos que tenham
       // listeners próprios (Radix ScrollArea, dnd-kit, etc.). Sem isso o
       // ScrollArea de cada coluna interceptaria e o pan nunca ativava.
@@ -139,12 +147,14 @@ export function useDragToPan<T extends HTMLElement = HTMLElement>(
       el.addEventListener('pointermove', onPointerMove, listenerOpts);
       el.addEventListener('pointerup', release, listenerOpts);
       el.addEventListener('pointercancel', release, listenerOpts);
+      el.addEventListener('dragstart', onDragStart, listenerOpts);
 
       cleanupRef.current = () => {
         el.removeEventListener('pointerdown', onPointerDown, listenerOpts);
         el.removeEventListener('pointermove', onPointerMove, listenerOpts);
         el.removeEventListener('pointerup', release, listenerOpts);
         el.removeEventListener('pointercancel', release, listenerOpts);
+        el.removeEventListener('dragstart', onDragStart, listenerOpts);
         // Reset estilos caso o componente desmonte mid-drag
         el.style.cursor = '';
         document.body.style.userSelect = '';
