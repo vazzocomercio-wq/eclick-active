@@ -197,14 +197,22 @@ export function PipelineConfigSheet({
         next.splice(lastNormalIdx, 0, { ...created, deal_count: 0 });
       }
       setStages(next);
-      // Persiste a ordem (move para antes de Ganho/Perdido)
+      // Persiste a ordem (move para antes de Ganho/Perdido). Backend
+      // auto-normaliza terminais pro fim — não vai mais falhar por
+      // ordem, mas reportamos qualquer outro erro (ex: mismatch).
       try {
         await pipelinesApi.reorderStages(
           pipeline.id,
           next.map((s) => s.id),
         );
-      } catch {
-        // Não-fatal — a UI mostra a ordem desejada; reload externo reconcilia
+      } catch (err) {
+        setError(
+          err instanceof ApiError
+            ? err.message
+            : err instanceof Error
+              ? err.message
+              : 'Erro ao posicionar a nova etapa',
+        );
       }
       onChange();
     } catch (err) {

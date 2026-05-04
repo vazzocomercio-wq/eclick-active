@@ -138,9 +138,20 @@ export class StagesService {
   // ──────────────────────────────────────────────────────────
 
   /**
-   * Aplica nova ordem nos stages de um pipeline. Validações:
+   * Aplica nova ordem nos stages de um pipeline.
+   *
+   * Validações:
    *  - O array deve conter EXATAMENTE os stages do pipeline (sem extras / sem faltas)
-   *  - Stages won/lost devem permanecer ao FINAL — não pode haver normal depois deles
+   *
+   * Auto-normalize: stages won/lost são SEMPRE empurrados pro final,
+   * preservando a ordem dos normais como veio na request. Em vez de
+   * rejeitar quando um normal vem depois de won/lost, organiza.
+   *
+   * Why: createStage cria a stage com position = max+1 (= depois de
+   * Ganho/Perdido). O frontend tenta consertar via reorderStages, e
+   * antes da auto-normalize a request era rejeitada por violação. Pior:
+   * se o estado já tinha um normal após won/lost (legacy), TODA tentativa
+   * de drag-drop subsequente também era rejeitada — deadlock.
    *
    * Updates rodam em paralelo (não-atômico). Janela de inconsistência <100ms;
    * pra produção alta, migrar pra RPC com BEGIN/COMMIT.
@@ -172,27 +183,22 @@ export class StagesService {
       throw new BadRequestException(`Stage ${missing} não pertence ao pipeline ${pipelineId}.`);
     }
 
-    // Won/Lost devem ficar ao final. Pega o índice do último normal e do
-    // primeiro won/lost — se um normal vem DEPOIS de won/lost, recusa.
-    let firstWonLostIdx = stageIds.length;
-    let lastNormalIdx = -1;
-    stageIds.forEach((id, idx) => {
+    // Auto-normalize: separa normais e terminais, terminais SEMPRE pro fim
+    const normais: string[] = [];
+    const terminais: string[] = [];
+    for (const id of stageIds) {
       const s = stageMap.get(id)!;
       if (s.is_won || s.is_lost) {
-        if (idx < firstWonLostIdx) firstWonLostIdx = idx;
+        terminais.push(id);
       } else {
-        if (idx > lastNormalIdx) lastNormalIdx = idx;
+        normais.push(id);
       }
-    });
-    if (lastNormalIdx > firstWonLostIdx) {
-      throw new ConflictException(
-        'Stages "Ganho" e "Perdido" precisam ficar no final do funil.',
-      );
     }
+    const finalOrder = [...normais, ...terminais];
 
     // Aplica as novas positions em paralelo
     await Promise.all(
-      stageIds.map((id, idx) =>
+      finalOrder.map((id, idx) =>
         this.supabase.adminClient
           .from('pipeline_stages')
           .update({ position: idx })
