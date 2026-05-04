@@ -495,7 +495,19 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
   }): Promise<void> {
     const { orgId, conversationId, conversation, messageText, settings, persona } = args;
 
-    // 1. Carrega pipelines com stages
+    // 1. Card na PRIMEIRA etapa do funil default — independente do que a
+    //    IA decidir, atendente humano vê o lead aparecendo no /funis assim
+    //    que ele responde a primeira pergunta. Etapas subsequentes são
+    //    movidas pela IA do Concierge via upsertDealForRoute quando ela
+    //    decide rotear (com pipeline+stage específicos).
+    void this.ensureDealAtFirstStage(orgId, conversation.contact_id).catch(
+      (err: unknown) =>
+        this.logger.warn(
+          `concierge: ensureDealAtFirstStage falhou: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+    );
+
+    // 2. Carrega pipelines com stages
     const pipelines = await this.loadPipelines(orgId);
     if (pipelines.length === 0) {
       this.logger.warn(`concierge: org ${orgId} sem pipelines — não pode rotear`);
@@ -503,7 +515,7 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
       return;
     }
 
-    // 2. Carrega histórico curto pra IA ter contexto
+    // 3. Carrega histórico curto pra IA ter contexto
     const history = await this.loadHistory(orgId, conversationId);
 
     // 3. Carrega catálogo de tags da org (deal) — IA usa pra reusar tags
@@ -627,9 +639,11 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
         );
     }
 
-    // Cria deal nesse pipeline+stage (se contato ainda não tem deal ativo).
-    // Passa as tags semânticas extraídas pra ficarem visíveis no card.
-    const dealCreated = await this.createDealIfMissing({
+    // Atualiza o deal existente (criado em ensureDealAtFirstStage) com o
+    // stage final decidido pela IA + tags semânticas. Se por algum motivo
+    // não existe (ex: ensureDealAtFirstStage falhou ou edge-case), cria
+    // como fallback diretamente no stage decidido.
+    const dealCreated = await this.upsertDealForRoute({
       orgId,
       contactId: conversation.contact_id,
       pipelineId: decision.pipeline_id,
@@ -974,17 +988,23 @@ Decida o roteamento.`;
     }
   }
 
-  private async createDealIfMissing(args: {
-    orgId: string;
-    contactId: string;
-    pipelineId: string;
-    stageId: string;
-    reasoning: string;
-    intentLabel: string;
-    tags: string[];
-  }): Promise<boolean> {
-    const { orgId, contactId, pipelineId, stageId, reasoning, intentLabel, tags } = args;
-
+  /**
+   * Garante que o contato tenha um deal aberto na PRIMEIRA etapa do
+   * pipeline default. Chamado mecanicamente após o lead responder a 1ª
+   * pergunta (turno 1 do qualifying), pra que o card já apareça no funil
+   * desde o início — atendente humano vê leads ativos sem esperar a IA
+   * decidir o roteamento.
+   *
+   * Etapas subsequentes (qualificação/Documento Pendente/Aprovado/etc.)
+   * seguem a inteligência do Concierge: cada vez que ele roteia, faz
+   * UPDATE do deal pro stage decidido pela IA via upsertDealForRoute.
+   *
+   * Idempotente: se já tem deal aberto, retorna sem criar outro.
+   */
+  private async ensureDealAtFirstStage(
+    orgId: string,
+    contactId: string,
+  ): Promise<string | null> {
     // Já tem deal aberto?
     const { data: existing } = await this.supabase.adminClient
       .from('deals')
@@ -995,17 +1015,113 @@ Decida o roteamento.`;
       .is('lost_at', null)
       .limit(1)
       .maybeSingle();
-    if (existing) return false;
+    if (existing?.id) return existing.id as string;
 
-    // Pega nome do contato pra title do deal
+    const pipelines = await this.loadPipelines(orgId);
+    if (pipelines.length === 0) return null;
+
+    // Pipeline default; fallback pro primeiro
+    const def = pipelines.find((p) => p.is_default) ?? pipelines[0];
+    if (!def) return null;
+
+    // Primeira etapa não-terminal (won/lost ficam por último)
+    const firstStage = [...def.stages]
+      .filter((s) => !s.is_won && !s.is_lost)
+      .sort((a, b) => a.position - b.position)[0];
+    if (!firstStage) return null;
+
     const contactName = await this.fetchContactName(orgId, contactId);
+    const { data: created, error } = await this.supabase.adminClient
+      .from('deals')
+      .insert({
+        org_id: orgId,
+        contact_id: contactId,
+        pipeline_id: def.id,
+        stage_id: firstStage.id,
+        title: contactName ?? 'Novo lead',
+        tags: ['ai-concierge', 'EM_QUALIFICACAO'],
+        custom_fields: {
+          ai_concierge: {
+            stage: 'first_response',
+            created_at: new Date().toISOString(),
+          },
+        },
+      })
+      .select('id')
+      .single();
 
-    // Tabela deals não tem colunas `source` nem `metadata` no schema —
-    // usamos `tags` (text[]) + `custom_fields` (jsonb) que já existem
-    // e seguem o padrão usado em `auto-lead.service.ts`. Sem isso o
-    // INSERT falhava com 42703 (column does not exist) e o Concierge
-    // marcava state=routed sem deal criado.
-    const dealTags = Array.from(new Set(['ai-concierge', ...tags]));
+    if (error || !created) {
+      this.logger.warn(
+        `concierge: ensureDealAtFirstStage falhou: ${error?.message ?? 'unknown'}`,
+      );
+      return null;
+    }
+    return (created as { id: string }).id;
+  }
+
+  /**
+   * Após o Concierge fazer route (decisão final da IA), atualiza o deal
+   * existente (criado em ensureDealAtFirstStage) com o stage final +
+   * pipeline correto + tags semânticas. Se por alguma razão não tem deal
+   * aberto, cria como fallback.
+   */
+  private async upsertDealForRoute(args: {
+    orgId: string;
+    contactId: string;
+    pipelineId: string;
+    stageId: string;
+    reasoning: string;
+    intentLabel: string;
+    tags: string[];
+  }): Promise<boolean> {
+    const { orgId, contactId, pipelineId, stageId, reasoning, intentLabel, tags } = args;
+
+    const { data: existing } = await this.supabase.adminClient
+      .from('deals')
+      .select('id, tags')
+      .eq('org_id', orgId)
+      .eq('contact_id', contactId)
+      .is('won_at', null)
+      .is('lost_at', null)
+      .limit(1)
+      .maybeSingle();
+
+    // Tags finais: ai-concierge + tags da IA. Remove "EM_QUALIFICACAO"
+    // (placeholder do turno 1) — se a IA roteou, qualificação acabou.
+    const baseTags = (existing?.tags as string[] | null) ?? [];
+    const merged = Array.from(
+      new Set(
+        [...baseTags, 'ai-concierge', ...tags].filter((t) => t !== 'EM_QUALIFICACAO'),
+      ),
+    );
+
+    if (existing?.id) {
+      const { error } = await this.supabase.adminClient
+        .from('deals')
+        .update({
+          pipeline_id: pipelineId,
+          stage_id: stageId,
+          tags: merged,
+          custom_fields: {
+            ai_concierge: {
+              intent_label: intentLabel,
+              reasoning,
+              routed_at: new Date().toISOString(),
+              tags,
+            },
+          },
+        })
+        .eq('id', existing.id);
+      if (error) {
+        this.logger.warn(`concierge: update deal falhou: ${error.message}`);
+        return false;
+      }
+      return true;
+    }
+
+    // Fallback: não tem deal (não passou pelo ensureDealAtFirstStage por
+    // algum motivo). Cria do zero no stage decidido pela IA.
+    const contactName = await this.fetchContactName(orgId, contactId);
     const { error } = await this.supabase.adminClient
       .from('deals')
       .insert({
@@ -1014,7 +1130,7 @@ Decida o roteamento.`;
         pipeline_id: pipelineId,
         stage_id: stageId,
         title: contactName ?? 'Novo lead',
-        tags: dealTags,
+        tags: merged,
         custom_fields: {
           ai_concierge: {
             intent_label: intentLabel,
@@ -1024,9 +1140,8 @@ Decida o roteamento.`;
           },
         },
       });
-
     if (error) {
-      this.logger.warn(`concierge: insert deal falhou: ${error.message}`);
+      this.logger.warn(`concierge: insert deal (fallback) falhou: ${error.message}`);
       return false;
     }
     return true;
