@@ -610,7 +610,17 @@ REGRAS:
 
 2. **Se ainda falta info importante e qualifying_turns < ${MAX_QUALIFYING_TURNS}:**
    - "needs_more_info": true
-   - "next_question": **UMA** pergunta natural (máx 200 chars), no tom ${tonePt}, abordando UM ASPECTO por vez (não amontoe perguntas). Faça ela soar fluida — pode incluir confirmação do que o cliente disse antes, empatia, ou contexto curto. **Nunca** numere as perguntas nem pareça um formulário.
+   - "next_question": **UMA pergunta DIRETA**, no tom ${tonePt}, abordando UM ASPECTO por vez (não amontoe perguntas). DEVE terminar com "?" e fazer uma pergunta concreta. Pode começar com 1 frase curta de empatia/confirmação do que o cliente disse, mas o final SEMPRE precisa ser uma pergunta real. Máx 200 chars.
+
+   ❌ ERRADO (frase de transição sem pergunta):
+     "Que bom ter você aqui! Vou te fazer algumas perguntinhas pra entender melhor."
+     "Entendi! Já anotei aqui."
+     "Vou te ajudar com cuidado."
+   ✅ CERTO (uma pergunta concreta):
+     "Que bom! Pra te orientar melhor — você está buscando consulta, exame ou já tem indicação de tratamento?"
+     "Entendi. E o atendimento seria por convênio ou particular?"
+     "Anotado. Qual especialidade ou tipo de tratamento te trouxe até a gente?"
+
    - Os outros campos (pipeline_id, stage_id, etc.) podem ser null.
 
 3. **Se já tem info suficiente OU está em forceRoute:**
@@ -676,15 +686,25 @@ Decida o roteamento.`;
 
       const d = json as Partial<RouteDecision>;
 
-      // Caminho A: IA pede mais info — só precisa de needs_more_info=true e next_question
+      // Caminho A: IA pede mais info — precisa de needs_more_info=true E
+      // next_question com "?" (caso contrário a IA tipicamente gerou
+      // frase de transição vazia tipo "Vou te fazer algumas perguntinhas..."
+      // sem pergunta real, travando a conversa).
       if (d.needs_more_info === true) {
-        if (typeof d.next_question !== 'string' || !d.next_question.trim()) {
-          this.logger.warn(`concierge IA needs_more_info=true mas sem next_question: ${cleaned.slice(0, 200)}`);
-          return null;
+        const nq = typeof d.next_question === 'string' ? d.next_question.trim() : '';
+        let finalQuestion = nq;
+        if (!nq) {
+          this.logger.warn(`concierge IA needs_more_info=true mas sem next_question — usando fallback`);
+          finalQuestion = 'E pra eu te orientar melhor — qual seria sua principal necessidade ou dúvida no momento?';
+        } else if (!nq.includes('?')) {
+          this.logger.warn(
+            `concierge IA gerou next_question sem "?" (provável frase de transição): "${nq}" — anexando fallback`,
+          );
+          finalQuestion = `${nq.replace(/[.!]+$/, '')} Pode me contar um pouquinho do que você precisa?`;
         }
         return {
           needs_more_info: true,
-          next_question: d.next_question.trim(),
+          next_question: finalQuestion,
           pipeline_id: null,
           stage_id: null,
           intent_label: null,
