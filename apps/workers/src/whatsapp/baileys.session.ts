@@ -562,13 +562,21 @@ export class BaileysSession {
       }
     }
 
-    // 3) Cria novo contato com wa_jid populado
+    // 3) Cria novo contato com wa_jid populado.
+    //
+    // Como a msg chegou pelo socket Baileys, sabemos que o remetente
+    // tem WhatsApp ativo — setamos whatsapp_verified=true direto sem
+    // chamar onWhatsApp (evita ida de volta à rede). whatsapp_jid e
+    // whatsapp_profile_name são populados nos campos top-level (além do
+    // channel_profiles) pra que o auto-validate trigger e os badges
+    // visuais reconheçam o estado verified.
     const channelProfiles: Record<string, Record<string, string>> = {
       whatsapp: {
         wa_jid: waJid,
         ...(senderName ? { profile_name: senderName } : {}),
       },
     };
+    const nowIso = new Date().toISOString();
 
     const { data: created, error } = await supabase
       .from('contacts')
@@ -578,6 +586,10 @@ export class BaileysSession {
         name: senderName ?? null,
         source: 'whatsapp',
         channel_profiles: channelProfiles,
+        whatsapp_verified: true,
+        whatsapp_verified_at: nowIso,
+        whatsapp_jid: waJid,
+        ...(senderName ? { whatsapp_profile_name: senderName } : {}),
       })
       .select('id')
       .single();
@@ -591,9 +603,12 @@ export class BaileysSession {
   }
 
   /**
-   * Garante que `channel_profiles.whatsapp.wa_jid` existe pro contato.
-   * Usado em (a) match por JID que chegou sem profile_name salvo, e
-   * (b) backfill de contatos legacy que casaram só por `phone`.
+   * Garante que `channel_profiles.whatsapp.wa_jid` existe pro contato e
+   * que os campos top-level whatsapp_* estejam populados (verified=true,
+   * jid, profile_name). Usado em (a) match por JID que chegou sem
+   * profile_name salvo, (b) backfill de contatos legacy que casaram
+   * só por `phone`, e (c) re-confirmar verified=true caso ainda esteja
+   * null/false (contato criado pelo CRM antes do canal estar pareado).
    */
   private async ensureWhatsappProfile(
     contactId: string,
@@ -605,10 +620,6 @@ export class BaileysSession {
       (currentProfiles as Record<string, Record<string, unknown>> | null) ?? {};
     const wa = (profiles.whatsapp as Record<string, unknown> | undefined) ?? {};
 
-    const needsJid = wa.wa_jid !== waJid;
-    const needsName = senderName && !wa.profile_name;
-    if (!needsJid && !needsName) return;
-
     const merged = {
       ...profiles,
       whatsapp: {
@@ -618,9 +629,17 @@ export class BaileysSession {
       },
     };
 
+    const patch: Record<string, unknown> = {
+      channel_profiles: merged,
+      whatsapp_verified: true,
+      whatsapp_verified_at: new Date().toISOString(),
+      whatsapp_jid: waJid,
+    };
+    if (senderName) patch.whatsapp_profile_name = senderName;
+
     const { error } = await getSupabase()
       .from('contacts')
-      .update({ channel_profiles: merged })
+      .update(patch)
       .eq('id', contactId);
 
     if (error) {
