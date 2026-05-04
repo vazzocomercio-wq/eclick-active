@@ -117,6 +117,24 @@ export class AiConciergeService {
   private readonly logger = new Logger(AiConciergeService.name);
   private _client?: Anthropic;
 
+  /**
+   * Lock in-process por conversation_id. Quando o cliente manda várias
+   * mensagens em rápida sequência ("Olá", "tudo bem?", "queria saber..."),
+   * cada inbound dispara handle() em paralelo. Sem este lock duas execuções
+   * podem ler `state=idle` simultaneamente e mandar greetings duplicados
+   * (acontecia em prod 2026-05-04 com Ila/Ola/Sim em ~2s).
+   *
+   * Estratégia leader-based: a primeira chamada vira "líder" e processa.
+   * Chamadas concorrentes apenas marcam `pendingRerun=true` e voltam.
+   * Quando o líder termina, se houver pending, dispara um único rerun
+   * com a mensagem mais recente da conversa (que já considera todas as
+   * msgs anteriores via histórico).
+   */
+  private readonly inFlightHandlers = new Map<
+    string,
+    { pendingRerun: boolean }
+  >();
+
   constructor(
     private readonly supabase: SupabaseService,
     private readonly dispatcher: ChannelDispatcherService,
@@ -141,6 +159,19 @@ export class AiConciergeService {
     conversationId: string,
     messageId: string,
   ): Promise<void> {
+    // Lock leader-based: se já tem handler em curso pra essa conv, marca
+    // rerun pendente e sai. O líder vai re-processar a última msg quando
+    // terminar — evita duplicação de greeting em msgs concorrentes.
+    const existing = this.inFlightHandlers.get(conversationId);
+    if (existing) {
+      existing.pendingRerun = true;
+      this.logger.debug(
+        `concierge: handler já em curso pra conv ${conversationId} — rerun pendente`,
+      );
+      return;
+    }
+    this.inFlightHandlers.set(conversationId, { pendingRerun: false });
+
     const start = performance.now();
     try {
       const settings = await this.loadSettings(orgId);
@@ -196,6 +227,42 @@ export class AiConciergeService {
       this.logger.error(
         `concierge handler crashed (não fatal): ${err instanceof Error ? err.message : String(err)}`,
       );
+    } finally {
+      const final = this.inFlightHandlers.get(conversationId);
+      this.inFlightHandlers.delete(conversationId);
+      // Se chegou msg nova durante o processamento, re-roda com a última
+      // inbound da conversa (que já vai considerar todas as msgs anteriores
+      // via histórico). Garante que não perdemos input do cliente.
+      if (final?.pendingRerun) {
+        this.logger.debug(
+          `concierge: rerunning pra conv ${conversationId} (msg chegou durante processamento)`,
+        );
+        void this.rerunForLatestInbound(orgId, conversationId);
+      }
+    }
+  }
+
+  /**
+   * Re-roda o handle pegando a mensagem inbound mais recente da conversa.
+   * Chamado quando uma execução foi adiada via lock (pendingRerun) — pra
+   * garantir que toda input do cliente seja processada eventualmente.
+   */
+  private async rerunForLatestInbound(
+    orgId: string,
+    conversationId: string,
+  ): Promise<void> {
+    const { data } = await this.supabase.adminClient
+      .from('messages')
+      .select('id')
+      .eq('org_id', orgId)
+      .eq('conversation_id', conversationId)
+      .eq('direction', 'inbound')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const latestId = (data as { id?: string } | null)?.id;
+    if (latestId) {
+      await this.handle(orgId, conversationId, latestId);
     }
   }
 
