@@ -1,6 +1,8 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { ExternalLink, Mail, Phone, Sparkles } from 'lucide-react';
+import { toast } from 'sonner';
 import type { ConversationDetail } from '@eclick-active/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,7 +13,9 @@ import { TemperatureBadge } from '@/components/contacts/temperature-badge';
 import { WhatsAppVerifiedBadge } from '@/components/contacts/whatsapp-verified-badge';
 import { channelLabel } from '@/components/ui/channel-icon';
 import { ScoreBar } from '@/components/contacts/score-bar';
-import { TagPills } from '@/components/contacts/tag-pills';
+import { TagPicker } from '@/components/tags/tag-picker';
+import { contactsApi } from '@/lib/api/contacts';
+import { ApiError } from '@/lib/api/client';
 import { formatPhone } from '@/lib/format';
 
 interface ContactPanelProps {
@@ -146,13 +150,13 @@ export function ContactPanel({ conversation, loading, onOpenFullProfile }: Conta
           </CardContent>
         </Card>
 
-        {/* Tags */}
+        {/* Tags do contato (editáveis) */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs">Tags</CardTitle>
+            <CardTitle className="text-xs">Tags do contato</CardTitle>
           </CardHeader>
           <CardContent>
-            <TagPills tags={contact.tags ?? []} max={20} />
+            <ContactTagsEditor contact={contact} />
           </CardContent>
         </Card>
 
@@ -198,6 +202,38 @@ export function ContactPanel({ conversation, loading, onOpenFullProfile }: Conta
         )}
       </div>
     </ScrollArea>
+  );
+}
+
+// ──────────────────────────────────────────────────────────
+// ContactTagsEditor — TagPicker editável dentro do panel
+// ──────────────────────────────────────────────────────────
+
+function ContactTagsEditor({ contact }: { contact: NonNullable<ConversationDetail['contact']> }) {
+  const [tags, setTags] = useState<string[]>(contact.tags ?? []);
+
+  // Re-sincroniza quando o contato troca (selecionou outra conversa)
+  useEffect(() => {
+    setTags(contact.tags ?? []);
+  }, [contact.id, contact.tags]);
+
+  return (
+    <TagPicker
+      entityType="contact"
+      value={tags}
+      onChange={(next) => {
+        const prev = tags;
+        setTags(next); // optimistic
+        contactsApi.update(contact.id, { tags: next }).catch((err) => {
+          // Reverte UI em caso de falha
+          setTags(prev);
+          toast.error('Falha ao salvar tags', {
+            description: err instanceof ApiError ? err.message : undefined,
+          });
+        });
+      }}
+      placeholder="Adicionar tag…"
+    />
   );
 }
 
