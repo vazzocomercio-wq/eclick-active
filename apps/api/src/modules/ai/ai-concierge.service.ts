@@ -622,6 +622,11 @@ Decida o roteamento.`;
     // Pega nome do contato pra title do deal
     const contactName = await this.fetchContactName(orgId, contactId);
 
+    // Tabela deals não tem colunas `source` nem `metadata` no schema —
+    // usamos `tags` (text[]) + `custom_fields` (jsonb) que já existem
+    // e seguem o padrão usado em `auto-lead.service.ts`. Sem isso o
+    // INSERT falhava com 42703 (column does not exist) e o Concierge
+    // marcava state=routed sem deal criado.
     const { error } = await this.supabase.adminClient
       .from('deals')
       .insert({
@@ -630,8 +635,8 @@ Decida o roteamento.`;
         pipeline_id: pipelineId,
         stage_id: stageId,
         title: contactName ?? 'Novo lead',
-        source: 'ai_concierge',
-        metadata: {
+        tags: ['ai-concierge'],
+        custom_fields: {
           ai_concierge: {
             intent_label: intentLabel,
             reasoning,
