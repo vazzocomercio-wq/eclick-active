@@ -6,6 +6,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { Calendar, Sparkles } from 'lucide-react';
 import type { BoardDealItem } from '@/lib/api/pipelines';
 import { InitialsAvatar } from '@/components/contacts/initials-avatar';
+import { tagColor } from '@/components/contacts/tag-pills';
 import { AIScoreCircle } from './ai-score-circle';
 import { RiskPill } from './risk-pill';
 import { TimeInStage } from './time-in-stage';
@@ -133,14 +134,22 @@ export const DealCardVisual = forwardRef<HTMLDivElement, DealCardVisualProps>(
           <div className="flex items-center justify-between gap-2">
             {visibleTags.length > 0 && (
               <div className="flex min-w-0 flex-wrap gap-1">
-                {visibleTags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="inline-flex items-center rounded-md border border-border bg-muted/50 px-1.5 py-0.5 text-[10px] font-medium text-foreground"
-                  >
-                    {tag}
-                  </span>
-                ))}
+                {visibleTags.map((tag) => {
+                  const c = tagColor(tag);
+                  return (
+                    <span
+                      key={tag}
+                      className={cn(
+                        'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium',
+                        c.border,
+                        c.bg,
+                        c.text,
+                      )}
+                    >
+                      {tag}
+                    </span>
+                  );
+                })}
                 {remainingTags > 0 && (
                   <span className="text-[10px] text-muted-foreground">+{remainingTags}</span>
                 )}
