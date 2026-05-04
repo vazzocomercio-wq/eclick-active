@@ -1,6 +1,7 @@
 import {
   Browsers,
   DisconnectReason,
+  downloadMediaMessage,
   fetchLatestBaileysVersion,
   makeWASocket,
   type WASocket,
@@ -8,6 +9,7 @@ import {
   type WAMessageContent,
   type ConnectionState,
 } from '@whiskeysockets/baileys';
+import { randomUUID } from 'node:crypto';
 import pino from 'pino';
 import { getSupabase } from '../supabase.js';
 import {
@@ -503,10 +505,23 @@ export class BaileysSession {
       payload: { conversation_id: conversationId, message: inserted },
     });
 
-    // 5) Avisa a api pra rodar o pipeline de IA (classify + concierge) e
+    // 5) Se a msg trouxe mídia, baixa o blob e arquiva no Storage.
+    //    Best-effort: erro aqui não bloqueia o flow.
+    const insertedMessageId = (inserted as { id?: string } | null)?.id;
+    if (insertedMessageId && parsed.kind !== 'text') {
+      void this.persistAttachment(msg, insertedMessageId, conversationId, contactId, parsed).catch(
+        (err: unknown) =>
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[baileys ${this.ctx.channelId}] persistAttachment falhou:`,
+            err instanceof Error ? err.message : err,
+          ),
+      );
+    }
+
+    // 6) Avisa a api pra rodar o pipeline de IA (classify + concierge) e
     //    automations (trigger=message_received). Sem isso, mensagens
     //    do WhatsApp Gratuito não disparam nada do lado da api.
-    const insertedMessageId = (inserted as { id?: string } | null)?.id;
     if (insertedMessageId) {
       void notifyInboundProcessed({
         org_id: this.ctx.orgId,
@@ -517,6 +532,115 @@ export class BaileysSession {
         channel_type: 'whatsapp_free',
         message_text: parsed.kind === 'text' ? parsed.body : '',
       });
+    }
+  }
+
+  /**
+   * Baixa o blob da mídia via Baileys, sobe pro Supabase Storage no
+   * bucket `message-media` e cria row em `attachments`. Best-effort.
+   *
+   * Path: `{orgId}/{conversationId}/{messageId}/{uuid}.{ext}`
+   *
+   * Mídia inicial cobre: image, audio, video, document. Cada uma tem
+   * mimetype e fileSize próprios via Baileys proto.
+   */
+  private async persistAttachment(
+    msg: WAMessage,
+    messageId: string,
+    conversationId: string,
+    contactId: string,
+    parsed: ParsedContent,
+  ): Promise<void> {
+    if (parsed.kind === 'text') return;
+
+    // Baixa o blob da mídia. logger é o mesmo do socket (silenciado por default).
+    const buffer = await downloadMediaMessage(
+      msg,
+      'buffer',
+      {},
+      {
+        logger: this.logger as never,
+        // @ts-expect-error reuploadRequest é interno mas necessário pra mídia perdida
+        reuploadRequest: this.sock?.updateMediaMessage,
+      },
+    );
+    if (!buffer || !(buffer instanceof Buffer) || buffer.length === 0) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[baileys ${this.ctx.channelId}] downloadMediaMessage retornou vazio (msg=${messageId})`,
+      );
+      return;
+    }
+
+    // Pega mime + filename do proto da mensagem
+    const m = msg.message ?? {};
+    const mediaInfo = (() => {
+      if (parsed.kind === 'image') return { mime: m.imageMessage?.mimetype, file: null };
+      if (parsed.kind === 'audio') return { mime: m.audioMessage?.mimetype, file: null };
+      if (parsed.kind === 'video') return { mime: m.videoMessage?.mimetype, file: null };
+      if (parsed.kind === 'document')
+        return {
+          mime: m.documentMessage?.mimetype,
+          file: m.documentMessage?.fileName ?? null,
+        };
+      return { mime: null, file: null };
+    })();
+
+    const mimeType = mediaInfo.mime ?? defaultMimeFor(parsed.kind);
+    const ext = extFromMime(mimeType) ?? 'bin';
+    const fileName = mediaInfo.file ?? `${parsed.kind}-${randomUUID()}.${ext}`;
+    const storagePath = `${this.ctx.orgId}/${conversationId}/${messageId}/${randomUUID()}-${fileName}`;
+
+    const supabase = getSupabase();
+
+    // Upload pro Storage
+    const { error: uploadErr } = await supabase.storage
+      .from('message-media')
+      .upload(storagePath, buffer, {
+        contentType: mimeType,
+        upsert: false,
+      });
+    if (uploadErr) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[baileys ${this.ctx.channelId}] storage upload falhou (${storagePath}):`,
+        uploadErr.message,
+      );
+      return;
+    }
+
+    // Insere row em attachments
+    const { error: insertErr } = await supabase.from('attachments').insert({
+      org_id: this.ctx.orgId,
+      message_id: messageId,
+      conversation_id: conversationId,
+      contact_id: contactId,
+      media_type: parsed.kind,
+      mime_type: mimeType,
+      file_name: fileName,
+      file_size_bytes: buffer.length,
+      storage_path: storagePath,
+      metadata: {
+        ...(parsed.kind === 'image' && m.imageMessage?.caption
+          ? { caption: m.imageMessage.caption }
+          : {}),
+        ...(parsed.kind === 'audio' && typeof m.audioMessage?.seconds === 'number'
+          ? { duration_seconds: m.audioMessage.seconds }
+          : {}),
+      },
+    });
+
+    if (insertErr) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[baileys ${this.ctx.channelId}] insert attachment falhou:`,
+        insertErr.message,
+      );
+    } else {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[baileys ${this.ctx.channelId}] attachment salvo: ${parsed.kind} ${(buffer.length / 1024).toFixed(1)}KB → ${storagePath}`,
+      );
     }
   }
 
@@ -724,6 +848,30 @@ export class BaileysSession {
 // ──────────────────────────────────────────────────────────
 // Pure helpers
 // ──────────────────────────────────────────────────────────
+
+function defaultMimeFor(kind: ParsedContent['kind']): string {
+  switch (kind) {
+    case 'image': return 'image/jpeg';
+    case 'audio': return 'audio/ogg';
+    case 'video': return 'video/mp4';
+    case 'document': return 'application/octet-stream';
+    default: return 'application/octet-stream';
+  }
+}
+
+function extFromMime(mime: string): string | null {
+  const map: Record<string, string> = {
+    'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png',
+    'image/webp': 'webp', 'image/gif': 'gif', 'audio/ogg': 'ogg',
+    'audio/mpeg': 'mp3', 'audio/mp4': 'm4a', 'video/mp4': 'mp4',
+    'video/webm': 'webm', 'application/pdf': 'pdf', 'text/plain': 'txt',
+    'application/msword': 'doc',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+    'application/vnd.ms-excel': 'xls',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  };
+  return map[mime] ?? null;
+}
 
 function extractPhoneFromJid(jid: string): string | null {
   // JID format: '5571999999999@s.whatsapp.net' ou '5571999999999:21@s.whatsapp.net'
