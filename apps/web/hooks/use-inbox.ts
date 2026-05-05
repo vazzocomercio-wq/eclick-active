@@ -219,9 +219,10 @@ export function useInbox(): UseInboxResult {
         conversation_id: string;
         message: Message;
       }) => {
-        // Atualização incremental — bumpa last_message_at e re-sort.
-        // unread_count e last_message_preview vêm depois via conversation:updated
-        // (trigger SQL atualiza conversa logo após insert da mensagem).
+        // Atualização incremental — bumpa last_message_at, preview text
+        // e re-sort. last_message_text/direction são campos da v_inbox
+        // (preview da última msg) — atualizando aqui evita preview stale
+        // até o próximo refetch.
         setItems((prev) => {
           const idx = prev.findIndex((i) => i.id === payload.conversation_id);
           if (idx === -1) {
@@ -236,6 +237,8 @@ export function useInbox(): UseInboxResult {
               payload.message.created_at ??
               prev[idx]!.last_message_at ??
               new Date().toISOString(),
+            last_message_text: payload.message.plain_text ?? null,
+            last_message_direction: payload.message.direction,
             // Bump unread só se for inbound. Outbound (agent/bot) não conta.
             unread_count:
               payload.message.direction === 'inbound'
