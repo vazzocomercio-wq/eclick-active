@@ -21,6 +21,14 @@ import type {
 
 const HISTORY_MAX_MESSAGES = 6;
 
+/**
+ * Limite de respostas de follow-up que IA dá numa MESMA conversa após
+ * rotear. Proteção anti-loop infinito (lead troca msg sem fim, IA
+ * consome tokens). Quando atingir, silencia até atendente humano
+ * intervir manualmente.
+ */
+const MAX_FOLLOW_UP_COUNT = 30;
+
 /** Limite de delay por humanização — evita persona com delay maluco travar request */
 const MAX_DELAY_MS = 30_000;
 
@@ -239,11 +247,6 @@ export class AiConciergeService {
       let state: ConciergeState =
         (conv.metadata as { concierge_state?: ConciergeState })?.concierge_state ?? 'idle';
 
-      if (state === 'routed') {
-        // Já roteou — concierge sai de cena, fluxo normal continua.
-        return;
-      }
-
       const message = await this.loadMessage(orgId, messageId);
       if (!message || message.direction !== 'inbound' || !message.plain_text) {
         return;
@@ -296,6 +299,18 @@ export class AiConciergeService {
         });
       } else if (state === 'awaiting_slot_choice') {
         await this.handleSlotChoice({
+          orgId,
+          conversationId,
+          conversation: conv,
+          messageText: message.plain_text,
+          settings,
+          persona: personaActive,
+        });
+      } else if (state === 'routed') {
+        // Já roteou — IA continua atuando como atendente, mas só silencia
+        // quando lead atingir condição que exige humano (appointment
+        // confirmado OU stage com requires_human=true OU max follow-ups).
+        await this.handleFollowUp({
           orgId,
           conversationId,
           conversation: conv,
@@ -1859,6 +1874,211 @@ Decida o roteamento.`;
         .filter((s) => s.pipeline_id === p.id)
         .map(({ pipeline_id: _ignore, ...rest }) => rest),
     }));
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // Follow-up — IA continua respondendo após rotear
+  // ──────────────────────────────────────────────────────────
+
+  /**
+   * Handler chamado quando state='routed' e lead manda nova msg.
+   * Decide: silenciar (deixar atendente humano) OU responder via IA.
+   *
+   * Critérios pra silenciar:
+   *   1. Contato tem appointment com status='scheduled' futuro
+   *      (já tá agendado — humano confirma + atende)
+   *   2. Deal aberto do contato em stage com requires_human=true
+   *   3. Atingiu MAX_FOLLOW_UP_COUNT na conversa (anti-loop)
+   *
+   * Quando responde:
+   *   - Usa LLM com persona + histórico
+   *   - Foco em RESPONDER mensagem, não rotear de novo
+   *   - Não muda concierge_state (continua 'routed')
+   *   - Incrementa metadata.follow_up_count
+   */
+  private async handleFollowUp(args: {
+    orgId: string;
+    conversationId: string;
+    conversation: ConversationRow;
+    messageText: string;
+    settings: ConciergeSettings;
+    persona: AiAgentPersona;
+  }): Promise<void> {
+    const { orgId, conversationId, conversation, messageText, settings, persona } = args;
+
+    // Anti-loop: bate o teto?
+    const followUpCount =
+      ((conversation.metadata as { follow_up_count?: number } | null)?.follow_up_count ?? 0);
+    if (followUpCount >= MAX_FOLLOW_UP_COUNT) {
+      this.logger.log(
+        `concierge: follow-up max (${MAX_FOLLOW_UP_COUNT}) atingido conv=${conversationId} — silenciando`,
+      );
+      return;
+    }
+
+    // Critérios de "deixar humano assumir"
+    if (conversation.contact_id) {
+      const silence = await this.shouldSilenceConcierge(orgId, conversation.contact_id);
+      if (silence.silence) {
+        this.logger.log(
+          `concierge: silenciando conv=${conversationId} — ${silence.reason}`,
+        );
+        return;
+      }
+    }
+
+    // IA gera resposta de follow-up
+    const reply = await this.generateFollowUpReply({
+      orgId,
+      conversationId,
+      conversation,
+      messageText,
+      persona,
+    });
+    if (!reply) return;
+
+    if (settings.auto_reply) {
+      await this.applyResponseDelay(persona);
+      await this.sendOutbound(orgId, conversation, reply);
+    }
+
+    // Incrementa contador (tracked em conv.metadata pra anti-loop)
+    await this.updateConciergeMetadata(orgId, conversationId, {
+      follow_up_count: followUpCount + 1,
+    });
+  }
+
+  /**
+   * Decide se IA deve silenciar pra esse contato. Critérios:
+   *   a) Tem appointment com status='scheduled' E start_time > now()
+   *   b) Tem deal aberto em pipeline_stage com requires_human=true
+   *
+   * Best-effort: erros aqui voltam silence=false (IA continua, defesa
+   * em profundidade — mais perigoso é IA parar quando deveria atuar).
+   */
+  private async shouldSilenceConcierge(
+    orgId: string,
+    contactId: string,
+  ): Promise<{ silence: boolean; reason: string }> {
+    try {
+      // 1. Appointment scheduled futuro?
+      const { data: appts } = await this.supabase.adminClient
+        .from('appointments')
+        .select('id, start_time, status')
+        .eq('org_id', orgId)
+        .eq('contact_id', contactId)
+        .eq('status', 'scheduled')
+        .gte('start_time', new Date().toISOString())
+        .limit(1);
+      if ((appts ?? []).length > 0) {
+        return { silence: true, reason: 'tem agendamento confirmado futuro' };
+      }
+
+      // 2. Deal aberto em stage requires_human?
+      const { data: deals } = await this.supabase.adminClient
+        .from('deals')
+        .select('id, stage_id, won_at, lost_at')
+        .eq('org_id', orgId)
+        .eq('contact_id', contactId)
+        .is('won_at', null)
+        .is('lost_at', null);
+      const stageIds = ((deals ?? []) as Array<{ stage_id: string }>).map((d) => d.stage_id);
+      if (stageIds.length > 0) {
+        const { data: stages } = await this.supabase.adminClient
+          .from('pipeline_stages')
+          .select('id, requires_human')
+          .in('id', stageIds);
+        const humanStage = ((stages ?? []) as Array<{ requires_human?: boolean }>)
+          .find((s) => s.requires_human === true);
+        if (humanStage) {
+          return { silence: true, reason: 'deal em stage requires_human' };
+        }
+      }
+    } catch (err) {
+      this.logger.warn(
+        `shouldSilenceConcierge falhou (default=continua): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    return { silence: false, reason: '' };
+  }
+
+  /**
+   * Gera resposta de follow-up via LLM. Persona + histórico recente +
+   * msg atual → resposta direta como atendente. NÃO mexe em pipeline/
+   * stage/concierge_state. Best-effort: retorna null se LLM falhar.
+   */
+  private async generateFollowUpReply(args: {
+    orgId: string;
+    conversationId: string;
+    conversation: ConversationRow;
+    messageText: string;
+    persona: AiAgentPersona;
+  }): Promise<string | null> {
+    const { orgId, conversationId, conversation, messageText, persona } = args;
+
+    const history = await this.loadHistory(orgId, conversationId);
+    const historyText = history
+      .slice(-HISTORY_MAX_MESSAGES)
+      .map((h) => `${h.direction === 'inbound' ? 'CLIENTE' : 'VOCÊ'}: ${h.text}`)
+      .join('\n');
+
+    const tonePt = this.tonePt(persona.tone);
+    const role = persona.role ?? 'assistant';
+    const guidelines = (persona.guidelines ?? []).slice(0, 5).join('\n- ');
+    const forbidden = (persona.forbidden_topics ?? []).join(', ');
+
+    const system = `Você é ${persona.name}, ${role.replace(/_/g, ' ')} de uma empresa.
+Tom de voz: ${tonePt}.
+${persona.personality ? `Personalidade: ${persona.personality}` : ''}
+${guidelines ? `Diretrizes:\n- ${guidelines}` : ''}
+${forbidden ? `Tópicos a evitar: ${forbidden}` : ''}
+
+Esta conversa JÁ FOI ROTEADA — você está atuando como atendente em
+follow-up. Tarefa: responder a mensagem do cliente de forma direta e
+útil, com base no histórico.
+
+REGRAS IMPORTANTES:
+- NÃO repita saudação ("Olá!", "Bom dia") — o cliente já está em conversa ativa
+- Responda DIRETO ao ponto da mensagem dele
+- Máximo 2-3 frases curtas (esse é WhatsApp, não email)
+- Se ele perguntar algo que você não sabe responder com confiança,
+  diga "Vou verificar com nossa equipe e te respondo em breve"
+- Se ele pedir agendamento e ainda não tem, sugira que a equipe
+  vai entrar em contato pra confirmar (NÃO proponha slots aqui —
+  isso é responsabilidade do flow inicial, já passamos disso)
+- Não mencione que você é IA. Atue como atendente humana.`;
+
+    const user = `HISTÓRICO RECENTE:
+${historyText || '(início)'}
+
+MENSAGEM ATUAL DO CLIENTE:
+"${messageText}"
+
+Responda como atendente humana de forma curta e direta.`;
+
+    try {
+      const res = await this.llm.chat({
+        orgId,
+        feature: 'concierge_followup',
+        system,
+        user,
+        max_tokens: 200,
+        context: {
+          conversation_id: conversationId,
+          ...(conversation.contact_id ? { contact_id: conversation.contact_id } : {}),
+        },
+        metadata: {
+          source: 'ai_concierge',
+          mode: 'follow_up',
+        },
+      });
+      return res.text?.trim() || null;
+    } catch (err) {
+      this.logger.warn(
+        `generateFollowUpReply falhou conv=${conversationId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return null;
+    }
   }
 
   private async loadHistory(
