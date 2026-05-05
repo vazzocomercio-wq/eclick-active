@@ -9,31 +9,35 @@ import { MetaConnector } from './connectors/meta.connector';
 import { MetaOAuthController } from './oauth/meta-oauth.controller';
 import { MetricCatalogService } from './metric-catalog.service';
 import { MetricConfigService } from './metric-config.service';
+import { AdSignalsController } from './signals/ad-signals.controller';
+import { SignalDetectorService } from './signals/signal-detector.service';
+import { SignalDetectorWorker } from './signals/signal-detector.worker';
 
 /**
- * Módulo de Ads — Blocos B + C + E do Active Intelligence.
+ * Módulo de Ads — Blocos B + C + E + G do Active Intelligence.
  *
- * Bloco B (OAuth + persist):
- *   - AdIntegrationsService, AdIntegrationsController, MetaOAuthController
- *
- * Bloco C (sync):
- *   - MetaConnector, AdsSyncService, AdsSyncWorker
- *
- * Bloco E (metric catalog + configs):
- *   - MetricCatalogService — read-only do catálogo curado
- *   - MetricConfigService — CRUD de configs por org com defaults virtuais
- *   - AdMetricsController — GET /ad-metrics/{catalog,configs} + PATCH
+ * B — OAuth + persist (AdIntegrationsService, MetaOAuthController)
+ * C — sync (MetaConnector, AdsSyncService, AdsSyncWorker)
+ * E — metric catalog + configs (MetricCatalogService, MetricConfigService)
+ * G — signal detector (SignalDetectorService, SignalDetectorWorker,
+ *     AdSignalsController) — 3 camadas: regras determinísticas,
+ *     anomaly detection, sinais compostos hardcoded.
  *
  * Próximos blocos:
- *   - GoogleOAuthController + GoogleConnector (Bloco D)
- *   - MetaLeadAdsController (Bloco F — webhook leadgen)
- *   - SignalDetectorService consumindo ad_metric_configs + ad_metrics_daily (G)
+ *   - GoogleOAuthController + GoogleConnector (Bloco D — bloqueado)
+ *   - MetaLeadAdsController (Bloco F)
+ *   - AlertEngine consumindo ad_signals pendentes (Bloco H)
  *
- * Exporta serviços que outros módulos vão consumir.
+ * Exporta serviços consumidos por outros módulos.
  */
 @Module({
   imports: [AuthModule],
-  controllers: [AdIntegrationsController, MetaOAuthController, AdMetricsController],
+  controllers: [
+    AdIntegrationsController,
+    MetaOAuthController,
+    AdMetricsController,
+    AdSignalsController,
+  ],
   providers: [
     AdIntegrationsService,
     AdsSyncService,
@@ -41,12 +45,15 @@ import { MetricConfigService } from './metric-config.service';
     MetaConnector,
     MetricCatalogService,
     MetricConfigService,
+    SignalDetectorService,
+    SignalDetectorWorker,
   ],
   exports: [
     AdIntegrationsService,
     AdsSyncService,
     MetricCatalogService,
     MetricConfigService,
+    SignalDetectorService,
   ],
 })
 export class AdsModule {}

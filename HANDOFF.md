@@ -1,13 +1,13 @@
 # HANDOFF — eclick-active
 
 > Documento vivo de continuidade entre sessões. **Lê isso primeiro ao começar nova sessão.**
-> Última atualização: **2026-05-05** (Bloco E do Active Intelligence — metric catalog + configs)
+> Última atualização: **2026-05-05** (Bloco G do Active Intelligence — signal detector 3 camadas)
 
 ---
 
 ## 🎯 Próximo trabalho planejado
 
-**Active Intelligence (Ads & Social Analytics + Hub)** — A+B+C+E entregues, próximo é F ou G.
+**Active Intelligence (Ads & Social Analytics + Hub)** — A+B+C+E+G entregues, próximo é H.
 
 📄 **Doc canônico**: [`docs/analytics-design.md`](./docs/analytics-design.md)
 
@@ -16,14 +16,34 @@ Estado:
 - ✅ **Bloco B** (Ad Integrations + OAuth Meta) — OAuth flow Meta funcional
 - ✅ **Bloco C** (Meta Connector + Sync) — campaigns + insights diários, cron 1h, backfill 90d
 - ⏸️ **Bloco D** (Google Ads) — bloqueado pelo `GOOGLE_ADS_DEVELOPER_TOKEN` (3-7d approval)
-- ✅ **Bloco E** (Metric Catalog + Configs) — 40 métricas core seeded, configs por org com defaults virtuais
+- ✅ **Bloco E** (Metric Catalog + Configs) — 40 métricas core seeded
+- ✅ **Bloco G** (Signal Detector) — 3 camadas + worker 15min + dedupe diário
 - ⏭️ **Próxima ação possível**:
-  - **Bloco F** (Lead Ads Webhook, ~2h) — webhook do Meta que cria contato + dispara Concierge. Precisa app Meta configurado pra registrar o webhook URL
-  - **Bloco G** (Signal Detector, ~4h) — agora viável já que catálogo+configs+métricas existem. Implementa camadas 1+2+3 (regras + anomalia + composto)
+  - **Bloco H** (Alert Managers + Engine + Camada 4 LLM, ~5h) — consome ad_signals pending e dispatcha via WhatsApp. **Maior valor** — fecha o ciclo "detectar → notificar gestor". Sem dependência externa
+  - **Bloco F** (Lead Ads Webhook, ~2h) — webhook do Meta que cria contato + Concierge. Precisa app Meta configurado
 - ⚠️ **Solicitar `GOOGLE_ADS_DEVELOPER_TOKEN` agora** via https://ads.google.com/aw/apicenter
 - ⚠️ **Configurar app Meta** em developers.facebook.com (Business type)
 - Decisões 1-7 fechadas (ver doc)
 - ⚠️ **NÃO** confundir com Intelligence Hub do `eclick-backend` (SaaS) — em prod lá, projeto distinto
+
+### Bloco G entregue — sumário
+
+- Migration `047_ad_signals.sql` — `ad_signals` com `dedupe_key` UNIQUE parcial (1 pendente/dia/dedupe_key) + RLS + indexes pra Bloco H consumir pendentes
+- `signals/signal-detector.service.ts` — implementa as 3 camadas:
+  - **Camada 1 (regras determinísticas)**: SQL puro contra `ad_metric_configs` × `ad_metrics_daily`. Pra cada config `enabled+threshold_mode='manual'` com `target_value`, agrega métrica na janela e compara com target±warning_pct/critical_pct respeitando `direction` (higher_better/lower_better/neutral)
+  - **Camada 2 (anomaly detection)**: pra `threshold_mode='auto'`, calcula rolling avg + stddev da janela de baseline (default 30d), dispara warning ≥2σ / critical ≥3σ. Só sinaliza se a direção da anomalia for "ruim" pelo catálogo
+  - **Camada 3 (sinais compostos hardcoded)**: 7d vs 7d window comparison
+    - `creative_fatigue` — CTR↓>20% + freq↑>30% + CPC↑>20%
+    - `audience_burnout` — freq>4 + CTR cai >30%
+    - `scaling_inefficiency` — spend dobra (>=100%) mas conversões crescem <50% (critical se spend >=200%)
+    - `pixel_drift` — conversões caem >50% sem mudar spend (<20% delta)
+- Dedupe via `dedupe_key = "<signal_type>:<campaign_id|metric>:<YYYY-MM-DD>"` + UNIQUE pendente
+- `signals/signal-detector.worker.ts` — `setInterval` 15min, BOOT_DELAY 7min (depois do AdsSyncWorker em 5min). `DISABLE_SIGNAL_DETECTOR_WORKER=true` desliga
+- `signals/ad-signals.controller.ts`:
+  - `GET /ad-signals?status=pending|sent|acked|expired&limit=N` — lista com join campaign
+  - `POST /ad-signals/:id/ack` — marca como visto (qualquer membro autenticado)
+  - `POST /ad-signals/detect` — trigger manual (útil pra seedar primeiros sinais sem esperar 15min)
+- **Decidido fora do MVP**: `lead_unattended` (depende do Bloco F — Lead Ads webhook)
 
 ### Bloco E entregue — sumário
 
@@ -87,9 +107,9 @@ Estado:
 
 ## Estado atual
 
-**Última migration aplicada via API**: `045_ad_metric_configs.sql`
+**Última migration aplicada via API**: `047_ad_signals.sql`
 **Migration aplicada via Studio**: `038_message_media_storage_policy.sql` (2026-05-05)
-**Próxima migration livre**: `046_*.sql`
+**Próxima migration livre**: `046_*.sql` (pulamos pra 047 pq 046 estava reservado pro Bloco F — Lead Ads webhook)
 
 **Helper pra aplicar migrations rapidão (Claude usa esse)**:
 ```bash
