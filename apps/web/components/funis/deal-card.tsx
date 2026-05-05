@@ -72,6 +72,11 @@ export const DealCardVisual = forwardRef<HTMLDivElement, DealCardVisualProps>(
     return (
       <div
         ref={ref}
+        // data-no-pan: o useDragToPan do board ignora pointerdown originado
+        // aqui. Sem isso, ao começar drag de card o pan também ativa
+        // (movendo as colunas junto) e setPointerCapture do pan rouba os
+        // eventos do dnd-kit, deixando o cursor "preso" até o user clicar.
+        data-no-pan
         className={cn(
           'group flex cursor-grab flex-col gap-2 rounded-lg border border-border bg-background p-3 shadow-sm transition-[border-color,box-shadow] hover:border-primary/40 hover:shadow-md',
           isDragging && 'opacity-30',
