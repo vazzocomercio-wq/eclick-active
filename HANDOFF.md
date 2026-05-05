@@ -7,8 +7,9 @@
 
 ## Estado atual
 
-**Última migration aplicada**: `037_appointment_custom_fields.sql`
-**Próxima migration livre**: `038_*.sql`
+**Última migration aplicada via API**: `037_appointment_custom_fields.sql`
+**Migration pendente (manual no Studio)**: `038_message_media_storage_policy.sql`
+**Próxima migration livre**: `039_*.sql`
 
 **Helper pra aplicar migrations rapidão (Claude usa esse)**:
 ```bash
@@ -110,15 +111,21 @@ A sessão completou:
 ## Pendências e roadmap
 
 ### Imediato (low-effort)
-1. **UI editor pra `custom_fields_schema`** no settings de appointment_types.
-   Hoje configurar requer SQL/API direto. Schema editor com add/remove/reorder
-   de fields, type-specific options (select → manage options).
-2. **Storage policy via Supabase Studio**: `message_media_org_read` ainda
-   não foi aplicada (service_role não pode mexer em `storage.objects`).
-   Backend usa service_role, então só importa se quiser frontend autenticado
-   baixando direto sem signed URL.
-3. **Audio transcript via Whisper** pra attachments (hoje skipa).
-   OpenAI Whisper API ou local. Logica vai em AttachmentsService.
+1. ✅ **UI editor pra `custom_fields_schema`** — entregue em `ca18c27`.
+   Em /configuracoes > Agenda agora tem seção "Tipos de agendamento" com
+   editor visual completo de schema.
+2. ⚠️ **Storage policy `message_media_org_read`** — precisa aplicar via
+   Supabase Studio. Cola o SQL de
+   `supabase/migrations/038_message_media_storage_policy.sql` em
+   https://supabase.com/dashboard/project/hzhrkfdwzxalaromcffn/sql/new
+   e roda. **OPCIONAL**: backend já usa signed URLs (30min) via service_role,
+   então fluxo atual funciona sem essa policy. Habilitá-la permite frontend
+   autenticado baixar direto sem precisar pedir signed URL toda vez.
+3. ✅ **Audio transcript via Whisper** — entregue em `50f1e7d`.
+   Áudio inbound (audio/ogg do WhatsApp) agora vira transcript via
+   Whisper + summary via Sonnet. UI tem TranscriptToggle expansível.
+4. ✅ **Configuração de timezone na UI** — entregue em `25566f8`.
+   /configuracoes > Organização tem dropdown com 25 timezones.
 
 ### Sprint próximo (já planejado)
 - **Intelligence Hub**: 5 analyzers + alert routing — vê
@@ -201,6 +208,10 @@ Worker pega no próximo tick (30s).
 ## Commits desta sessão (cronológicos)
 
 ```
+50f1e7d  feat(attachments): transcrição de áudio via OpenAI Whisper
+25566f8  feat(configuracoes): seletor de timezone na seção Organização
+ca18c27  feat(configuracoes): editor de tipos de agendamento + custom fields
+7aea27b  docs(handoff): consolida sessão Concierge + Vision
 088e4b9  feat(attachments): Vision OCR + UI no chat (2.B+2.C)
 3cc4b09  feat(appointments): timezone por org + reminders WhatsApp (3.F)
 d057f6d  feat(appointments): custom_fields_schema por type (3.E)
