@@ -3,11 +3,14 @@
 import { useEffect, useState } from 'react';
 import {
   Briefcase,
+  CalendarClock,
   CheckSquare,
   Clock,
   Loader2,
   MessageCircle,
+  Plus,
   Trash2,
+  X,
 } from 'lucide-react';
 import type { OrgMemberRole } from '@eclick-active/shared';
 import {
@@ -18,6 +21,8 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   teamApi,
@@ -51,6 +56,10 @@ export function MemberDetailSheet({
   const [stats, setStats] = useState<MemberStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [role, setRole] = useState<OrgMemberRole>('agent');
+  const [specialties, setSpecialties] = useState<string[]>([]);
+  const [specialtyInput, setSpecialtyInput] = useState('');
+  const [duration, setDuration] = useState<string>('');
+  const [buffer, setBuffer] = useState<string>('0');
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +68,14 @@ export function MemberDetailSheet({
   useEffect(() => {
     if (!open || !member) return;
     setRole(member.role);
+    setSpecialties(member.specialties ?? []);
+    setSpecialtyInput('');
+    setDuration(
+      member.default_duration_minutes != null
+        ? String(member.default_duration_minutes)
+        : '',
+    );
+    setBuffer(String(member.default_buffer_minutes ?? 0));
     setError(null);
     setConfirmRemove(false);
     setStats(null);
@@ -85,12 +102,37 @@ export function MemberDetailSheet({
   const canRemove = canEdit && !isSelf;
   const canPromoteToAdmin = currentUserRole === 'owner';
 
-  async function handleSaveRole() {
-    if (!member || role === member.role) return;
+  async function handleSave() {
+    if (!member) return;
+    const patch: Parameters<typeof teamApi.update>[1] = {};
+    if (role !== member.role) patch.role = role;
+
+    // Specialties só envia se mudou (compara como JSON pra cobrir reorder)
+    const oldSpec = (member.specialties ?? []).slice().sort();
+    const newSpec = specialties.slice().sort();
+    if (JSON.stringify(oldSpec) !== JSON.stringify(newSpec)) {
+      patch.specialties = specialties;
+    }
+
+    const newDuration = duration.trim() ? Number(duration) : null;
+    if (newDuration !== member.default_duration_minutes) {
+      patch.default_duration_minutes = newDuration;
+    }
+
+    const newBuffer = Number(buffer) || 0;
+    if (newBuffer !== (member.default_buffer_minutes ?? 0)) {
+      patch.default_buffer_minutes = newBuffer;
+    }
+
+    if (Object.keys(patch).length === 0) {
+      onOpenChange(false);
+      return;
+    }
+
     setSaving(true);
     setError(null);
     try {
-      await teamApi.update(member.id, { role });
+      await teamApi.update(member.id, patch);
       onChanged();
       onOpenChange(false);
     } catch (err) {
@@ -104,6 +146,20 @@ export function MemberDetailSheet({
     } finally {
       setSaving(false);
     }
+  }
+
+  function addSpecialty() {
+    const t = specialtyInput.trim();
+    if (!t || specialties.includes(t)) {
+      setSpecialtyInput('');
+      return;
+    }
+    setSpecialties((prev) => [...prev, t]);
+    setSpecialtyInput('');
+  }
+
+  function removeSpecialty(s: string) {
+    setSpecialties((prev) => prev.filter((x) => x !== s));
   }
 
   async function handleRemove() {
@@ -128,7 +184,14 @@ export function MemberDetailSheet({
   }
 
   const displayName = member.display_name ?? member.email ?? 'Sem nome';
-  const dirty = role !== member.role;
+  const oldSpecSorted = (member.specialties ?? []).slice().sort();
+  const newSpecSorted = specialties.slice().sort();
+  const newDurationParsed = duration.trim() ? Number(duration) : null;
+  const dirty =
+    role !== member.role ||
+    JSON.stringify(oldSpecSorted) !== JSON.stringify(newSpecSorted) ||
+    newDurationParsed !== member.default_duration_minutes ||
+    Number(buffer) !== (member.default_buffer_minutes ?? 0);
 
   return (
     <Sheet open={open} onOpenChange={(o) => !saving && !removing && onOpenChange(o)}>
@@ -244,6 +307,112 @@ export function MemberDetailSheet({
                 : 'Você não tem permissão pra editar esse membro.'}
             </p>
           )}
+
+          {/* Agendamento — duração + especialidades pra IA Concierge usar */}
+          {canEdit && (
+            <section className="mt-5 flex flex-col gap-3 border-t border-border pt-5">
+              <div className="flex items-center gap-2">
+                <CalendarClock className="h-3.5 w-3.5 text-primary" />
+                <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Agendamento
+                </h3>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="duration" className="text-[11px]">
+                    Duração padrão (min)
+                  </Label>
+                  <Input
+                    id="duration"
+                    type="number"
+                    min={5}
+                    max={480}
+                    value={duration}
+                    onChange={(e) => setDuration(e.target.value)}
+                    placeholder="Ex: 30, 60"
+                    className="h-9"
+                  />
+                  <span className="text-[10px] text-muted-foreground">
+                    Tempo de cada atendimento. Sistema calcula slots livres.
+                  </span>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="buffer" className="text-[11px]">
+                    Intervalo (min)
+                  </Label>
+                  <Input
+                    id="buffer"
+                    type="number"
+                    min={0}
+                    max={120}
+                    value={buffer}
+                    onChange={(e) => setBuffer(e.target.value)}
+                    placeholder="0"
+                    className="h-9"
+                  />
+                  <span className="text-[10px] text-muted-foreground">
+                    Pausa entre atendimentos.
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-[11px]">Especialidades / Serviços</Label>
+                <div className="flex gap-1.5">
+                  <Input
+                    value={specialtyInput}
+                    onChange={(e) => setSpecialtyInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addSpecialty();
+                      }
+                    }}
+                    placeholder="Ex: nutricionista, corte, motor, vendas…"
+                    className="h-9 flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addSpecialty}
+                    disabled={!specialtyInput.trim()}
+                    className="h-9 px-3"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                {specialties.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {specialties.map((s) => (
+                      <span
+                        key={s}
+                        className="inline-flex items-center gap-1 rounded-full border border-cyan-500/40 bg-cyan-500/15 px-2 py-0.5 text-[11px] font-medium text-cyan-300"
+                      >
+                        {s}
+                        <button
+                          type="button"
+                          onClick={() => removeSpecialty(s)}
+                          className="rounded-full p-0.5 hover:bg-cyan-500/20"
+                          aria-label={`Remover ${s}`}
+                        >
+                          <X className="h-2.5 w-2.5" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-[10px] italic text-muted-foreground">
+                    Sem especialidades. IA não vai matchar agendamentos com este profissional até definir pelo menos uma.
+                  </span>
+                )}
+                <span className="text-[10px] text-muted-foreground">
+                  Texto livre por nicho. Ex: clínica = ["nutricionista"], salão = ["corte", "manicure"], oficina = ["motor", "elétrica"]. IA Concierge usa pra rotear pedido de agendamento.
+                </span>
+              </div>
+            </section>
+          )}
         </div>
 
         {/* Footer actions */}
@@ -285,7 +454,7 @@ export function MemberDetailSheet({
               Fechar
             </Button>
             {canEdit && (
-              <Button onClick={handleSaveRole} disabled={!dirty || saving}>
+              <Button onClick={handleSave} disabled={!dirty || saving}>
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Salvar
               </Button>
