@@ -1,5 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { performance } from 'node:perf_hooks';
+import { spawn } from 'node:child_process';
+import { mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import ffmpegPath from 'ffmpeg-static';
 import Anthropic from '@anthropic-ai/sdk';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 
@@ -92,18 +97,6 @@ export class AttachmentsService {
   async processAttachment(att: AttachmentRow): Promise<void> {
     const start = performance.now();
 
-    // Audio/document/image têm pipelines diferentes — vídeo ainda skipa
-    if (att.media_type === 'video') {
-      await this.markProcessed(att.id, {
-        ai_summary: null,
-        ai_extracted: {
-          skipped: true,
-          reason: 'video transcription not supported yet (would need ffmpeg extract first)',
-        },
-      });
-      return;
-    }
-
     // Document: por enquanto só PDF (Vision aceita PDF nativo). Outros tipos skipa.
     if (att.media_type === 'document') {
       const isPdf = (att.mime_type ?? '').includes('pdf');
@@ -140,9 +133,39 @@ export class AttachmentsService {
       return;
     }
 
-    // Audio → Whisper (transcrição). Sai daqui antes de partir pro Vision.
+    // Audio → Whisper direto. Vídeo → extrai trilha de áudio com ffmpeg
+    // e manda pro Whisper. Em ambos casos, fluxo de transcript +
+    // resumo via Sonnet é compartilhado em processAudioWithWhisper.
     if (att.media_type === 'audio') {
       await this.processAudioWithWhisper(att, buffer, start);
+      return;
+    }
+
+    if (att.media_type === 'video') {
+      const audioBuf = await this.extractAudioFromVideo(buffer, att.id).catch(
+        (err: unknown) => {
+          this.logger.warn(
+            `att ${att.id} ffmpeg extract falhou: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          return null;
+        },
+      );
+      if (!audioBuf) {
+        await this.markProcessed(att.id, {
+          ai_summary: null,
+          ai_extracted: {
+            error: 'ffmpeg failed to extract audio',
+            stage: 'video_extract',
+          },
+        });
+        return;
+      }
+      // Reusa pipeline de áudio com mime forçado pra ogg (formato extraído).
+      await this.processAudioWithWhisper(
+        { ...att, mime_type: 'audio/ogg' },
+        audioBuf,
+        start,
+      );
       return;
     }
 
@@ -263,6 +286,60 @@ export class AttachmentsService {
     this.logger.log(
       `att ${att.id} processed (${att.media_type}) summary="${(aiSummary ?? '').slice(0, 60)}…"`,
     );
+  }
+
+  /**
+   * Extrai trilha de áudio de um buffer de vídeo via ffmpeg-static.
+   * Output: ogg/opus mono 16kHz (formato leve, ideal pra Whisper). Usa
+   * arquivos temp porque ffmpeg trabalha com paths reais.
+   *
+   * Lança Error se ffmpeg falhar (caller decide o fallback).
+   */
+  private async extractAudioFromVideo(
+    videoBuf: Buffer,
+    attachmentId: string,
+  ): Promise<Buffer> {
+    const ff = ffmpegPath as unknown as string | null;
+    if (!ff) throw new Error('ffmpeg-static não disponível');
+
+    const dir = await mkdtemp(join(tmpdir(), 'eclick-att-'));
+    const inputPath = join(dir, `in-${attachmentId}.bin`);
+    const outputPath = join(dir, `out-${attachmentId}.ogg`);
+
+    try {
+      await writeFile(inputPath, videoBuf);
+
+      // -vn = sem video; -ac 1 = mono; -ar 16k = 16kHz; -c:a libopus = codec opus
+      // -b:a 24k = bitrate baixo (Whisper aceita bem); -y = sobrescreve
+      const args = [
+        '-i', inputPath,
+        '-vn',
+        '-ac', '1',
+        '-ar', '16000',
+        '-c:a', 'libopus',
+        '-b:a', '24k',
+        '-y',
+        outputPath,
+      ];
+
+      await new Promise<void>((resolve, reject) => {
+        const proc = spawn(ff, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+        let stderr = '';
+        proc.stderr.on('data', (chunk: Buffer) => {
+          stderr += chunk.toString();
+        });
+        proc.on('error', (err) => reject(err));
+        proc.on('close', (code) => {
+          if (code === 0) resolve();
+          else reject(new Error(`ffmpeg exit ${code}: ${stderr.slice(-300)}`));
+        });
+      });
+
+      return await readFile(outputPath);
+    } finally {
+      // Cleanup temp dir mesmo se ffmpeg falhar — evita lixo no /tmp
+      await rm(dir, { recursive: true, force: true }).catch(() => {});
+    }
   }
 
   /**
