@@ -4,6 +4,7 @@ import type { AiAgentPersona } from '@eclick-active/shared';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { ChannelDispatcherService } from '../../common/channels/channel-dispatcher.service';
 import { LlmService } from '../../common/llm/llm.service';
+import { OutboundEventsService } from '../../common/messaging-realtime/outbound-events.service';
 import { AiPersonaService } from '../ai-persona/ai-persona.service';
 
 export interface ReEngagementSettings {
@@ -76,6 +77,7 @@ export class ReEngagementService {
     private readonly dispatcher: ChannelDispatcherService,
     private readonly persona: AiPersonaService,
     private readonly llm: LlmService,
+    private readonly outboundEvents: OutboundEventsService,
   ) {}
 
   // ──────────────────────────────────────────────────────────
@@ -416,6 +418,12 @@ export class ReEngagementService {
         .eq('org_id', orgId)
         .eq('id', messageId)
         .eq('created_at', messageCreatedAt);
+      await this.outboundEvents.notifyOutbound({
+        orgId,
+        conversationId: conv.conversation_id,
+        messageId,
+        messageCreatedAt,
+      });
       await this.recordRun(orgId, conv, { text, status: 'ok', messageId });
       this.logger.log(
         `re-engage ok org=${orgId} conv=${conv.conversation_id} retry=${conv.retry_number} took=${Math.round(performance.now() - start)}ms`,

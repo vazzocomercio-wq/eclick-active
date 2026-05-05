@@ -5,6 +5,7 @@ import { AuthModule } from './common/auth/auth.module';
 import { ChannelsModule as ChannelDispatcherModule } from './common/channels/channels.module';
 import { PlaceholderModule } from './common/placeholder/placeholder.module';
 import { LlmModule } from './common/llm/llm.module';
+import { MessagingRealtimeModule } from './common/messaging-realtime/messaging-realtime.module';
 import { EventsModule } from './gateways/events.module';
 import { AdsModule } from './modules/ads/ads.module';
 import { AlertsModule } from './modules/alerts/alerts.module';
@@ -47,6 +48,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     PlaceholderModule,
     LlmModule,
     EventsModule,
+    MessagingRealtimeModule,
     // Feature modules
     ContactsModule,
     ConversationsModule,

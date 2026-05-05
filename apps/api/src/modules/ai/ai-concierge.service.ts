@@ -8,6 +8,7 @@ import type {
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { ChannelDispatcherService } from '../../common/channels/channel-dispatcher.service';
 import { LlmService } from '../../common/llm/llm.service';
+import { OutboundEventsService } from '../../common/messaging-realtime/outbound-events.service';
 import { getOrgTimezone } from '../../common/org-settings.helper';
 import { AiPersonaService } from '../ai-persona/ai-persona.service';
 import { TagsService } from '../tags/tags.service';
@@ -188,6 +189,7 @@ export class AiConciergeService {
     private readonly appointments: AppointmentsService,
     private readonly events: EventsGateway,
     private readonly llm: LlmService,
+    private readonly outboundEvents: OutboundEventsService,
   ) {}
 
   // ──────────────────────────────────────────────────────────
@@ -1742,6 +1744,17 @@ Decida o roteamento.`;
         this.logger.warn(`concierge: mark failed falhou: ${updErr.message}`);
       }
     }
+
+    // Emit pra UI atualizar realtime — bypass do MessagesService.create
+    // (path humano), via helper centralizado. Sem isso a UI só recebe
+    // a msg do bot quando user perde+volta foco (silent refetch do
+    // use-chat). Sintoma: "msg da IA demora a aparecer ou não aparece".
+    await this.outboundEvents.notifyOutbound({
+      orgId,
+      conversationId: conversation.id,
+      messageId,
+      messageCreatedAt,
+    });
   }
 
   // ──────────────────────────────────────────────────────────
