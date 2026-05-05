@@ -268,6 +268,52 @@ A sessão completou:
 - **Configuração de timezone na UI** (`organizations.settings.timezone`).
   Hoje só funciona via UPDATE direto.
 
+### Roadmap futuro — features pedidas mas não implementadas
+
+#### 1. Chat interno entre usuários da mesma org
+**Status**: feature nova, sem precedente no SaaS pra portar.
+
+Cenário: members da org conversam entre si dentro do Active (estilo Slack/Teams light), pra discutir leads/deals sem precisar sair da plataforma.
+
+Escopo proposto:
+- Migration `internal_messages` (id, org_id, sender_user_id, recipient_user_id OR thread_channel_id, content_type text/file, attachments jsonb, read_at, created_at)
+- Suporte a:
+  - DMs 1:1 entre members
+  - Canais (rooms) compartilhados — opcional, decisão de UX
+  - Threading em msgs específicas (nice-to-have)
+- Realtime via `EventsGateway` existente (já roda websocket pra events de org)
+- Notificações: badge no sidebar + sound opcional + integração futura com push notifications
+- UI: nova rota `/team-chat` ou drawer/painel lateral expansível
+- Mention `@user` que dispara notificação direcionada
+- Search por conteúdo
+- Permissões: todo member vê DMs próprios; canais respeitam membership opcional
+
+Estimativa: ~6-8h backend + ~6h UI.
+
+#### 2. Widget de chat embutido (porta do SaaS)
+**Status**: existe no SaaS em `eclick-backend/src/modules/widgets/`. Portar com adaptações.
+
+Cenário: cliente cola um snippet JS no site dele e visitantes anônimos podem chatear. Conversa vira `conversation` no Active e o Concierge IA reage normalmente.
+
+Escopo de porta (referência: `eclick-backend/src/modules/widgets/`):
+- `chat-widget.service.ts` — CRUD widgets, gera `widget_token` único, valida `allowed_origins`
+- `widgets.controller.ts` — endpoints autenticados pro dashboard CRUD
+- `widget-public.controller.ts` — endpoints públicos consumidos pelo embed JS:
+  - `POST /widget/<token>/init` — abre conversa anônima
+  - `POST /widget/<token>/message` — envia msg
+  - `GET /widget/<token>/messages?since=...` — long-poll OU upgrade pra SSE/websocket
+- Migration `chat_widgets` (id, org_id, name, agent_id REF ai_persona, welcome_message, theme_color, position, require_name/email/phone, allowed_origins, widget_token, is_active)
+- Conversa criada com `channel_type='widget'` (precisa adicionar enum + provider)
+- AI Concierge reage automaticamente se `auto_reply` habilitado
+- UI no dashboard: nova section em `/configuracoes > Widget` (CRUD + preview + snippet de embed)
+- Embed JS estático servido via CDN/Netlify (`widget.js` que carrega iframe ou direto)
+- Adaptações pro Active:
+  - `supabaseAdmin` → `SupabaseService`
+  - `atendente-ia` (SaaS) → `AiConciergeService` (Active) — Concierge já tem fluxo de greeting + qualify
+  - Schema do SaaS usa `user_id` na ad-account; aqui é `org_id` puro
+
+Estimativa: ~5h backend + ~4h UI + ~2h embed JS.
+
 ### Bugs conhecidos / observações
 - **Card no kanban**: drag-to-pan tem `data-no-pan` no DealCardVisual pra
   não conflitar com dnd-kit. Se mudar root do card, redo isso.
