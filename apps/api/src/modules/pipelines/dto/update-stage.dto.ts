@@ -26,7 +26,7 @@ export class UpdateStageDto {
    */
   @IsOptional()
   @IsString()
-  @MaxLength(500)
+  @MaxLength(2000)
   description?: string;
 
   @IsOptional()
