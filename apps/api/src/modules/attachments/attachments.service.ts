@@ -4,11 +4,26 @@ import Anthropic from '@anthropic-ai/sdk';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 
 const VISION_MODEL = 'claude-sonnet-4-6';
+const WHISPER_MODEL = 'whisper-1';
 const SIGNED_URL_TTL_SECONDS = 60 * 30; // 30min — UI usa pra exibir mídia
+const WHISPER_MAX_BYTES = 24 * 1024 * 1024; // 25MB limite OpenAI; deixa folga
 
 /** Pricing Sonnet 4.6 (USD por milhão de tokens). */
 const SONNET_INPUT_PER_MTOK = 3.0;
 const SONNET_OUTPUT_PER_MTOK = 15.0;
+/** Whisper preço fixo por minuto (USD). */
+const WHISPER_USD_PER_MIN = 0.006;
+
+/** Mapeia mime de áudio comum pra extensão aceita pelo Whisper. */
+function mimeToWhisperExt(mime: string): string {
+  const m = mime.toLowerCase();
+  if (m.includes('mp3') || m.includes('mpeg')) return 'mp3';
+  if (m.includes('m4a') || m.includes('mp4')) return 'm4a';
+  if (m.includes('ogg') || m.includes('opus')) return 'ogg';
+  if (m.includes('wav')) return 'wav';
+  if (m.includes('webm')) return 'webm';
+  return 'ogg'; // default razoável (Baileys WhatsApp manda audio/ogg geralmente)
+}
 
 interface AttachmentRow {
   id: string;
@@ -77,16 +92,19 @@ export class AttachmentsService {
   async processAttachment(att: AttachmentRow): Promise<void> {
     const start = performance.now();
 
-    // Audio/video MVP: skipa por enquanto (pediria Whisper/transcript).
-    if (att.media_type !== 'image' && att.media_type !== 'document') {
+    // Audio/document/image têm pipelines diferentes — vídeo ainda skipa
+    if (att.media_type === 'video') {
       await this.markProcessed(att.id, {
         ai_summary: null,
-        ai_extracted: { skipped: true, reason: `media_type=${att.media_type} not supported yet` },
+        ai_extracted: {
+          skipped: true,
+          reason: 'video transcription not supported yet (would need ffmpeg extract first)',
+        },
       });
       return;
     }
 
-    // Document: por enquanto só PDF. Outros tipos vão registrar skip.
+    // Document: por enquanto só PDF (Vision aceita PDF nativo). Outros tipos skipa.
     if (att.media_type === 'document') {
       const isPdf = (att.mime_type ?? '').includes('pdf');
       if (!isPdf) {
@@ -119,6 +137,12 @@ export class AttachmentsService {
           stage: 'download',
         },
       });
+      return;
+    }
+
+    // Audio → Whisper (transcrição). Sai daqui antes de partir pro Vision.
+    if (att.media_type === 'audio') {
+      await this.processAudioWithWhisper(att, buffer, start);
       return;
     }
 
@@ -238,6 +262,199 @@ export class AttachmentsService {
 
     this.logger.log(
       `att ${att.id} processed (${att.media_type}) summary="${(aiSummary ?? '').slice(0, 60)}…"`,
+    );
+  }
+
+  /**
+   * Áudio inbound — transcreve via OpenAI Whisper (whisper-1). Limita a
+   * 25MB. Se mídia maior, marca como skipped com motivo. Após transcript,
+   * dispara Anthropic Sonnet pra resumir + extrair entities estruturadas
+   * (semelhante ao Vision pra imagens).
+   */
+  private async processAudioWithWhisper(
+    att: AttachmentRow,
+    buffer: Buffer,
+    startTs: number,
+  ): Promise<void> {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      this.logger.warn(`att ${att.id} audio: OPENAI_API_KEY ausente — skip`);
+      await this.markProcessed(att.id, {
+        ai_summary: null,
+        ai_extracted: { skipped: true, reason: 'OPENAI_API_KEY not configured' },
+      });
+      return;
+    }
+
+    if (buffer.length > WHISPER_MAX_BYTES) {
+      await this.markProcessed(att.id, {
+        ai_summary: null,
+        ai_extracted: {
+          skipped: true,
+          reason: `file too large (${(buffer.length / 1024 / 1024).toFixed(1)}MB > 25MB Whisper limit)`,
+        },
+      });
+      return;
+    }
+
+    // Whisper aceita: mp3, mp4, mpeg, mpga, m4a, wav, webm, opus, ogg
+    const mime = att.mime_type ?? 'audio/ogg';
+    const ext = mimeToWhisperExt(mime);
+    const fileName = att.file_name ?? `audio-${att.id}.${ext}`;
+
+    let transcript = '';
+    try {
+      // Node 20+ tem FormData nativa
+      const form = new FormData();
+      const blob = new Blob([new Uint8Array(buffer)], { type: mime });
+      form.append('file', blob, fileName);
+      form.append('model', WHISPER_MODEL);
+      form.append('language', 'pt');
+      form.append('response_format', 'verbose_json');
+
+      const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}` },
+        body: form,
+      });
+
+      if (!res.ok) {
+        const errBody = await res.text();
+        throw new Error(`Whisper ${res.status}: ${errBody.slice(0, 300)}`);
+      }
+      const json = (await res.json()) as {
+        text?: string;
+        duration?: number;
+        language?: string;
+      };
+      transcript = (json.text ?? '').trim();
+      // Loga custo aproximado
+      const minutes = (json.duration ?? 0) / 60;
+      const cost = minutes * WHISPER_USD_PER_MIN;
+      void this.supabase.adminClient
+        .from('ai_interactions')
+        .insert({
+          org_id: att.org_id,
+          interaction_type: 'attachment_transcribe',
+          model: WHISPER_MODEL,
+          provider: 'openai',
+          input_tokens: 0,
+          output_tokens: 0,
+          cost_usd: Math.round(cost * 1_000_000) / 1_000_000,
+          latency_ms: Math.round(performance.now() - startTs),
+          result_summary: transcript.slice(0, 200),
+          metadata: {
+            source: 'attachments_worker',
+            attachment_id: att.id,
+            message_id: att.message_id,
+            duration_seconds: json.duration ?? 0,
+            language: json.language ?? 'pt',
+          },
+        })
+        .then(() => {})
+        .then(undefined, () => {});
+    } catch (err) {
+      this.logger.warn(
+        `att ${att.id} whisper falhou: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      await this.markProcessed(att.id, {
+        ai_summary: null,
+        ai_extracted: {
+          error: err instanceof Error ? err.message : String(err),
+          stage: 'whisper',
+        },
+      });
+      return;
+    }
+
+    if (!transcript) {
+      await this.markProcessed(att.id, {
+        ai_summary: 'Áudio sem fala detectada.',
+        ai_extracted: { type: 'audio', transcript: '', empty: true },
+      });
+      return;
+    }
+
+    // Resumo + extração via Sonnet a partir do transcript. Best-effort —
+    // se falhar, ainda salvamos o transcript bruto como ai_summary.
+    let aiSummary: string = transcript.slice(0, 280);
+    let aiExtracted: Record<string, unknown> = {
+      type: 'audio',
+      transcript,
+    };
+
+    try {
+      const res = await this.getClient().messages.create({
+        model: VISION_MODEL,
+        max_tokens: 500,
+        system:
+          'Você está analisando uma transcrição de áudio que um cliente enviou via WhatsApp. Tarefa: 1) Resumo em 1-2 frases pt-BR (ai_summary). 2) Entities estruturadas (ai_extracted). Retorne APENAS JSON: {"ai_summary":"...","ai_extracted":{...}}',
+        messages: [
+          {
+            role: 'user',
+            content: `Transcrição:\n"""\n${transcript.slice(0, 4000)}\n"""\n\nGere o JSON.`,
+          },
+        ],
+      });
+      const block = res.content.find(
+        (b): b is Anthropic.TextBlock => b.type === 'text',
+      );
+      const text = block?.text?.trim() ?? '';
+      const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
+      try {
+        const parsed = JSON.parse(cleaned) as {
+          ai_summary?: unknown;
+          ai_extracted?: unknown;
+        };
+        if (typeof parsed.ai_summary === 'string') aiSummary = parsed.ai_summary;
+        if (parsed.ai_extracted && typeof parsed.ai_extracted === 'object') {
+          aiExtracted = {
+            type: 'audio',
+            transcript,
+            ...(parsed.ai_extracted as Record<string, unknown>),
+          };
+        }
+      } catch {
+        // mantém summary=transcript fallback
+      }
+
+      const cost =
+        (res.usage.input_tokens * SONNET_INPUT_PER_MTOK +
+          res.usage.output_tokens * SONNET_OUTPUT_PER_MTOK) /
+        1_000_000;
+      void this.supabase.adminClient
+        .from('ai_interactions')
+        .insert({
+          org_id: att.org_id,
+          interaction_type: 'attachment_audio_summary',
+          model: VISION_MODEL,
+          provider: 'anthropic',
+          input_tokens: res.usage.input_tokens,
+          output_tokens: res.usage.output_tokens,
+          cost_usd: Math.round(cost * 1_000_000) / 1_000_000,
+          latency_ms: Math.round(performance.now() - startTs),
+          result_summary: aiSummary.slice(0, 200),
+          metadata: {
+            source: 'attachments_worker',
+            attachment_id: att.id,
+            message_id: att.message_id,
+          },
+        })
+        .then(() => {})
+        .then(undefined, () => {});
+    } catch (err) {
+      this.logger.warn(
+        `att ${att.id} sonnet summary falhou (transcript salvo): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    await this.markProcessed(att.id, {
+      ai_summary: aiSummary,
+      ai_extracted: aiExtracted,
+    });
+
+    this.logger.log(
+      `att ${att.id} audio transcrito (${transcript.length} chars) summary="${aiSummary.slice(0, 60)}…"`,
     );
   }
 

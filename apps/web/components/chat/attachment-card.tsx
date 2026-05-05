@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import {
+  ChevronDown,
+  ChevronRight,
   Download,
   File,
   FileSpreadsheet,
@@ -9,6 +11,7 @@ import {
   ImageOff,
   Loader2,
   Mic,
+  Quote,
   Sparkles,
   Video as VideoIcon,
 } from 'lucide-react';
@@ -28,6 +31,15 @@ interface AttachmentCardProps {
  * abaixo. Clicável pra abrir lightbox/dialog quando aplicável.
  */
 export function AttachmentCard({ attachment, compact = false }: AttachmentCardProps) {
+  // Transcript fica em ai_extracted.transcript quando media_type=audio.
+  const extracted = attachment.ai_extracted as
+    | { type?: string; transcript?: string }
+    | null;
+  const transcript =
+    attachment.media_type === 'audio' && typeof extracted?.transcript === 'string'
+      ? extracted.transcript
+      : null;
+
   return (
     <div className="flex flex-col gap-1.5">
       <MediaBlock attachment={attachment} compact={compact} />
@@ -37,11 +49,40 @@ export function AttachmentCard({ attachment, compact = false }: AttachmentCardPr
           <span className="line-clamp-3">{attachment.ai_summary}</span>
         </div>
       )}
+      {transcript && transcript.trim() && (
+        <TranscriptToggle transcript={transcript} />
+      )}
       {!attachment.ai_summary && attachment.url && (
         <span className="inline-flex items-center gap-1 text-[10px] italic text-muted-foreground">
           <Loader2 className="h-2.5 w-2.5 animate-spin" />
           IA está analisando…
         </span>
+      )}
+    </div>
+  );
+}
+
+function TranscriptToggle({ transcript }: { transcript: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-md border border-border/60 bg-muted/30">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center gap-1.5 px-2 py-1 text-left text-[10px] text-muted-foreground hover:text-foreground"
+      >
+        {open ? (
+          <ChevronDown className="h-3 w-3 shrink-0" />
+        ) : (
+          <ChevronRight className="h-3 w-3 shrink-0" />
+        )}
+        <Quote className="h-3 w-3 shrink-0" />
+        <span className="font-medium uppercase tracking-wider">Transcrição</span>
+      </button>
+      {open && (
+        <div className="border-t border-border/60 px-2 py-1.5 text-[11px] leading-relaxed text-foreground/80">
+          {transcript}
+        </div>
       )}
     </div>
   );
