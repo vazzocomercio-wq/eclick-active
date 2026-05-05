@@ -259,7 +259,53 @@ export function getFormTemplates(): FormTemplate[] {
       branding: DEFAULT_BRANDING,
     },
 
-    // 6. Contato B2B
+    // 6. SAC / Suporte
+    {
+      category: 'sac',
+      name: 'SAC / Suporte',
+      description: 'Abertura de chamado de pós-venda com tipo de problema e descrição',
+      fields: [
+        field({ type: 'heading', label: 'Abrir chamado de atendimento', position: 0, width: 'full', required: false, content: 'Conta pra gente o que aconteceu — vamos resolver o mais rápido possível.' }),
+        field({ type: 'text', label: 'Nome completo', mapping: 'name', required: true, position: 1, width: 'full' }),
+        field({ type: 'email', label: 'Email', mapping: 'email', required: false, position: 2, width: 'half' }),
+        field({ type: 'phone', label: 'WhatsApp', mapping: 'phone', required: true, position: 3, width: 'half' }),
+        field({ type: 'text', label: 'Número do pedido', placeholder: 'Ex: ML-123456789 (opcional)', required: false, position: 4, width: 'full' }),
+        field({
+          type: 'select',
+          label: 'Tipo de problema',
+          required: true,
+          position: 5,
+          width: 'full',
+          options: [
+            { value: 'delivery_delay', label: 'Atraso na entrega' },
+            { value: 'defective_product', label: 'Produto com defeito' },
+            { value: 'wrong_product', label: 'Produto errado' },
+            { value: 'missing_parts', label: 'Falta de peças/itens' },
+            { value: 'exchange', label: 'Solicitar troca' },
+            { value: 'return', label: 'Solicitar devolução' },
+            { value: 'refund', label: 'Solicitar reembolso' },
+            { value: 'cancellation', label: 'Cancelar pedido' },
+            { value: 'warranty', label: 'Acionar garantia' },
+            { value: 'invoice', label: 'Nota fiscal' },
+            { value: 'order_status', label: 'Consultar status do pedido' },
+            { value: 'technical', label: 'Suporte técnico' },
+            { value: 'general', label: 'Outro' },
+          ],
+        }),
+        field({ type: 'textarea', label: 'Descreva o que aconteceu', placeholder: 'Conte detalhes sobre o problema…', mapping: 'notes', required: true, position: 6, width: 'full' }),
+        field({ type: 'file_upload', label: 'Anexo (foto, NF, comprovante)', required: false, position: 7, width: 'full' }),
+      ],
+      settings: {
+        ...DEFAULT_SETTINGS,
+        deal_title_template: 'SAC — {name}',
+        auto_tags: ['sac', 'pos_venda'],
+        success_message:
+          'Recebemos seu chamado! Em instantes um atendente vai entrar em contato pelo WhatsApp.',
+      },
+      branding: DEFAULT_BRANDING,
+    },
+
+    // 7. Contato B2B
     {
       category: 'b2b',
       name: 'Contato B2B',

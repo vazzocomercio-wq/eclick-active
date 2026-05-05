@@ -292,6 +292,84 @@ export const COPILOT_TOOLS: Anthropic.Tool[] = [
       required: ['title'],
     },
   },
+  // ── SAC tools ──
+  {
+    name: 'list_sac_tickets',
+    description:
+      'Lista tickets do SAC (atendimento pós-venda). Use quando o usuário perguntar sobre tickets, atendimentos, reclamações, atrasos, problemas de entrega ou pedidos com defeito. Filtros: prioridade (low/normal/high/critical/reputation_risk), status (new/in_progress/waiting_customer/waiting_internal/resolved/reopened/cancelled), categoria, SLA vencido. Por padrão lista tickets abertos ordenados por prioridade.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        priority: {
+          type: 'string',
+          enum: ['low', 'normal', 'high', 'critical', 'reputation_risk'],
+          description: 'Filtra por prioridade. Use "critical" pra urgentes ou "reputation_risk" pra risco de reputação.',
+        },
+        status: {
+          type: 'string',
+          enum: ['new', 'in_progress', 'waiting_customer', 'waiting_internal', 'resolved', 'reopened'],
+          description: 'Filtra por status. Omita pra ver os abertos.',
+        },
+        category: {
+          type: 'string',
+          enum: [
+            'pre_sale', 'post_sale', 'order_status', 'delivery_delay',
+            'exchange', 'return', 'warranty', 'cancellation', 'refund',
+            'defective_product', 'wrong_product', 'missing_parts',
+            'invoice', 'payment', 'technical', 'complaint', 'mediation',
+            'negative_review', 'general',
+          ],
+        },
+        sla_breached: {
+          type: 'boolean',
+          description: 'Se true, só tickets com SLA vencido.',
+        },
+        limit: { type: 'number', description: 'Default 10, máx 25.' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'get_sac_dashboard',
+    description:
+      'Retorna o snapshot atual do SAC: contagem de tickets por status, críticos abertos, SLA vencendo em <1h, SLA já vencidos, risco reputacional, resolvidos hoje. Use quando o usuário pedir "resumo do SAC", "como tá o atendimento", "tickets críticos" sem mais contexto.',
+    input_schema: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'get_sac_performance',
+    description:
+      'Roda diagnóstico IA do SAC com base nas métricas do período: identifica problemas principais, produtos com mais reclamações, canais problemáticos e gera recomendações. Use quando o usuário pedir análise de performance, diagnóstico do SAC, "como melhorar atendimento", "produtos problemáticos".',
+    input_schema: {
+      type: 'object',
+      properties: {
+        period: {
+          type: 'string',
+          enum: ['today', 'week', 'month'],
+          description: 'Janela temporal — default "week".',
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'check_order_status',
+    description:
+      'Consulta o status de um pedido do SaaS via bridge. Aceita número do pedido (marketplace_order_id), código de rastreio ou UUID. Retorna marketplace, status logístico, rastreio, valor, prazo de entrega. Use quando o usuário perguntar status de pedido específico ou consultar pra um cliente.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Número do pedido, rastreio ou UUID.',
+        },
+      },
+      required: ['query'],
+    },
+  },
 ];
 
 export type CopilotToolName =
@@ -307,4 +385,8 @@ export type CopilotToolName =
   | 'search_live_sources'
   | 'check_available_slots'
   | 'schedule_appointment'
+  | 'list_sac_tickets'
+  | 'get_sac_dashboard'
+  | 'get_sac_performance'
+  | 'check_order_status'
   | 'send_scheduling_link';

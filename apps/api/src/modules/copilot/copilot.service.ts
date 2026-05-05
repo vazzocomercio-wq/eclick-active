@@ -15,6 +15,9 @@ import { AppointmentsService } from '../appointments/appointments.service';
 import { AppointmentTypesService } from '../appointments/appointment-types.service';
 import { CalendarIntegrationsService } from '../calendar-integrations/calendar-integrations.service';
 import { CalendlyService } from '../calendar-integrations/calendly.service';
+import { SacTicketsService } from '../sac/sac-tickets.service';
+import { SacAiService } from '../sac/sac-ai.service';
+import { BridgeService } from '../bridge/bridge.service';
 import {
   COPILOT_SYSTEM_PROMPT,
   MAX_HISTORY_MESSAGES,
@@ -81,6 +84,9 @@ export class CopilotService {
     private readonly appointmentTypes: AppointmentTypesService,
     private readonly calendarIntegrations: CalendarIntegrationsService,
     private readonly calendly: CalendlyService,
+    private readonly sacTickets: SacTicketsService,
+    private readonly sacAi: SacAiService,
+    private readonly bridge: BridgeService,
   ) {}
 
   // ────────────────────────────────────────────
@@ -379,6 +385,14 @@ export class CopilotService {
         return this.toolCheckAvailableSlots(input, ctx);
       case 'schedule_appointment':
         return this.toolScheduleAppointment(input, ctx);
+      case 'list_sac_tickets':
+        return this.toolListSacTickets(input, ctx);
+      case 'get_sac_dashboard':
+        return this.toolGetSacDashboard(input, ctx);
+      case 'get_sac_performance':
+        return this.toolGetSacPerformance(input, ctx);
+      case 'check_order_status':
+        return this.toolCheckOrderStatus(input, ctx);
       case 'send_scheduling_link':
         return this.toolSendSchedulingLink(input, ctx);
       default:
@@ -1276,6 +1290,132 @@ export class CopilotService {
       .single();
     if (error) throw new Error(error.message);
     return (data as { id: string } | null)?.id ?? null;
+  }
+
+  // ────────────────────────────────────────────
+  // SAC tools
+  // ────────────────────────────────────────────
+
+  private async toolListSacTickets(
+    input: Record<string, unknown>,
+    ctx: ToolContext,
+  ): Promise<{ result: unknown; record: ToolCallRecord }> {
+    const limit = clampLimit(Number(input.limit ?? 0), 10, 25);
+    const filters: Parameters<typeof this.sacTickets.findAll>[1] = {
+      page_size: limit,
+    };
+    if (typeof input.priority === 'string') {
+      filters.priority = input.priority as never;
+    }
+    if (typeof input.status === 'string') {
+      filters.status = input.status as never;
+    } else {
+      // Default: tickets abertos
+      filters.status = ['new', 'in_progress', 'reopened', 'waiting_customer', 'waiting_internal'] as never;
+    }
+    if (typeof input.category === 'string') {
+      filters.category = input.category as never;
+    }
+    if (typeof input.sla_breached === 'boolean') {
+      filters.sla_breached = input.sla_breached;
+    }
+
+    const { rows, total } = await this.sacTickets.findAll(ctx.orgId, filters);
+    const summary =
+      rows.length === 0
+        ? 'Nenhum ticket encontrado'
+        : `${rows.length} ticket(s) (de ${total} total)`;
+    return {
+      result: {
+        total,
+        tickets: rows.map((t) => ({
+          id: t.id,
+          number: t.ticket_number,
+          status: t.status,
+          priority: t.priority,
+          category: t.category,
+          summary: t.ai_summary,
+          sla_deadline: t.sla_deadline_at,
+          sla_breached: t.sla_breached,
+          reputation_risk: t.reputation_risk_level,
+          source: t.source_channel,
+          order_id: t.order_marketplace_id,
+          created_at: t.created_at,
+        })),
+      },
+      record: { tool: 'list_sac_tickets', summary },
+    };
+  }
+
+  private async toolGetSacDashboard(
+    _input: Record<string, unknown>,
+    ctx: ToolContext,
+  ): Promise<{ result: unknown; record: ToolCallRecord }> {
+    const counts = await this.sacTickets.getDashboardCounts(ctx.orgId);
+    return {
+      result: counts,
+      record: {
+        tool: 'get_sac_dashboard',
+        summary: `${counts.total_open} aberto(s), ${counts.critical} crítico(s), ${counts.sla_breached} SLA vencido(s)`,
+      },
+    };
+  }
+
+  private async toolGetSacPerformance(
+    input: Record<string, unknown>,
+    ctx: ToolContext,
+  ): Promise<{ result: unknown; record: ToolCallRecord }> {
+    const period =
+      input.period === 'today' || input.period === 'month' ? input.period : 'week';
+    const analysis = await this.sacAi.analyzePerformance(ctx.orgId, period as 'today' | 'week' | 'month');
+    return {
+      result: analysis,
+      record: {
+        tool: 'get_sac_performance',
+        summary: `Diagnóstico SAC (${period}) gerado`,
+      },
+    };
+  }
+
+  private async toolCheckOrderStatus(
+    input: Record<string, unknown>,
+    ctx: ToolContext,
+  ): Promise<{ result: unknown; record: ToolCallRecord }> {
+    const query = typeof input.query === 'string' ? input.query.trim() : '';
+    if (!query) {
+      return {
+        result: { error: 'query é obrigatório' },
+        record: { tool: 'check_order_status', summary: 'Query vazia' },
+      };
+    }
+    const order = await this.bridge.getOrderByQuery(ctx.orgId, query);
+    if (!order) {
+      return {
+        result: { found: false, query },
+        record: {
+          tool: 'check_order_status',
+          summary: `Pedido "${query}" não encontrado no SaaS`,
+        },
+      };
+    }
+    return {
+      result: {
+        found: true,
+        marketplace: order.marketplace,
+        marketplace_order_id: order.marketplace_order_id,
+        status: order.status,
+        shipping_status: order.shipping_status,
+        shipping_tracking: order.shipping_tracking_number,
+        shipping_estimated_delivery: order.shipping_estimated_delivery,
+        total_amount: order.total_amount,
+        buyer_phone: order.buyer_phone,
+        buyer_email: order.buyer_email,
+      },
+      record: {
+        tool: 'check_order_status',
+        summary: `${order.marketplace ?? 'Pedido'} #${order.marketplace_order_id ?? '?'}: ${order.shipping_status ?? '?'}`,
+      },
+    };
   }
 }
 

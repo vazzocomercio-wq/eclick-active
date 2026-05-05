@@ -16,6 +16,7 @@ import { AttentionList } from '@/components/central-de-acao/attention-list';
 import { HotLeadsCard } from '@/components/central-de-acao/hot-leads-card';
 import { MetricCard } from '@/components/central-de-acao/metric-card';
 import { TopDealsCard } from '@/components/central-de-acao/top-deals-card';
+import { SacAttentionCard } from '@/components/central-de-acao/sac-attention-card';
 
 export default function CentralDeAcaoPage() {
   const { data, loading, error, refetch } = useDashboard();
@@ -101,6 +102,9 @@ export default function CentralDeAcaoPage() {
             </header>
             <AttentionList items={data?.attention ?? []} loading={loading && !data} />
           </section>
+
+          {/* BLOCO SAC — Atenção imediata (entre atenção geral e hot leads) */}
+          <SacAttentionCard />
 
           {/* BLOCOS 3 & 4 — Hot leads + Top deals */}
           <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">

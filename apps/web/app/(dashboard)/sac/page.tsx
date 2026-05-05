@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Headphones, Sparkles, RefreshCw, AlertTriangle, Clock, CheckCircle2, ShieldAlert } from 'lucide-react';
+import Link from 'next/link';
+import { Headphones, Sparkles, RefreshCw, AlertTriangle, Clock, CheckCircle2, ShieldAlert, BarChart3 } from 'lucide-react';
 import { useSacDashboard, useSacTickets } from '@/hooks/use-sac';
 import { sacApi } from '@/lib/api/sac';
 import { SacTicketsTable } from '@/components/sac/sac-tickets-table';
@@ -53,6 +54,18 @@ export default function SacDashboardPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/sac/riscos">
+              <ShieldAlert className="h-3.5 w-3.5" />
+              <span className="hidden md:inline ml-1">Riscos</span>
+            </Link>
+          </Button>
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/sac/relatorios">
+              <BarChart3 className="h-3.5 w-3.5" />
+              <span className="hidden md:inline ml-1">Relatórios</span>
+            </Link>
+          </Button>
           <Button
             variant="outline"
             size="sm"

@@ -9,8 +9,10 @@ import {
   ClipboardList,
   Compass,
   FileText,
+  Headphones,
   Lightbulb,
   MessageSquare,
+  Package,
   Sparkles,
   Target,
   TrendingDown,
@@ -271,6 +273,13 @@ const QUICK_SUGGESTIONS: Record<CopilotContextType, string[]> = {
     'Leads quentes sem atendimento',
     'Próximas tarefas críticas',
     'Onde estou perdendo deals?',
+    // ── SAC ──
+    'Quais tickets críticos eu tenho agora?',
+    'Resumo do SAC hoje',
+    'Performance do SAC esta semana',
+    'Tickets com SLA vencido',
+    'Pedidos atrasados sem ticket',
+    'Quais produtos têm mais reclamações?',
   ],
   deal: [
     'Próxima ação?',
@@ -327,6 +336,8 @@ const SUGGESTION_ICON_HINTS: Array<{
   { match: /resposta|conversa|mensag/i, icon: MessageSquare, accent: '#00E5FF' },
   { match: /aprovado|completo|✓/i, icon: CheckCircle2, accent: '#34d399' },
   { match: /comparar|relatório|gráfic/i, icon: BarChart3, accent: '#67e8f9' },
+  { match: /ticket|sac|reclama|atendimento|sla/i, icon: Headphones, accent: '#06b6d4' },
+  { match: /pedido|atras|entrega|rastreio|reembolso|troca|devolu/i, icon: Package, accent: '#f59e0b' },
 ];
 
 function pickIcon(text: string): { icon: LucideIcon; accent: string } {
