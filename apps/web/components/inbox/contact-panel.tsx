@@ -23,6 +23,7 @@ import { channelLabel } from '@/components/ui/channel-icon';
 import { ScoreBar } from '@/components/contacts/score-bar';
 import { TagPicker } from '@/components/tags/tag-picker';
 import { NewAppointmentDialog } from '@/components/agenda/new-appointment-dialog';
+import { TicketSacSection } from '@/components/sac/ticket-sac-section';
 import { contactsApi, type ContactDealItem } from '@/lib/api/contacts';
 import { ApiError } from '@/lib/api/client';
 import { formatPhone } from '@/lib/format';
@@ -180,6 +181,9 @@ export function ContactPanel({ conversation, loading, onOpenFullProfile }: Conta
             <ContactTagsEditor contact={contact} />
           </CardContent>
         </Card>
+
+        {/* Ticket SAC vinculado (se existir — aparece automaticamente) */}
+        {conversation?.id && <TicketSacSection conversationId={conversation.id} />}
 
         {/* Funil & Etapa atual — deals abertos do contato */}
         <FunnelStageSection contactId={contact.id} />

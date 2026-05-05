@@ -13,6 +13,7 @@ import {
   CheckSquare,
   ChevronLeft,
   FileText,
+  Headphones,
   Kanban,
   Layout,
   LayoutDashboard,
@@ -27,6 +28,7 @@ import {
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { useUnreadCount } from '@/hooks/use-unread-count';
+import { useSacCriticalCount } from '@/hooks/use-sac';
 
 interface NavItem {
   href: string;
@@ -43,6 +45,8 @@ const PRIMARY_NAV: NavItem[] = [
   { href: '/funis', icon: Kanban, label: 'Funis' },
   { href: '/contatos', icon: Users, label: 'Contatos' },
   { href: '/tarefas', icon: CheckSquare, label: 'Tarefas' },
+  // O badge de SAC é injetado dinamicamente via useSacCriticalCount no render
+  { href: '/sac', icon: Headphones, label: 'SAC', tag: 'AI' },
   { href: '/calendario', icon: Calendar, label: 'Calendário' },
   { href: '/agenda', icon: CalendarClock, label: 'Agenda', tag: 'AI' },
   { href: '/copiloto', icon: Bot, label: 'Copiloto IA', tag: 'AI' },
@@ -72,6 +76,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps = {}
   const [collapsed, setCollapsed] = useState(false);
   const [mounted, setMounted] = useState(false);
   const unreadCount = useUnreadCount();
+  const sacCriticalCount = useSacCriticalCount();
 
   useEffect(() => {
     try {
@@ -224,11 +229,13 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps = {}
         <nav className="flex-1 overflow-y-auto py-2 scrollbar-auto-hide">
           <ul className="flex flex-col gap-0.5 px-2">
             {PRIMARY_NAV.map((item) => {
-              // Injeta badge dinâmico em /conversas com count de não-lidas
-              const itemWithBadge: NavItem =
-                item.href === '/conversas' && unreadCount > 0
-                  ? { ...item, badge: unreadCount }
-                  : item;
+              // Injeta badges dinâmicos: /conversas (não-lidas) e /sac (críticos)
+              let itemWithBadge: NavItem = item;
+              if (item.href === '/conversas' && unreadCount > 0) {
+                itemWithBadge = { ...item, badge: unreadCount };
+              } else if (item.href === '/sac' && sacCriticalCount > 0) {
+                itemWithBadge = { ...item, badge: sacCriticalCount };
+              }
               return (
                 <NavLink
                   key={item.href}
