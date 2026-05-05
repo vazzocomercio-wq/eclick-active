@@ -27,6 +27,7 @@ import { KnowledgeModule } from './modules/knowledge/knowledge.module';
 import { MessagesModule } from './modules/messages/messages.module';
 import { PagesModule } from './modules/pages/pages.module';
 import { PipelinesModule } from './modules/pipelines/pipelines.module';
+import { ReEngagementModule } from './modules/re-engagement/re-engagement.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { TagsModule } from './modules/tags/tags.module';
@@ -68,6 +69,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     TeamModule,
     ReportsModule,
     AutomationsModule,
+    ReEngagementModule,
     PagesModule,
     WebhooksModule,
     InternalModule,

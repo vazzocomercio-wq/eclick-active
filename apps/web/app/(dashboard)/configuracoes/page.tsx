@@ -27,6 +27,7 @@ import { WebhooksSection } from '@/components/configuracoes/webhooks-section';
 import { CalendarIntegrationsSection } from '@/components/configuracoes/calendar-integrations-section';
 import { AppointmentTypesSection } from '@/components/configuracoes/appointment-types-section';
 import { ConciergeSection } from '@/components/configuracoes/concierge-section';
+import { ReEngagementSection } from '@/components/configuracoes/re-engagement-section';
 import { TagsSection } from '@/components/configuracoes/tags-section';
 import { cn } from '@/lib/utils';
 
@@ -216,7 +217,10 @@ export default function ConfiguracoesPage() {
             {section === 'agente-ia' && <AgenteIaLink />}
 
             {section === 'concierge' && (
-              <ConciergeSection org={org} onSaved={reloadOrg} />
+              <div className="flex flex-col gap-4">
+                <ConciergeSection org={org} onSaved={reloadOrg} />
+                <ReEngagementSection />
+              </div>
             )}
 
             {section === 'custom-fields' && <CustomFieldsAdminSection />}
