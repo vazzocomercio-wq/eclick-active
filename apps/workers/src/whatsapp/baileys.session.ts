@@ -871,22 +871,63 @@ export class BaileysSession {
   ): Promise<void> {
     if (parsed.kind === 'text') return;
 
-    // Baixa o blob da mídia. logger é o mesmo do socket (silenciado por default).
-    const buffer = await downloadMediaMessage(
-      msg,
-      'buffer',
-      {},
-      {
-        logger: this.logger as never,
-        // @ts-expect-error reuploadRequest é interno mas necessário pra mídia perdida
-        reuploadRequest: this.sock?.updateMediaMessage,
-      },
-    );
-    if (!buffer || !(buffer instanceof Buffer) || buffer.length === 0) {
+    // Download com retry — `downloadMediaMessage` falha silenciosamente
+    // (retorna buffer vazio ou throws) quando o WhatsApp não conseguiu
+    // re-encriptar mídia rapidamente. Tipicamente acontece quando:
+    //   - Signal session com remetente recém-restabelecida (cold)
+    //   - Sessão de upload no peer ainda não pronta
+    //   - Concurrent retry de outras msgs do mesmo peer
+    // Sintoma na UI: "Documento indisponível" / "Imagem indisponível".
+    let buffer: Buffer | null = null;
+    let lastErr: unknown = null;
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        const result = await downloadMediaMessage(
+          msg,
+          'buffer',
+          {},
+          {
+            logger: this.logger as never,
+            // @ts-expect-error reuploadRequest é interno mas necessário pra mídia perdida
+            reuploadRequest: this.sock?.updateMediaMessage,
+          },
+        );
+        if (result instanceof Buffer && result.length > 0) {
+          buffer = result;
+          break;
+        }
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[baileys ${this.ctx.channelId}] downloadMediaMessage tentativa ${attempt}/${maxAttempts} retornou vazio (msg=${messageId} kind=${parsed.kind})`,
+        );
+      } catch (err) {
+        lastErr = err;
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[baileys ${this.ctx.channelId}] downloadMediaMessage tentativa ${attempt}/${maxAttempts} threw (msg=${messageId}):`,
+          err instanceof Error ? err.message : err,
+        );
+      }
+      if (attempt < maxAttempts) {
+        // Backoff exponencial: 1s, 3s
+        const delay = attempt === 1 ? 1000 : 3000;
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+
+    if (!buffer) {
       // eslint-disable-next-line no-console
-      console.warn(
-        `[baileys ${this.ctx.channelId}] downloadMediaMessage retornou vazio (msg=${messageId})`,
+      console.error(
+        `[baileys ${this.ctx.channelId}] downloadMediaMessage FALHOU após ${maxAttempts} tentativas (msg=${messageId} kind=${parsed.kind}) lastErr=${lastErr instanceof Error ? lastErr.message : String(lastErr)}`,
       );
+      // Marca a msg como mídia-falhou pra UI mostrar erro específico em
+      // vez de placeholder genérico "indisponível"
+      await this.markMessageMediaFailed(
+        messageId,
+        parsed.kind,
+        lastErr instanceof Error ? lastErr.message : 'download retornou vazio',
+      ).catch(() => {});
       return;
     }
 
@@ -960,6 +1001,40 @@ export class BaileysSession {
         `[baileys ${this.ctx.channelId}] attachment salvo: ${parsed.kind} ${(buffer.length / 1024).toFixed(1)}KB → ${storagePath}`,
       );
     }
+  }
+
+  /**
+   * Marca a row em `messages` com flag `metadata.media_download_failed=true`
+   * + `metadata.media_error` quando persistAttachment desistiu após retries.
+   * UI lê esse flag pra mostrar mensagem específica ("Falha ao baixar
+   * mídia — peça pro contato reenviar") em vez de placeholder genérico.
+   */
+  private async markMessageMediaFailed(
+    messageId: string,
+    kind: string,
+    error: string,
+  ): Promise<void> {
+    const supabase = getSupabase();
+    // Lê metadata atual pra preservar outros campos
+    const { data: row } = await supabase
+      .from('messages')
+      .select('metadata')
+      .eq('org_id', this.ctx.orgId)
+      .eq('id', messageId)
+      .maybeSingle();
+    const current = (row?.metadata as Record<string, unknown> | null) ?? {};
+    await supabase
+      .from('messages')
+      .update({
+        metadata: {
+          ...current,
+          media_download_failed: true,
+          media_kind: kind,
+          media_error: error.slice(0, 300),
+        },
+      })
+      .eq('org_id', this.ctx.orgId)
+      .eq('id', messageId);
   }
 
   // ──────────────────────────────────────────────────────────
