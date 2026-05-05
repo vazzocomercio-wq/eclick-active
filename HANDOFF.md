@@ -1,27 +1,40 @@
 # HANDOFF — eclick-active
 
 > Documento vivo de continuidade entre sessões. **Lê isso primeiro ao começar nova sessão.**
-> Última atualização: **2026-05-05** (Bloco C do Active Intelligence — Meta Connector + sync campaigns/insights)
+> Última atualização: **2026-05-05** (Bloco E do Active Intelligence — metric catalog + configs)
 
 ---
 
 ## 🎯 Próximo trabalho planejado
 
-**Active Intelligence (Ads & Social Analytics + Hub)** — Blocos A+B+C entregues, próximo é Bloco D ou E.
+**Active Intelligence (Ads & Social Analytics + Hub)** — A+B+C+E entregues, próximo é F ou G.
 
 📄 **Doc canônico**: [`docs/analytics-design.md`](./docs/analytics-design.md)
 
 Estado:
 - ✅ **Bloco A** (LlmProvider abstraction) — A.1 + A.2
 - ✅ **Bloco B** (Ad Integrations + OAuth Meta) — OAuth flow Meta funcional
-- ✅ **Bloco C** (Meta Connector + Sync) — campaigns + insights diários, cron horário, backfill 90d on-connect
+- ✅ **Bloco C** (Meta Connector + Sync) — campaigns + insights diários, cron 1h, backfill 90d
+- ⏸️ **Bloco D** (Google Ads) — bloqueado pelo `GOOGLE_ADS_DEVELOPER_TOKEN` (3-7d approval)
+- ✅ **Bloco E** (Metric Catalog + Configs) — 40 métricas core seeded, configs por org com defaults virtuais
 - ⏭️ **Próxima ação possível**:
-  - **Bloco D** (Google Ads Connector, ~4h) — depende do `GOOGLE_ADS_DEVELOPER_TOKEN` (3-7d approval)
-  - **Bloco E** (Metric Catalog + Configs, ~3h) — não tem dependência externa, pode rodar antes de D
-- ⚠️ **Solicitar `GOOGLE_ADS_DEVELOPER_TOKEN` agora** via https://ads.google.com/aw/apicenter pra desbloquar Bloco D
-- ⚠️ **Configurar app Meta** em developers.facebook.com (Business type) — sem isso o flow Meta OAuth não roda em prod
+  - **Bloco F** (Lead Ads Webhook, ~2h) — webhook do Meta que cria contato + dispara Concierge. Precisa app Meta configurado pra registrar o webhook URL
+  - **Bloco G** (Signal Detector, ~4h) — agora viável já que catálogo+configs+métricas existem. Implementa camadas 1+2+3 (regras + anomalia + composto)
+- ⚠️ **Solicitar `GOOGLE_ADS_DEVELOPER_TOKEN` agora** via https://ads.google.com/aw/apicenter
+- ⚠️ **Configurar app Meta** em developers.facebook.com (Business type)
 - Decisões 1-7 fechadas (ver doc)
 - ⚠️ **NÃO** confundir com Intelligence Hub do `eclick-backend` (SaaS) — em prod lá, projeto distinto
+
+### Bloco E entregue — sumário
+
+- Migration `044_ad_metric_catalog.sql` — catálogo curado read-only com seed de **~40 métricas** (Meta + Google + shared) cobrindo spend, reach, engagement, conversion, video, quality
+- Migration `045_ad_metric_configs.sql` — configs por org+métrica (threshold mode manual/auto, target_value, warning/critical pcts, baseline window, aggregation window, routing_manager_ids)
+- `metric-catalog.service.ts` — read-only com cache em memória, métodos `list(platform)`, `get(key)`, `listCore(platform)`
+- `metric-config.service.ts` — `list()` mescla rows persistidas com defaults virtuais (core=enabled, non-core=disabled, warning 15%/critical 30%); `upsert()` valida bounds e merge com baseline
+- Endpoints (auth required):
+  - `GET /ad-metrics/catalog?platform=meta|google|shared|all`
+  - `GET /ad-metrics/configs?platform=...`
+  - `PATCH /ad-metrics/configs/:metricKey` (owner/admin)
 
 ### Bloco C entregue — sumário
 
@@ -74,9 +87,9 @@ Estado:
 
 ## Estado atual
 
-**Última migration aplicada via API**: `043_ad_metrics_daily.sql`
+**Última migration aplicada via API**: `045_ad_metric_configs.sql`
 **Migration aplicada via Studio**: `038_message_media_storage_policy.sql` (2026-05-05)
-**Próxima migration livre**: `044_*.sql`
+**Próxima migration livre**: `046_*.sql`
 
 **Helper pra aplicar migrations rapidão (Claude usa esse)**:
 ```bash
