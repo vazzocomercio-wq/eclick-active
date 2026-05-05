@@ -1,13 +1,13 @@
 # HANDOFF — eclick-active
 
 > Documento vivo de continuidade entre sessões. **Lê isso primeiro ao começar nova sessão.**
-> Última atualização: **2026-05-05** (Bloco G do Active Intelligence — signal detector 3 camadas)
+> Última atualização: **2026-05-05** (Bloco H do Active Intelligence — alert engine + cold outbound fix)
 
 ---
 
 ## 🎯 Próximo trabalho planejado
 
-**Active Intelligence (Ads & Social Analytics + Hub)** — A+B+C+E+G entregues, próximo é H.
+**Active Intelligence (Ads & Social Analytics + Hub)** — A+B+C+E+G+H entregues. Sprint principal **completo**.
 
 📄 **Doc canônico**: [`docs/analytics-design.md`](./docs/analytics-design.md)
 
@@ -17,14 +17,43 @@ Estado:
 - ✅ **Bloco C** (Meta Connector + Sync) — campaigns + insights diários, cron 1h, backfill 90d
 - ⏸️ **Bloco D** (Google Ads) — bloqueado pelo `GOOGLE_ADS_DEVELOPER_TOKEN` (3-7d approval)
 - ✅ **Bloco E** (Metric Catalog + Configs) — 40 métricas core seeded
+- ⏭️ **Bloco F** (Lead Ads Webhook) — bloqueado pelo app Meta (precisa configurar webhook URL)
 - ✅ **Bloco G** (Signal Detector) — 3 camadas + worker 15min + dedupe diário
-- ⏭️ **Próxima ação possível**:
-  - **Bloco H** (Alert Managers + Engine + Camada 4 LLM, ~5h) — consome ad_signals pending e dispatcha via WhatsApp. **Maior valor** — fecha o ciclo "detectar → notificar gestor". Sem dependência externa
-  - **Bloco F** (Lead Ads Webhook, ~2h) — webhook do Meta que cria contato + Concierge. Precisa app Meta configurado
+- ✅ **Bloco H** (Alert Managers + Engine + Camada 4 LLM) — fecha o ciclo. Worker 5min immediate + slot horário
+- ✅ **Cold outbound fix** (paralelo, mesmo dia) — `resolveJid` via `onWhatsApp` no worker Baileys. Desbloqueou `/conversa/nova` pra números que nunca conversaram E o verify-phone do Bloco H
 - ⚠️ **Solicitar `GOOGLE_ADS_DEVELOPER_TOKEN` agora** via https://ads.google.com/aw/apicenter
 - ⚠️ **Configurar app Meta** em developers.facebook.com (Business type)
 - Decisões 1-7 fechadas (ver doc)
 - ⚠️ **NÃO** confundir com Intelligence Hub do `eclick-backend` (SaaS) — em prod lá, projeto distinto
+
+### Bloco H entregue — sumário
+
+- Migrations 048 (`alert_managers`), 049 (`alert_routing_rules`), 050 (`alert_deliveries`)
+- `alerts/alert-managers.service.ts` — CRUD + verificação de phone via WhatsApp:
+  - Código 6 dígitos + expires 10min, throttle 1min entre reenvios
+  - **Usa cold outbound fix** — manda código pelo `ChannelDispatcher.send` mesmo pra phone que nunca conversou
+  - `phone_masked` na resposta da API (oculta dígitos por padrão)
+- `alerts/alert-routing.service.ts` — CRUD rules + `resolveRecipients()`:
+  - Match por `signal_type` (exato ou `*`) + `min_severity`
+  - Dedupe por manager (rule de menor `priority` vence)
+- `alerts/message-formatter.ts` — Camada 4:
+  - `formatImmediate()` (1 signal) e `formatDigest()` (N signals consolidados)
+  - Cache de 60s pra `org_llm_credentials` lookup
+  - Fallback determinístico (`narrator='template'`) preserva entrega quando LLM não configurado
+- `alerts/alert-engine.service.ts` — pipeline 3 etapas:
+  - `processSignals(orgId)` — pega `ad_signals` pending → routing → cria deliveries (immediate ou deferred)
+  - `dispatchPending(orgId)` — pega deliveries com `message_text` pronto → dispatch via `ChannelDispatcher`. Retry com backoff (max 3)
+  - `processDigestSlot(orgId, slot)` — agrupa deferred do dia em 1 delivery consolidado por manager
+  - `business_hours_only` flag converte alerts fora de 8-20h pro digest_8h
+- `alerts/alert-engine.worker.ts` — 2 ciclos:
+  - `tickImmediate` 5min — processSignals + dispatchPending
+  - `tickSlot` 1h — checa hora local da org (via `getOrgTimezone`) → dispara slots `digest_8h/14h/18h` + `weekly` (segunda 8h)
+  - Anti-double-fire por `${orgId}:${slot}:${date}:${hour}` Set
+  - `DISABLE_ALERT_ENGINE_WORKER=true` desliga em dev
+- Endpoints:
+  - `GET/POST/PATCH/DELETE /alert-managers` + `POST /:id/verify-phone` + `POST /:id/confirm-phone`
+  - `GET/POST/PATCH/DELETE /alert-routing-rules`
+  - `GET /alert-deliveries?status=&manager_id=&limit=` + `POST /alert-deliveries/:id/ack`
 
 ### Bloco G entregue — sumário
 
@@ -107,9 +136,9 @@ Estado:
 
 ## Estado atual
 
-**Última migration aplicada via API**: `047_ad_signals.sql`
+**Última migration aplicada via API**: `050_alert_deliveries.sql`
 **Migration aplicada via Studio**: `038_message_media_storage_policy.sql` (2026-05-05)
-**Próxima migration livre**: `046_*.sql` (pulamos pra 047 pq 046 estava reservado pro Bloco F — Lead Ads webhook)
+**Próxima migration livre**: `046_*.sql` (reservada pro Bloco F — Lead Ads webhook quando o app Meta estiver configurado) ou `051_*.sql`
 
 **Helper pra aplicar migrations rapidão (Claude usa esse)**:
 ```bash

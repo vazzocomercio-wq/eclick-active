@@ -7,6 +7,7 @@ import { PlaceholderModule } from './common/placeholder/placeholder.module';
 import { LlmModule } from './common/llm/llm.module';
 import { EventsModule } from './gateways/events.module';
 import { AdsModule } from './modules/ads/ads.module';
+import { AlertsModule } from './modules/alerts/alerts.module';
 import { AiModule } from './modules/ai/ai.module';
 import { AiPersonaModule } from './modules/ai-persona/ai-persona.module';
 import { AiSkillsModule } from './modules/ai-skills/ai-skills.module';
@@ -77,6 +78,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     WebhooksModule,
     InternalModule,
     AdsModule,
+    AlertsModule,
   ],
   controllers: [AppController],
 })
