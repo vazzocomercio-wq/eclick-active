@@ -234,7 +234,7 @@ export class AiConciergeService {
       const conv = await this.loadConversation(orgId, conversationId);
       if (!conv) return;
 
-      const state: ConciergeState =
+      let state: ConciergeState =
         (conv.metadata as { concierge_state?: ConciergeState })?.concierge_state ?? 'idle';
 
       if (state === 'routed') {
@@ -252,6 +252,27 @@ export class AiConciergeService {
           `concierge: org ${orgId} sem persona default — nada a fazer`,
         );
         return;
+      }
+
+      // Anti-greeting-duplicado: se contato JÁ foi roteado em outra conv
+      // nas últimas 24h (ex: ontem ele falou conosco e foi pro funil
+      // "Consulta", agora voltou hoje), pula greeting e vai direto pro
+      // qualify/route com a msg atual. Evita "Olá! Sou a Lia..." 2x na
+      // mesma semana.
+      if (state === 'idle' && conv.contact_id && conv.channel_id) {
+        const hasRecent = await this.hasRecentRoutedConversation(
+          orgId,
+          conv.contact_id,
+          conv.channel_id,
+          conversationId,
+        );
+        if (hasRecent) {
+          this.logger.log(
+            `concierge: contato ${conv.contact_id} foi roteado nas últimas 24h — pula greeting e vai pro route`,
+          );
+          await this.setConciergeState(orgId, conversationId, 'awaiting_response');
+          state = 'awaiting_response';
+        }
       }
 
       if (state === 'idle') {
@@ -1888,6 +1909,45 @@ Decida o roteamento.`;
   ): Promise<void> {
     return this.updateConciergeMetadata(orgId, conversationId, {
       concierge_state: state,
+    });
+  }
+
+  /**
+   * Checa se existe outra conversation desse mesmo contato (mesmo canal)
+   * que foi roteada (concierge_state='routed') nas últimas 24h. Usado pra
+   * pular greeting duplicado: se cliente conversou ontem e foi roteado pra
+   * algum funil, hoje quando ele volta a IA não cumprimenta de novo —
+   * pula direto pro qualify/route com a primeira msg.
+   *
+   * Janela 24h é defensiva: contatos que somem por dias merecem greeting
+   * fresh (provavelmente esqueceram do contexto).
+   */
+  private async hasRecentRoutedConversation(
+    orgId: string,
+    contactId: string,
+    channelId: string,
+    excludeConversationId: string,
+  ): Promise<boolean> {
+    const since = new Date(Date.now() - 24 * 3600_000).toISOString();
+    const { data } = await this.supabase.adminClient
+      .from('conversations')
+      .select('id, metadata, updated_at')
+      .eq('org_id', orgId)
+      .eq('contact_id', contactId)
+      .eq('channel_id', channelId)
+      .neq('id', excludeConversationId)
+      .gte('updated_at', since)
+      .order('updated_at', { ascending: false })
+      .limit(5);
+
+    const rows = (data ?? []) as Array<{
+      id: string;
+      metadata: Record<string, unknown> | null;
+      updated_at: string;
+    }>;
+    return rows.some((r) => {
+      const state = (r.metadata as { concierge_state?: string } | null)?.concierge_state;
+      return state === 'routed';
     });
   }
 
