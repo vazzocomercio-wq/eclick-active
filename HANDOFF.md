@@ -1,13 +1,13 @@
 # HANDOFF — eclick-active
 
 > Documento vivo de continuidade entre sessões. **Lê isso primeiro ao começar nova sessão.**
-> Última atualização: **2026-05-05** (Bloco H do Active Intelligence — alert engine + cold outbound fix)
+> Última atualização: **2026-05-05** (Active Intelligence — sprint completo + UI das 3 telas /configuracoes)
 
 ---
 
 ## 🎯 Próximo trabalho planejado
 
-**Active Intelligence (Ads & Social Analytics + Hub)** — A+B+C+E+G+H entregues. Sprint principal **completo**.
+**Active Intelligence (Ads & Social Analytics + Hub)** — **TODOS os 8 blocos entregues + UI completa**.
 
 📄 **Doc canônico**: [`docs/analytics-design.md`](./docs/analytics-design.md)
 
@@ -15,12 +15,18 @@ Estado:
 - ✅ **Bloco A** (LlmProvider abstraction) — A.1 + A.2
 - ✅ **Bloco B** (Ad Integrations + OAuth Meta) — OAuth flow Meta funcional
 - ✅ **Bloco C** (Meta Connector + Sync) — campaigns + insights diários, cron 1h, backfill 90d
-- ⏸️ **Bloco D** (Google Ads) — bloqueado pelo `GOOGLE_ADS_DEVELOPER_TOKEN` (3-7d approval)
+- ✅ **Bloco D** (Google Ads Connector) — código pronto; ATIVAÇÃO precisa de `GOOGLE_ADS_DEVELOPER_TOKEN` (3-7d approval)
 - ✅ **Bloco E** (Metric Catalog + Configs) — 40 métricas core seeded
-- ⏭️ **Bloco F** (Lead Ads Webhook) — bloqueado pelo app Meta (precisa configurar webhook URL)
-- ✅ **Bloco G** (Signal Detector) — 3 camadas + worker 15min + dedupe diário
+- ✅ **Bloco F** (Lead Ads Webhook) — código pronto; ATIVAÇÃO precisa de app Meta + `META_WEBHOOK_VERIFY_TOKEN`
+- ✅ **Bloco G** (Signal Detector) — 3 camadas + worker 15min + dedupe diário + lead_unattended (depende de F estar ativo)
 - ✅ **Bloco H** (Alert Managers + Engine + Camada 4 LLM) — fecha o ciclo. Worker 5min immediate + slot horário
-- ✅ **Cold outbound fix** (paralelo, mesmo dia) — `resolveJid` via `onWhatsApp` no worker Baileys. Desbloqueou `/conversa/nova` pra números que nunca conversaram E o verify-phone do Bloco H
+- ✅ **Cold outbound fix** — `resolveJid` via `onWhatsApp` no worker Baileys. Desbloqueou `/conversa/nova` E o verify-phone
+- ✅ **UI** — 3 telas em `/configuracoes`:
+  - **Integrações de Ads** — conectar Meta/Google + sync manual + desconectar
+  - **Métricas Monitoradas** — catálogo agrupado por categoria, toggle enabled, configurar threshold (manual/auto), warning/critical pcts, janela
+  - **Inteligência (Alertas)** — 4 tabs: Gestores (CRUD + verify-phone), Regras (signal_type→managers), Sinais (read-only + ack + detect manual), Entregas (listing com texto consolidado)
+
+Sprint principal **completo**. Tudo aguardando envs externas pra ativar produção real.
 - ⚠️ **Solicitar `GOOGLE_ADS_DEVELOPER_TOKEN` agora** via https://ads.google.com/aw/apicenter
 - ⚠️ **Configurar app Meta** em developers.facebook.com (Business type)
 - Decisões 1-7 fechadas (ver doc)

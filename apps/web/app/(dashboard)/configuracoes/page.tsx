@@ -3,12 +3,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
+  Activity,
+  Bell,
   Bot,
   BotMessageSquare,
   Building2,
   Cable,
   CalendarClock,
   ChevronRight,
+  Plug,
   Settings,
   Sliders,
   Sparkles,
@@ -29,6 +32,9 @@ import { AppointmentTypesSection } from '@/components/configuracoes/appointment-
 import { ConciergeSection } from '@/components/configuracoes/concierge-section';
 import { ReEngagementSection } from '@/components/configuracoes/re-engagement-section';
 import { TagsSection } from '@/components/configuracoes/tags-section';
+import { AdIntegrationsSection } from '@/components/configuracoes/ad-integrations-section';
+import { AdMetricsSection } from '@/components/configuracoes/ad-metrics-section';
+import { IntelligenceSection } from '@/components/configuracoes/intelligence-section';
 import { cn } from '@/lib/utils';
 
 type Section =
@@ -41,7 +47,10 @@ type Section =
   | 'custom-fields'
   | 'tags'
   | 'webhooks'
-  | 'pipelines';
+  | 'pipelines'
+  | 'ad-integrations'
+  | 'ad-metrics'
+  | 'intelligence';
 
 const SECTIONS: Array<{
   id: Section;
@@ -89,6 +98,24 @@ const SECTIONS: Array<{
     description: 'Integrações externas (Zapier, n8n)',
   },
   { id: 'pipelines', label: 'Pipelines', icon: Workflow, description: 'Etapas e funis' },
+  {
+    id: 'ad-integrations',
+    label: 'Integrações de Ads',
+    icon: Plug,
+    description: 'Meta Ads e Google Ads',
+  },
+  {
+    id: 'ad-metrics',
+    label: 'Métricas Monitoradas',
+    icon: Activity,
+    description: 'Catálogo + thresholds por org',
+  },
+  {
+    id: 'intelligence',
+    label: 'Inteligência (Alertas)',
+    icon: Bell,
+    description: 'Gestores, regras, sinais, entregas',
+  },
 ];
 
 export default function ConfiguracoesPage() {
@@ -230,6 +257,12 @@ export default function ConfiguracoesPage() {
             {section === 'webhooks' && <WebhooksSection />}
 
             {section === 'pipelines' && <PipelinesLink />}
+
+            {section === 'ad-integrations' && <AdIntegrationsSection />}
+
+            {section === 'ad-metrics' && <AdMetricsSection />}
+
+            {section === 'intelligence' && <IntelligenceSection />}
           </div>
         </div>
       </div>
