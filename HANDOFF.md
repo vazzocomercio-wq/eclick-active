@@ -1,24 +1,44 @@
 # HANDOFF — eclick-active
 
 > Documento vivo de continuidade entre sessões. **Lê isso primeiro ao começar nova sessão.**
-> Última atualização: **2026-05-05** (Bloco B do Active Intelligence — OAuth Meta Ads + ad_integrations)
+> Última atualização: **2026-05-05** (Bloco C do Active Intelligence — Meta Connector + sync campaigns/insights)
 
 ---
 
 ## 🎯 Próximo trabalho planejado
 
-**Active Intelligence (Ads & Social Analytics + Hub)** — Blocos A+B entregues, próximo é Bloco C.
+**Active Intelligence (Ads & Social Analytics + Hub)** — Blocos A+B+C entregues, próximo é Bloco D ou E.
 
 📄 **Doc canônico**: [`docs/analytics-design.md`](./docs/analytics-design.md)
 
 Estado:
 - ✅ **Bloco A** (LlmProvider abstraction) — A.1 + A.2
-- ✅ **Bloco B** (Ad Integrations + OAuth Meta) — `ad_integrations` table, OAuth flow Meta funcional
-- ⏭️ **Próxima ação**: **Bloco C** (Meta Connector + Sync de campaigns/insights, ~4h)
-- ⚠️ **Solicitar `GOOGLE_ADS_DEVELOPER_TOKEN` agora** via https://ads.google.com/aw/apicenter (3-7 dias de approval) — usado no Bloco D
-- ⚠️ **Configurar app Meta** em developers.facebook.com (Business type) com scopes `ads_read`, `ads_management`, `pages_show_list`, `pages_read_engagement`, `leads_retrieval`, `business_management`
+- ✅ **Bloco B** (Ad Integrations + OAuth Meta) — OAuth flow Meta funcional
+- ✅ **Bloco C** (Meta Connector + Sync) — campaigns + insights diários, cron horário, backfill 90d on-connect
+- ⏭️ **Próxima ação possível**:
+  - **Bloco D** (Google Ads Connector, ~4h) — depende do `GOOGLE_ADS_DEVELOPER_TOKEN` (3-7d approval)
+  - **Bloco E** (Metric Catalog + Configs, ~3h) — não tem dependência externa, pode rodar antes de D
+- ⚠️ **Solicitar `GOOGLE_ADS_DEVELOPER_TOKEN` agora** via https://ads.google.com/aw/apicenter pra desbloquar Bloco D
+- ⚠️ **Configurar app Meta** em developers.facebook.com (Business type) — sem isso o flow Meta OAuth não roda em prod
 - Decisões 1-7 fechadas (ver doc)
 - ⚠️ **NÃO** confundir com Intelligence Hub do `eclick-backend` (SaaS) — em prod lá, projeto distinto
+
+### Bloco C entregue — sumário
+
+- Migration `042_ad_campaigns.sql` (não particionada — campaigns são poucas)
+- Migration `043_ad_metrics_daily.sql` (PARTITION BY RANGE date, mensal Jan/2026 → Dec/2027 + default)
+- `apps/api/src/modules/ads/connectors/meta.connector.ts` — Graph API client v21.0:
+  - `fetchCampaigns()` com paging
+  - `fetchInsights()` com `level=campaign` + `time_increment=1` (diário)
+  - `MetaApiError` com `isAuthError` (401 / fb_code 190 / 102) → flag automático `token_expired`
+  - Conversion mapping: soma `lead`, `purchase`, `complete_registration`, `onsite_conversion.lead_grouped`, `offsite_conversion.fb_pixel_*` (configurável depois)
+- `ads-sync.service.ts` — orquestra connector → upsert DB:
+  - `syncIntegration(id, daysBack=7)` incremental
+  - `backfillIntegration(id, daysBack=90)` chamado pelo callback OAuth async
+  - Upsert por `(integration_id, external_id)` em campaigns, `(campaign_id, date)` em metrics; batches de 500
+- `ads-sync.worker.ts` — `setInterval` 1h, BOOT_DELAY 5min, `DISABLE_ADS_SYNC_WORKER=true` desliga em dev
+- `POST /ad-integrations/:id/sync` — trigger manual (síncrono, 10-30s pra 90d)
+- Backfill on-connect já fica plumbed: callback Meta upserta integração e dispara `sync.backfillIntegration()` em background pra cada ad_account
 
 ### Bloco B entregue — sumário
 
@@ -54,9 +74,9 @@ Estado:
 
 ## Estado atual
 
-**Última migration aplicada via API**: `041_ad_integrations.sql`
+**Última migration aplicada via API**: `043_ad_metrics_daily.sql`
 **Migration aplicada via Studio**: `038_message_media_storage_policy.sql` (2026-05-05)
-**Próxima migration livre**: `042_*.sql`
+**Próxima migration livre**: `044_*.sql`
 
 **Helper pra aplicar migrations rapidão (Claude usa esse)**:
 ```bash

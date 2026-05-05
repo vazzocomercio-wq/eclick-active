@@ -13,6 +13,7 @@ import { AuthGuard } from '../../../common/auth/auth.guard';
 import { CurrentUser } from '../../../common/auth/current-user.decorator';
 import type { AuthUser } from '../../../common/auth/auth.types';
 import { AdIntegrationsService } from '../ad-integrations.service';
+import { AdsSyncService } from '../ads-sync.service';
 
 /**
  * OAuth fluxo Meta (Facebook/Instagram Ads).
@@ -58,7 +59,10 @@ export class MetaOAuthController {
     'business_management',
   ].join(',');
 
-  constructor(private readonly integrations: AdIntegrationsService) {}
+  constructor(
+    private readonly integrations: AdIntegrationsService,
+    private readonly sync: AdsSyncService,
+  ) {}
 
   // ────────────────────────────────────────────
   // 1) Connect — gera URL pro dialog Meta
@@ -143,8 +147,9 @@ export class MetaOAuthController {
       }
 
       // 2.4) Persiste TODAS as ad accounts (user pode ter várias)
+      const created: Array<{ id: string; account: string }> = [];
       for (const acc of accounts) {
-        await this.integrations.upsertIntegration({
+        const integration = await this.integrations.upsertIntegration({
           orgId: stateData.org_id,
           platform: 'meta',
           adAccountId: acc.id,
@@ -159,11 +164,31 @@ export class MetaOAuthController {
             business: acc.business,
           },
         });
+        created.push({ id: integration.id, account: acc.id });
       }
 
       this.logger.log(
         `Meta OAuth ok — org=${stateData.org_id} accounts=${accounts.length}`,
       );
+
+      // 2.5) Backfill 90 dias em background. NÃO awaita — UI já redirecionou
+      //      e dados vão aparecer aos poucos. Se falhar, integração é
+      //      marcada com status=error pelo AdsSyncService.
+      for (const c of created) {
+        void this.sync
+          .backfillIntegration(c.id, 90)
+          .then((r) => {
+            this.logger.log(
+              `backfill[${c.id}] done campaigns=${r.campaigns_upserted} metrics=${r.metrics_upserted} took=${r.duration_ms}ms`,
+            );
+          })
+          .catch((err) => {
+            this.logger.warn(
+              `backfill[${c.id}] falhou (status já marcado): ${err instanceof Error ? err.message : String(err)}`,
+            );
+          });
+      }
+
       res.redirect(`${frontend}/configuracoes?ads_ok=meta&accounts=${accounts.length}`);
     } catch (err) {
       this.logger.error(
