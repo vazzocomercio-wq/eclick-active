@@ -9,6 +9,7 @@ import { MessagingRealtimeModule } from './common/messaging-realtime/messaging-r
 import { EventsModule } from './gateways/events.module';
 import { AdsModule } from './modules/ads/ads.module';
 import { AlertsModule } from './modules/alerts/alerts.module';
+import { BridgeModule } from './modules/bridge/bridge.module';
 import { AiModule } from './modules/ai/ai.module';
 import { AiPersonaModule } from './modules/ai-persona/ai-persona.module';
 import { AiSkillsModule } from './modules/ai-skills/ai-skills.module';
@@ -81,6 +82,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     InternalModule,
     AdsModule,
     AlertsModule,
+    BridgeModule,
   ],
   controllers: [AppController],
 })

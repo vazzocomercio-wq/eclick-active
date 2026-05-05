@@ -1,0 +1,239 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { SupabaseService } from '../../common/supabase/supabase.service';
+import {
+  SaasOrder,
+  SaasProduct,
+  SaasOrderStats,
+  BridgeStatus,
+} from './bridge.types';
+
+/**
+ * Bridge SaaS → Active. 100% leitura, com:
+ *   - Cache (`hasSaasIntegration` 5min, `getOrdersByContact` 1min)
+ *   - Circuit breaker silencioso: erro → marca org como "sem SaaS" 5min,
+ *     evita martelar Supabase quando bridge offline.
+ *   - Toda função do service entra por `hasSaasIntegration` — se falso,
+ *     retorna fallback vazio (`[]` / `null` / `0`) sem lançar.
+ *   - Logs `warn`, nunca `error` — bridge offline é estado esperado.
+ *
+ * Migration: `supabase/migrations/052_bridge_saas_active.sql`.
+ * Schema do client supabase-js já é `active` (config global em
+ * SupabaseService) — `.from('v_saas_orders')` e `.rpc('xxx')` resolvem
+ * automaticamente em `active.v_saas_orders` / `active.xxx`.
+ */
+
+const HAS_SAAS_TTL_MS = 5 * 60 * 1000; // 5min
+const ORDERS_CACHE_TTL_MS = 60 * 1000; // 1min
+
+@Injectable()
+export class BridgeService {
+  private readonly log = new Logger(BridgeService.name);
+  private readonly hasSaasCache = new Map<
+    string,
+    { value: boolean; until: number }
+  >();
+  private readonly ordersCache = new Map<
+    string,
+    { value: SaasOrder[]; until: number }
+  >();
+  /** Circuit breaker: se uma chamada falhar, marca a org como "sem SaaS" por 5min. */
+  private readonly brokenOrgs = new Map<string, number>();
+
+  constructor(private readonly supabase: SupabaseService) {}
+
+  private isBroken(orgId: string): boolean {
+    const until = this.brokenOrgs.get(orgId);
+    if (!until) return false;
+    if (Date.now() > until) {
+      this.brokenOrgs.delete(orgId);
+      return false;
+    }
+    return true;
+  }
+
+  private breakOrg(orgId: string, err: unknown) {
+    this.brokenOrgs.set(orgId, Date.now() + HAS_SAAS_TTL_MS);
+    this.log.warn(
+      `bridge offline para org ${orgId} por ${HAS_SAAS_TTL_MS}ms: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  }
+
+  /** True se a org tem dados no SaaS. Cache 5min + circuit breaker. */
+  async hasSaasIntegration(orgId: string): Promise<boolean> {
+    if (this.isBroken(orgId)) return false;
+
+    const cached = this.hasSaasCache.get(orgId);
+    if (cached && cached.until > Date.now()) return cached.value;
+
+    try {
+      const { data, error } = await this.supabase.adminClient.rpc(
+        'has_saas_integration',
+        { p_org_id: orgId },
+      );
+      if (error) throw error;
+      const value = !!data;
+      this.hasSaasCache.set(orgId, {
+        value,
+        until: Date.now() + HAS_SAAS_TTL_MS,
+      });
+      return value;
+    } catch (err) {
+      this.breakOrg(orgId, err);
+      return false;
+    }
+  }
+
+  /** Busca pedidos por phone/email/nickname do contato. Vazio se sem SaaS ou erro. */
+  async getOrdersByContact(
+    orgId: string,
+    opts: {
+      phone?: string | null;
+      email?: string | null;
+      nickname?: string | null;
+      limit?: number;
+    },
+  ): Promise<SaasOrder[]> {
+    if (!(await this.hasSaasIntegration(orgId))) return [];
+
+    const cacheKey = `${orgId}:${opts.phone ?? ''}:${opts.email ?? ''}:${
+      opts.nickname ?? ''
+    }`;
+    const cached = this.ordersCache.get(cacheKey);
+    if (cached && cached.until > Date.now()) return cached.value;
+
+    try {
+      const { data, error } = await this.supabase.adminClient.rpc(
+        'get_saas_orders_by_contact',
+        {
+          p_org_id: orgId,
+          p_phone: opts.phone ?? null,
+          p_email: opts.email ?? null,
+          p_buyer_nickname: opts.nickname ?? null,
+          p_limit: opts.limit ?? 20,
+        },
+      );
+      if (error) throw error;
+      const value = (data ?? []) as SaasOrder[];
+      this.ordersCache.set(cacheKey, {
+        value,
+        until: Date.now() + ORDERS_CACHE_TTL_MS,
+      });
+      return value;
+    } catch (err) {
+      this.log.warn(`getOrdersByContact falhou para ${orgId}: ${String(err)}`);
+      return [];
+    }
+  }
+
+  /** Busca um pedido específico por marketplace_order_id, tracking ou id. */
+  async getOrderByQuery(
+    orgId: string,
+    query: string,
+  ): Promise<SaasOrder | null> {
+    if (!(await this.hasSaasIntegration(orgId))) return null;
+    try {
+      const { data, error } = await this.supabase.adminClient
+        .from('v_saas_orders')
+        .select('*')
+        .eq('organization_id', orgId)
+        .or(
+          `marketplace_order_id.eq.${query},shipping_tracking_number.eq.${query},id.eq.${query}`,
+        )
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return (data as SaasOrder | null) ?? null;
+    } catch (err) {
+      this.log.warn(`getOrderByQuery falhou: ${String(err)}`);
+      return null;
+    }
+  }
+
+  /** Produto por SKU ou ml_listing_id. */
+  async getProduct(
+    orgId: string,
+    opts: { sku?: string; mlListingId?: string },
+  ): Promise<SaasProduct | null> {
+    if (!(await this.hasSaasIntegration(orgId))) return null;
+    try {
+      const { data, error } = await this.supabase.adminClient.rpc(
+        'get_saas_product',
+        {
+          p_org_id: orgId,
+          p_sku: opts.sku ?? null,
+          p_ml_listing_id: opts.mlListingId ?? null,
+        },
+      );
+      if (error) throw error;
+      const rows = (data ?? []) as SaasProduct[];
+      return rows[0] ?? null;
+    } catch (err) {
+      this.log.warn(`getProduct falhou: ${String(err)}`);
+      return null;
+    }
+  }
+
+  /** Últimos pedidos da org (dashboard). */
+  async getRecentOrders(orgId: string, limit = 10): Promise<SaasOrder[]> {
+    if (!(await this.hasSaasIntegration(orgId))) return [];
+    try {
+      const { data, error } = await this.supabase.adminClient
+        .from('v_saas_orders')
+        .select('*')
+        .eq('organization_id', orgId)
+        .order('date_created', { ascending: false, nullsFirst: false })
+        .limit(limit);
+      if (error) throw error;
+      return (data ?? []) as SaasOrder[];
+    } catch (err) {
+      this.log.warn(`getRecentOrders falhou: ${String(err)}`);
+      return [];
+    }
+  }
+
+  /** Estatísticas agregadas (total, atrasados, entregues, revenue). */
+  async getOrderStats(orgId: string, sinceDays = 30): Promise<SaasOrderStats> {
+    const empty: SaasOrderStats = {
+      total_orders: 0,
+      delayed_orders: 0,
+      delivered_orders: 0,
+      total_revenue: 0,
+    };
+    if (!(await this.hasSaasIntegration(orgId))) return empty;
+    try {
+      const since = new Date(
+        Date.now() - sinceDays * 24 * 60 * 60 * 1000,
+      ).toISOString();
+      const { data, error } = await this.supabase.adminClient.rpc(
+        'get_saas_order_stats',
+        { p_org_id: orgId, p_since: since },
+      );
+      if (error) throw error;
+      const rows = (data ?? []) as SaasOrderStats[];
+      return rows[0] ?? empty;
+    } catch (err) {
+      this.log.warn(`getOrderStats falhou: ${String(err)}`);
+      return empty;
+    }
+  }
+
+  /** Status pra UI: has_saas + cache_ttl. */
+  async getStatus(orgId: string): Promise<BridgeStatus> {
+    return {
+      has_saas: await this.hasSaasIntegration(orgId),
+      checked_at: new Date().toISOString(),
+      cache_ttl_ms: HAS_SAAS_TTL_MS,
+    };
+  }
+
+  /** Invalida caches da org (chamar de webhooks do SaaS quando rolar mudança). */
+  invalidate(orgId: string) {
+    this.hasSaasCache.delete(orgId);
+    this.brokenOrgs.delete(orgId);
+    for (const key of this.ordersCache.keys()) {
+      if (key.startsWith(`${orgId}:`)) this.ordersCache.delete(key);
+    }
+  }
+}
