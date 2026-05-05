@@ -51,9 +51,9 @@ export class AdsSyncWorker implements OnModuleInit, OnModuleDestroy {
     if (this.inFlight) return;
     this.inFlight = true;
     try {
-      const ids = await this.sync.listActiveMetaIntegrations();
+      const ids = await this.sync.listActiveIntegrations();
       if (ids.length === 0) return;
-      this.logger.log(`Tick — ${ids.length} integração(ões) Meta ativa(s)`);
+      this.logger.log(`Tick — ${ids.length} integração(ões) ativa(s)`);
 
       for (const id of ids) {
         try {

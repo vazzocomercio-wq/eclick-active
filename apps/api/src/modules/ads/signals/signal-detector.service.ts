@@ -11,8 +11,8 @@ export type SignalType =
   | 'creative_fatigue'
   | 'audience_burnout'
   | 'scaling_inefficiency'
-  | 'pixel_drift';
-// Nota: 'lead_unattended' fica fora do MVP (depende do Bloco F — Lead Ads webhook)
+  | 'pixel_drift'
+  | 'lead_unattended';
 
 export type SignalSeverity = 'warning' | 'critical';
 
@@ -149,6 +149,10 @@ export class SignalDetectorService {
       metricsByCampaign,
     });
     drafts.push(...layer3Drafts);
+
+    // Camada 3 extra: lead_unattended — depende de ad_leads (Bloco F)
+    const leadUnattendedDrafts = await this.detectLeadUnattended(orgId);
+    drafts.push(...leadUnattendedDrafts);
 
     // Persiste com dedupe (UNIQUE WHERE status='pending')
     const persistedCount = await this.persistDrafts(drafts);
@@ -451,6 +455,108 @@ export class SignalDetectorService {
       }
     }
 
+    return drafts;
+  }
+
+  // ────────────────────────────────────────────
+  // Camada 3 extra: lead_unattended (depende de ad_leads — Bloco F)
+  // ────────────────────────────────────────────
+
+  /**
+   * Detecta leads de Meta Lead Ads que chegaram há > 1h e não tiveram
+   * resposta inbound do contato. Indica: greeting outbound não pegou OU
+   * lead errou número/desistiu — precisa intervenção humana.
+   *
+   * Regra:
+   *   - ad_lead com contact_id setado, processed_at NOT NULL, created_at > 1h
+   *   - SEM mensagem inbound do contact em messages com direction='inbound'
+   *     desde lead.created_at
+   *   - Severity: warning (>1h), critical (>4h)
+   *
+   * Dedupe: 1 sinal por (lead_id, dia)
+   */
+  private async detectLeadUnattended(orgId: string): Promise<SignalDraft[]> {
+    const oneHourAgo = new Date(Date.now() - 60 * 60_000).toISOString();
+    const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60_000).toISOString();
+
+    // Pega ad_leads processed da org com >1h
+    const { data: leads } = await this.supabase.adminClient
+      .from('ad_leads')
+      .select('id, contact_id, conversation_id, campaign_id, name, created_at, raw_payload')
+      .eq('org_id', orgId)
+      .not('contact_id', 'is', null)
+      .not('conversation_id', 'is', null)
+      .lte('created_at', oneHourAgo)
+      .gte('created_at', new Date(Date.now() - 7 * 86400_000).toISOString()) // só últimos 7d
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    const leadRows = (leads ?? []) as Array<{
+      id: string;
+      contact_id: string;
+      conversation_id: string;
+      campaign_id: string | null;
+      name: string | null;
+      created_at: string;
+      raw_payload: Record<string, unknown>;
+    }>;
+    if (leadRows.length === 0) return [];
+
+    const drafts: SignalDraft[] = [];
+    for (const lead of leadRows) {
+      // Checa se contact mandou alguma msg inbound desde o lead
+      const { data: inbound } = await this.supabase.adminClient
+        .from('messages')
+        .select('id')
+        .eq('org_id', orgId)
+        .eq('conversation_id', lead.conversation_id)
+        .eq('direction', 'inbound')
+        .gte('created_at', lead.created_at)
+        .limit(1);
+      if ((inbound ?? []).length > 0) continue; // tem resposta — OK
+
+      // Resolve campaign info pra payload
+      let campaignName: string | null = null;
+      let integrationId: string | null = null;
+      let platform: 'meta' | 'google' = 'meta';
+      if (lead.campaign_id) {
+        const { data: c } = await this.supabase.adminClient
+          .from('ad_campaigns')
+          .select('name, integration_id, platform')
+          .eq('id', lead.campaign_id)
+          .maybeSingle();
+        if (c) {
+          const row = c as { name: string; integration_id: string; platform: 'meta' | 'google' };
+          campaignName = row.name;
+          integrationId = row.integration_id;
+          platform = row.platform;
+        }
+      }
+
+      const severity: SignalSeverity = lead.created_at <= fourHoursAgo ? 'critical' : 'warning';
+
+      drafts.push({
+        org_id: orgId,
+        integration_id: integrationId,
+        campaign_id: lead.campaign_id,
+        platform,
+        signal_type: 'lead_unattended',
+        metric_key: null,
+        severity,
+        current_value: null,
+        threshold_value: null,
+        payload: {
+          lead_id: lead.id,
+          contact_id: lead.contact_id,
+          conversation_id: lead.conversation_id,
+          contact_name: lead.name,
+          campaign_name: campaignName,
+          lead_created_at: lead.created_at,
+          minutes_unattended: Math.floor((Date.now() - new Date(lead.created_at).getTime()) / 60_000),
+        },
+        dedupe_key: bucketKey('lead_unattended', lead.id),
+      });
+    }
     return drafts;
   }
 

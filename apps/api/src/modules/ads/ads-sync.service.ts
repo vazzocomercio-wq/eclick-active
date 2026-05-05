@@ -7,6 +7,12 @@ import {
   MetaCampaignInsight,
   MetaConnector,
 } from './connectors/meta.connector';
+import {
+  GoogleApiError,
+  GoogleCampaign,
+  GoogleCampaignInsight,
+  GoogleConnector,
+} from './connectors/google.connector';
 
 export interface SyncResult {
   integration_id: string;
@@ -41,6 +47,7 @@ export class AdsSyncService {
     private readonly supabase: SupabaseService,
     private readonly integrations: AdIntegrationsService,
     private readonly meta: MetaConnector,
+    private readonly google: GoogleConnector,
   ) {}
 
   // ────────────────────────────────────────────
@@ -63,18 +70,23 @@ export class AdsSyncService {
     return this.runSync(integrationId, daysBack);
   }
 
-  /** Lista IDs de integrações que o worker deve processar agora. */
-  async listActiveMetaIntegrations(): Promise<string[]> {
+  /** Lista IDs de integrações ativas (Meta + Google). Worker processa todas. */
+  async listActiveIntegrations(): Promise<string[]> {
     const { data, error } = await this.supabase.adminClient
       .from('ad_integrations')
       .select('id')
-      .eq('platform', 'meta')
+      .in('platform', ['meta', 'google'])
       .eq('status', 'active');
     if (error) {
-      this.logger.error(`listActiveMetaIntegrations falhou: ${error.message}`);
+      this.logger.error(`listActiveIntegrations falhou: ${error.message}`);
       return [];
     }
     return ((data ?? []) as Array<{ id: string }>).map((r) => r.id);
+  }
+
+  /** @deprecated Usar listActiveIntegrations */
+  async listActiveMetaIntegrations(): Promise<string[]> {
+    return this.listActiveIntegrations();
   }
 
   // ────────────────────────────────────────────
@@ -124,9 +136,17 @@ export class AdsSyncService {
           daysBack,
           result,
         });
+      } else if (internal.platform === 'google') {
+        await this.runGoogleSync({
+          accessToken,
+          integrationId,
+          orgId: internal.org_id,
+          customerId: internal.ad_account_id,
+          daysBack,
+          result,
+        });
       } else {
-        // Google fica pro Bloco D
-        throw new Error('Google sync ainda não implementado (Bloco D)');
+        throw new Error(`Plataforma "${internal.platform}" não suportada`);
       }
 
       await this.integrations.markSynced(integrationId);
@@ -134,7 +154,9 @@ export class AdsSyncService {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.error(`sync[${integrationId}] falhou: ${message}`);
 
-      if (err instanceof MetaApiError && err.isAuthError) {
+      const isMetaAuth = err instanceof MetaApiError && err.isAuthError;
+      const isGoogleAuth = err instanceof GoogleApiError && err.isAuthError;
+      if (isMetaAuth || isGoogleAuth) {
         // Token inválido — marca pra UI pedir re-conexão
         await this.supabase.adminClient
           .from('ad_integrations')
@@ -195,6 +217,127 @@ export class AdsSyncService {
         insights: validInsights,
       });
       args.result.metrics_upserted = validInsights.length;
+    }
+  }
+
+  // ────────────────────────────────────────────
+  // Google sync (Bloco D)
+  // ────────────────────────────────────────────
+
+  private async runGoogleSync(args: {
+    accessToken: string;
+    integrationId: string;
+    orgId: string;
+    customerId: string;
+    daysBack: number;
+    result: SyncResult;
+  }): Promise<void> {
+    // 1. Campaigns
+    const campaigns = await this.google.fetchCampaigns(args.accessToken, args.customerId);
+    const campaignIdMap = await this.upsertGoogleCampaigns({
+      orgId: args.orgId,
+      integrationId: args.integrationId,
+      campaigns,
+    });
+    args.result.campaigns_upserted = campaigns.length;
+
+    // 2. Insights — janela últimos N dias
+    const until = new Date();
+    const since = new Date(until.getTime() - args.daysBack * 86400_000);
+    const insights = await this.google.fetchInsights(
+      args.accessToken,
+      args.customerId,
+      since,
+      until,
+    );
+
+    const validInsights = insights.filter((i) => campaignIdMap.has(i.campaign_external_id));
+    args.result.campaigns_missing = insights.length - validInsights.length;
+
+    if (validInsights.length > 0) {
+      await this.upsertGoogleMetrics({
+        orgId: args.orgId,
+        integrationId: args.integrationId,
+        campaignIdMap,
+        insights: validInsights,
+      });
+      args.result.metrics_upserted = validInsights.length;
+    }
+  }
+
+  private async upsertGoogleCampaigns(args: {
+    orgId: string;
+    integrationId: string;
+    campaigns: GoogleCampaign[];
+  }): Promise<Map<string, string>> {
+    if (args.campaigns.length === 0) return new Map();
+    const rows = args.campaigns.map((c) => ({
+      org_id: args.orgId,
+      integration_id: args.integrationId,
+      platform: 'google' as const,
+      external_id: c.external_id,
+      name: c.name,
+      status: c.status,
+      objective: c.objective,
+      // Google budgets já vêm em USD inteiro (não micros) após divisão no connector
+      // ad_campaigns.daily_budget é bigint — convertemos pra centavos pra
+      // bater com Meta (que armazena em cents)
+      daily_budget: c.daily_budget !== null ? Math.round(c.daily_budget * 100) : null,
+      lifetime_budget: c.lifetime_budget !== null ? Math.round(c.lifetime_budget * 100) : null,
+      started_at: c.started_at?.toISOString() ?? null,
+      ended_at: c.ended_at?.toISOString() ?? null,
+      raw: c.raw,
+    }));
+
+    const { data, error } = await this.supabase.adminClient
+      .from('ad_campaigns')
+      .upsert(rows, { onConflict: 'integration_id,external_id' })
+      .select('id, external_id');
+
+    if (error) {
+      throw new Error(`upsert ad_campaigns google falhou: ${error.message}`);
+    }
+
+    const map = new Map<string, string>();
+    for (const r of (data ?? []) as Array<{ id: string; external_id: string }>) {
+      map.set(r.external_id, r.id);
+    }
+    return map;
+  }
+
+  private async upsertGoogleMetrics(args: {
+    orgId: string;
+    integrationId: string;
+    campaignIdMap: Map<string, string>;
+    insights: GoogleCampaignInsight[];
+  }): Promise<void> {
+    const rows = args.insights.map((m) => ({
+      org_id: args.orgId,
+      campaign_id: args.campaignIdMap.get(m.campaign_external_id) as string,
+      integration_id: args.integrationId,
+      platform: 'google' as const,
+      date: m.date,
+      spend: m.spend,
+      impressions: m.impressions,
+      clicks: m.clicks,
+      ctr: m.ctr,
+      cpc: m.cpc,
+      cpm: m.cpm,
+      conversions: m.conversions,
+      cost_per_conversion: m.cost_per_conversion,
+      roas: m.roas,
+      raw_metrics: m.raw,
+    }));
+
+    const BATCH = 500;
+    for (let i = 0; i < rows.length; i += BATCH) {
+      const slice = rows.slice(i, i + BATCH);
+      const { error } = await this.supabase.adminClient
+        .from('ad_metrics_daily')
+        .upsert(slice, { onConflict: 'campaign_id,date' });
+      if (error) {
+        throw new Error(`upsert ad_metrics_daily google falhou (batch ${i}): ${error.message}`);
+      }
     }
   }
 

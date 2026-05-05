@@ -6,7 +6,11 @@ import { AppModule } from './app.module';
 import { resolveCorsOrigins } from './common/cors';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // rawBody: true expõe req.rawBody pros webhooks que precisam validar
+  // HMAC signature (Meta Lead Ads). NestJS preserva o buffer original
+  // antes do JSON.parse — sem isso, validação HMAC com body re-stringificado
+  // falha em qualquer variação de whitespace/ordering.
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   // CORS — aceita lista explícita (CORS_ORIGINS env, separado por vírgula)
   // ou cai pro default (localhost:3000 + domínios de produção).

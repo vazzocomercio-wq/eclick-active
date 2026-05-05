@@ -1,17 +1,23 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../../common/auth/auth.module';
+import { ContactsModule } from '../contacts/contacts.module';
+import { ConversationsModule } from '../conversations/conversations.module';
 import { AdIntegrationsController } from './ad-integrations.controller';
 import { AdIntegrationsService } from './ad-integrations.service';
 import { AdMetricsController } from './ad-metrics.controller';
 import { AdsSyncService } from './ads-sync.service';
 import { AdsSyncWorker } from './ads-sync.worker';
+import { GoogleConnector } from './connectors/google.connector';
 import { MetaConnector } from './connectors/meta.connector';
+import { GoogleOAuthController } from './oauth/google-oauth.controller';
 import { MetaOAuthController } from './oauth/meta-oauth.controller';
 import { MetricCatalogService } from './metric-catalog.service';
 import { MetricConfigService } from './metric-config.service';
 import { AdSignalsController } from './signals/ad-signals.controller';
 import { SignalDetectorService } from './signals/signal-detector.service';
 import { SignalDetectorWorker } from './signals/signal-detector.worker';
+import { AdLeadsService } from './webhooks/ad-leads.service';
+import { MetaLeadAdsController } from './webhooks/meta-lead.controller';
 
 /**
  * Módulo de Ads — Blocos B + C + E + G do Active Intelligence.
@@ -31,22 +37,26 @@ import { SignalDetectorWorker } from './signals/signal-detector.worker';
  * Exporta serviços consumidos por outros módulos.
  */
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, ContactsModule, ConversationsModule],
   controllers: [
     AdIntegrationsController,
     MetaOAuthController,
+    GoogleOAuthController,
     AdMetricsController,
     AdSignalsController,
+    MetaLeadAdsController,
   ],
   providers: [
     AdIntegrationsService,
     AdsSyncService,
     AdsSyncWorker,
     MetaConnector,
+    GoogleConnector,
     MetricCatalogService,
     MetricConfigService,
     SignalDetectorService,
     SignalDetectorWorker,
+    AdLeadsService,
   ],
   exports: [
     AdIntegrationsService,
@@ -54,6 +64,7 @@ import { SignalDetectorWorker } from './signals/signal-detector.worker';
     MetricCatalogService,
     MetricConfigService,
     SignalDetectorService,
+    AdLeadsService,
   ],
 })
 export class AdsModule {}
