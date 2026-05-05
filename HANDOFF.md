@@ -8,7 +8,7 @@
 ## Estado atual
 
 **Última migration aplicada via API**: `037_appointment_custom_fields.sql`
-**Migration pendente (manual no Studio)**: `038_message_media_storage_policy.sql`
+**Migration aplicada via Studio**: `038_message_media_storage_policy.sql` (2026-05-05)
 **Próxima migration livre**: `039_*.sql`
 
 **Helper pra aplicar migrations rapidão (Claude usa esse)**:
@@ -114,13 +114,10 @@ A sessão completou:
 1. ✅ **UI editor pra `custom_fields_schema`** — entregue em `ca18c27`.
    Em /configuracoes > Agenda agora tem seção "Tipos de agendamento" com
    editor visual completo de schema.
-2. ⚠️ **Storage policy `message_media_org_read`** — precisa aplicar via
-   Supabase Studio. Cola o SQL de
-   `supabase/migrations/038_message_media_storage_policy.sql` em
-   https://supabase.com/dashboard/project/hzhrkfdwzxalaromcffn/sql/new
-   e roda. **OPCIONAL**: backend já usa signed URLs (30min) via service_role,
-   então fluxo atual funciona sem essa policy. Habilitá-la permite frontend
-   autenticado baixar direto sem precisar pedir signed URL toda vez.
+2. ✅ **Storage policy `message_media_org_read`** — aplicada via Studio em
+   2026-05-05. Frontend autenticado agora pode baixar arquivos do bucket
+   `message-media` direto, sem precisar pedir signed URL ao backend toda
+   vez (signed URL continua sendo o caminho default por enquanto).
 3. ✅ **Audio transcript via Whisper** — entregue em `50f1e7d`.
    Áudio inbound (audio/ogg do WhatsApp) agora vira transcript via
    Whisper + summary via Sonnet. UI tem TranscriptToggle expansível.
