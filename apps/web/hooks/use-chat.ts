@@ -96,6 +96,41 @@ export function useChat(conversationId: string | null): UseChatResult {
   );
   useEvents(realtimeHandlers);
 
+  /**
+   * Defesa em profundidade pra realtime. O socket.io reconecta sozinho
+   * mas eventos perdidos durante o drop (ex: msg chegou no DB mas o WS
+   * estava down) ficam invisíveis no chat. Refresh silencioso quando:
+   *   1. User volta pra aba (visibilitychange)
+   *   2. Janela ganha foco (focus)
+   * Cobertura: 10min sem msgs → tab perde foco → user volta → atualiza.
+   */
+  useEffect(() => {
+    if (!conversationId) return;
+
+    const refetchSilently = () => {
+      if (document.visibilityState !== 'visible') return;
+      const reqId = ++reqIdRef.current;
+      messagesApi
+        .getByConversation(conversationId, undefined, PAGE_LIMIT)
+        .then((r) => {
+          if (reqId !== reqIdRef.current) return;
+          setMessages([...r.data].reverse());
+          cursorRef.current = r.nextCursor;
+          setHasMore(!!r.nextCursor);
+        })
+        .catch(() => {
+          /* silent — não polui UX se cair offline */
+        });
+    };
+
+    document.addEventListener('visibilitychange', refetchSilently);
+    window.addEventListener('focus', refetchSilently);
+    return () => {
+      document.removeEventListener('visibilitychange', refetchSilently);
+      window.removeEventListener('focus', refetchSilently);
+    };
+  }, [conversationId]);
+
   const loadMore = useCallback(async () => {
     if (!conversationId || !hasMore || loadingMore || !cursorRef.current) return;
     setLoadingMore(true);
