@@ -178,6 +178,20 @@ export class BaileysSession {
         // Não buscamos histórico antigo — só mensagens novas a partir da conexão
         syncFullHistory: false,
         markOnlineOnConnect: false,
+        // Recovery de mensagens cifradas que falharam decryption inicial.
+        // Default Baileys = 250ms × 3 tentativas (frequentemente insuficiente
+        // quando o peer está offline ou em rede ruim — msg fica órfã e nunca
+        // aparece no nosso DB). Aumentando: 500ms × 8 = ~4s de janela total
+        // pro peer responder ao retry request.
+        retryRequestDelayMs: 500,
+        maxMsgRetryCount: 8,
+        // Callback obrigatório pra que o protocolo de retry funcione.
+        // Quando NÓS mandamos msg que peer falhou em decifrar, peer pede
+        // retry e Baileys precisa do conteúdo original — sem getMessage,
+        // ele desiste silenciosamente. Pra inbound puro (msg do peer pra
+        // nós), retornar undefined é safe — o conteúdo vem direto do socket
+        // após retry bem-sucedido.
+        getMessage: async () => undefined,
       });
 
       this.sock.ev.on('creds.update', () => {
@@ -201,25 +215,42 @@ export class BaileysSession {
           `[baileys ${this.ctx.channelId}] messages.upsert type=${m.type} count=${m.messages.length} ids=${m.messages.map((mm) => `${mm.key.id?.slice(0, 12)}/${mm.key.fromMe ? 'me' : 'other'}/${mm.message ? Object.keys(mm.message).slice(0, 2).join(',') : 'null'}`).join(';')}`,
         );
 
-        if (m.type !== 'notify') {
+        // Aceita 'notify' (msg nova) E 'append' (re-entrega após retry de
+        // decryption — quando peer reenvia msg cifrada que nosso device
+        // falhou inicialmente). Antes pulávamos 'append' e a msg recovered
+        // ficava órfã — sintoma "msg só apareceu depois de muito tempo"
+        // só quando próxima msg do mesmo contato forçava re-sync.
+        if (m.type !== 'notify' && m.type !== 'append') {
           // eslint-disable-next-line no-console
           console.log(
-            `[baileys ${this.ctx.channelId}] messages.upsert skip — type=${m.type} (não é notify, geralmente é history/append de outro device)`,
+            `[baileys ${this.ctx.channelId}] messages.upsert skip — type=${m.type} (history/sync de outro device)`,
           );
           return;
         }
         for (const msg of m.messages) {
-          // Log antes do persist — ajuda a saber se mensagem chegou
-          // mas falhou silenciosamente em algum filtro do persistInbound
-          // (grupos, msg sem text/media, msg fromMe, etc.)
+          void this.handleInboundCandidate(msg);
+        }
+      });
+
+      // messages.update: dispara quando uma msg que veio inicialmente sem
+      // conteúdo decifrado é decryptada depois (recovery via retry). Baileys
+      // emite update com `update.message` populado. Tratamos como inbound
+      // tardio.
+      this.sock.ev.on('messages.update', (updates) => {
+        for (const u of updates) {
+          if (!u.update?.message || u.key.fromMe) continue;
           // eslint-disable-next-line no-console
           console.log(
-            `[baileys ${this.ctx.channelId}] inbound from=${msg.key.remoteJid} fromMe=${msg.key.fromMe} id=${msg.key.id?.slice(0, 16)} hasMessage=${!!msg.message}`,
+            `[baileys ${this.ctx.channelId}] messages.update RECOVERY id=${u.key.id?.slice(0, 16)} from=${u.key.remoteJid} keys=${Object.keys(u.update.message).slice(0, 3).join(',')}`,
           );
-          void this.persistInbound(msg).catch((err) => {
-            // eslint-disable-next-line no-console
-            console.error(`[baileys ${this.ctx.channelId}] persistInbound erro:`, err);
-          });
+          // Reconstrói shape de WAMessage pra reusar persistInbound
+          const recovered: WAMessage = {
+            key: u.key,
+            message: u.update.message,
+            messageTimestamp: u.update.messageTimestamp ?? Math.floor(Date.now() / 1000),
+            pushName: u.update.pushName ?? undefined,
+          } as WAMessage;
+          void this.handleInboundCandidate(recovered);
         }
       });
 
@@ -622,6 +653,85 @@ export class BaileysSession {
           );
         });
       }, 1000);
+    }
+  }
+
+  /**
+   * Filtra/encaminha msg pro persistInbound. Captura decryption failures
+   * (msg vazia ou só com protocol blocks) e dispara assertSessions
+   * proativo pro JID — próxima msg deles vem decifrada.
+   */
+  private async handleInboundCandidate(msg: WAMessage): Promise<void> {
+    const remoteJid = msg.key.remoteJid;
+    // eslint-disable-next-line no-console
+    console.log(
+      `[baileys ${this.ctx.channelId}] inbound from=${remoteJid} fromMe=${msg.key.fromMe} id=${msg.key.id?.slice(0, 16)} hasMessage=${!!msg.message}`,
+    );
+
+    if (msg.key.fromMe) return; // ignora eco do próprio device
+
+    // Msg sem conteúdo = decryption failure ou msg de protocolo (entrega/leitura).
+    // Dispara assertSessions PROATIVO pro JID — futura msg dele vem OK.
+    if (!msg.message) {
+      if (remoteJid && this.sock) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[baileys ${this.ctx.channelId}] msg vazia from=${remoteJid} — provável decryption failure, disparando assertSessions`,
+        );
+        try {
+          await this.sock.assertSessions([remoteJid], true);
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[baileys ${this.ctx.channelId}] assertSessions ${remoteJid} falhou:`,
+            err instanceof Error ? err.message : err,
+          );
+        }
+      }
+      return;
+    }
+
+    // Pula msgs que são apenas blocks de protocolo (senderKeyDistributionMessage,
+    // protocolMessage, etc) sem conteúdo de usuário. Estes são parte do handshake
+    // Signal — não devem virar msg no inbox.
+    const messageKeys = Object.keys(msg.message);
+    const CONTENT_KEYS = new Set([
+      'conversation',
+      'extendedTextMessage',
+      'imageMessage',
+      'videoMessage',
+      'audioMessage',
+      'documentMessage',
+      'documentWithCaptionMessage',
+      'stickerMessage',
+      'contactMessage',
+      'contactsArrayMessage',
+      'locationMessage',
+      'liveLocationMessage',
+      'reactionMessage',
+      'pollCreationMessage',
+      'pollUpdateMessage',
+      'buttonsResponseMessage',
+      'listResponseMessage',
+      'templateButtonReplyMessage',
+      'ephemeralMessage',
+      'viewOnceMessage',
+      'viewOnceMessageV2',
+    ]);
+    const hasUserContent = messageKeys.some((k) => CONTENT_KEYS.has(k));
+    if (!hasUserContent) {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[baileys ${this.ctx.channelId}] msg só protocol blocks (${messageKeys.join(',')}) from=${remoteJid} — skip persist`,
+      );
+      return;
+    }
+
+    try {
+      await this.persistInbound(msg);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(`[baileys ${this.ctx.channelId}] persistInbound erro:`, err);
     }
   }
 
