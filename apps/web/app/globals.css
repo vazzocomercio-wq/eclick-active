@@ -163,3 +163,30 @@
 .scrollbar-none::-webkit-scrollbar {
   display: none;
 }
+
+/* Marquee infinito horizontal pra carrossel de sugestões em prompts IA.
+   Usado em <AnimatedPromptSuggestions> (Copiloto e outros inputs IA).
+   Move o container com translateX(-50%) — content precisa estar duplicado
+   pra dar loop sem corte visual. duration controlada via inline style. */
+@keyframes marquee-left {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+@keyframes marquee-right {
+  from {
+    transform: translateX(-50%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+.animate-marquee-left {
+  animation: marquee-left linear infinite;
+}
+.animate-marquee-right {
+  animation: marquee-right linear infinite;
+}

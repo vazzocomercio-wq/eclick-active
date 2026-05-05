@@ -1,13 +1,35 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, Sparkles, Trash2 } from 'lucide-react';
+import {
+  AlertTriangle,
+  BarChart3,
+  Bot,
+  CheckCircle2,
+  ClipboardList,
+  Compass,
+  FileText,
+  Lightbulb,
+  MessageSquare,
+  Sparkles,
+  Target,
+  TrendingDown,
+  TrendingUp,
+  Users,
+  Zap,
+  Trash2,
+  type LucideIcon,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ChatInput } from '@/components/copiloto/chat-input';
 import {
   ChatMessageItem,
   TypingIndicator,
 } from '@/components/copiloto/chat-message';
+import {
+  AnimatedPromptSuggestions,
+  type PromptSuggestion,
+} from '@/components/ui/animated-prompt-suggestions';
 import { useCopilot } from '@/hooks/use-copilot';
 import type { CopilotContextType } from '@/lib/api/copilot';
 import { cn } from '@/lib/utils';
@@ -191,23 +213,42 @@ export function CopilotPanel({
             compact ? 'max-w-full' : 'max-w-3xl',
           )}
         >
-          {/* Sugestões: sempre visíveis em modo compact, só no estado vazio em modo full */}
-          {(compact || isEmpty) && suggestions.length > 0 && (
-            <QuickSuggestions
-              suggestions={suggestions}
-              onSelect={handleSuggestion}
-              disabled={thinking}
-              compact={compact}
-            />
+          {/* Modo full + estado vazio = carrossel animado de sugestões.
+              Modo compact (drawer) usa lista clicável simples — marquee
+              horizontal não cabe em 320px. */}
+          {!compact && isEmpty && suggestions.length > 0 ? (
+            <AnimatedPromptSuggestions
+              suggestions={withIcons(contextType, suggestions)}
+              onSuggestionClick={(text) => handleSuggestion(text)}
+              speed={45}
+            >
+              <ChatInput
+                value={input}
+                onChange={setInput}
+                onSubmit={handleSubmit}
+                disabled={thinking}
+                placeholder={PLACEHOLDER[contextType]}
+              />
+            </AnimatedPromptSuggestions>
+          ) : (
+            <>
+              {compact && suggestions.length > 0 && (
+                <QuickSuggestions
+                  suggestions={suggestions}
+                  onSelect={handleSuggestion}
+                  disabled={thinking}
+                  compact={compact}
+                />
+              )}
+              <ChatInput
+                value={input}
+                onChange={setInput}
+                onSubmit={handleSubmit}
+                disabled={thinking}
+                placeholder={PLACEHOLDER[contextType]}
+              />
+            </>
           )}
-
-          <ChatInput
-            value={input}
-            onChange={setInput}
-            onSubmit={handleSubmit}
-            disabled={thinking}
-            placeholder={PLACEHOLDER[contextType]}
-          />
 
           {!compact && (
             <p className="text-center text-[11px] text-muted-foreground">
@@ -231,24 +272,87 @@ const QUICK_SUGGESTIONS: Record<CopilotContextType, string[]> = {
     'Tarefas pendentes',
     'Por que perdi vendas esta semana?',
     'Crie follow-up para leads sem resposta',
+    'Quais clientes não respondem há mais de 5 dias?',
+    'Performance da equipe esta semana',
+    'Análise de objeções recorrentes',
+    'Sugestões para aumentar conversão',
+    'Leads quentes sem atendimento',
+    'Próximas tarefas críticas',
+    'Onde estou perdendo deals?',
   ],
   deal: [
     'Próxima ação?',
     'Risco de perda?',
     'Gerar proposta',
     'Criar follow-up',
+    'Análise da negociação',
+    'Sugestões de fechamento',
+    'Histórico de interações',
+    'Comparar com deals similares',
+    'Pontos de atenção',
   ],
   contact: [
     'Resumo do cliente',
     'Histórico de objeções',
     'Melhor abordagem',
+    'Perfil de comportamento',
+    'Probabilidade de compra',
+    'Tópicos de interesse',
+    'Próximos passos sugeridos',
+    'Análise de engajamento',
+    'Deals anteriores',
   ],
   conversation: [
     'Resumir conversa',
     'Sugerir resposta',
     'O que o cliente quer?',
+    'Identificar urgência',
+    'Próxima pergunta a fazer',
+    'Sentiment do cliente',
+    'Pontos não respondidos',
+    'Resumir documentos enviados',
+    'Sugestão de roteamento',
   ],
 };
+
+/** Mapping de palavra-chave da sugestão → ícone + cor de accent.
+ *  Cycling determinístico: usa primeiro match da palavra-chave. */
+const SUGGESTION_ICON_HINTS: Array<{
+  match: RegExp;
+  icon: LucideIcon;
+  accent: string;
+}> = [
+  { match: /priorizar|prioridade|urgênc/i, icon: AlertTriangle, accent: '#f59e0b' },
+  { match: /funil|kanban|pipeline/i, icon: Target, accent: '#00E5FF' },
+  { match: /tarefa|task|pendente/i, icon: ClipboardList, accent: '#a78bfa' },
+  { match: /perdi|perda|risco/i, icon: TrendingDown, accent: '#ef4444' },
+  { match: /follow-up|follow up|reativ/i, icon: Zap, accent: '#fcd34d' },
+  { match: /resum|análise|analisar/i, icon: FileText, accent: '#67e8f9' },
+  { match: /performance|crescer|aumentar|conversão/i, icon: TrendingUp, accent: '#34d399' },
+  { match: /cliente|contato|equipe/i, icon: Users, accent: '#a78bfa' },
+  { match: /sugest|próxima ação|melhor|sugerir/i, icon: Lightbulb, accent: '#fde68a' },
+  { match: /quente|engajamento|interesse/i, icon: Sparkles, accent: '#f472b6' },
+  { match: /resposta|conversa|mensag/i, icon: MessageSquare, accent: '#00E5FF' },
+  { match: /aprovado|completo|✓/i, icon: CheckCircle2, accent: '#34d399' },
+  { match: /comparar|relatório|gráfic/i, icon: BarChart3, accent: '#67e8f9' },
+];
+
+function pickIcon(text: string): { icon: LucideIcon; accent: string } {
+  for (const h of SUGGESTION_ICON_HINTS) {
+    if (h.match.test(text)) return { icon: h.icon, accent: h.accent };
+  }
+  return { icon: Compass, accent: '#00E5FF' };
+}
+
+function withIcons(
+  _contextType: CopilotContextType,
+  texts: string[],
+): PromptSuggestion[] {
+  return texts.map((text) => {
+    const { icon, accent } = pickIcon(text);
+    return { text, icon, accent };
+  });
+}
 
 const PLACEHOLDER: Record<CopilotContextType, string> = {
   general: 'Pergunte sobre seus leads, deals, performance...',
