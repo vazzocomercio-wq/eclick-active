@@ -823,6 +823,143 @@ export class AppointmentsService {
     }
   }
 
+  // ──────────────────────────────────────────────────────────
+  // findSlotsForOrg — usado pelo Concierge IA pra propor horários
+  // ──────────────────────────────────────────────────────────
+
+  /**
+   * Encontra slots disponíveis na org inteira pra propor pro lead via
+   * Concierge. Diferente de `getAvailableSlots`:
+   *
+   *   - Filtra agentes por `specialty` (GIN array overlap em
+   *     org_members.specialties) quando fornecida.
+   *   - Cada agente usa SEU PRÓPRIO `default_duration_minutes` +
+   *     `default_buffer_minutes` (não depende de appointment_type).
+   *     Fallback `fallbackDurationMinutes` quando agent não configurou.
+   *   - Itera por `daysAhead` dias (default 7).
+   *   - Cap em `limit` slots (default 12) — Concierge geralmente vai
+   *     mostrar só os 3 primeiros.
+   *
+   * Retorna lista achatada e ordenada por start_time.
+   */
+  async findSlotsForOrg(
+    orgId: string,
+    opts: {
+      specialty?: string;
+      daysAhead?: number;
+      limit?: number;
+      fallbackDurationMinutes?: number;
+      minAdvanceHours?: number;
+    } = {},
+  ): Promise<AvailabilitySlot[]> {
+    const daysAhead = Math.max(1, Math.min(opts.daysAhead ?? 7, 30));
+    const limit = Math.max(1, Math.min(opts.limit ?? 12, 100));
+    const fallbackDuration = opts.fallbackDurationMinutes ?? 30;
+    const minAdvanceHours = opts.minAdvanceHours ?? 2;
+    const minStartTime = new Date(Date.now() + minAdvanceHours * 60 * 60 * 1000);
+
+    // 1. Lista candidatos — filtra por specialty se fornecida (GIN array
+    //    overlap via PostgREST `cs` operator → Postgres `@>`/`&&`).
+    let q = this.supabase.adminClient
+      .from('org_members')
+      .select('id, display_name, specialties, default_duration_minutes, default_buffer_minutes')
+      .eq('org_id', orgId)
+      .eq('status', 'active')
+      .in('role', ['owner', 'admin', 'agent']);
+
+    if (opts.specialty) {
+      // Normaliza a busca pra lower-case-trim. Como specialties é text[] e
+      // não temos índice case-insensitive, aplicamos overlap direto. Se
+      // quiser flexibilidade extra, dá pra fazer match em JS após o fetch.
+      q = q.contains('specialties', [opts.specialty]);
+    }
+
+    const { data: agentsRaw, error } = await q;
+    if (error) {
+      this.logger.warn(`findSlotsForOrg query agents falhou: ${error.message}`);
+      return [];
+    }
+
+    let agents = (agentsRaw ?? []) as Array<{
+      id: string;
+      display_name: string | null;
+      specialties: string[];
+      default_duration_minutes: number | null;
+      default_buffer_minutes: number;
+    }>;
+
+    // Fallback: se filtro por specialty não retornou ninguém, tenta sem
+    //   specialty pra ainda propor algo (evita Concierge ficar mudo).
+    let specialtyMatched = agents.length > 0;
+    if (opts.specialty && agents.length === 0) {
+      const { data: allAgents } = await this.supabase.adminClient
+        .from('org_members')
+        .select('id, display_name, specialties, default_duration_minutes, default_buffer_minutes')
+        .eq('org_id', orgId)
+        .eq('status', 'active')
+        .in('role', ['owner', 'admin', 'agent']);
+      agents = (allAgents ?? []) as typeof agents;
+      specialtyMatched = false;
+      this.logger.log(
+        `findSlotsForOrg: specialty="${opts.specialty}" sem match — fallback pra todos os agentes (${agents.length})`,
+      );
+    }
+
+    if (agents.length === 0) return [];
+
+    // 2. Janela base por org (business_hours) — usado como fallback quando
+    //    agente não tem agent_availability nenhum (override ou semanal).
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const out: AvailabilitySlot[] = [];
+
+    // Itera dias (hoje incluído pra slots ainda válidos pelo minStartTime)
+    for (let d = 0; d < daysAhead; d++) {
+      const day = new Date(today);
+      day.setDate(today.getDate() + d);
+
+      const dayStart = new Date(day);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(day);
+      dayEnd.setHours(23, 59, 59, 999);
+
+      const orgWindow = await this.fetchOrgBusinessHoursForDate(orgId, dayStart);
+
+      for (const agent of agents) {
+        const duration = agent.default_duration_minutes ?? fallbackDuration;
+        const buffer = agent.default_buffer_minutes ?? 0;
+
+        const windows = await this.resolveAgentWindow(orgId, agent.id, dayStart, orgWindow);
+        if (windows.length === 0) continue;
+
+        const busy = await this.fetchBusyRanges(orgId, agent.id, dayStart, dayEnd);
+
+        for (const win of windows) {
+          const winSlots = this.generateSlots(win, duration, buffer, busy, minStartTime);
+          for (const s of winSlots) {
+            out.push({
+              start_time: s.start.toISOString(),
+              end_time: s.end.toISOString(),
+              agent_id: agent.id,
+              agent_name: agent.display_name,
+              duration_minutes: duration,
+              agent_specialties: specialtyMatched ? agent.specialties : [],
+            });
+            if (out.length >= limit * 3) break; // cap intermediário antes do sort final
+          }
+          if (out.length >= limit * 3) break;
+        }
+        if (out.length >= limit * 3) break;
+      }
+      if (out.length >= limit * 3) break;
+    }
+
+    return out
+      .sort((a, b) => a.start_time.localeCompare(b.start_time))
+      .slice(0, limit);
+  }
+
   private generateSlots(
     window: TimeRange,
     durationMinutes: number,

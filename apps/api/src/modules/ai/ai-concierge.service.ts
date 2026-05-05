@@ -10,8 +10,12 @@ import { SupabaseService } from '../../common/supabase/supabase.service';
 import { ChannelDispatcherService } from '../../common/channels/channel-dispatcher.service';
 import { AiPersonaService } from '../ai-persona/ai-persona.service';
 import { TagsService } from '../tags/tags.service';
+import { AppointmentsService } from '../appointments/appointments.service';
 import { EventsGateway } from '../../gateways/events.gateway';
-import type { TagDefinition } from '@eclick-active/shared';
+import type {
+  AvailabilitySlot,
+  TagDefinition,
+} from '@eclick-active/shared';
 
 const SONNET_MODEL_ID = 'claude-sonnet-4-6';
 const HISTORY_MAX_MESSAGES = 6;
@@ -23,7 +27,41 @@ const MAX_DELAY_MS = 30_000;
 const SONNET_INPUT_PER_MTOK = 3.0;
 const SONNET_OUTPUT_PER_MTOK = 15.0;
 
-type ConciergeState = 'idle' | 'awaiting_response' | 'routed';
+type ConciergeState =
+  | 'idle'
+  | 'awaiting_response'
+  | 'awaiting_slot_choice'
+  | 'routed';
+
+/** Slot armazenado em conversation.metadata.scheduling.offered_slots — versão
+ *  serializada do AvailabilitySlot pra facilitar parsing depois. */
+interface OfferedSlot {
+  index: number;
+  start_time: string;
+  end_time: string;
+  agent_id: string;
+  agent_name: string | null;
+  duration_minutes: number;
+}
+
+interface SchedulingMetadata {
+  /** Slots oferecidos ao lead na última proposta. */
+  offered_slots: OfferedSlot[];
+  /** Specialty (lower-case) usada pra filtrar agentes. Null = todos. */
+  specialty: string | null;
+  /** ISO timestamp de quando a proposta foi enviada. */
+  proposed_at: string;
+  /** Quantas vezes a IA pediu pro cliente escolher (cap 3). */
+  retries: number;
+  /** Mensagem original que disparou a oferta — pra contexto se ele tentar mudar. */
+  origin_message: string;
+}
+
+/** Limite de re-perguntas quando lead não responde com número claro antes
+ *  de transferir pro humano. Evita IA ficar perguntando "1, 2 ou 3?" infinito. */
+const MAX_SLOT_CHOICE_RETRIES = 3;
+/** Quantos slots mostrar de uma vez no WhatsApp. Mais que 3 polui a msg. */
+const SLOT_OPTIONS_TO_SHOW = 3;
 
 interface ConciergeSettings {
   enabled: boolean;
@@ -81,6 +119,14 @@ interface RouteDecision {
    * needs_more_info=false (no momento do route).
    */
   tags: string[];
+  /**
+   * Quando o lead pediu agendamento, qual specialty/serviço a IA
+   * detectou. Texto livre por nicho (ex: "nutricionista", "corte",
+   * "motor", "vendas"). Lower-case. Null se não conseguiu extrair —
+   * Concierge propõe slots de qualquer agente nesse caso. Só
+   * preenchido quando AGENDAMENTO_SOLICITADO está em tags.
+   */
+  specialty_guess: string | null;
   /** Stats da chamada IA pra logar em ai_interactions */
   _usage?: {
     inputTokens: number;
@@ -141,6 +187,7 @@ export class AiConciergeService {
     private readonly dispatcher: ChannelDispatcherService,
     private readonly persona: AiPersonaService,
     private readonly tags: TagsService,
+    private readonly appointments: AppointmentsService,
     private readonly events: EventsGateway,
   ) {}
 
@@ -226,6 +273,15 @@ export class AiConciergeService {
         });
       } else if (state === 'awaiting_response') {
         await this.handleRoute({
+          orgId,
+          conversationId,
+          conversation: conv,
+          messageText: message.plain_text,
+          settings,
+          persona: personaActive,
+        });
+      } else if (state === 'awaiting_slot_choice') {
+        await this.handleSlotChoice({
           orgId,
           conversationId,
           conversation: conv,
@@ -689,17 +745,43 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
         .eq('id', conversation.contact_id);
     }
 
-    // Bridge message — se IA gerou e setting ligado
-    if (
+    // Detecta intent de agendamento via tag — quando presente, em vez de
+    // mandar só o bridge_message genérico, monta proposta com 3 horários
+    // reais (calculados via AppointmentsService) e transiciona pra
+    // awaiting_slot_choice. Lead vai responder com 1/2/3 e Concierge cria
+    // o appointment automaticamente.
+    const wantsScheduling = decision.tags.includes('AGENDAMENTO_SOLICITADO');
+    let stateAfterRoute: ConciergeState = 'routed';
+
+    if (wantsScheduling && settings.auto_reply) {
+      const offered = await this.proposeSlotsAndPersist({
+        orgId,
+        conversationId,
+        conversation,
+        persona,
+        specialty: decision.specialty_guess,
+        bridgeMessage: decision.bridge_message,
+        originMessage: messageText,
+      });
+      if (offered) {
+        stateAfterRoute = 'awaiting_slot_choice';
+      } else if (decision.bridge_message) {
+        // Sem slots disponíveis — manda bridge_message original (que já avisa
+        // que equipe humana entra em contato).
+        await this.applyResponseDelay(persona);
+        await this.sendOutbound(orgId, conversation, decision.bridge_message);
+      }
+    } else if (
       settings.send_bridge_message &&
       settings.auto_reply &&
       decision.bridge_message
     ) {
+      // Caminho normal — bridge_message comum sem agendamento
       await this.applyResponseDelay(persona);
       await this.sendOutbound(orgId, conversation, decision.bridge_message);
     }
 
-    await this.setConciergeState(orgId, conversationId, 'routed');
+    await this.setConciergeState(orgId, conversationId, stateAfterRoute);
 
     this.logger.log(
       `concierge: roteou conv=${conversationId} → pipeline=${decision.pipeline_id} stage=${decision.stage_id} intent=${decision.intent_label} temp=${decision.temperature} deal_created=${dealCreated} turns=${qualifyingTurns}`,
@@ -865,6 +947,16 @@ REGRAS:
 
 5. **NÃO precisa esgotar todas as diretrizes da persona** — quando você tiver clareza MÍNIMA da intenção principal + 1-2 dados-chave, pode rotear.
 
+6. **specialty_guess** (relevante só se "AGENDAMENTO_SOLICITADO" tá em tags):
+   - String em **lower-case** representando o serviço/especialidade que o
+     cliente busca (ex: "nutricionista", "oncologia", "corte", "manicure",
+     "motor", "elétrica", "vendas", "consultoria").
+   - O sistema vai usar esta string pra fazer match contra
+     org_members.specialties (texto livre). Use o termo mais natural do
+     nicho — não invente categorias. Se a mensagem só diz "consulta" sem
+     especificar especialidade, retorne null.
+   - Quando NÃO há AGENDAMENTO_SOLICITADO, deixe null.
+
 Retorne APENAS JSON puro com este shape exato:
 {
   "needs_more_info": <true|false>,
@@ -875,6 +967,7 @@ Retorne APENAS JSON puro com este shape exato:
   "temperature": "cold|warm|hot|very_hot ou null",
   "bridge_message": "<string ou null>",
   "tags": ["TAG_1", "TAG_2", "TAG_3"] (3-6 itens; vazio APENAS quando needs_more_info=true),
+  "specialty_guess": "<string lower-case ou null>",
   "reasoning": "<string>"
 }`;
 
@@ -942,6 +1035,7 @@ Decida o roteamento.`;
           temperature: null,
           bridge_message: null,
           tags: [],
+          specialty_guess: null,
           reasoning: d.reasoning ?? '',
           _usage: usage,
         };
@@ -984,6 +1078,14 @@ Decida o roteamento.`;
         ),
       ).slice(0, 6);
 
+      // specialty_guess: lower-case + trim. Null se ausente ou ""/"null".
+      const rawSpecialty =
+        typeof d.specialty_guess === 'string' ? d.specialty_guess.trim() : '';
+      const specialtyGuess =
+        rawSpecialty && rawSpecialty.toLowerCase() !== 'null'
+          ? rawSpecialty.toLowerCase()
+          : null;
+
       return {
         needs_more_info: false,
         next_question: null,
@@ -996,6 +1098,7 @@ Decida o roteamento.`;
             ? d.bridge_message.trim()
             : null,
         tags,
+        specialty_guess: specialtyGuess,
         reasoning: d.reasoning ?? '',
         _usage: usage,
       };
@@ -1164,6 +1267,418 @@ Decida o roteamento.`;
       return false;
     }
     return true;
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // Scheduling — proposta de slots + recebimento da escolha
+  // ──────────────────────────────────────────────────────────
+
+  /**
+   * Calcula slots disponíveis na org filtrando por specialty (quando
+   * informada), pega os 3 melhores (distintos em dia/horário quando
+   * possível), monta mensagem friendly numerada e persiste a oferta no
+   * conversation.metadata pra ser consumida em handleSlotChoice.
+   *
+   * Retorna true se conseguiu propor pelo menos 1 slot (e estado deve
+   * ir pra awaiting_slot_choice). Retorna false quando não há slot
+   * disponível — chamador decide o fallback (bridge message normal).
+   */
+  private async proposeSlotsAndPersist(args: {
+    orgId: string;
+    conversationId: string;
+    conversation: ConversationRow;
+    persona: AiAgentPersona;
+    specialty: string | null;
+    bridgeMessage: string | null;
+    originMessage: string;
+  }): Promise<boolean> {
+    const { orgId, conversationId, conversation, persona, specialty, bridgeMessage, originMessage } = args;
+
+    let slots: AvailabilitySlot[] = [];
+    try {
+      slots = await this.appointments.findSlotsForOrg(orgId, {
+        ...(specialty ? { specialty } : {}),
+        daysAhead: 7,
+        limit: 24, // pega mais pra ter margem ao distribuir
+        fallbackDurationMinutes: 30,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `concierge: findSlotsForOrg falhou: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return false;
+    }
+
+    if (slots.length === 0) {
+      this.logger.log(
+        `concierge: sem slots disponíveis pra specialty="${specialty}" — fallback pra bridge_message`,
+      );
+      return false;
+    }
+
+    // Distribui — pega slots em momentos diferentes (idealmente em dias
+    // diferentes ou horários diferentes do mesmo dia) pra dar opção real.
+    const picked = this.pickDistributedSlots(slots, SLOT_OPTIONS_TO_SHOW);
+    if (picked.length === 0) return false;
+
+    const offered: OfferedSlot[] = picked.map((s, i) => ({
+      index: i + 1,
+      start_time: s.start_time,
+      end_time: s.end_time,
+      agent_id: s.agent_id,
+      agent_name: s.agent_name,
+      duration_minutes: s.duration_minutes ?? 30,
+    }));
+
+    const intro =
+      bridgeMessage?.trim() ||
+      `Posso te ajudar com isso! Tenho ${picked.length === 1 ? 'um horário' : 'esses horários'} disponíve${picked.length === 1 ? 'l' : 'is'}:`;
+    const text = `${intro}\n\n${this.formatSlotsForUser(offered)}\n\nQual prefere? Pode me responder com o número (${offered.map((o) => o.index).join(', ')}).`;
+
+    await this.applyResponseDelay(persona);
+    await this.sendOutbound(orgId, conversation, text);
+
+    const schedulingMeta: SchedulingMetadata = {
+      offered_slots: offered,
+      specialty: specialty ?? null,
+      proposed_at: new Date().toISOString(),
+      retries: 0,
+      origin_message: originMessage.slice(0, 500),
+    };
+    await this.updateConciergeMetadata(orgId, conversationId, {
+      scheduling: schedulingMeta,
+    });
+
+    this.logger.log(
+      `concierge: propôs ${offered.length} slots (specialty="${specialty}") conv=${conversationId}`,
+    );
+    return true;
+  }
+
+  /**
+   * Pega N slots tentando distribuir entre dias diferentes pra dar opção
+   * real. Se não conseguir (ex: só tem slot pra amanhã), pega os primeiros
+   * sequenciais.
+   */
+  private pickDistributedSlots(
+    slots: AvailabilitySlot[],
+    n: number,
+  ): AvailabilitySlot[] {
+    if (slots.length <= n) return slots.slice(0, n);
+
+    const byDay = new Map<string, AvailabilitySlot[]>();
+    for (const s of slots) {
+      const day = s.start_time.slice(0, 10);
+      if (!byDay.has(day)) byDay.set(day, []);
+      byDay.get(day)!.push(s);
+    }
+
+    const out: AvailabilitySlot[] = [];
+    const dayKeys = [...byDay.keys()].sort();
+
+    // Round-robin: pega o primeiro slot de cada dia até preencher n
+    let idx = 0;
+    while (out.length < n && dayKeys.length > 0) {
+      const dayKey = dayKeys[idx % dayKeys.length];
+      if (!dayKey) break;
+      const daySlots = byDay.get(dayKey)!;
+      if (daySlots.length === 0) {
+        dayKeys.splice(idx % dayKeys.length, 1);
+        continue;
+      }
+      out.push(daySlots.shift()!);
+      idx++;
+    }
+
+    return out.slice(0, n);
+  }
+
+  /**
+   * Formata os slots como lista numerada amigável em pt-BR. Usa
+   * Intl.DateTimeFormat com timezone São Paulo (default da org). Inclui
+   * agente quando há múltiplos com nomes distintos.
+   */
+  private formatSlotsForUser(offered: OfferedSlot[]): string {
+    const tz = 'America/Sao_Paulo';
+    const dayFmt = new Intl.DateTimeFormat('pt-BR', {
+      weekday: 'short',
+      day: '2-digit',
+      month: 'short',
+      timeZone: tz,
+    });
+    const timeFmt = new Intl.DateTimeFormat('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: tz,
+    });
+
+    const distinctAgents = new Set(offered.map((o) => o.agent_id));
+    const showAgent = distinctAgents.size > 1;
+
+    return offered
+      .map((s) => {
+        const d = new Date(s.start_time);
+        const dayLabel = dayFmt.format(d).replace(/\./g, '');
+        const timeLabel = timeFmt.format(d);
+        const agentSuffix =
+          showAgent && s.agent_name ? ` com ${s.agent_name}` : '';
+        return `${s.index}️⃣ ${dayLabel} às ${timeLabel}${agentSuffix}`;
+      })
+      .join('\n');
+  }
+
+  /**
+   * Parser simples — tenta detectar qual slot o lead escolheu. Cobre:
+   * "1", "2", "3", "primeira", "segunda", "terceira", "primeiro",
+   * "opção 2", "a 1", "quero a 2", "n.3", emojis 1️⃣/2️⃣/3️⃣, etc.
+   *
+   * Retorna 1-based index ou null se ambíguo. Estratégia conservadora:
+   * só retorna match se for inequívoco.
+   */
+  private parseSlotChoice(text: string, max: number): number | null {
+    const norm = text
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .trim();
+
+    // Emoji digit (1️⃣) — pega o primeiro caractere de dígito
+    const emojiDigitMatch = text.match(/([1-9])️?⃣/);
+    if (emojiDigitMatch && emojiDigitMatch[1]) {
+      const n = Number(emojiDigitMatch[1]);
+      if (n >= 1 && n <= max) return n;
+    }
+
+    // Ordinais escritos
+    const ordinals: Record<string, number> = {
+      primeira: 1,
+      primeiro: 1,
+      segunda: 2,
+      segundo: 2,
+      terceira: 3,
+      terceiro: 3,
+      quarta: 4,
+      quarto: 4,
+    };
+    for (const [word, n] of Object.entries(ordinals)) {
+      if (n <= max && new RegExp(`\\b${word}\\b`).test(norm)) return n;
+    }
+
+    // Número escrito ("um", "dois", "tres")
+    const written: Record<string, number> = {
+      um: 1,
+      uma: 1,
+      dois: 2,
+      duas: 2,
+      tres: 3,
+    };
+    for (const [word, n] of Object.entries(written)) {
+      if (n <= max && new RegExp(`\\b${word}\\b`).test(norm)) return n;
+    }
+
+    // Dígito isolado — match em "[1-9]" cercado por non-digit (não pega "12h")
+    const digitMatches = norm.match(/(?:^|\D)([1-9])(?:\D|$)/g);
+    if (digitMatches) {
+      const numbers = digitMatches
+        .map((m) => Number(m.replace(/\D/g, '')))
+        .filter((n) => n >= 1 && n <= max);
+      // Se múltiplos dígitos válidos, ambíguo → null
+      if (numbers.length === 1 && numbers[0] !== undefined) return numbers[0];
+    }
+
+    return null;
+  }
+
+  /**
+   * Lead já recebeu proposta de slots e mandou nova mensagem. Tenta
+   * interpretar como escolha. Se sim → cria appointment + confirma. Se
+   * não → re-pergunta (até MAX_SLOT_CHOICE_RETRIES) e depois transfere
+   * pro humano (transição pra routed sem criar nada).
+   */
+  private async handleSlotChoice(args: {
+    orgId: string;
+    conversationId: string;
+    conversation: ConversationRow;
+    messageText: string;
+    settings: ConciergeSettings;
+    persona: AiAgentPersona;
+  }): Promise<void> {
+    const { orgId, conversationId, conversation, messageText, settings, persona } = args;
+
+    const meta = (conversation.metadata as { scheduling?: SchedulingMetadata } | null)?.scheduling;
+    if (!meta || !Array.isArray(meta.offered_slots) || meta.offered_slots.length === 0) {
+      this.logger.warn(
+        `concierge: state=awaiting_slot_choice mas conversation.metadata.scheduling vazio — transferindo pra humano`,
+      );
+      await this.setConciergeState(orgId, conversationId, 'routed');
+      return;
+    }
+
+    const max = meta.offered_slots.length;
+    const pick = this.parseSlotChoice(messageText, max);
+
+    if (pick !== null) {
+      const chosen = meta.offered_slots.find((o) => o.index === pick);
+      if (!chosen) {
+        this.logger.warn(`concierge: pick=${pick} fora dos offered_slots`);
+        await this.setConciergeState(orgId, conversationId, 'routed');
+        return;
+      }
+
+      // Re-valida slot — pode ter sido ocupado por outro fluxo entre a
+      // proposta e a escolha. Se conflitar, pede pro lead reenviar com
+      // novo conjunto de slots.
+      const stillFree = await this.isSlotStillFree(orgId, chosen);
+      if (!stillFree) {
+        this.logger.log(
+          `concierge: slot escolhido (${chosen.start_time}) foi ocupado entre proposta e escolha — re-propondo`,
+        );
+        if (settings.auto_reply) {
+          await this.applyResponseDelay(persona);
+          await this.sendOutbound(
+            orgId,
+            conversation,
+            'Desculpe, esse horário acabou de ser preenchido. Vou checar outras opções e já te retorno!',
+          );
+        }
+        // Re-tenta proposta
+        const ok = await this.proposeSlotsAndPersist({
+          orgId,
+          conversationId,
+          conversation,
+          persona,
+          specialty: meta.specialty,
+          bridgeMessage: null,
+          originMessage: meta.origin_message,
+        });
+        if (!ok) {
+          await this.setConciergeState(orgId, conversationId, 'routed');
+        }
+        return;
+      }
+
+      // Tudo certo — cria o appointment via AppointmentsService
+      try {
+        await this.appointments.create(
+          orgId,
+          {
+            title: `Atendimento — ${meta.specialty ?? 'Geral'}`,
+            description: `Agendado pelo Concierge IA via WhatsApp.\nMensagem original: "${meta.origin_message.slice(0, 200)}"`,
+            start_time: chosen.start_time,
+            end_time: chosen.end_time,
+            assigned_to: chosen.agent_id,
+            contact_id: conversation.contact_id,
+            conversation_id: conversation.id,
+            metadata: {
+              source: 'ai_concierge',
+              specialty_guess: meta.specialty,
+              proposed_at: meta.proposed_at,
+            },
+          },
+          true, // createdByAi
+        );
+      } catch (err) {
+        this.logger.warn(
+          `concierge: appointments.create falhou: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        if (settings.auto_reply) {
+          await this.applyResponseDelay(persona);
+          await this.sendOutbound(
+            orgId,
+            conversation,
+            'Tive um probleminha pra confirmar o horário aqui. Nossa equipe vai te chamar em instantes!',
+          );
+        }
+        await this.setConciergeState(orgId, conversationId, 'routed');
+        return;
+      }
+
+      // Confirma pro lead
+      const dayFmt = new Intl.DateTimeFormat('pt-BR', {
+        weekday: 'long',
+        day: '2-digit',
+        month: 'long',
+        timeZone: 'America/Sao_Paulo',
+      });
+      const timeFmt = new Intl.DateTimeFormat('pt-BR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'America/Sao_Paulo',
+      });
+      const d = new Date(chosen.start_time);
+      const dayLabel = dayFmt.format(d);
+      const timeLabel = timeFmt.format(d);
+      const agentSuffix = chosen.agent_name ? ` com ${chosen.agent_name}` : '';
+      const confirmText = `Pronto! ✅ Agendamento confirmado pra ${dayLabel} às ${timeLabel}${agentSuffix}. Te lembramos antes pra você não esquecer.`;
+
+      if (settings.auto_reply) {
+        await this.applyResponseDelay(persona);
+        await this.sendOutbound(orgId, conversation, confirmText);
+      }
+
+      // Limpa scheduling do metadata + transiciona pra routed
+      await this.updateConciergeMetadata(orgId, conversationId, {
+        concierge_state: 'routed',
+        scheduling: null, // remove a oferta consumida
+        last_appointment_created_at: new Date().toISOString(),
+      });
+
+      this.logger.log(
+        `concierge: appointment criado conv=${conversationId} pick=${pick} agent=${chosen.agent_id} start=${chosen.start_time}`,
+      );
+      return;
+    }
+
+    // Não conseguiu parsear — incrementa retries. Se passou do limite,
+    // entrega pro humano (transferência silenciosa pra atendente revisar).
+    const retries = (meta.retries ?? 0) + 1;
+    if (retries > MAX_SLOT_CHOICE_RETRIES) {
+      this.logger.log(
+        `concierge: ${MAX_SLOT_CHOICE_RETRIES} tentativas sem escolha clara conv=${conversationId} — entregando pra humano`,
+      );
+      if (settings.auto_reply) {
+        await this.applyResponseDelay(persona);
+        await this.sendOutbound(
+          orgId,
+          conversation,
+          'Sem problemas! Vou pedir pra equipe te chamar pra alinhar o melhor horário. Já já alguém te responde por aqui!',
+        );
+      }
+      await this.updateConciergeMetadata(orgId, conversationId, {
+        concierge_state: 'routed',
+        scheduling: null,
+      });
+      return;
+    }
+
+    // Re-pergunta
+    if (settings.auto_reply) {
+      const list = this.formatSlotsForUser(meta.offered_slots);
+      const text = `Não entendi qual você prefere. Pode me responder só com o número (${meta.offered_slots.map((o) => o.index).join(', ')})?\n\n${list}`;
+      await this.applyResponseDelay(persona);
+      await this.sendOutbound(orgId, conversation, text);
+    }
+    await this.updateConciergeMetadata(orgId, conversationId, {
+      scheduling: { ...meta, retries },
+    });
+  }
+
+  /**
+   * Confere se o slot escolhido ainda está livre (alguém pode ter
+   * agendado entre a proposta e a escolha). Best-effort: query simples
+   * em appointments com overlap por agente.
+   */
+  private async isSlotStillFree(orgId: string, slot: OfferedSlot): Promise<boolean> {
+    const { data } = await this.supabase.adminClient
+      .from('appointments')
+      .select('id')
+      .eq('org_id', orgId)
+      .eq('assigned_to', slot.agent_id)
+      .in('status', ['scheduled', 'confirmed'])
+      .lt('start_time', slot.end_time)
+      .gt('end_time', slot.start_time)
+      .limit(1);
+    return !data || data.length === 0;
   }
 
   // ──────────────────────────────────────────────────────────

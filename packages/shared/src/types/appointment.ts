@@ -94,6 +94,11 @@ export interface AvailabilitySlot {
   end_time: ISODateString;
   agent_id: UUID;
   agent_name: string | null;
+  /** Duração do slot em minutos. Útil quando vem de `findSlotsForOrg`
+   *  agregando agentes com durações diferentes. */
+  duration_minutes?: number;
+  /** Specialties do agente (quando o slot vem de match por specialty). */
+  agent_specialties?: string[];
 }
 
 /**
