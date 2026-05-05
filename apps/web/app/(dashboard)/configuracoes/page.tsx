@@ -25,6 +25,7 @@ import { CustomFieldsAdminSection } from '@/components/configuracoes/custom-fiel
 import { AutoLeadSection } from '@/components/configuracoes/auto-lead-section';
 import { WebhooksSection } from '@/components/configuracoes/webhooks-section';
 import { CalendarIntegrationsSection } from '@/components/configuracoes/calendar-integrations-section';
+import { AppointmentTypesSection } from '@/components/configuracoes/appointment-types-section';
 import { ConciergeSection } from '@/components/configuracoes/concierge-section';
 import { TagsSection } from '@/components/configuracoes/tags-section';
 import { cn } from '@/lib/utils';
@@ -205,7 +206,12 @@ export default function ConfiguracoesPage() {
 
             {section === 'ai' && <AiFeaturesSection />}
 
-            {section === 'agenda' && <CalendarIntegrationsSection />}
+            {section === 'agenda' && (
+              <div className="flex flex-col gap-4">
+                <AppointmentTypesSection />
+                <CalendarIntegrationsSection />
+              </div>
+            )}
 
             {section === 'agente-ia' && <AgenteIaLink />}
 
