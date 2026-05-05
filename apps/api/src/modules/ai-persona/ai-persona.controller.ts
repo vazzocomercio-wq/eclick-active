@@ -11,12 +11,23 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import type { AiAgentPersona } from '@eclick-active/shared';
+import { IsBoolean, IsOptional, IsString, Length } from 'class-validator';
+import type { AiAgentPersona, PersonaTemplate } from '@eclick-active/shared';
 import { AuthGuard } from '../../common/auth/auth.guard';
 import { CurrentUser } from '../../common/auth/current-user.decorator';
 import type { AuthUser } from '../../common/auth/auth.types';
 import { AiPersonaService } from './ai-persona.service';
 import { CreatePersonaDto, UpdatePersonaDto } from './dto/persona.dto';
+
+class ApplyTemplateDto {
+  @IsString()
+  @Length(1, 80)
+  template_id!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  create_appointment_types?: boolean;
+}
 
 @UseGuards(AuthGuard)
 @Controller('ai/personas')
@@ -31,6 +42,19 @@ export class AiPersonaController {
   @Get('default')
   getDefault(@CurrentUser() user: AuthUser): Promise<AiAgentPersona | null> {
     return this.service.getDefault(user.org_id);
+  }
+
+  @Get('templates')
+  listTemplates(): PersonaTemplate[] {
+    return this.service.listTemplates();
+  }
+
+  @Post('apply-template')
+  @HttpCode(HttpStatus.OK)
+  applyTemplate(@CurrentUser() user: AuthUser, @Body() dto: ApplyTemplateDto) {
+    return this.service.applyTemplate(user.org_id, dto.template_id, {
+      create_appointment_types: dto.create_appointment_types ?? false,
+    });
   }
 
   @Get(':id')

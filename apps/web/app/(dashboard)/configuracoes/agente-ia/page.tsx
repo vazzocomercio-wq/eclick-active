@@ -2,18 +2,29 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, BarChart3, Bot, Brain, Clock, FlaskConical, User } from 'lucide-react';
+import {
+  ArrowLeft,
+  BarChart3,
+  Bot,
+  Brain,
+  Clock,
+  FlaskConical,
+  User,
+  Wand2,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PersonaTab } from '@/components/configuracoes/agente-ia/persona-tab';
 import { BusinessHoursTab } from '@/components/configuracoes/agente-ia/business-hours-tab';
 import { TestModeTab } from '@/components/configuracoes/agente-ia/test-mode-tab';
 import { StatsTab } from '@/components/configuracoes/agente-ia/stats-tab';
 import { SkillsTab } from '@/components/configuracoes/agente-ia/skills-tab';
+import { PersonaTemplatesSection } from '@/components/configuracoes/persona-templates-section';
 
-type Tab = 'persona' | 'skills' | 'hours' | 'test' | 'stats';
+type Tab = 'persona' | 'templates' | 'skills' | 'hours' | 'test' | 'stats';
 
 const TABS: Array<{ id: Tab; label: string; icon: typeof User; description: string }> = [
   { id: 'persona', label: 'Persona', icon: User, description: 'Identidade do agente' },
+  { id: 'templates', label: 'Templates', icon: Wand2, description: 'Onboarding por nicho' },
   { id: 'skills', label: 'Skills', icon: Brain, description: 'Habilidades modulares' },
   { id: 'hours', label: 'Horário Comercial', icon: Clock, description: 'Quando responder' },
   { id: 'test', label: 'Modo Teste', icon: FlaskConical, description: 'Simular conversa' },
@@ -70,6 +81,7 @@ export default function AgenteIaPage() {
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 p-6">
           {tab === 'persona' && <PersonaTab />}
+          {tab === 'templates' && <PersonaTemplatesSection />}
           {tab === 'skills' && <SkillsTab />}
           {tab === 'hours' && <BusinessHoursTab />}
           {tab === 'test' && <TestModeTab />}

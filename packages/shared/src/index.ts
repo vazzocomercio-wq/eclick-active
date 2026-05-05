@@ -42,3 +42,6 @@ export * from './constants';
 
 // Utils
 export * from './utils/placeholder-resolver';
+
+// Onboarding templates por nicho
+export * from './persona-templates';

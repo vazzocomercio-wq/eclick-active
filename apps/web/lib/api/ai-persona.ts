@@ -1,5 +1,19 @@
-import type { AiAgentPersona } from '@eclick-active/shared';
+import type { AiAgentPersona, PersonaTemplate } from '@eclick-active/shared';
 import { api } from './client';
+
+export interface ApplyTemplateInput {
+  template_id: string;
+  create_appointment_types?: boolean;
+}
+
+export interface ApplyTemplateResponse {
+  persona: AiAgentPersona;
+  applied: {
+    template_id: string;
+    business_context_set: boolean;
+    appointment_types_created: number;
+  };
+}
 
 export interface CreatePersonaInput {
   name: string;
@@ -42,5 +56,11 @@ export const aiPersonaApi = {
   },
   remove(id: string): Promise<void> {
     return api.delete<void>(`/ai/personas/${id}`);
+  },
+  listTemplates(signal?: AbortSignal): Promise<PersonaTemplate[]> {
+    return api.get<PersonaTemplate[]>('/ai/personas/templates', { signal });
+  },
+  applyTemplate(input: ApplyTemplateInput): Promise<ApplyTemplateResponse> {
+    return api.post<ApplyTemplateResponse>('/ai/personas/apply-template', input);
   },
 };
