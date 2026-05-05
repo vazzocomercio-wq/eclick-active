@@ -91,8 +91,30 @@ export class BaileysSession {
       });
 
       this.sock.ev.on('messages.upsert', (m) => {
-        if (m.type !== 'notify') return;
+        // Log defensivo de TUDO que chega — capturar msgs perdidas
+        // (reportadas em prod 2026-05-05). Mostra type + count + ids
+        // pra cruzar com WhatsApp screenshot do user e detectar onde
+        // a msg cai.
+        // eslint-disable-next-line no-console
+        console.log(
+          `[baileys ${this.ctx.channelId}] messages.upsert type=${m.type} count=${m.messages.length} ids=${m.messages.map((mm) => `${mm.key.id?.slice(0, 12)}/${mm.key.fromMe ? 'me' : 'other'}/${mm.message ? Object.keys(mm.message).slice(0, 2).join(',') : 'null'}`).join(';')}`,
+        );
+
+        if (m.type !== 'notify') {
+          // eslint-disable-next-line no-console
+          console.log(
+            `[baileys ${this.ctx.channelId}] messages.upsert skip — type=${m.type} (não é notify, geralmente é history/append de outro device)`,
+          );
+          return;
+        }
         for (const msg of m.messages) {
+          // Log antes do persist — ajuda a saber se mensagem chegou
+          // mas falhou silenciosamente em algum filtro do persistInbound
+          // (grupos, msg sem text/media, msg fromMe, etc.)
+          // eslint-disable-next-line no-console
+          console.log(
+            `[baileys ${this.ctx.channelId}] inbound from=${msg.key.remoteJid} fromMe=${msg.key.fromMe} id=${msg.key.id?.slice(0, 16)} hasMessage=${!!msg.message}`,
+          );
           void this.persistInbound(msg).catch((err) => {
             // eslint-disable-next-line no-console
             console.error(`[baileys ${this.ctx.channelId}] persistInbound erro:`, err);
@@ -440,10 +462,22 @@ export class BaileysSession {
   }
 
   private async persistInbound(msg: WAMessage): Promise<void> {
-    if (!msg.message || msg.key.fromMe) return; // ignora outbound (eco) e tombstones
+    if (!msg.message || msg.key.fromMe) {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[baileys ${this.ctx.channelId}] persistInbound skip — fromMe=${msg.key.fromMe} hasMessage=${!!msg.message}`,
+      );
+      return; // ignora outbound (eco) e tombstones
+    }
 
     const remoteJid = msg.key.remoteJid;
-    if (!remoteJid || remoteJid.endsWith('@g.us')) return; // ignora grupos no MVP
+    if (!remoteJid || remoteJid.endsWith('@g.us')) {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[baileys ${this.ctx.channelId}] persistInbound skip — jid=${remoteJid} (sem JID ou grupo)`,
+      );
+      return; // ignora grupos no MVP
+    }
 
     // JID pode ser `@s.whatsapp.net` (digits = telefone real) OU `@lid`
     // (digits = pseudo-ID anônimo, NÃO é telefone). O JID completo é a
@@ -455,7 +489,17 @@ export class BaileysSession {
     const messageId = msg.key.id ?? `${Date.now()}-${Math.random()}`;
 
     const parsed = extractContent(msg.message);
-    if (!parsed) return; // tipo não suportado no MVP
+    if (!parsed) {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[baileys ${this.ctx.channelId}] persistInbound skip — tipo não suportado msgKeys=${Object.keys(msg.message).slice(0, 3).join(',')} id=${messageId.slice(0, 12)}`,
+      );
+      return; // tipo não suportado no MVP
+    }
+    // eslint-disable-next-line no-console
+    console.log(
+      `[baileys ${this.ctx.channelId}] persistInbound persist kind=${parsed.kind} from=${senderName ?? '(sem nome)'} text="${parsed.kind === 'text' ? parsed.body.slice(0, 60) : ''}" id=${messageId.slice(0, 12)}`,
+    );
 
     const supabase = getSupabase();
 
