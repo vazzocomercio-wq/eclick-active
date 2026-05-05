@@ -216,13 +216,28 @@ export default function AgendaPage() {
               if (!block) return null;
               const Icon = appt.location_type ? LOCATION_ICON[appt.location_type] : CalendarClock;
               const color = appt.type?.color ?? '#00E5FF';
+              // Layout adaptive — block.height vem em px (1min = 0.8px ish)
+              // <40px (~30min) = compacto: só hora + título
+              // 40-70px (~30-50min) = padrão: + contato
+              // >=70px (~60min+) = expandido: + profissional + ícone localização
+              const isCompact = block.height < 40;
+              const isExpanded = block.height >= 70;
+              const startTime = new Date(appt.start_time).toLocaleTimeString('pt-BR', {
+                hour: '2-digit',
+                minute: '2-digit',
+              });
+              const endTime = new Date(appt.end_time).toLocaleTimeString('pt-BR', {
+                hour: '2-digit',
+                minute: '2-digit',
+              });
               return (
                 <button
                   key={appt.id}
                   type="button"
                   onClick={() => setSelected(appt)}
                   className={cn(
-                    'absolute z-20 overflow-hidden rounded-md border-l-2 px-1.5 py-1 text-left text-[10px] shadow-sm transition-all hover:z-30 hover:shadow-md',
+                    'group absolute z-20 overflow-hidden rounded-lg border-l-[3px] text-left shadow-sm transition-all hover:z-30 hover:shadow-lg hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-offset-1',
+                    isCompact ? 'px-1.5 py-0.5' : 'px-2 py-1.5',
                     appt.status === 'cancelled' && 'opacity-50 line-through',
                     appt.status === 'completed' && 'opacity-60',
                   )}
@@ -231,32 +246,65 @@ export default function AgendaPage() {
                     left: `calc(60px + ((100% - 60px) / 7) * ${block.col})`,
                     width: `calc((100% - 60px) / 7 - 4px)`,
                     height: `${block.height}px`,
-                    backgroundColor: `${color}20`,
+                    background: `linear-gradient(135deg, ${color}30 0%, ${color}15 100%)`,
                     borderLeftColor: color,
+                    boxShadow: `inset 0 0 0 1px ${color}25`,
                   }}
+                  title={`${appt.title}${appt.contact?.name ? ` — ${appt.contact.name}` : ''}\n${startTime} – ${endTime}${appt.agent?.display_name ? `\nProfissional: ${appt.agent.display_name}` : ''}`}
                 >
-                  <div className="flex items-center gap-1 font-semibold leading-tight">
-                    <Icon className="h-2.5 w-2.5 shrink-0" style={{ color }} />
-                    <span className="truncate">{appt.title}</span>
-                  </div>
-                  {appt.contact?.name && (
-                    <div className="truncate text-muted-foreground">{appt.contact.name}</div>
-                  )}
-                  {appt.agent?.display_name && (
-                    <div
-                      className="truncate text-[9px] font-medium"
-                      style={{ color }}
-                      title={`Profissional: ${appt.agent.display_name}`}
-                    >
-                      👤 {appt.agent.display_name}
+                  {isCompact ? (
+                    // Compacto: 1 linha — hora + título inline
+                    <div className="flex items-baseline gap-1 leading-tight">
+                      <span className="text-[10px] font-bold tabular-nums" style={{ color }}>
+                        {startTime}
+                      </span>
+                      <span className="truncate text-[10px] font-medium text-foreground">
+                        {appt.title}
+                      </span>
                     </div>
+                  ) : (
+                    // Padrão / Expandido — hierarquia clara em linhas
+                    <>
+                      {/* Linha 1: hora + ícone tipo */}
+                      <div className="flex items-center gap-1 leading-tight">
+                        <Icon className="h-3 w-3 shrink-0" style={{ color }} />
+                        <span className="text-[11px] font-bold tabular-nums" style={{ color }}>
+                          {startTime}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground tabular-nums">
+                          – {endTime}
+                        </span>
+                        {appt.created_by_ai && (
+                          <span
+                            className="ml-auto text-[9px]"
+                            title="Agendado pela IA"
+                            aria-label="Agendado pela IA"
+                          >
+                            🤖
+                          </span>
+                        )}
+                      </div>
+                      {/* Linha 2: título */}
+                      <div className="truncate text-[12px] font-semibold leading-snug text-foreground">
+                        {appt.title}
+                      </div>
+                      {/* Linha 3: contato */}
+                      {appt.contact?.name && (
+                        <div className="truncate text-[10px] leading-tight text-muted-foreground">
+                          👤 {appt.contact.name}
+                        </div>
+                      )}
+                      {/* Linha 4: profissional (só se expandido) */}
+                      {isExpanded && appt.agent?.display_name && (
+                        <div
+                          className="mt-0.5 truncate text-[10px] font-medium leading-tight"
+                          style={{ color }}
+                        >
+                          ⚕ {appt.agent.display_name}
+                        </div>
+                      )}
+                    </>
                   )}
-                  <div className="truncate text-muted-foreground">
-                    {new Date(appt.start_time).toLocaleTimeString('pt-BR', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </div>
                 </button>
               );
             })}
