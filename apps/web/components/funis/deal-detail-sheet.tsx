@@ -194,7 +194,10 @@ export function DealDetailSheet({
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent
           side="right"
-          className="flex w-full max-w-[520px] flex-col gap-0 p-0 sm:max-w-[520px]"
+          // Esconde o X built-in do Sheet — o DealHeader tem MoreVertical
+          // próprio no canto direito que estava sobrepondo. User fecha via
+          // ESC ou clicando fora.
+          className="flex w-full max-w-[520px] flex-col gap-0 p-0 sm:max-w-[520px] [&>button[aria-label=Fechar]]:hidden"
         >
           {/* SheetTitle escondido (acessibilidade) — o header customizado
               tem o título visualmente. */}
@@ -241,7 +244,7 @@ export function DealDetailSheet({
                   </TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="main" className="flex-1 min-h-0 overflow-y-auto">
+                <TabsContent value="main" className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
                   <DealMainTab
                     deal={detail}
                     conversationId={detail.conversation_id ?? null}
@@ -258,7 +261,7 @@ export function DealDetailSheet({
                   />
                 </TabsContent>
 
-                <TabsContent value="insights" className="flex-1 min-h-0 overflow-y-auto">
+                <TabsContent value="insights" className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
                   <div className="p-4">
                     <DealInsightsTab
                       detail={detail}
@@ -268,7 +271,7 @@ export function DealDetailSheet({
                   </div>
                 </TabsContent>
 
-                <TabsContent value="history" className="flex-1 min-h-0 overflow-y-auto">
+                <TabsContent value="history" className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
                   <div className="p-4">
                     <DealHistoryTab
                       dealId={detail.id}
