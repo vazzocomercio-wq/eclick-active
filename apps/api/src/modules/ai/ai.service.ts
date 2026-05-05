@@ -15,6 +15,8 @@ import { AppointmentsService } from '../appointments/appointments.service';
 import { AnthropicClient } from './anthropic.client';
 import { AiConciergeService } from './ai-concierge.service';
 import { DataCollectionService } from './data-collection.service';
+import { SacAiService } from '../sac/sac-ai.service';
+import { SacTicketsService } from '../sac/sac-tickets.service';
 import type { AiSkill } from '@eclick-active/shared';
 import {
   CLASSIFY_SCHEMA,
@@ -53,6 +55,8 @@ export class AiService {
     private readonly dataCollection: DataCollectionService,
     private readonly appointmentsLookup: AppointmentsService,
     private readonly concierge: AiConciergeService,
+    private readonly sacAi: SacAiService,
+    private readonly sacTickets: SacTicketsService,
   ) {}
 
   // ──────────────────────────────────────────────────────────
@@ -91,7 +95,87 @@ export class AiService {
 
     await this.persistClassification(orgId, message, conversation, classification);
 
+    // Auto-classificação SAC: se intent indica pós-venda/suporte/reclamação
+    // E mensagem contém palavras-chave, dispara fluxo SAC em paralelo (não bloqueia).
+    void this.maybeCreateSacTicket(orgId, conversationId, message, classification).catch(
+      (err) => {
+        this.logger.warn(
+          `SAC auto-classify falhou (non-fatal): ${err instanceof Error ? err.message : String(err)}`,
+        );
+      },
+    );
+
     return classification;
+  }
+
+  /**
+   * Detecta se a mensagem é candidata a virar ticket SAC e cria
+   * automaticamente quando confidence > 0.7. Idempotente: se já há ticket
+   * aberto pra essa conversa, não recria.
+   */
+  private async maybeCreateSacTicket(
+    orgId: string,
+    conversationId: string,
+    message: Message,
+    classification: ClassificationResult,
+  ): Promise<void> {
+    const SAC_INTENTS = new Set(['complaint', 'support', 'other']);
+    const SAC_KEYWORDS =
+      /(pedido|entrega|atraso|atras[ao]u|defeito|defeituoso|troca|devolu[çc][ãa]o|devolver|reembolso|garantia|cancelar|reclama|nota fiscal|rastreio|rastreamento|extravio|perdeu|n[ãa]o chegou|estornar|nf-?e)/i;
+
+    const intent = (classification.intent ?? '').toLowerCase();
+    if (!SAC_INTENTS.has(intent)) return;
+
+    const text = message.plain_text ?? this.extractText(message.content);
+    if (!text || !SAC_KEYWORDS.test(text)) return;
+
+    // Idempotência: se já há ticket aberto pra essa conversa, sai
+    const existing = await this.sacTickets.findOpenByConversation(orgId, conversationId);
+    if (existing) return;
+
+    // Histórico recente como contexto pra IA
+    const recent = await this.fetchRecentMessages(orgId, conversationId, 6);
+    const history = recent
+      .reverse()
+      .map((m) => `${m.direction === 'inbound' ? 'Cliente' : 'Atendente'}: ${m.plain_text ?? ''}`)
+      .filter((s) => s.length > 5);
+
+    // Busca contato pra enriquecer com dados de pedido (bridge)
+    const conv = await this.fetchConversationCore(orgId, conversationId);
+    let contactRefs: { phone?: string | null; email?: string | null } = {};
+    if (conv.contact_id) {
+      const { data: c } = await this.supabase.adminClient
+        .from('contacts')
+        .select('phone, email')
+        .eq('id', conv.contact_id)
+        .eq('org_id', orgId)
+        .maybeSingle();
+      if (c) contactRefs = c as { phone?: string | null; email?: string | null };
+    }
+
+    const sac = await this.sacAi.classifyTicket(orgId, text, history, contactRefs);
+    if (!sac || sac.confidence < 0.7) return;
+
+    try {
+      await this.sacTickets.createFromConversation(orgId, conversationId, sac);
+    } catch (err) {
+      this.logger.warn(
+        `createFromConversation falhou: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  /** Extrai string do `content: Json`. Aceita string direta ou objeto com .text/.body. */
+  private extractText(content: Json | null | undefined): string {
+    if (!content) return '';
+    if (typeof content === 'string') return content;
+    if (typeof content === 'object' && content !== null) {
+      const obj = content as Record<string, unknown>;
+      if (typeof obj.text === 'string') return obj.text;
+      if (typeof obj.body === 'string') return obj.body;
+      if (typeof obj.message === 'string') return obj.message;
+    }
+    return '';
   }
 
   // ──────────────────────────────────────────────────────────

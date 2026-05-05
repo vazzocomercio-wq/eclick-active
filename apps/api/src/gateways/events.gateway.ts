@@ -129,6 +129,21 @@ export interface ConciergeTypingPayload {
   persona_name?: string;
 }
 
+// ── SAC events ──
+// Granulares pra UI poder reagir diferente em cada caso (toast crítico
+// pra ticket-created vs invalidate-query pra ticket-updated).
+export interface SacTicketEventPayload {
+  ticket: unknown;
+  source?: string;
+  reason?: string;
+}
+
+export interface SacSlaBreachedPayload {
+  ticket_id: string;
+  ticket_number?: number;
+  priority?: string;
+}
+
 export type EventName =
   | 'message:new'
   | 'message:updated'
@@ -146,7 +161,14 @@ export type EventName =
   | 'appointment:reminder-24h'
   | 'appointment:reminder-1h'
   | 'appointment:no-show'
-  | 'concierge:typing';
+  | 'concierge:typing'
+  | 'sac:ticket-created'
+  | 'sac:ticket-updated'
+  | 'sac:ticket-resolved'
+  | 'sac:ticket-reopened'
+  | 'sac:ticket-escalated'
+  | 'sac:preventive-created'
+  | 'sac:sla-breached';
 
 export interface EventPayloadMap {
   'message:new': MessageNewPayload;
@@ -166,6 +188,13 @@ export interface EventPayloadMap {
   'appointment:reminder-1h': AppointmentReminderPayload;
   'appointment:no-show': AppointmentNoShowPayload;
   'concierge:typing': ConciergeTypingPayload;
+  'sac:ticket-created': SacTicketEventPayload;
+  'sac:ticket-updated': SacTicketEventPayload;
+  'sac:ticket-resolved': SacTicketEventPayload;
+  'sac:ticket-reopened': SacTicketEventPayload;
+  'sac:ticket-escalated': SacTicketEventPayload;
+  'sac:preventive-created': SacTicketEventPayload;
+  'sac:sla-breached': SacSlaBreachedPayload;
 }
 
 const ROOM_PREFIX = 'org';
