@@ -10,6 +10,10 @@ export interface ConversationAttachment {
   ai_summary: string | null;
   ai_extracted: Record<string, unknown> | null;
   url: string | null;
+  /** Status interno: 'downloading' | 'uploaded' | 'download_failed' | 'upload_failed' | null (legacy) */
+  status?: string | null;
+  /** Mensagem de erro quando status terminou em '*_failed' */
+  error?: string | null;
   created_at: string;
 }
 

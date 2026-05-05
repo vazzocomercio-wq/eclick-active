@@ -95,9 +95,36 @@ function MediaBlock({
   attachment: ConversationAttachment;
   compact: boolean;
 }) {
-  const { url, media_type, mime_type, file_name, file_size_bytes } = attachment;
+  const { url, media_type, mime_type, file_name, file_size_bytes, status, error } = attachment;
 
   if (!url) {
+    // Diferencia: ainda baixando (auto-poll do hook vai atualizar) vs erro definitivo
+    const downloading = status === 'downloading' || (!status && !error);
+    const failed = status === 'download_failed' || status === 'upload_failed' || !!error;
+
+    if (failed) {
+      return (
+        <div className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+          <ImageOff className="h-4 w-4 shrink-0" />
+          <div className="flex flex-col gap-0.5">
+            <span className="font-medium">Falha ao baixar mídia</span>
+            <span className="text-[10px] opacity-80">
+              Peça ao contato pra reenviar{error ? ` (${error.slice(0, 80)})` : ''}
+            </span>
+          </div>
+        </div>
+      );
+    }
+
+    if (downloading) {
+      return (
+        <div className="flex items-center gap-2 rounded-md border border-cyan-500/30 bg-cyan-500/5 px-3 py-2 text-xs text-cyan-700 dark:text-cyan-400">
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+          <span>Baixando mídia…</span>
+        </div>
+      );
+    }
+
     return (
       <div className="flex items-center gap-2 rounded-md border border-dashed border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
         <ImageOff className="h-4 w-4" />

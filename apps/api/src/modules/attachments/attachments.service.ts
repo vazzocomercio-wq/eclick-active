@@ -72,6 +72,11 @@ export class AttachmentsService {
         'id, org_id, message_id, conversation_id, contact_id, media_type, mime_type, file_name, storage_path, metadata',
       )
       .is('ai_processed_at', null)
+      // Pula rows que ainda estão baixando (storage_path='pending://download'
+      // = inserção pending no worker Baileys, blob ainda não foi pra Storage)
+      // ou que falharam download. Worker re-tenta no próximo tick quando
+      // storage_path real chegar.
+      .neq('storage_path', 'pending://download')
       .order('created_at', { ascending: true })
       .limit(limit);
     return (data ?? []) as AttachmentRow[];
@@ -495,13 +500,17 @@ export class AttachmentsService {
       ai_summary: string | null;
       ai_extracted: Record<string, unknown> | null;
       url: string | null;
+      /** Status do processamento (downloading | uploaded | download_failed | upload_failed) */
+      status: string | null;
+      /** Mensagem de erro quando status='*_failed' — UI mostra ao user */
+      error: string | null;
       created_at: string;
     }>
   > {
     const { data } = await this.supabase.adminClient
       .from('attachments')
       .select(
-        'id, message_id, media_type, mime_type, file_name, file_size_bytes, storage_path, ai_summary, ai_extracted, created_at',
+        'id, message_id, media_type, mime_type, file_name, file_size_bytes, storage_path, ai_summary, ai_extracted, metadata, created_at',
       )
       .eq('org_id', orgId)
       .eq('conversation_id', conversationId)
@@ -517,13 +526,21 @@ export class AttachmentsService {
       storage_path: string;
       ai_summary: string | null;
       ai_extracted: Record<string, unknown> | null;
+      metadata: Record<string, unknown> | null;
       created_at: string;
     }>;
 
     return Promise.all(
       rows.map(async (r) => {
-        const url = await this.getSignedUrl(r.storage_path);
-        const out = {
+        const meta = r.metadata ?? {};
+        const status = (meta.status as string | undefined) ?? null;
+        const error = (meta.error as string | undefined) ?? null;
+        // storage_path='pending://download' = ainda baixando, sem URL ainda
+        const url =
+          status === 'uploaded' || (!status && r.storage_path !== 'pending://download')
+            ? await this.getSignedUrl(r.storage_path)
+            : null;
+        return {
           id: r.id,
           message_id: r.message_id,
           media_type: r.media_type,
@@ -533,9 +550,10 @@ export class AttachmentsService {
           ai_summary: r.ai_summary,
           ai_extracted: r.ai_extracted,
           url,
+          status,
+          error,
           created_at: r.created_at,
         };
-        return out;
       }),
     );
   }

@@ -871,13 +871,60 @@ export class BaileysSession {
   ): Promise<void> {
     if (parsed.kind === 'text') return;
 
-    // Download com retry — `downloadMediaMessage` falha silenciosamente
-    // (retorna buffer vazio ou throws) quando o WhatsApp não conseguiu
-    // re-encriptar mídia rapidamente. Tipicamente acontece quando:
-    //   - Signal session com remetente recém-restabelecida (cold)
-    //   - Sessão de upload no peer ainda não pronta
-    //   - Concurrent retry de outras msgs do mesmo peer
-    // Sintoma na UI: "Documento indisponível" / "Imagem indisponível".
+    // Pega mime + filename do proto ANTES do download — populamos o
+    // attachment row imediatamente pra UI conseguir mostrar "Processando…"
+    // em vez de "Indisponível" enquanto baixamos.
+    const m = msg.message ?? {};
+    const mediaInfo = (() => {
+      if (parsed.kind === 'image') return { mime: m.imageMessage?.mimetype, file: null };
+      if (parsed.kind === 'audio') return { mime: m.audioMessage?.mimetype, file: null };
+      if (parsed.kind === 'video') return { mime: m.videoMessage?.mimetype, file: null };
+      if (parsed.kind === 'document')
+        return {
+          mime: m.documentMessage?.mimetype,
+          file: m.documentMessage?.fileName ?? null,
+        };
+      return { mime: null, file: null };
+    })();
+
+    const mimeType = mediaInfo.mime ?? defaultMimeFor(parsed.kind);
+    const ext = extFromMime(mimeType) ?? 'bin';
+    const fileName = mediaInfo.file ?? `${parsed.kind}-${randomUUID()}.${ext}`;
+    const supabase = getSupabase();
+
+    // 1) Insert row PENDING (sem storage_path, sem ai_summary). Se a etapa
+    //    seguinte (download/upload) falhar, row já existe e UI mostra
+    //    "Processando…" em vez de "Indisponível" silenciosamente.
+    const { data: createdRow, error: createErr } = await supabase
+      .from('attachments')
+      .insert({
+        org_id: this.ctx.orgId,
+        message_id: messageId,
+        conversation_id: conversationId,
+        contact_id: contactId,
+        media_type: parsed.kind,
+        mime_type: mimeType,
+        file_name: fileName,
+        // storage_path NOT NULL no schema → usamos placeholder e
+        // atualizamos no upload OK. Schema vai precisar update pra
+        // aceitar null (próximo migration). Por ora placeholder.
+        storage_path: 'pending://download',
+        metadata: { status: 'downloading' },
+      })
+      .select('id')
+      .single();
+    if (createErr || !createdRow) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[baileys ${this.ctx.channelId}] insert attachment pending falhou (msg=${messageId.slice(0, 8)}):`,
+        createErr?.message,
+      );
+      // Continue mesmo assim — tenta download/upload sem row pending
+    }
+    const attachmentId = (createdRow as { id?: string } | null)?.id ?? null;
+
+    // 2) Download com retry (Signal session corruption pode falhar em msgs
+    //    cold; backoff dá janela pro Baileys re-pedir ao peer)
     let buffer: Buffer | null = null;
     let lastErr: unknown = null;
     const maxAttempts = 3;
@@ -899,18 +946,17 @@ export class BaileysSession {
         }
         // eslint-disable-next-line no-console
         console.warn(
-          `[baileys ${this.ctx.channelId}] downloadMediaMessage tentativa ${attempt}/${maxAttempts} retornou vazio (msg=${messageId} kind=${parsed.kind})`,
+          `[baileys ${this.ctx.channelId}] downloadMediaMessage tentativa ${attempt}/${maxAttempts} retornou vazio (msg=${messageId.slice(0, 8)} kind=${parsed.kind})`,
         );
       } catch (err) {
         lastErr = err;
         // eslint-disable-next-line no-console
         console.warn(
-          `[baileys ${this.ctx.channelId}] downloadMediaMessage tentativa ${attempt}/${maxAttempts} threw (msg=${messageId}):`,
+          `[baileys ${this.ctx.channelId}] downloadMediaMessage tentativa ${attempt}/${maxAttempts} threw (msg=${messageId.slice(0, 8)}):`,
           err instanceof Error ? err.message : err,
         );
       }
       if (attempt < maxAttempts) {
-        // Backoff exponencial: 1s, 3s
         const delay = attempt === 1 ? 1000 : 3000;
         await new Promise((r) => setTimeout(r, delay));
       }
@@ -919,40 +965,29 @@ export class BaileysSession {
     if (!buffer) {
       // eslint-disable-next-line no-console
       console.error(
-        `[baileys ${this.ctx.channelId}] downloadMediaMessage FALHOU após ${maxAttempts} tentativas (msg=${messageId} kind=${parsed.kind}) lastErr=${lastErr instanceof Error ? lastErr.message : String(lastErr)}`,
+        `[baileys ${this.ctx.channelId}] downloadMediaMessage FALHOU após ${maxAttempts} tentativas (msg=${messageId.slice(0, 8)} kind=${parsed.kind}) lastErr=${lastErr instanceof Error ? lastErr.message : String(lastErr)}`,
       );
-      // Marca a msg como mídia-falhou pra UI mostrar erro específico em
-      // vez de placeholder genérico "indisponível"
-      await this.markMessageMediaFailed(
-        messageId,
-        parsed.kind,
-        lastErr instanceof Error ? lastErr.message : 'download retornou vazio',
-      ).catch(() => {});
+      const errMsg = lastErr instanceof Error ? lastErr.message : 'download retornou vazio';
+      // Atualiza attachment row com erro (UI mostra "Falha — peça reenvio")
+      if (attachmentId) {
+        try {
+          await supabase
+            .from('attachments')
+            .update({
+              metadata: { status: 'download_failed', error: errMsg.slice(0, 300) },
+            })
+            .eq('id', attachmentId);
+        } catch {
+          /* best-effort */
+        }
+      }
+      // Mantém flag em messages.metadata pra debug histórico
+      await this.markMessageMediaFailed(messageId, parsed.kind, errMsg).catch(() => {});
       return;
     }
 
-    // Pega mime + filename do proto da mensagem
-    const m = msg.message ?? {};
-    const mediaInfo = (() => {
-      if (parsed.kind === 'image') return { mime: m.imageMessage?.mimetype, file: null };
-      if (parsed.kind === 'audio') return { mime: m.audioMessage?.mimetype, file: null };
-      if (parsed.kind === 'video') return { mime: m.videoMessage?.mimetype, file: null };
-      if (parsed.kind === 'document')
-        return {
-          mime: m.documentMessage?.mimetype,
-          file: m.documentMessage?.fileName ?? null,
-        };
-      return { mime: null, file: null };
-    })();
-
-    const mimeType = mediaInfo.mime ?? defaultMimeFor(parsed.kind);
-    const ext = extFromMime(mimeType) ?? 'bin';
-    const fileName = mediaInfo.file ?? `${parsed.kind}-${randomUUID()}.${ext}`;
+    // 3) Upload pro Storage
     const storagePath = `${this.ctx.orgId}/${conversationId}/${messageId}/${randomUUID()}-${fileName}`;
-
-    const supabase = getSupabase();
-
-    // Upload pro Storage
     const { error: uploadErr } = await supabase.storage
       .from('message-media')
       .upload(storagePath, buffer, {
@@ -965,10 +1000,55 @@ export class BaileysSession {
         `[baileys ${this.ctx.channelId}] storage upload falhou (${storagePath}):`,
         uploadErr.message,
       );
+      if (attachmentId) {
+        try {
+          await supabase
+            .from('attachments')
+            .update({
+              metadata: { status: 'upload_failed', error: uploadErr.message.slice(0, 300) },
+            })
+            .eq('id', attachmentId);
+        } catch {
+          /* best-effort */
+        }
+      }
       return;
     }
 
-    // Insere row em attachments
+    // 4) UPDATE attachment row com storage_path final + size
+    if (attachmentId) {
+      const { error: updateErr } = await supabase
+        .from('attachments')
+        .update({
+          storage_path: storagePath,
+          file_size_bytes: buffer.length,
+          metadata: {
+            status: 'uploaded',
+            ...(parsed.kind === 'image' && m.imageMessage?.caption
+              ? { caption: m.imageMessage.caption }
+              : {}),
+            ...(parsed.kind === 'audio' && typeof m.audioMessage?.seconds === 'number'
+              ? { duration_seconds: m.audioMessage.seconds }
+              : {}),
+          },
+        })
+        .eq('id', attachmentId);
+      if (updateErr) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[baileys ${this.ctx.channelId}] update attachment row falhou:`,
+          updateErr.message,
+        );
+      } else {
+        // eslint-disable-next-line no-console
+        console.log(
+          `[baileys ${this.ctx.channelId}] attachment OK: ${parsed.kind} ${(buffer.length / 1024).toFixed(1)}KB → ${storagePath}`,
+        );
+      }
+      return;
+    }
+
+    // Fallback: row pending falhou no insert inicial — cria agora com tudo OK
     const { error: insertErr } = await supabase.from('attachments').insert({
       org_id: this.ctx.orgId,
       message_id: messageId,
