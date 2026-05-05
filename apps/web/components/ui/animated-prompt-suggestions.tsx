@@ -23,6 +23,10 @@ interface AnimatedPromptSuggestionsProps {
   onSuggestionClick?: (text: string) => void;
   /** Velocidade marquee em segundos. Default 50 (mais alto = mais lento). */
   speed?: number;
+  /** Quantas rows visíveis. Default 3. Use 1 em popovers/drawers estreitos. */
+  rows?: 1 | 2 | 3;
+  /** Modo compacto: chips menores, padding reduzido. Pra drawers/dialogs. */
+  compact?: boolean;
   className?: string;
 }
 
@@ -43,22 +47,24 @@ export function AnimatedPromptSuggestions({
   children,
   onSuggestionClick,
   speed = 50,
+  rows: rowCount = 3,
+  compact = false,
   className,
 }: AnimatedPromptSuggestionsProps) {
-  // Distribui em 3 rows alternando — items[i] vai pro row i%3.
-  // Resulta em rows balanceadas mesmo quando suggestions.length não é múltiplo de 3.
+  // Distribui em N rows alternando — items[i] vai pro row i%N.
+  // Resulta em rows balanceadas mesmo quando suggestions.length não é múltiplo de N.
   const rows = useMemo(() => {
-    const r: PromptSuggestion[][] = [[], [], []];
+    const r: PromptSuggestion[][] = Array.from({ length: rowCount }, () => []);
     suggestions.forEach((s, i) => {
-      r[i % 3]!.push(s);
+      r[i % rowCount]!.push(s);
     });
     return r;
-  }, [suggestions]);
+  }, [suggestions, rowCount]);
 
   return (
-    <div className={cn('group/aps relative flex flex-col gap-3', className)}>
-      {/* Carrossel — 3 rows com pause-on-hover global via group/aps */}
-      <div className="flex flex-col gap-2 overflow-hidden py-1">
+    <div className={cn('group/aps relative flex flex-col', compact ? 'gap-2' : 'gap-3', className)}>
+      {/* Carrossel — pause-on-hover global via group/aps */}
+      <div className={cn('flex flex-col overflow-hidden', compact ? 'gap-1 py-0.5' : 'gap-2 py-1')}>
         {rows.map((row, i) => (
           <MarqueeRow
             key={i}
@@ -66,6 +72,7 @@ export function AnimatedPromptSuggestions({
             direction={i % 2 === 0 ? 'left' : 'right'}
             speed={speed + i * 5}
             onClick={onSuggestionClick}
+            compact={compact}
           />
         ))}
       </div>
@@ -81,11 +88,13 @@ function MarqueeRow({
   direction,
   speed,
   onClick,
+  compact,
 }: {
   items: PromptSuggestion[];
   direction: 'left' | 'right';
   speed: number;
   onClick?: (text: string) => void;
+  compact: boolean;
 }) {
   if (items.length === 0) return null;
 
@@ -97,7 +106,8 @@ function MarqueeRow({
     <div className="flex overflow-hidden">
       <div
         className={cn(
-          'flex shrink-0 gap-2 pr-2',
+          'flex shrink-0 pr-2',
+          compact ? 'gap-1.5' : 'gap-2',
           // Animação keyframes definida em globals.css
           direction === 'left' ? 'animate-marquee-left' : 'animate-marquee-right',
           // Pause global quando user hover qualquer chip ou área do componente
@@ -106,7 +116,7 @@ function MarqueeRow({
         style={{ animationDuration: `${speed}s` }}
       >
         {doubled.map((item, i) => (
-          <Chip key={i} item={item} onClick={onClick} />
+          <Chip key={i} item={item} onClick={onClick} compact={compact} />
         ))}
       </div>
     </div>
@@ -116,9 +126,11 @@ function MarqueeRow({
 function Chip({
   item,
   onClick,
+  compact,
 }: {
   item: PromptSuggestion;
   onClick?: (text: string) => void;
+  compact: boolean;
 }) {
   const Icon = item.icon;
   const accent = item.accent ?? '#00E5FF';
@@ -128,21 +140,21 @@ function Chip({
       type="button"
       onClick={() => onClick?.(item.text)}
       className={cn(
-        'group/chip flex shrink-0 items-center gap-1.5 rounded-full border border-border/50 bg-card/40 px-3 py-1.5 text-xs',
+        'group/chip flex shrink-0 items-center rounded-full border border-border/50 bg-card/40',
+        compact ? 'gap-1 px-2 py-0.5 text-[10px]' : 'gap-1.5 px-3 py-1.5 text-xs',
         'whitespace-nowrap text-muted-foreground/70 backdrop-blur-sm',
         'transition-all duration-200',
         'hover:border-primary/60 hover:bg-card hover:text-foreground hover:shadow-md',
         'focus:outline-none focus:ring-2 focus:ring-primary/40',
       )}
-      style={
-        {
-          '--accent': accent,
-        } as React.CSSProperties
-      }
+      style={{ '--accent': accent } as React.CSSProperties}
     >
       {Icon && (
         <Icon
-          className="h-3 w-3 shrink-0 opacity-60 transition-all group-hover/chip:opacity-100"
+          className={cn(
+            'shrink-0 opacity-60 transition-all group-hover/chip:opacity-100',
+            compact ? 'h-2.5 w-2.5' : 'h-3 w-3',
+          )}
           style={{ color: accent }}
         />
       )}

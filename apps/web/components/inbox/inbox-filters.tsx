@@ -1,9 +1,38 @@
 'use client';
 
-import { Search, Star, X, type LucideIcon } from 'lucide-react';
+import {
+  Calendar,
+  CalendarClock,
+  CreditCard,
+  FileText,
+  HelpCircle,
+  Search,
+  Star,
+  Stethoscope,
+  Syringe,
+  X,
+  type LucideIcon,
+} from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import {
+  AnimatedPromptSuggestions,
+  type PromptSuggestion,
+} from '@/components/ui/animated-prompt-suggestions';
 import { cn } from '@/lib/utils';
 import type { InboxFilter } from '@/hooks/use-inbox';
+
+/** Sugestões de busca textual fluindo embaixo quando search está vazio.
+ *  Click preenche o input. Termos comuns que aparecem em conversas. */
+const SEARCH_SUGGESTIONS: PromptSuggestion[] = [
+  { text: 'agendamento', icon: CalendarClock, accent: '#00E5FF' },
+  { text: 'consulta', icon: Stethoscope, accent: '#67e8f9' },
+  { text: 'infusão', icon: Syringe, accent: '#a78bfa' },
+  { text: 'particular', icon: CreditCard, accent: '#34d399' },
+  { text: 'convênio', icon: CreditCard, accent: '#fcd34d' },
+  { text: 'documento', icon: FileText, accent: '#f472b6' },
+  { text: 'urgente', icon: HelpCircle, accent: '#ef4444' },
+  { text: 'hoje', icon: Calendar, accent: '#fde68a' },
+];
 
 interface InboxFiltersProps {
   filter: InboxFilter;
@@ -29,16 +58,34 @@ export function InboxFilters({
 }: InboxFiltersProps) {
   return (
     <div className="flex flex-col gap-2 border-b border-border p-3">
-      {/* Search */}
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Buscar contato..."
-          className="h-9 pl-8 pr-8 text-sm"
-        />
-        {search && (
+      {/* Search com sugestões animadas embaixo quando vazio */}
+      {!search ? (
+        <AnimatedPromptSuggestions
+          suggestions={SEARCH_SUGGESTIONS}
+          onSuggestionClick={(text) => onSearchChange(text)}
+          rows={1}
+          compact
+          speed={35}
+        >
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder="Buscar contato..."
+              className="h-9 pl-8 pr-8 text-sm"
+            />
+          </div>
+        </AnimatedPromptSuggestions>
+      ) : (
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder="Buscar contato..."
+            className="h-9 pl-8 pr-8 text-sm"
+          />
           <button
             type="button"
             aria-label="Limpar busca"
@@ -47,8 +94,8 @@ export function InboxFilters({
           >
             <X className="h-3 w-3" />
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Filtros */}
       <div className="flex flex-wrap gap-1">

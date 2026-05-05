@@ -1,10 +1,41 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Loader2, Lock, Paperclip, Send, Smile } from 'lucide-react';
+import {
+  CalendarClock,
+  CheckCircle2,
+  Clock,
+  FileText,
+  HelpCircle,
+  Loader2,
+  Lock,
+  MessageSquare,
+  Paperclip,
+  PhoneCall,
+  Send,
+  Smile,
+  Sparkles,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  AnimatedPromptSuggestions,
+  type PromptSuggestion,
+} from '@/components/ui/animated-prompt-suggestions';
 import { cn } from '@/lib/utils';
+
+/** Sugestões de respostas rápidas — fluem acima do textarea quando vazio.
+ *  Click cola no textarea pro atendente editar antes de enviar. */
+const QUICK_REPLY_SUGGESTIONS: PromptSuggestion[] = [
+  { text: 'Olá! Como posso ajudar você hoje?', label: 'Saudação', icon: MessageSquare, accent: '#00E5FF' },
+  { text: 'Aguarde um momento, vou verificar.', label: 'Aguarde', icon: Clock, accent: '#fcd34d' },
+  { text: 'Qual o melhor horário pra você?', label: 'Horário', icon: CalendarClock, accent: '#a78bfa' },
+  { text: 'Pode me enviar a documentação por aqui?', label: 'Documentação', icon: FileText, accent: '#67e8f9' },
+  { text: 'Você tem algum convênio ou seria particular?', label: 'Convênio', icon: HelpCircle, accent: '#fde68a' },
+  { text: 'Vou encaminhar pro setor responsável.', label: 'Encaminhar', icon: PhoneCall, accent: '#34d399' },
+  { text: 'Confirmado! Vou registrar o agendamento.', label: 'Confirmar', icon: CheckCircle2, accent: '#34d399' },
+  { text: 'Posso te ajudar com mais alguma coisa?', label: 'Mais ajuda', icon: Sparkles, accent: '#f472b6' },
+];
 
 interface MessageInputProps {
   onSend: (text: string, isInternalNote: boolean) => Promise<void>;
@@ -140,6 +171,25 @@ export function MessageInput({
           </span>
         )}
       </div>
+
+      {/* Quando vazio E não é nota interna, mostra carrossel de respostas
+          rápidas acima do input. Disponível só em modo full (compact=false)
+          pra não tomar espaço em drawers laterais estreitos. */}
+      {!compact && !value && !isInternalNote && (
+        <AnimatedPromptSuggestions
+          className="mb-2"
+          suggestions={QUICK_REPLY_SUGGESTIONS}
+          onSuggestionClick={(text) => {
+            setValue(text);
+            focusInput();
+          }}
+          rows={1}
+          compact
+          speed={45}
+        >
+          <></>
+        </AnimatedPromptSuggestions>
+      )}
 
       <div className="flex items-end gap-2">
         {!compact && (

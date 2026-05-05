@@ -2,12 +2,18 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Calendar,
   CheckCircle2,
+  Hand,
   HelpCircle,
   Loader2,
+  MessageSquare,
   MessageSquarePlus,
+  PhoneCall,
   Search,
   Send,
+  Sparkles,
+  Stethoscope,
   XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -23,6 +29,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ChannelIcon } from '@/components/ui/channel-icon';
+import {
+  AnimatedPromptSuggestions,
+  type PromptSuggestion,
+} from '@/components/ui/animated-prompt-suggestions';
 import { contactsApi } from '@/lib/api/contacts';
 import { VerifyWhatsAppButton } from '@/components/contacts/verify-whatsapp-button';
 import { channelsApi, type ChannelView } from '@/lib/api/channels';
@@ -32,6 +42,47 @@ import {
 } from '@/lib/api/conversations';
 import { ApiError } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
+
+/** Templates de mensagens iniciais — fluem acima do textarea quando vazio.
+ *  Click cola no textarea pro user editar antes de enviar. */
+const FIRST_MESSAGE_SUGGESTIONS: PromptSuggestion[] = [
+  {
+    text: 'Olá! Aqui é da [Sua empresa]. Em que posso te ajudar?',
+    label: 'Saudação inicial',
+    icon: Hand,
+    accent: '#00E5FF',
+  },
+  {
+    text: 'Olá! Vi que você se interessou. Quer agendar uma conversa?',
+    label: 'Follow-up de interesse',
+    icon: Sparkles,
+    accent: '#a78bfa',
+  },
+  {
+    text: 'Oi! Tem disponibilidade esta semana pra um agendamento?',
+    label: 'Propor agendamento',
+    icon: Calendar,
+    accent: '#34d399',
+  },
+  {
+    text: 'Olá! Sou [seu nome] da [empresa]. Posso te apresentar nossas opções?',
+    label: 'Apresentação',
+    icon: MessageSquare,
+    accent: '#67e8f9',
+  },
+  {
+    text: 'Oi! Você está precisando de alguma consulta ou orientação?',
+    label: 'Consulta',
+    icon: Stethoscope,
+    accent: '#f472b6',
+  },
+  {
+    text: 'Olá! Posso te ligar agora pra entender melhor sua necessidade?',
+    label: 'Pedir ligação',
+    icon: PhoneCall,
+    accent: '#fcd34d',
+  },
+];
 
 interface StartConversationDialogProps {
   open: boolean;
@@ -381,15 +432,34 @@ export function StartConversationDialog({
               >
                 Primeira mensagem
               </Label>
-              <textarea
-                id="start-msg"
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                rows={4}
-                placeholder="Escreva a mensagem que vai abrir essa conversa…"
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-y"
-                maxLength={4096}
-              />
+              {!message ? (
+                <AnimatedPromptSuggestions
+                  suggestions={FIRST_MESSAGE_SUGGESTIONS}
+                  onSuggestionClick={(text) => setMessage(text)}
+                  rows={2}
+                  speed={45}
+                >
+                  <textarea
+                    id="start-msg"
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    rows={4}
+                    placeholder="Escreva a mensagem que vai abrir essa conversa…"
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-y"
+                    maxLength={4096}
+                  />
+                </AnimatedPromptSuggestions>
+              ) : (
+                <textarea
+                  id="start-msg"
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  rows={4}
+                  placeholder="Escreva a mensagem que vai abrir essa conversa…"
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-y"
+                  maxLength={4096}
+                />
+              )}
               <div className="flex justify-between text-[11px] text-muted-foreground">
                 <span>{message.length} / 4096</span>
                 <span>Enter manda nova linha · Ctrl+Enter envia</span>

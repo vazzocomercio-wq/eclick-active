@@ -213,14 +213,16 @@ export function CopilotPanel({
             compact ? 'max-w-full' : 'max-w-3xl',
           )}
         >
-          {/* Modo full + estado vazio = carrossel animado de sugestões.
-              Modo compact (drawer) usa lista clicável simples — marquee
-              horizontal não cabe em 320px. */}
-          {!compact && isEmpty && suggestions.length > 0 ? (
+          {/* Estado vazio = carrossel animado de sugestões. Modo full usa
+              3 rows com chips full-size; modo compact (drawer) usa 2 rows
+              compactas que cabem em 320px. */}
+          {isEmpty && suggestions.length > 0 ? (
             <AnimatedPromptSuggestions
               suggestions={withIcons(contextType, suggestions)}
               onSuggestionClick={(text) => handleSuggestion(text)}
-              speed={45}
+              speed={compact ? 35 : 45}
+              rows={compact ? 2 : 3}
+              compact={compact}
             >
               <ChatInput
                 value={input}
@@ -231,23 +233,13 @@ export function CopilotPanel({
               />
             </AnimatedPromptSuggestions>
           ) : (
-            <>
-              {compact && suggestions.length > 0 && (
-                <QuickSuggestions
-                  suggestions={suggestions}
-                  onSelect={handleSuggestion}
-                  disabled={thinking}
-                  compact={compact}
-                />
-              )}
-              <ChatInput
-                value={input}
-                onChange={setInput}
-                onSubmit={handleSubmit}
-                disabled={thinking}
-                placeholder={PLACEHOLDER[contextType]}
-              />
-            </>
+            <ChatInput
+              value={input}
+              onChange={setInput}
+              onSubmit={handleSubmit}
+              disabled={thinking}
+              placeholder={PLACEHOLDER[contextType]}
+            />
           )}
 
           {!compact && (
