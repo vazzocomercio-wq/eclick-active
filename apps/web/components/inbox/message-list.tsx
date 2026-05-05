@@ -25,12 +25,22 @@ export function MessageList({
   onLoadMore,
   conversationId,
 }: MessageListProps) {
-  // Refresh quando última mensagem da conversa mudar — cobre attachments
-  // que terminam de processar enquanto a tela já está aberta.
-  const lastMessageId = messages[messages.length - 1]?.id ?? null;
+  // Detecta msgs inbound de mídia que ainda podem não ter attachment
+  // associado (worker leva ~1-3s pra processar). useConversationAttachments
+  // faz auto-poll enquanto a lista contiver IDs sem attachment matching.
+  const pendingMediaIds = messages
+    .filter(
+      (m) =>
+        m.direction === 'inbound' &&
+        m.content_type !== 'text' &&
+        m.content_type !== 'system',
+    )
+    .map((m) => m.id);
+  // refreshKey muda quando qualquer msg nova chega → força refetch inicial
   const attachmentsByMessage = useConversationAttachments(
     conversationId,
-    lastMessageId ? lastMessageId.length : 0,
+    `${messages.length}-${messages[messages.length - 1]?.id ?? ''}`,
+    pendingMediaIds,
   );
   const containerRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);

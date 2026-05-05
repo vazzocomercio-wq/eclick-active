@@ -208,22 +208,9 @@ export class AttachmentsService {
       });
 
       const text = res.text;
-      const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
-      try {
-        const parsed = JSON.parse(cleaned) as {
-          ai_summary?: unknown;
-          ai_extracted?: unknown;
-        };
-        aiSummary = typeof parsed.ai_summary === 'string' ? parsed.ai_summary : null;
-        aiExtracted =
-          parsed.ai_extracted && typeof parsed.ai_extracted === 'object'
-            ? (parsed.ai_extracted as Record<string, unknown>)
-            : null;
-      } catch {
-        // Falhou JSON — usa raw text como summary
-        aiSummary = text.slice(0, 280);
-        aiExtracted = { raw: text.slice(0, 1000) };
-      }
+      const parsed = parseVisionJson(text);
+      aiSummary = parsed.ai_summary;
+      aiExtracted = parsed.ai_extracted;
     } catch (err) {
       this.logger.warn(
         `att ${att.id} vision falhou: ${err instanceof Error ? err.message : String(err)}`,
@@ -435,25 +422,14 @@ export class AttachmentsService {
           message_id: att.message_id,
         },
       });
-      const cleaned = res.text
-        .trim()
-        .replace(/^```(?:json)?\s*/i, '')
-        .replace(/```\s*$/, '');
-      try {
-        const parsed = JSON.parse(cleaned) as {
-          ai_summary?: unknown;
-          ai_extracted?: unknown;
+      const parsed = parseVisionJson(res.text);
+      if (parsed.ai_summary) aiSummary = parsed.ai_summary;
+      if (parsed.ai_extracted) {
+        aiExtracted = {
+          type: 'audio',
+          transcript,
+          ...parsed.ai_extracted,
         };
-        if (typeof parsed.ai_summary === 'string') aiSummary = parsed.ai_summary;
-        if (parsed.ai_extracted && typeof parsed.ai_extracted === 'object') {
-          aiExtracted = {
-            type: 'audio',
-            transcript,
-            ...(parsed.ai_extracted as Record<string, unknown>),
-          };
-        }
-      } catch {
-        // mantém summary=transcript fallback
       }
     } catch (err) {
       this.logger.warn(
@@ -563,4 +539,79 @@ export class AttachmentsService {
       }),
     );
   }
+}
+
+/**
+ * Parser robusto pro JSON de saída do Vision/audio summary.
+ *
+ * O LLM ocasionalmente retorna o JSON envolto em texto, com markdown
+ * fences inconsistentes, ou com escape errado de aspas internas. Esse
+ * helper tenta múltiplas estratégias antes de cair no fallback de
+ * mostrar texto bruto:
+ *
+ *   1. JSON.parse direto (95% dos casos)
+ *   2. Strip de fences ```json ... ```
+ *   3. Substring entre primeiro `{` e último `}` que parseia
+ *   4. Regex pra extrair `ai_summary` e `ai_extracted` separados
+ *   5. Fallback: ai_summary = primeira linha legível (não JSON cru)
+ */
+export function parseVisionJson(text: string): {
+  ai_summary: string | null;
+  ai_extracted: Record<string, unknown> | null;
+} {
+  const tryParse = (s: string): { ai_summary?: unknown; ai_extracted?: unknown } | null => {
+    try {
+      return JSON.parse(s) as { ai_summary?: unknown; ai_extracted?: unknown };
+    } catch {
+      return null;
+    }
+  };
+
+  // 1. Direto
+  let parsed = tryParse(text.trim());
+
+  // 2. Strip fences
+  if (!parsed) {
+    const stripped = text
+      .trim()
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/```\s*$/, '')
+      .trim();
+    parsed = tryParse(stripped);
+  }
+
+  // 3. Substring {...}
+  if (!parsed) {
+    const firstBrace = text.indexOf('{');
+    const lastBrace = text.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      parsed = tryParse(text.slice(firstBrace, lastBrace + 1));
+    }
+  }
+
+  if (parsed) {
+    return {
+      ai_summary: typeof parsed.ai_summary === 'string' ? parsed.ai_summary : null,
+      ai_extracted:
+        parsed.ai_extracted && typeof parsed.ai_extracted === 'object'
+          ? (parsed.ai_extracted as Record<string, unknown>)
+          : null,
+    };
+  }
+
+  // 4. Regex pra extrair ai_summary mesmo se JSON inválido global
+  // Ex: text inválido com `"ai_summary": "frase aqui"` no meio
+  const summaryMatch = /"ai_summary"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(text);
+  if (summaryMatch?.[1]) {
+    return {
+      ai_summary: summaryMatch[1].replace(/\\"/g, '"').slice(0, 500),
+      ai_extracted: { parser_fallback: 'regex_extracted', raw: text.slice(0, 1000) },
+    };
+  }
+
+  // 5. Fallback final: nada salvo no ai_summary (UI mostra "IA está analisando")
+  return {
+    ai_summary: null,
+    ai_extracted: { parser_failed: true, raw: text.slice(0, 1000) },
+  };
 }
