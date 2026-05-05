@@ -217,7 +217,11 @@ export function DealDetailSheet({
                 deleting={deleting}
               />
 
-              <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)} className="flex-1">
+              <Tabs
+                value={tab}
+                onValueChange={(v) => setTab(v as TabKey)}
+                className="flex flex-1 flex-col min-h-0"
+              >
                 <TabsList className="px-2">
                   <TabsTrigger value="main">
                     <User className="h-3.5 w-3.5" />
@@ -237,7 +241,7 @@ export function DealDetailSheet({
                   </TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="main" className="overflow-y-auto">
+                <TabsContent value="main" className="flex-1 min-h-0 overflow-y-auto">
                   <DealMainTab
                     deal={detail}
                     conversationId={detail.conversation_id ?? null}
@@ -246,7 +250,7 @@ export function DealDetailSheet({
                   />
                 </TabsContent>
 
-                <TabsContent value="chat" className="overflow-hidden">
+                <TabsContent value="chat" className="flex-1 min-h-0 overflow-hidden">
                   <DealConversationTab
                     ref={conversationRef}
                     deal={detail}
@@ -254,7 +258,7 @@ export function DealDetailSheet({
                   />
                 </TabsContent>
 
-                <TabsContent value="insights" className="overflow-y-auto">
+                <TabsContent value="insights" className="flex-1 min-h-0 overflow-y-auto">
                   <div className="p-4">
                     <DealInsightsTab
                       detail={detail}
@@ -264,7 +268,7 @@ export function DealDetailSheet({
                   </div>
                 </TabsContent>
 
-                <TabsContent value="history" className="overflow-y-auto">
+                <TabsContent value="history" className="flex-1 min-h-0 overflow-y-auto">
                   <div className="p-4">
                     <DealHistoryTab
                       dealId={detail.id}
