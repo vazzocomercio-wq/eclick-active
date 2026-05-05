@@ -1,6 +1,6 @@
 'use client';
 
-import { CheckCheck, MoreVertical, PanelRightClose, PanelRightOpen, UserPlus } from 'lucide-react';
+import { ArrowLeft, CheckCheck, MoreVertical, PanelRightClose, PanelRightOpen, UserPlus } from 'lucide-react';
 import type { ConversationDetail } from '@eclick-active/shared';
 import { Button } from '@/components/ui/button';
 import { AvatarWithChannel } from '@/components/contacts/avatar-with-channel';
@@ -14,6 +14,8 @@ interface ChatHeaderProps {
   onAssign?: () => void;
   panelOpen: boolean;
   onTogglePanel: () => void;
+  /** Em mobile, callback pra voltar pra lista. Quando passado, exibe botão. */
+  onBack?: () => void;
 }
 
 export function ChatHeader({
@@ -22,6 +24,7 @@ export function ChatHeader({
   onAssign,
   panelOpen,
   onTogglePanel,
+  onBack,
 }: ChatHeaderProps) {
   if (!conversation) {
     return <div className="h-16 border-b border-border" />;
@@ -33,6 +36,16 @@ export function ChatHeader({
   return (
     <header className="flex h-16 items-center justify-between gap-3 border-b border-border px-4">
       <div className="flex items-center gap-3 min-w-0">
+        {onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            aria-label="Voltar para lista"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground md:hidden"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+        )}
         <AvatarWithChannel
           name={contact?.name ?? null}
           src={contact?.avatar_url}

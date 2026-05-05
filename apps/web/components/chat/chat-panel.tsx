@@ -55,6 +55,12 @@ export interface ChatPanelProps {
   onTogglePanel?: () => void;
 
   /**
+   * Em mobile, callback pra voltar à lista (esconde o ChatPanel). Quando
+   * passado, exibe ArrowLeft no ChatHeader. Esconde em md+.
+   */
+  onBack?: () => void;
+
+  /**
    * Callback disparado quando o detalhe da conversa carrega — usado pelo
    * inbox pra sincronizar o ContactPanel da 3ª coluna.
    */
@@ -93,6 +99,7 @@ export function ChatPanel({
   showActions = true,
   panelOpen,
   onTogglePanel,
+  onBack,
   onConversationLoad,
   onAction,
   className,
@@ -252,6 +259,7 @@ export function ChatPanel({
           onResolve={showActions ? handleResolve : undefined}
           panelOpen={panelOpen ?? false}
           onTogglePanel={onTogglePanel ?? (() => {})}
+          {...(onBack ? { onBack } : {})}
         />
       )}
 

@@ -20,6 +20,7 @@ import {
   Settings,
   UserCog,
   Users,
+  X,
   Zap,
   type LucideIcon,
 } from 'lucide-react';
@@ -59,7 +60,14 @@ const FOOTER_NAV: NavItem[] = [
 
 const COLLAPSED_KEY = 'sidebar:collapsed';
 
-export function Sidebar() {
+interface SidebarProps {
+  /** Quando true, em mobile a sidebar fica visível (translate-x-0). */
+  mobileOpen?: boolean;
+  /** Callback pra fechar em mobile (chamado ao clicar item, ESC, ou backdrop). */
+  onMobileClose?: () => void;
+}
+
+export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps = {}) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -75,6 +83,34 @@ export function Sidebar() {
     setMounted(true);
   }, []);
 
+  // Auto-close em mobile quando rota muda (clicou num link)
+  useEffect(() => {
+    if (mobileOpen && onMobileClose) {
+      onMobileClose();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
+  // ESC fecha em mobile
+  useEffect(() => {
+    if (!mobileOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape' && onMobileClose) onMobileClose();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [mobileOpen, onMobileClose]);
+
+  // Travar scroll do body quando drawer mobile aberto
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const orig = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = orig;
+    };
+  }, [mobileOpen]);
+
   function toggleCollapse() {
     setCollapsed((prev) => {
       const next = !prev;
@@ -88,114 +124,147 @@ export function Sidebar() {
   }
 
   // Evita mismatch de hidratação: até montar, renderiza expandido
-  const isCollapsed = mounted && collapsed;
+  // Em mobile (drawer aberto), nunca colapsa.
+  const isCollapsed = mounted && collapsed && !mobileOpen;
 
   return (
-    <aside
-      className={cn(
-        'flex h-screen flex-col border-r border-border bg-background transition-[width] duration-200',
-        isCollapsed ? 'w-16' : 'w-64',
-      )}
-      aria-label="Navegação principal"
-    >
-      {/* Logo + collapse toggle */}
+    <>
+      {/* Backdrop (mobile drawer aberto) */}
       <div
         className={cn(
-          'flex items-center border-b border-border',
-          isCollapsed ? 'h-16 justify-center px-2' : 'h-20 justify-between px-4',
+          'fixed inset-0 z-40 bg-black/50 transition-opacity lg:hidden',
+          mobileOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none',
         )}
-      >
-        {isCollapsed ? (
-          // Quando colapsado, o ícone é o próprio botão de expandir
-          <button
-            type="button"
-            onClick={toggleCollapse}
-            aria-label="Expandir sidebar"
-            className="flex h-12 w-12 items-center justify-center rounded-md hover:bg-card"
-          >
-            <Image
-              src="/logo-active.svg"
-              alt="e-Click Active"
-              width={48}
-              height={48}
-              priority
-              className="h-10 w-10"
-            />
-          </button>
-        ) : (
-          <Link
-            href="/central-de-acao"
-            className="flex items-center"
-            aria-label="e-Click Active"
-          >
-            <Image
-              src="/logo-icon.svg"
-              alt="e-Click Active"
-              width={280}
-              height={112}
-              priority
-              className="h-14 w-auto"
-            />
-          </Link>
-        )}
-        {!isCollapsed && (
-        <button
-          type="button"
-          onClick={toggleCollapse}
-          aria-label="Colapsar sidebar"
-          className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-card hover:text-foreground"
-        >
-          <ChevronLeft
-            className={cn('h-4 w-4 transition-transform', isCollapsed && 'rotate-180')}
-          />
-        </button>
-        )}
-      </div>
+        aria-hidden="true"
+        onClick={onMobileClose}
+      />
 
-      {/* Primary nav */}
-      <nav className="flex-1 overflow-y-auto py-2 scrollbar-auto-hide">
-        <ul className="flex flex-col gap-0.5 px-2">
-          {PRIMARY_NAV.map((item) => {
-            // Injeta badge dinâmico em /conversas com count de não-lidas
-            const itemWithBadge: NavItem =
-              item.href === '/conversas' && unreadCount > 0
-                ? { ...item, badge: unreadCount }
-                : item;
-            return (
+      <aside
+        className={cn(
+          'fixed inset-y-0 left-0 z-50 flex h-screen flex-col border-r border-border bg-background transition-transform duration-200',
+          // Desktop: comportamento normal (estático, largura controlada)
+          'lg:static lg:translate-x-0 lg:transition-[width]',
+          isCollapsed ? 'lg:w-16' : 'lg:w-64',
+          // Mobile: translate-x off-canvas
+          'w-64',
+          mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
+        )}
+        aria-label="Navegação principal"
+      >
+        {/* Logo + collapse/close toggle */}
+        <div
+          className={cn(
+            'flex items-center border-b border-border',
+            isCollapsed ? 'h-16 justify-center px-2' : 'h-20 justify-between px-4',
+          )}
+        >
+          {isCollapsed ? (
+            // Quando colapsado, o ícone é o próprio botão de expandir
+            <button
+              type="button"
+              onClick={toggleCollapse}
+              aria-label="Expandir sidebar"
+              className="flex h-12 w-12 items-center justify-center rounded-md hover:bg-card"
+            >
+              <Image
+                src="/logo-active.svg"
+                alt="e-Click Active"
+                width={48}
+                height={48}
+                priority
+                className="h-10 w-10"
+              />
+            </button>
+          ) : (
+            <Link
+              href="/central-de-acao"
+              className="flex items-center"
+              aria-label="e-Click Active"
+              onClick={onMobileClose}
+            >
+              <Image
+                src="/logo-icon.svg"
+                alt="e-Click Active"
+                width={280}
+                height={112}
+                priority
+                className="h-14 w-auto"
+              />
+            </Link>
+          )}
+
+          {/* Botão collapse (desktop) — escondido em mobile pra não confundir com close */}
+          {!isCollapsed && (
+            <button
+              type="button"
+              onClick={toggleCollapse}
+              aria-label="Colapsar sidebar"
+              className="hidden h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-card hover:text-foreground lg:flex"
+            >
+              <ChevronLeft
+                className={cn('h-4 w-4 transition-transform', isCollapsed && 'rotate-180')}
+              />
+            </button>
+          )}
+
+          {/* Botão fechar (mobile) */}
+          {mobileOpen && (
+            <button
+              type="button"
+              onClick={onMobileClose}
+              aria-label="Fechar menu"
+              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-card hover:text-foreground lg:hidden"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+
+        {/* Primary nav */}
+        <nav className="flex-1 overflow-y-auto py-2 scrollbar-auto-hide">
+          <ul className="flex flex-col gap-0.5 px-2">
+            {PRIMARY_NAV.map((item) => {
+              // Injeta badge dinâmico em /conversas com count de não-lidas
+              const itemWithBadge: NavItem =
+                item.href === '/conversas' && unreadCount > 0
+                  ? { ...item, badge: unreadCount }
+                  : item;
+              return (
+                <NavLink
+                  key={item.href}
+                  item={itemWithBadge}
+                  active={isActive(pathname, item.href)}
+                  collapsed={isCollapsed}
+                />
+              );
+            })}
+          </ul>
+
+          <div className="mx-3 my-2 border-t border-border" />
+
+          <ul className="flex flex-col gap-0.5 px-2">
+            {FOOTER_NAV.map((item) => (
               <NavLink
                 key={item.href}
-                item={itemWithBadge}
+                item={item}
                 active={isActive(pathname, item.href)}
                 collapsed={isCollapsed}
               />
-            );
-          })}
-        </ul>
+            ))}
+          </ul>
+        </nav>
 
-        <div className="mx-3 my-2 border-t border-border" />
-
-        <ul className="flex flex-col gap-0.5 px-2">
-          {FOOTER_NAV.map((item) => (
-            <NavLink
-              key={item.href}
-              item={item}
-              active={isActive(pathname, item.href)}
-              collapsed={isCollapsed}
-            />
-          ))}
-        </ul>
-      </nav>
-
-      {/* Theme toggle */}
-      <div
-        className={cn(
-          'border-t border-border p-2',
-          isCollapsed ? 'flex justify-center' : '',
-        )}
-      >
-        <ThemeToggle collapsed={isCollapsed} />
-      </div>
-    </aside>
+        {/* Theme toggle */}
+        <div
+          className={cn(
+            'border-t border-border p-2',
+            isCollapsed ? 'flex justify-center' : '',
+          )}
+        >
+          <ThemeToggle collapsed={isCollapsed} />
+        </div>
+      </aside>
+    </>
   );
 }
 

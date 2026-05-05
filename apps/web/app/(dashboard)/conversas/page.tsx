@@ -86,12 +86,12 @@ export default function ConversasPage() {
         )}
 
         <div className="flex flex-1 overflow-hidden">
-          {/* COLUNA 1 — Lista de conversas */}
+          {/* COLUNA 1 — Lista de conversas. Em mobile ocupa full quando não há
+              conversa aberta; em md+ tem largura fixa de 320px. */}
           <aside
             className={cn(
-              'w-80 shrink-0 border-r border-border bg-background',
-              // Em mobile, esconde a lista quando uma conversa está aberta
-              selectedId ? 'hidden md:flex md:flex-col' : 'flex flex-col',
+              'shrink-0 border-r border-border bg-background md:w-80',
+              selectedId ? 'hidden md:flex md:flex-col' : 'flex w-full flex-col',
             )}
           >
             <InboxList
@@ -107,12 +107,18 @@ export default function ConversasPage() {
             />
           </aside>
 
-          {/* COLUNA 2 — Chat */}
-          <main className="flex flex-1 flex-col min-w-0">
+          {/* COLUNA 2 — Chat — em mobile esconde quando não tem conv selecionada */}
+          <main
+            className={cn(
+              'flex flex-1 flex-col min-w-0',
+              !selectedId && 'hidden md:flex',
+            )}
+          >
             <ChatPanel
               conversationId={selectedId}
               panelOpen={panelOpen}
               onTogglePanel={() => setPanelOpen((v) => !v)}
+              onBack={() => setSelectedId(null)}
               onConversationLoad={handleConversationLoad}
               onAction={(ev) => {
                 // Optimistic update no inbox — não espera socket retornar
