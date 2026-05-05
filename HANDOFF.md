@@ -1,22 +1,38 @@
 # HANDOFF — eclick-active
 
 > Documento vivo de continuidade entre sessões. **Lê isso primeiro ao começar nova sessão.**
-> Última atualização: **2026-05-05** (Bloco A do Active Intelligence completo — LlmProvider abstraction)
+> Última atualização: **2026-05-05** (Bloco B do Active Intelligence — OAuth Meta Ads + ad_integrations)
 
 ---
 
 ## 🎯 Próximo trabalho planejado
 
-**Active Intelligence (Ads & Social Analytics + Hub)** — Bloco A entregue, próximo é Bloco B.
+**Active Intelligence (Ads & Social Analytics + Hub)** — Blocos A+B entregues, próximo é Bloco C.
 
 📄 **Doc canônico**: [`docs/analytics-design.md`](./docs/analytics-design.md)
 
 Estado:
-- ✅ **Bloco A** (LlmProvider abstraction) — entregue em A.1 + A.2
-- ⏭️ **Próxima ação**: implementar **Bloco B** (Ad Integrations + OAuth Meta, ~3h)
-- ⚠️ Antes do Bloco B, **solicitar `GOOGLE_ADS_DEVELOPER_TOKEN`** via https://ads.google.com/aw/apicenter (3-7 dias de approval) pra ter pronto quando chegar no Bloco D
+- ✅ **Bloco A** (LlmProvider abstraction) — A.1 + A.2
+- ✅ **Bloco B** (Ad Integrations + OAuth Meta) — `ad_integrations` table, OAuth flow Meta funcional
+- ⏭️ **Próxima ação**: **Bloco C** (Meta Connector + Sync de campaigns/insights, ~4h)
+- ⚠️ **Solicitar `GOOGLE_ADS_DEVELOPER_TOKEN` agora** via https://ads.google.com/aw/apicenter (3-7 dias de approval) — usado no Bloco D
+- ⚠️ **Configurar app Meta** em developers.facebook.com (Business type) com scopes `ads_read`, `ads_management`, `pages_show_list`, `pages_read_engagement`, `leads_retrieval`, `business_management`
 - Decisões 1-7 fechadas (ver doc)
 - ⚠️ **NÃO** confundir com Intelligence Hub do `eclick-backend` (SaaS) — em prod lá, projeto distinto
+
+### Bloco B entregue — sumário
+
+- Migration `041_ad_integrations.sql` aplicada (tokens OAuth cifrados AES-GCM)
+- `apps/api/src/common/crypto/aes-gcm.util.ts` — util genérica (encrypt/decrypt/lastFour/HMAC sign+verify) reusando `LLM_CRED_ENCRYPTION_KEY`. `common/llm/crypto.util.ts` virou shim
+- `apps/api/src/modules/ads/`:
+  - `ad-integrations.service.ts` — OAuth state HMAC, upsert pós-callback, list/disconnect, getAccessToken (decifra sob demanda + flagged token_expired automático)
+  - `oauth/meta-oauth.controller.ts` — `GET /ad-integrations/meta/connect` (auth) + `GET /ad-integrations/meta/callback` (público, identidade vem do state assinado)
+  - `ad-integrations.controller.ts` — `GET /ad-integrations`, `DELETE /ad-integrations/:id`
+- **Envs novas necessárias** (cole em `apps/api/.env` + Railway `active-api`):
+  - `META_APP_ID` — do app Meta Developers
+  - `META_APP_SECRET` — secret do app
+  - `META_OAUTH_REDIRECT_URI` — opcional (default `https://active.eclick.app.br/ad-integrations/meta/callback`)
+  - `FRONTEND_BASE_URL` — opcional (default `https://active.eclick.app.br`)
 
 ### Bloco A entregue — sumário
 
@@ -38,9 +54,9 @@ Estado:
 
 ## Estado atual
 
-**Última migration aplicada via API**: `040_org_llm_credentials.sql`
+**Última migration aplicada via API**: `041_ad_integrations.sql`
 **Migration aplicada via Studio**: `038_message_media_storage_policy.sql` (2026-05-05)
-**Próxima migration livre**: `041_*.sql`
+**Próxima migration livre**: `042_*.sql`
 
 **Helper pra aplicar migrations rapidão (Claude usa esse)**:
 ```bash
