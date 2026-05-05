@@ -12,6 +12,12 @@ export interface MemberView {
   status: 'active' | 'invited' | 'suspended';
   workspace_ids: string[];
   last_seen_at: string | null;
+  /** Especialidades/serviços que atende. Genérico por nicho. */
+  specialties: string[];
+  /** Duração padrão por atendimento (minutos). NULL = usa appointment_type. */
+  default_duration_minutes: number | null;
+  /** Buffer entre atendimentos (minutos). Default 0. */
+  default_buffer_minutes: number;
   created_at: string;
   updated_at: string;
 }
@@ -33,6 +39,9 @@ export interface UpdateMemberInput {
   role?: OrgMemberRole;
   workspace_ids?: string[];
   display_name?: string;
+  specialties?: string[];
+  default_duration_minutes?: number | null;
+  default_buffer_minutes?: number;
 }
 
 export const teamApi = {

@@ -22,6 +22,12 @@ export interface MemberView {
   status: 'active' | 'invited' | 'suspended';
   workspace_ids: string[];
   last_seen_at: string | null;
+  /** Especialidades/serviços que o profissional atende (texto livre por org). */
+  specialties: string[];
+  /** Duração padrão por atendimento em minutos (NULL = usa appointment_type). */
+  default_duration_minutes: number | null;
+  /** Buffer entre atendimentos em minutos. Default 0. */
+  default_buffer_minutes: number;
   created_at: string;
   updated_at: string;
 }
@@ -47,7 +53,7 @@ export class TeamService {
     const { data: members, error } = await this.supabase.adminClient
       .from('org_members')
       .select(
-        'id, user_id, org_id, role, status, workspace_ids, display_name, avatar_url, last_seen_at, created_at, updated_at',
+        'id, user_id, org_id, role, status, workspace_ids, display_name, avatar_url, last_seen_at, specialties, default_duration_minutes, default_buffer_minutes, created_at, updated_at',
       )
       .eq('org_id', orgId)
       .order('created_at', { ascending: true });
@@ -118,7 +124,7 @@ export class TeamService {
         display_name: dto.display_name ?? null,
       })
       .select(
-        'id, user_id, org_id, role, status, workspace_ids, display_name, avatar_url, last_seen_at, created_at, updated_at',
+        'id, user_id, org_id, role, status, workspace_ids, display_name, avatar_url, last_seen_at, specialties, default_duration_minutes, default_buffer_minutes, created_at, updated_at',
       )
       .single();
 
@@ -168,6 +174,11 @@ export class TeamService {
     if (dto.role) patch.role = dto.role;
     if (dto.workspace_ids) patch.workspace_ids = dto.workspace_ids;
     if (dto.display_name !== undefined) patch.display_name = dto.display_name;
+    if (dto.specialties !== undefined) patch.specialties = dto.specialties;
+    if (dto.default_duration_minutes !== undefined)
+      patch.default_duration_minutes = dto.default_duration_minutes;
+    if (dto.default_buffer_minutes !== undefined)
+      patch.default_buffer_minutes = dto.default_buffer_minutes;
 
     const { data, error } = await this.supabase.adminClient
       .from('org_members')
@@ -175,7 +186,7 @@ export class TeamService {
       .eq('org_id', orgId)
       .eq('id', memberId)
       .select(
-        'id, user_id, org_id, role, status, workspace_ids, display_name, avatar_url, last_seen_at, created_at, updated_at',
+        'id, user_id, org_id, role, status, workspace_ids, display_name, avatar_url, last_seen_at, specialties, default_duration_minutes, default_buffer_minutes, created_at, updated_at',
       )
       .single();
 

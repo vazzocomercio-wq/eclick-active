@@ -2,11 +2,14 @@ import {
   IsArray,
   IsEmail,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
   Length,
+  Max,
   MaxLength,
+  Min,
 } from 'class-validator';
 import type { OrgMemberRole } from '@eclick-active/shared';
 
@@ -47,4 +50,35 @@ export class UpdateMemberDto {
   @IsString()
   @Length(1, 120)
   display_name?: string;
+
+  /**
+   * Especialidades/serviços que o profissional atende. Texto livre por org
+   * — clínica ('nutricionista'), salão ('corte', 'manicure'), oficina,
+   * B2B etc. IA do Concierge usa pra match com mensagem do cliente.
+   */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(60, { each: true })
+  specialties?: string[];
+
+  /**
+   * Duração padrão por atendimento (em minutos). Sistema calcula slots
+   * livres dividindo a janela de availability por essa duração. NULL =
+   * usa appointment_type.duration_minutes (legado).
+   */
+  @IsOptional()
+  @IsInt()
+  @Min(5)
+  @Max(480)
+  default_duration_minutes?: number | null;
+
+  /**
+   * Tempo entre atendimentos (limpeza/intervalo). Default 0.
+   */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(120)
+  default_buffer_minutes?: number;
 }

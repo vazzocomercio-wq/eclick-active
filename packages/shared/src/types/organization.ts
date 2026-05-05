@@ -42,6 +42,21 @@ export interface OrgMember {
   avatar_url: string | null;
   status: OrgMemberStatus;
   last_seen_at: ISODateString | null;
+  /**
+   * Especialidades/serviços que o profissional atende. Texto livre por
+   * org pra cobrir qualquer nicho — clínica ('nutricionista'), salão
+   * ('corte'), oficina ('motor'), B2B ('vendas'), etc. IA do Concierge
+   * usa pra match contra mensagem do cliente ao detectar agendamento.
+   */
+  specialties: string[];
+  /**
+   * Duração padrão por atendimento em minutos. Sistema usa pra calcular
+   * slots disponíveis automaticamente. NULL = usa duração do
+   * appointment_type (modelo legado/avançado).
+   */
+  default_duration_minutes: number | null;
+  /** Buffer entre atendimentos em minutos. Default 0. */
+  default_buffer_minutes: number;
   created_at: ISODateString;
   updated_at: ISODateString;
 }
