@@ -391,6 +391,8 @@ export class ContactsService {
       > & {
         stage_name: string | null;
         stage_color: string | null;
+        stage_requires_human: boolean;
+        pipeline_name: string | null;
       }
     >
   > {
@@ -401,7 +403,8 @@ export class ContactsService {
       .select(
         `id, title, value, currency, stage_id, pipeline_id, ai_score, ai_risk,
          won_at, lost_at, updated_at, created_at,
-         stage:pipeline_stages(name, color)`,
+         stage:pipeline_stages(name, color, requires_human),
+         pipeline:pipelines(name)`,
       )
       .eq('org_id', orgId)
       .eq('contact_id', contactId)
@@ -412,6 +415,8 @@ export class ContactsService {
       throw new InternalServerErrorException(error.message);
     }
 
+    type StageJoin = { name: string; color: string; requires_human?: boolean };
+    type PipelineJoin = { name: string };
     return ((data ?? []) as Array<{
       id: string;
       title: string;
@@ -425,9 +430,11 @@ export class ContactsService {
       lost_at: string | null;
       updated_at: string;
       created_at: string;
-      stage: { name: string; color: string } | Array<{ name: string; color: string }> | null;
+      stage: StageJoin | StageJoin[] | null;
+      pipeline: PipelineJoin | PipelineJoin[] | null;
     }>).map((d) => {
       const stage = Array.isArray(d.stage) ? d.stage[0] ?? null : d.stage;
+      const pipeline = Array.isArray(d.pipeline) ? d.pipeline[0] ?? null : d.pipeline;
       return {
         id: d.id,
         title: d.title,
@@ -443,8 +450,18 @@ export class ContactsService {
         created_at: d.created_at,
         stage_name: stage?.name ?? null,
         stage_color: stage?.color ?? null,
+        stage_requires_human: stage?.requires_human === true,
+        pipeline_name: pipeline?.name ?? null,
       };
     });
+  }
+
+  /**
+   * Alias pro endpoint GET /contacts/:id/deals — retorna o mesmo shape
+   * de getDeals(). Usado pelo drawer da conversa pra mostrar "Funil & Etapa".
+   */
+  listDealsForContact(orgId: string, contactId: string) {
+    return this.getDeals(orgId, contactId);
   }
 
   // ──────────────────────────────────────────────────────────

@@ -141,6 +141,16 @@ export class ContactsController {
     return this.service.findById(user.org_id, id);
   }
 
+  // GET /contacts/:id/deals — deals abertos do contato com pipeline+stage
+  // resolvidos (pra UI do drawer da conversa exibir "Funil & Etapa")
+  @Get(':id/deals')
+  listDeals(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<Awaited<ReturnType<ContactsService['listDealsForContact']>>> {
+    return this.service.listDealsForContact(user.org_id, id);
+  }
+
   // POST /contacts
   @Post()
   @HttpCode(HttpStatus.CREATED)

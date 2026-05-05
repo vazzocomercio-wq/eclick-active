@@ -154,6 +154,9 @@ export interface ContactDealItem {
   created_at: string;
   stage_name: string | null;
   stage_color: string | null;
+  /** Quando true, IA Concierge silencia em deals nessa stage (Bloco H) */
+  stage_requires_human?: boolean;
+  pipeline_name?: string | null;
 }
 
 // Re-export tipo para conveniência (consumers da página não precisam importar do shared)

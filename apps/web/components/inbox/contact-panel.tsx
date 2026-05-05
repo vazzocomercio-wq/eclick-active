@@ -1,7 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { CalendarPlus, ExternalLink, Mail, Phone, Sparkles } from 'lucide-react';
+import {
+  CalendarPlus,
+  ExternalLink,
+  GitBranch,
+  Lock,
+  Mail,
+  Phone,
+  Sparkles,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import type { ConversationDetail } from '@eclick-active/shared';
 import { Button } from '@/components/ui/button';
@@ -15,7 +23,7 @@ import { channelLabel } from '@/components/ui/channel-icon';
 import { ScoreBar } from '@/components/contacts/score-bar';
 import { TagPicker } from '@/components/tags/tag-picker';
 import { NewAppointmentDialog } from '@/components/agenda/new-appointment-dialog';
-import { contactsApi } from '@/lib/api/contacts';
+import { contactsApi, type ContactDealItem } from '@/lib/api/contacts';
 import { ApiError } from '@/lib/api/client';
 import { formatPhone } from '@/lib/format';
 
@@ -173,17 +181,8 @@ export function ContactPanel({ conversation, loading, onOpenFullProfile }: Conta
           </CardContent>
         </Card>
 
-        {/* Deals placeholder */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs">Deals vinculados</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-[11px] text-muted-foreground">
-              Endpoint <code>GET /contacts/:id/deals</code> ainda não existe.
-            </p>
-          </CardContent>
-        </Card>
+        {/* Funil & Etapa atual — deals abertos do contato */}
+        <FunnelStageSection contactId={contact.id} />
 
         {/* Tasks placeholder */}
         <Card>
@@ -276,6 +275,112 @@ function Row({ icon: Icon, label, value, extra }: RowProps) {
       <span className="w-16 shrink-0 text-xs text-muted-foreground">{label}</span>
       <span className="flex-1 truncate text-xs text-foreground">{value ?? '—'}</span>
       {extra}
+    </div>
+  );
+}
+
+/**
+ * Mostra os deals abertos do contato com pipeline (funil) + stage (etapa)
+ * resolvidos. Quando a stage é marcada `requires_human=true`, mostra
+ * badge 🔒 indicando que IA Concierge silencia em deals nessa stage.
+ */
+function FunnelStageSection({ contactId }: { contactId: string }) {
+  const [deals, setDeals] = useState<ContactDealItem[] | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    const ctrl = new AbortController();
+    contactsApi
+      .getDeals(contactId, ctrl.signal)
+      .then((d) => setDeals(d))
+      .catch((err) => {
+        if ((err as { name?: string })?.name === 'AbortError') return;
+        // Endpoint pode não existir em ambientes legados — falha silenciosa
+        setDeals([]);
+      })
+      .finally(() => setLoading(false));
+    return () => ctrl.abort();
+  }, [contactId]);
+
+  // Deals ativos (não won, não lost) primeiro; fechados embaixo
+  const open = (deals ?? []).filter((d) => !d.won_at && !d.lost_at);
+  const closed = (deals ?? []).filter((d) => d.won_at || d.lost_at);
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-1.5 text-xs">
+          <GitBranch className="h-3 w-3 text-primary" /> Funil & Etapa
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-2">
+        {loading ? (
+          <Skeleton className="h-10 w-full" />
+        ) : open.length === 0 && closed.length === 0 ? (
+          <p className="text-[11px] italic text-muted-foreground">
+            Lead ainda não foi roteado pra nenhum funil.
+          </p>
+        ) : (
+          <>
+            {open.map((d) => (
+              <DealFunnelRow key={d.id} deal={d} />
+            ))}
+            {closed.length > 0 && (
+              <details className="text-[11px] text-muted-foreground">
+                <summary className="cursor-pointer select-none hover:text-foreground">
+                  Fechados ({closed.length})
+                </summary>
+                <div className="mt-1.5 flex flex-col gap-1.5">
+                  {closed.map((d) => (
+                    <DealFunnelRow key={d.id} deal={d} closed />
+                  ))}
+                </div>
+              </details>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function DealFunnelRow({ deal, closed = false }: { deal: ContactDealItem; closed?: boolean }) {
+  const stageColor = deal.stage_color ?? '#00E5FF';
+  const closedTag = deal.won_at ? '✓ ganho' : deal.lost_at ? '✕ perdido' : null;
+
+  return (
+    <div
+      className="flex flex-col gap-1 rounded-md border border-border bg-muted/30 px-2 py-1.5"
+      style={closed ? { opacity: 0.6 } : undefined}
+    >
+      <div className="flex items-center gap-1.5 text-xs">
+        <span
+          className="inline-block h-2 w-2 shrink-0 rounded-full"
+          style={{ backgroundColor: stageColor }}
+        />
+        <span className="truncate font-medium" title={deal.title}>
+          {deal.title}
+        </span>
+        {closedTag && (
+          <span className="ml-auto shrink-0 text-[9px] uppercase text-muted-foreground">
+            {closedTag}
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-1 pl-3.5 text-[10px] text-muted-foreground">
+        <span className="truncate">
+          {deal.pipeline_name ?? 'Funil'} · <span style={{ color: stageColor }}>{deal.stage_name ?? 'Etapa'}</span>
+        </span>
+        {deal.stage_requires_human && (
+          <span
+            className="ml-auto inline-flex shrink-0 items-center gap-0.5 rounded bg-amber-500/15 px-1 text-[9px] font-medium text-amber-700 dark:text-amber-400"
+            title="IA silencia nessa etapa — atendimento humano obrigatório"
+          >
+            <Lock className="h-2.5 w-2.5" /> humano
+          </span>
+        )}
+      </div>
     </div>
   );
 }
