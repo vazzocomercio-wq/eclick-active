@@ -41,10 +41,95 @@ export class BaileysSession {
   private connecting = false;
   private terminated = false;
 
-  private readonly logger = pino({
-    level: process.env.BAILEYS_LOG_LEVEL ?? 'warn',
-    base: { sess: 'baileys' },
-  });
+  /**
+   * Logger Baileys com destination customizado pra detectar "Closing session"
+   * — log do libsignal interno que indica que a sessão Signal Protocol com
+   * o contato foi fechada. Quando isso acontece, próximas msgs cifradas
+   * desse contato podem falhar a decryption silenciosamente (msgs perdidas).
+   *
+   * Reativo: quando detecta o pattern, agendamos assertSessions pra TODOS
+   * os JIDs de contatos ativos pra "reabrir" sessões — best-effort. JID
+   * exato não vem no log, daí o broadcast.
+   */
+  private readonly logger = pino(
+    {
+      level: process.env.BAILEYS_LOG_LEVEL ?? 'warn',
+      base: { sess: 'baileys' },
+    },
+    {
+      write: (msg: string): void => {
+        process.stdout.write(msg);
+        if (msg.includes('Closing session')) {
+          // eslint-disable-next-line no-console
+          console.log(
+            `[baileys ${this.ctx.channelId}] ⚠️ DETECTED Closing session — agendando reset de sessões ativas`,
+          );
+          void this.refreshActiveSessionsAfterClose().catch((err: unknown) =>
+            // eslint-disable-next-line no-console
+            console.warn(
+              `[baileys ${this.ctx.channelId}] refreshActiveSessions falhou:`,
+              err instanceof Error ? err.message : err,
+            ),
+          );
+        }
+      },
+    },
+  );
+
+  /**
+   * Pega todos os JIDs de contatos com conversa aberta neste canal nas
+   * últimas 24h e força assertSessions pra reabrir sessão Signal. Throttle
+   * de 30s pra evitar spam quando muitos `Closing session` rolam em rajada.
+   */
+  private lastSessionRefreshAt = 0;
+  private async refreshActiveSessionsAfterClose(): Promise<void> {
+    const now = Date.now();
+    if (now - this.lastSessionRefreshAt < 30_000) return; // throttle 30s
+    this.lastSessionRefreshAt = now;
+
+    if (!this.sock) return;
+
+    const supabase = getSupabase();
+    const since = new Date(now - 24 * 3600_000).toISOString();
+    const { data: convs } = await supabase
+      .from('conversations')
+      .select('contact_id')
+      .eq('org_id', this.ctx.orgId)
+      .eq('channel_id', this.ctx.channelId)
+      .eq('status', 'open')
+      .gte('last_message_at', since);
+
+    const contactIds = ((convs as { contact_id: string }[] | null) ?? []).map(
+      (c) => c.contact_id,
+    );
+    if (contactIds.length === 0) return;
+
+    const { data: contacts } = await supabase
+      .from('contacts')
+      .select('whatsapp_jid')
+      .eq('org_id', this.ctx.orgId)
+      .in('id', contactIds)
+      .not('whatsapp_jid', 'is', null);
+
+    const jids = ((contacts as { whatsapp_jid: string | null }[] | null) ?? [])
+      .map((c) => c.whatsapp_jid)
+      .filter((j): j is string => !!j);
+    if (jids.length === 0) return;
+
+    try {
+      await this.sock.assertSessions(jids, true);
+      // eslint-disable-next-line no-console
+      console.log(
+        `[baileys ${this.ctx.channelId}] sessões re-asseguradas pra ${jids.length} JIDs`,
+      );
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[baileys ${this.ctx.channelId}] assertSessions broadcast falhou:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
 
   constructor(private readonly ctx: SessionContext) {}
 
