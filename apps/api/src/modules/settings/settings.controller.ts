@@ -15,9 +15,14 @@ import type { AuthUser } from '../../common/auth/auth.types';
 import {
   SettingsService,
   type AiFeature,
+  type LlmCredentials,
   type OrgSettings,
 } from './settings.service';
-import { UpdateAiFeatureDto, UpdateOrgDto } from './dto/settings.dto';
+import {
+  UpdateAiFeatureDto,
+  UpdateLlmCredentialsDto,
+  UpdateOrgDto,
+} from './dto/settings.dto';
 
 const VALID_FEATURE_NAMES: AIFeatureName[] = [
   'auto_classify',
@@ -79,5 +84,23 @@ export class SettingsController {
       featureName as AIFeatureName,
       dto,
     );
+  }
+
+  // ────────────────────────────────────────────
+  // LLM credentials (provider/model/api_key por org)
+  // ────────────────────────────────────────────
+
+  @Get('llm')
+  getLlm(@CurrentUser() user: AuthUser): Promise<LlmCredentials> {
+    return this.service.getLlmCredentials(user.org_id);
+  }
+
+  @Patch('llm')
+  @HttpCode(HttpStatus.OK)
+  updateLlm(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: UpdateLlmCredentialsDto,
+  ): Promise<LlmCredentials> {
+    return this.service.updateLlmCredentials(user.org_id, user.role, dto);
   }
 }

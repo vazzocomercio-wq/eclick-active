@@ -13,7 +13,19 @@ import type {
 } from '@eclick-active/shared';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { invalidateOrgTimezoneCache } from '../../common/org-settings.helper';
-import { UpdateAiFeatureDto, UpdateOrgDto } from './dto/settings.dto';
+import { LlmService } from '../../common/llm/llm.service';
+import {
+  LLM_CATALOG,
+  LLM_DEFAULT_MODEL,
+  LlmProviderName,
+} from '../../common/llm/llm-provider.interface';
+import { encryptApiKey, lastFour } from '../../common/llm/crypto.util';
+import { BadRequestException } from '@nestjs/common';
+import {
+  UpdateAiFeatureDto,
+  UpdateLlmCredentialsDto,
+  UpdateOrgDto,
+} from './dto/settings.dto';
 
 export interface OrgSettings {
   id: string;
@@ -32,6 +44,16 @@ export interface OrgSettings {
   channel_count: number;
   /** Configurações livres da org (jsonb) — auto_create_deal, etc. */
   settings: Record<string, unknown>;
+}
+
+export interface LlmCredentials {
+  configured: boolean;
+  provider: LlmProviderName;
+  model: string;
+  api_key_last4: string | null;
+  available_providers: LlmProviderName[];
+  available_models: Record<LlmProviderName, readonly string[]>;
+  updated_at: string | null;
 }
 
 export interface AiFeature {
@@ -66,7 +88,10 @@ const DEFAULT_FEATURES: AIFeatureName[] = [
 export class SettingsService {
   private readonly logger = new Logger(SettingsService.name);
 
-  constructor(private readonly supabase: SupabaseService) {}
+  constructor(
+    private readonly supabase: SupabaseService,
+    private readonly llm: LlmService,
+  ) {}
 
   // ────────────────────────────────────────────
   // ORG
@@ -233,5 +258,111 @@ export class SettingsService {
       );
     }
     return data as AiFeature;
+  }
+
+  // ────────────────────────────────────────────
+  // LLM CREDENTIALS (org_llm_credentials)
+  // ────────────────────────────────────────────
+
+  async getLlmCredentials(orgId: string): Promise<LlmCredentials> {
+    const { data, error } = await this.supabase.adminClient
+      .from('org_llm_credentials')
+      .select('provider, model_default, api_key_last4, updated_at')
+      .eq('org_id', orgId)
+      .maybeSingle();
+
+    if (error) {
+      this.logger.error(`getLlmCredentials failed: ${error.message}`);
+      throw new InternalServerErrorException(error.message);
+    }
+
+    const row = data as {
+      provider: LlmProviderName;
+      model_default: string;
+      api_key_last4: string;
+      updated_at: string;
+    } | null;
+
+    return {
+      configured: !!row,
+      provider: row?.provider ?? 'anthropic',
+      model: row?.model_default ?? LLM_DEFAULT_MODEL.anthropic,
+      api_key_last4: row?.api_key_last4 ?? null,
+      available_providers: ['anthropic', 'openai', 'google'],
+      available_models: LLM_CATALOG,
+      updated_at: row?.updated_at ?? null,
+    };
+  }
+
+  async updateLlmCredentials(
+    orgId: string,
+    actorRole: OrgMemberRole,
+    dto: UpdateLlmCredentialsDto,
+  ): Promise<LlmCredentials> {
+    if (!['owner', 'admin'].includes(actorRole)) {
+      throw new ForbiddenException(
+        'Apenas owner/admin podem alterar a credencial de IA.',
+      );
+    }
+
+    const { data: existingRow } = await this.supabase.adminClient
+      .from('org_llm_credentials')
+      .select('provider, model_default, api_key_ciphertext, api_key_last4')
+      .eq('org_id', orgId)
+      .maybeSingle();
+
+    const existing = existingRow as {
+      provider: LlmProviderName;
+      model_default: string;
+      api_key_ciphertext: string;
+      api_key_last4: string;
+    } | null;
+
+    const nextProvider: LlmProviderName = dto.provider ?? existing?.provider ?? 'anthropic';
+    const nextModel = dto.model ?? existing?.model_default ?? LLM_DEFAULT_MODEL[nextProvider];
+
+    if (!LLM_CATALOG[nextProvider].includes(nextModel)) {
+      throw new BadRequestException(
+        `Modelo "${nextModel}" não é suportado para o provider ${nextProvider}.`,
+      );
+    }
+
+    // API key: nova ou mantém a atual. Se provider mudou e não há key nova, exigir.
+    let api_key_ciphertext: string;
+    let api_key_last4: string;
+    if (dto.api_key) {
+      api_key_ciphertext = encryptApiKey(dto.api_key);
+      api_key_last4 = lastFour(dto.api_key);
+    } else if (existing && existing.provider === nextProvider) {
+      api_key_ciphertext = existing.api_key_ciphertext;
+      api_key_last4 = existing.api_key_last4;
+    } else {
+      throw new BadRequestException(
+        'Ao trocar de provider você precisa enviar a nova api_key.',
+      );
+    }
+
+    const { error } = await this.supabase.adminClient
+      .from('org_llm_credentials')
+      .upsert(
+        {
+          org_id: orgId,
+          provider: nextProvider,
+          model_default: nextModel,
+          api_key_ciphertext,
+          api_key_last4,
+        },
+        { onConflict: 'org_id' },
+      );
+
+    if (error) {
+      this.logger.error(`updateLlmCredentials upsert failed: ${error.message}`);
+      throw new InternalServerErrorException(error.message);
+    }
+
+    // Invalida cache do LlmService pra essa org pegar a nova cred no próximo call
+    this.llm.invalidateCache(orgId);
+
+    return this.getLlmCredentials(orgId);
   }
 }

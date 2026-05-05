@@ -1,14 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { performance } from 'node:perf_hooks';
-import Anthropic from '@anthropic-ai/sdk';
 import type { AiAgentPersona } from '@eclick-active/shared';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { ChannelDispatcherService } from '../../common/channels/channel-dispatcher.service';
+import { LlmService } from '../../common/llm/llm.service';
 import { AiPersonaService } from '../ai-persona/ai-persona.service';
-
-const SONNET_MODEL = 'claude-sonnet-4-6';
-const SONNET_INPUT_PER_MTOK = 3.0;
-const SONNET_OUTPUT_PER_MTOK = 15.0;
 
 export interface ReEngagementSettings {
   enabled: boolean;
@@ -74,21 +70,13 @@ const DEFAULT_SETTINGS: ReEngagementSettings = {
 @Injectable()
 export class ReEngagementService {
   private readonly logger = new Logger(ReEngagementService.name);
-  private _client?: Anthropic;
 
   constructor(
     private readonly supabase: SupabaseService,
     private readonly dispatcher: ChannelDispatcherService,
     private readonly persona: AiPersonaService,
+    private readonly llm: LlmService,
   ) {}
-
-  private getClient(): Anthropic {
-    if (this._client) return this._client;
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) throw new Error('ANTHROPIC_API_KEY ausente');
-    this._client = new Anthropic({ apiKey, maxRetries: 2 });
-    return this._client;
-  }
 
   // ──────────────────────────────────────────────────────────
   // Settings
@@ -510,44 +498,23 @@ ${tagsText}
 
 Tentativa #${conv.retry_number}. Gere a mensagem de re-engajamento.`;
 
-    const startTs = performance.now();
     try {
-      const res = await this.getClient().messages.create({
-        model: SONNET_MODEL,
-        max_tokens: 200,
+      const res = await this.llm.chat({
+        orgId,
+        feature: 're_engagement',
         system,
-        messages: [{ role: 'user', content: userMsg }],
-      });
-      const block = res.content.find((b): b is Anthropic.TextBlock => b.type === 'text');
-      const text = block?.text?.trim() ?? '';
-      if (!text) return null;
-
-      const cost =
-        (res.usage.input_tokens * SONNET_INPUT_PER_MTOK +
-          res.usage.output_tokens * SONNET_OUTPUT_PER_MTOK) /
-        1_000_000;
-      void this.supabase.adminClient
-        .from('ai_interactions')
-        .insert({
-          org_id: orgId,
-          interaction_type: 're_engagement',
-          model: SONNET_MODEL,
-          provider: 'anthropic',
-          input_tokens: res.usage.input_tokens,
-          output_tokens: res.usage.output_tokens,
-          cost_usd: Math.round(cost * 1_000_000) / 1_000_000,
-          latency_ms: Math.round(performance.now() - startTs),
+        user: userMsg,
+        max_tokens: 200,
+        context: {
           conversation_id: conv.conversation_id,
           contact_id: conv.contact_id,
-          result_summary: text.slice(0, 200),
-          metadata: {
-            source: 're_engagement_worker',
-            retry_number: conv.retry_number,
-          },
-        })
-        .then(() => {})
-        .then(undefined, () => {});
-      return text;
+        },
+        metadata: {
+          source: 're_engagement_worker',
+          retry_number: conv.retry_number,
+        },
+      });
+      return res.text || null;
     } catch (err) {
       this.logger.warn(
         `generateMessage falhou: ${err instanceof Error ? err.message : String(err)}`,

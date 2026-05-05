@@ -1,5 +1,6 @@
 import {
   IsBoolean,
+  IsIn,
   IsObject,
   IsOptional,
   IsString,
@@ -49,4 +50,26 @@ export class UpdateAiFeatureDto {
   @IsOptional()
   @IsObject()
   config?: Record<string, unknown>;
+}
+
+/**
+ * Credenciais de LLM por org. Tudo opcional pra permitir patches parciais
+ * (ex: só trocar modelo mantendo a chave). Quando provider muda, api_key
+ * é obrigatória — a service valida.
+ */
+export class UpdateLlmCredentialsDto {
+  @IsOptional()
+  @IsString()
+  @IsIn(['anthropic', 'openai', 'google'])
+  provider?: 'anthropic' | 'openai' | 'google';
+
+  @IsOptional()
+  @IsString()
+  @Length(1, 120)
+  model?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(10, 500)
+  api_key?: string;
 }

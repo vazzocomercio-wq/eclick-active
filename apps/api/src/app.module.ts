@@ -4,6 +4,7 @@ import { SupabaseModule } from './common/supabase/supabase.module';
 import { AuthModule } from './common/auth/auth.module';
 import { ChannelsModule as ChannelDispatcherModule } from './common/channels/channels.module';
 import { PlaceholderModule } from './common/placeholder/placeholder.module';
+import { LlmModule } from './common/llm/llm.module';
 import { EventsModule } from './gateways/events.module';
 import { AiModule } from './modules/ai/ai.module';
 import { AiPersonaModule } from './modules/ai-persona/ai-persona.module';
@@ -42,6 +43,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     AuthModule,
     ChannelDispatcherModule,
     PlaceholderModule,
+    LlmModule,
     EventsModule,
     // Feature modules
     ContactsModule,

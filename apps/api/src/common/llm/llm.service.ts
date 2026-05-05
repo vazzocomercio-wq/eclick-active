@@ -1,0 +1,284 @@
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { SupabaseService } from '../supabase/supabase.service';
+import {
+  LlmChatInput,
+  LlmChatResult,
+  LlmProvider,
+  LlmProviderName,
+  LLM_DEFAULT_MODEL,
+} from './llm-provider.interface';
+import { AnthropicProvider } from './providers/anthropic.provider';
+import { OpenAIProvider } from './providers/openai.provider';
+import { GoogleProvider } from './providers/google.provider';
+import { decryptApiKey } from './crypto.util';
+
+interface ChatRequest {
+  /** Org dona da chamada — resolve credencial + escopa o tracking. */
+  orgId: string;
+  /**
+   * Identificador da feature consumindo (ex: 're_engagement',
+   * 'concierge_greeting', 'attachment_vision'). Vai pro
+   * `ai_interactions.interaction_type`.
+   */
+  feature: string;
+  system: string;
+  /** Mensagens do turno (se string única, vira role=user simples). */
+  user: string | LlmChatInput['messages'];
+  max_tokens?: number;
+  json_mode?: boolean;
+  tools?: LlmChatInput['tools'];
+  temperature?: number;
+  /** FKs opcionais pra ai_interactions. */
+  context?: {
+    conversation_id?: string;
+    contact_id?: string;
+    deal_id?: string;
+    user_id?: string;
+  };
+  /** Metadata livre pra logar junto. */
+  metadata?: Record<string, unknown>;
+}
+
+interface ChatResponse extends LlmChatResult {
+  /** ID da row em ai_interactions; null se logging falhou. */
+  interaction_id: string | null;
+}
+
+interface OrgCredRow {
+  provider: LlmProviderName;
+  model_default: string;
+  api_key_ciphertext: string;
+}
+
+interface CachedProvider {
+  provider: LlmProvider;
+  /** Hash do ciphertext: cache invalida se cred trocar. */
+  ciphertextKey: string;
+}
+
+/**
+ * Service unificado de chamadas LLM.
+ *
+ * Responsabilidades:
+ *   1. Resolver credencial da org (DB) — fallback pra ANTHROPIC_API_KEY env
+ *      durante onboarding (org sem cred configurada usa Anthropic com Sonnet).
+ *   2. Instanciar provider correto, cachear por org (chave inclui ciphertext
+ *      pra auto-invalidar no rotate).
+ *   3. Despachar chat() pro provider.
+ *   4. Logar custo+tokens+latência em active.ai_interactions (best-effort).
+ *
+ * Princípios:
+ *   - Multi-tenant: orgId obrigatório em todo call.
+ *   - PT-BR: erros ao user em PT-BR (UI catch & display).
+ *   - IA aplicada: este serviço É a fundação que outros módulos usam
+ *     pra adicionar IA sem reimplementar tracking/cred resolution.
+ */
+@Injectable()
+export class LlmService implements OnModuleInit {
+  private readonly logger = new Logger(LlmService.name);
+  private readonly cache = new Map<string, CachedProvider>();
+
+  constructor(private readonly supabase: SupabaseService) {}
+
+  onModuleInit(): void {
+    if (!process.env.LLM_CRED_ENCRYPTION_KEY) {
+      this.logger.warn(
+        'LLM_CRED_ENCRYPTION_KEY ausente — orgs sem cred caem no fallback ANTHROPIC_API_KEY; orgs com cred vão falhar ao decifrar.',
+      );
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // Cred management
+  // ──────────────────────────────────────────────────────────
+
+  /**
+   * Resolve provider pra uma org. Lê de org_llm_credentials; se ausente,
+   * cai no fallback global (Anthropic + ANTHROPIC_API_KEY env).
+   */
+  async resolveProvider(orgId: string): Promise<{
+    provider: LlmProvider;
+    providerName: LlmProviderName;
+    model: string;
+  }> {
+    const { data, error } = await this.supabase.adminClient
+      .from('org_llm_credentials')
+      .select('provider, model_default, api_key_ciphertext')
+      .eq('org_id', orgId)
+      .maybeSingle();
+
+    if (error) {
+      this.logger.warn(`org_llm_credentials lookup falhou: ${error.message} — caindo no fallback`);
+    }
+
+    const row = data as OrgCredRow | null;
+
+    if (row) {
+      const cached = this.cache.get(orgId);
+      if (cached && cached.ciphertextKey === row.api_key_ciphertext) {
+        return {
+          provider: cached.provider,
+          providerName: row.provider,
+          model: row.model_default,
+        };
+      }
+      const apiKey = decryptApiKey(row.api_key_ciphertext);
+      const provider = instantiateProvider(row.provider, apiKey);
+      this.cache.set(orgId, { provider, ciphertextKey: row.api_key_ciphertext });
+      return { provider, providerName: row.provider, model: row.model_default };
+    }
+
+    // Fallback: ANTHROPIC_API_KEY env, claude-sonnet-4-6.
+    const fallbackKey = process.env.ANTHROPIC_API_KEY;
+    if (!fallbackKey) {
+      throw new Error(
+        'Nenhuma credencial de IA configurada pra esta org e ANTHROPIC_API_KEY está ausente. Configure em /configuracoes > IA.',
+      );
+    }
+    const cacheKey = `__fallback__${orgId}`;
+    const cached = this.cache.get(cacheKey);
+    if (cached) {
+      return {
+        provider: cached.provider,
+        providerName: 'anthropic',
+        model: LLM_DEFAULT_MODEL.anthropic,
+      };
+    }
+    const provider = new AnthropicProvider(fallbackKey);
+    this.cache.set(cacheKey, { provider, ciphertextKey: '__env__' });
+    return {
+      provider,
+      providerName: 'anthropic',
+      model: LLM_DEFAULT_MODEL.anthropic,
+    };
+  }
+
+  /** Invalida cache pra uma org — chamado por settings.controller após PATCH. */
+  invalidateCache(orgId: string): void {
+    this.cache.delete(orgId);
+    this.cache.delete(`__fallback__${orgId}`);
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // Chat
+  // ──────────────────────────────────────────────────────────
+
+  async chat(req: ChatRequest): Promise<ChatResponse> {
+    const { provider, providerName, model } = await this.resolveProvider(req.orgId);
+
+    const messages =
+      typeof req.user === 'string'
+        ? [{ role: 'user' as const, content: req.user }]
+        : req.user;
+
+    const input: LlmChatInput = {
+      system: req.system,
+      messages,
+      max_tokens: req.max_tokens,
+      json_mode: req.json_mode,
+      tools: req.tools,
+      temperature: req.temperature,
+    };
+
+    let result: LlmChatResult;
+    try {
+      result = await provider.chat(model, input);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(`[${req.feature}] provider=${providerName} model=${model} falhou: ${message}`);
+      // Loga interação falhada (cost=0) pra visibilidade
+      void this.logInteraction({
+        org_id: req.orgId,
+        interaction_type: req.feature,
+        provider: providerName,
+        model,
+        input_tokens: 0,
+        output_tokens: 0,
+        cost_usd: 0,
+        latency_ms: 0,
+        result_summary: `ERROR: ${message.slice(0, 180)}`,
+        ...req.context,
+        metadata: { ...(req.metadata ?? {}), error: message },
+      });
+      throw err;
+    }
+
+    const interaction_id = await this.logInteraction({
+      org_id: req.orgId,
+      interaction_type: req.feature,
+      provider: providerName,
+      model,
+      input_tokens: result.input_tokens,
+      output_tokens: result.output_tokens,
+      cost_usd: result.cost_usd,
+      latency_ms: result.latency_ms,
+      result_summary: result.text.slice(0, 200) || `(tool_use ${result.tool_calls.map((t) => t.name).join(',')})`,
+      ...req.context,
+      metadata: req.metadata ?? {},
+    });
+
+    return { ...result, interaction_id };
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // Logging (best-effort — never fails the call)
+  // ──────────────────────────────────────────────────────────
+
+  private async logInteraction(input: {
+    org_id: string;
+    interaction_type: string;
+    provider: LlmProviderName;
+    model: string;
+    input_tokens: number;
+    output_tokens: number;
+    cost_usd: number;
+    latency_ms: number;
+    conversation_id?: string;
+    contact_id?: string;
+    deal_id?: string;
+    user_id?: string;
+    result_summary: string | null;
+    metadata: Record<string, unknown>;
+  }): Promise<string | null> {
+    try {
+      const { data, error } = await this.supabase.adminClient
+        .from('ai_interactions')
+        .insert({
+          org_id: input.org_id,
+          interaction_type: input.interaction_type,
+          model: input.model,
+          provider: input.provider,
+          input_tokens: input.input_tokens,
+          output_tokens: input.output_tokens,
+          cost_usd: input.cost_usd,
+          latency_ms: input.latency_ms,
+          conversation_id: input.conversation_id ?? null,
+          contact_id: input.contact_id ?? null,
+          deal_id: input.deal_id ?? null,
+          user_id: input.user_id ?? null,
+          result_summary: input.result_summary,
+          metadata: input.metadata,
+        })
+        .select('id')
+        .single();
+      if (error) throw new Error(error.message);
+      return (data as { id: string } | null)?.id ?? null;
+    } catch (err) {
+      this.logger.warn(
+        `ai_interactions log falhou (non-fatal): ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return null;
+    }
+  }
+}
+
+function instantiateProvider(name: LlmProviderName, apiKey: string): LlmProvider {
+  switch (name) {
+    case 'anthropic':
+      return new AnthropicProvider(apiKey);
+    case 'openai':
+      return new OpenAIProvider(apiKey);
+    case 'google':
+      return new GoogleProvider(apiKey);
+  }
+}
