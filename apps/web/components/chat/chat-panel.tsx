@@ -265,6 +265,7 @@ export function ChatPanel({
         onLoadMore={() => {
           void chat.loadMore();
         }}
+        conversationId={conversationId}
       />
 
       {/* Indicador "IA está digitando…" (Concierge processando) */}

@@ -9,14 +9,18 @@ import {
   Sparkles,
 } from 'lucide-react';
 import type { Message, MessageDeliveryStatus } from '@eclick-active/shared';
+import type { ConversationAttachment } from '@/lib/api/attachments';
+import { AttachmentCard } from '@/components/chat/attachment-card';
 import { MessageMedia } from '@/components/chat/message-media';
 import { cn } from '@/lib/utils';
 
 interface MessageBubbleProps {
   message: Message;
+  /** Attachments dessa mensagem (vindos do Storage com signed URL + summary IA). */
+  attachments?: ConversationAttachment[];
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
+export function MessageBubble({ message, attachments }: MessageBubbleProps) {
   const isOutbound = message.direction === 'outbound';
   const isBot = message.sender_type === 'bot';
   const isInternalNote = message.is_internal_note;
@@ -52,7 +56,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           </div>
         )}
 
-        <MessageContent message={message} />
+        <MessageContent message={message} attachments={attachments} />
 
         <div
           className={cn(
@@ -68,9 +72,36 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   );
 }
 
-function MessageContent({ message }: { message: Message }) {
-  // Toda renderização rica delegada a MessageMedia, que decide o tipo via
-  // content_type / metadata.type / auto-detect a partir de URL no texto.
+function MessageContent({
+  message,
+  attachments,
+}: {
+  message: Message;
+  attachments?: ConversationAttachment[];
+}) {
+  // Quando a mensagem tem attachments processados (Sub-fase 2.B), renderiza
+  // mídia rica + summary IA via AttachmentCard. Mantém o texto da msg como
+  // legenda quando houver. Se não tem attachment, fallback pra MessageMedia
+  // (auto-detect a partir de content_type / metadata.type / URL no texto).
+  if (attachments && attachments.length > 0) {
+    const caption =
+      ((message.content as Record<string, unknown> | null)?.body as string | undefined) ??
+      message.plain_text ??
+      '';
+    return (
+      <div className="flex flex-col gap-1.5">
+        {attachments.map((a) => (
+          <AttachmentCard key={a.id} attachment={a} />
+        ))}
+        {caption && caption.trim() && (
+          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+            {caption}
+          </p>
+        )}
+      </div>
+    );
+  }
+
   return <MessageMedia message={message} />;
 }
 

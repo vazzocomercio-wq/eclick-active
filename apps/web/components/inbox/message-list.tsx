@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 import type { Message } from '@eclick-active/shared';
+import { useConversationAttachments } from '@/hooks/use-conversation-attachments';
 import { Skeleton } from '@/components/ui/skeleton';
 import { MessageBubble } from './message-bubble';
 
@@ -12,6 +13,8 @@ interface MessageListProps {
   hasMore: boolean;
   loadingMore: boolean;
   onLoadMore: () => void;
+  /** ID da conversa pra buscar attachments (mídia + summary IA). */
+  conversationId: string | null;
 }
 
 export function MessageList({
@@ -20,7 +23,15 @@ export function MessageList({
   hasMore,
   loadingMore,
   onLoadMore,
+  conversationId,
 }: MessageListProps) {
+  // Refresh quando última mensagem da conversa mudar — cobre attachments
+  // que terminam de processar enquanto a tela já está aberta.
+  const lastMessageId = messages[messages.length - 1]?.id ?? null;
+  const attachmentsByMessage = useConversationAttachments(
+    conversationId,
+    lastMessageId ? lastMessageId.length : 0,
+  );
   const containerRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const lastMessageIdRef = useRef<string | null>(null);
@@ -119,7 +130,11 @@ export function MessageList({
         </div>
       )}
       {messages.map((m) => (
-        <MessageBubble key={m.id} message={m} />
+        <MessageBubble
+          key={m.id}
+          message={m}
+          attachments={attachmentsByMessage.get(m.id)}
+        />
       ))}
     </div>
   );
