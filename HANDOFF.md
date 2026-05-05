@@ -7,9 +7,9 @@
 
 ## Estado atual
 
-**Última migration aplicada via API**: `037_appointment_custom_fields.sql`
+**Última migration aplicada via API**: `039_re_engagement.sql`
 **Migration aplicada via Studio**: `038_message_media_storage_policy.sql` (2026-05-05)
-**Próxima migration livre**: `039_*.sql`
+**Próxima migration livre**: `040_*.sql`
 
 **Helper pra aplicar migrations rapidão (Claude usa esse)**:
 ```bash
@@ -205,6 +205,11 @@ Worker pega no próximo tick (30s).
 ## Commits desta sessão (cronológicos)
 
 ```
+f3c2989  feat(re-engagement): cron de reativação + painel UI
+9389f9c  feat(ai-persona): templates de onboarding por nicho
+441572e  feat(attachments): vídeo inbound transcrito via ffmpeg + Whisper
+8446936  docs(handoff): marca migration 038 como aplicada
+9cd3ab6  docs: storage policy 038 + atualiza HANDOFF
 50f1e7d  feat(attachments): transcrição de áudio via OpenAI Whisper
 25566f8  feat(configuracoes): seletor de timezone na seção Organização
 ca18c27  feat(configuracoes): editor de tipos de agendamento + custom fields
