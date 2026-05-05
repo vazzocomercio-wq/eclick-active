@@ -110,11 +110,22 @@ function toAnthropicMessage(m: LlmMessage): Anthropic.MessageParam {
 
 function toAnthropicBlock(b: LlmContentBlock): Anthropic.ContentBlockParam {
   if (b.type === 'text') return { type: 'text', text: b.text };
+  if (b.type === 'image_base64') {
+    return {
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: b.media_type as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+        data: b.data,
+      },
+    };
+  }
+  // pdf_base64 — Anthropic Vision suporta PDF nativo via type 'document'
   return {
-    type: 'image',
+    type: 'document',
     source: {
       type: 'base64',
-      media_type: b.media_type as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+      media_type: 'application/pdf',
       data: b.data,
     },
   };

@@ -5,17 +5,14 @@ import { mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import ffmpegPath from 'ffmpeg-static';
-import Anthropic from '@anthropic-ai/sdk';
 import { SupabaseService } from '../../common/supabase/supabase.service';
+import { LlmService } from '../../common/llm/llm.service';
+import type { LlmContentBlock } from '../../common/llm/llm-provider.interface';
 
-const VISION_MODEL = 'claude-sonnet-4-6';
 const WHISPER_MODEL = 'whisper-1';
 const SIGNED_URL_TTL_SECONDS = 60 * 30; // 30min — UI usa pra exibir mídia
 const WHISPER_MAX_BYTES = 24 * 1024 * 1024; // 25MB limite OpenAI; deixa folga
 
-/** Pricing Sonnet 4.6 (USD por milhão de tokens). */
-const SONNET_INPUT_PER_MTOK = 3.0;
-const SONNET_OUTPUT_PER_MTOK = 15.0;
 /** Whisper preço fixo por minuto (USD). */
 const WHISPER_USD_PER_MIN = 0.006;
 
@@ -57,17 +54,11 @@ interface AttachmentRow {
 @Injectable()
 export class AttachmentsService {
   private readonly logger = new Logger(AttachmentsService.name);
-  private _client?: Anthropic;
 
-  constructor(private readonly supabase: SupabaseService) {}
-
-  private getClient(): Anthropic {
-    if (this._client) return this._client;
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) throw new Error('ANTHROPIC_API_KEY ausente');
-    this._client = new Anthropic({ apiKey, maxRetries: 2 });
-    return this._client;
-  }
+  constructor(
+    private readonly supabase: SupabaseService,
+    private readonly llm: LlmService,
+  ) {}
 
   /**
    * Lista attachments pendentes de processamento de IA. Ordena por
@@ -189,39 +180,34 @@ export class AttachmentsService {
 
     let aiSummary: string | null = null;
     let aiExtracted: Record<string, unknown> | null = null;
-    let inputTokens = 0;
-    let outputTokens = 0;
 
     try {
-      const sourceBlock =
+      const mediaBlock: LlmContentBlock =
         att.media_type === 'image'
-          ? {
-              type: 'image' as const,
-              source: { type: 'base64' as const, media_type: mediaType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data: base64 },
-            }
-          : {
-              type: 'document' as const,
-              source: { type: 'base64' as const, media_type: 'application/pdf' as const, data: base64 },
-            };
+          ? { type: 'image_base64', media_type: mediaType, data: base64 }
+          : { type: 'pdf_base64', data: base64 };
 
-      const res = await this.getClient().messages.create({
-        model: VISION_MODEL,
-        max_tokens: 800,
-        messages: [
+      const res = await this.llm.chat({
+        orgId: att.org_id,
+        feature: 'attachment_vision',
+        system: 'Você analisa mídia inbound de WhatsApp e devolve JSON.',
+        user: [
           {
             role: 'user',
-            content: [sourceBlock, { type: 'text', text: userPrompt }],
+            content: [mediaBlock, { type: 'text', text: userPrompt }],
           },
         ],
+        max_tokens: 800,
+        json_mode: true,
+        metadata: {
+          source: 'attachments_worker',
+          attachment_id: att.id,
+          message_id: att.message_id,
+          media_type: att.media_type,
+        },
       });
 
-      inputTokens = res.usage.input_tokens;
-      outputTokens = res.usage.output_tokens;
-
-      const block = res.content.find(
-        (b): b is Anthropic.TextBlock => b.type === 'text',
-      );
-      const text = block?.text?.trim() ?? '';
+      const text = res.text;
       const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
       try {
         const parsed = JSON.parse(cleaned) as {
@@ -256,32 +242,6 @@ export class AttachmentsService {
       ai_summary: aiSummary,
       ai_extracted: aiExtracted,
     });
-
-    // Loga custo em ai_interactions (best-effort)
-    const cost =
-      (inputTokens * SONNET_INPUT_PER_MTOK + outputTokens * SONNET_OUTPUT_PER_MTOK) /
-      1_000_000;
-    void this.supabase.adminClient
-      .from('ai_interactions')
-      .insert({
-        org_id: att.org_id,
-        interaction_type: 'attachment_vision',
-        model: VISION_MODEL,
-        provider: 'anthropic',
-        input_tokens: inputTokens,
-        output_tokens: outputTokens,
-        cost_usd: Math.round(cost * 1_000_000) / 1_000_000,
-        latency_ms: Math.round(performance.now() - start),
-        result_summary: (aiSummary ?? '').slice(0, 200),
-        metadata: {
-          source: 'attachments_worker',
-          attachment_id: att.id,
-          message_id: att.message_id,
-          media_type: att.media_type,
-        },
-      })
-      .then(() => {})
-      .then(undefined, () => {});
 
     this.logger.log(
       `att ${att.id} processed (${att.media_type}) summary="${(aiSummary ?? '').slice(0, 60)}…"`,
@@ -461,23 +421,24 @@ export class AttachmentsService {
     };
 
     try {
-      const res = await this.getClient().messages.create({
-        model: VISION_MODEL,
-        max_tokens: 500,
+      const res = await this.llm.chat({
+        orgId: att.org_id,
+        feature: 'attachment_audio_summary',
         system:
           'Você está analisando uma transcrição de áudio que um cliente enviou via WhatsApp. Tarefa: 1) Resumo em 1-2 frases pt-BR (ai_summary). 2) Entities estruturadas (ai_extracted). Retorne APENAS JSON: {"ai_summary":"...","ai_extracted":{...}}',
-        messages: [
-          {
-            role: 'user',
-            content: `Transcrição:\n"""\n${transcript.slice(0, 4000)}\n"""\n\nGere o JSON.`,
-          },
-        ],
+        user: `Transcrição:\n"""\n${transcript.slice(0, 4000)}\n"""\n\nGere o JSON.`,
+        max_tokens: 500,
+        json_mode: true,
+        metadata: {
+          source: 'attachments_worker',
+          attachment_id: att.id,
+          message_id: att.message_id,
+        },
       });
-      const block = res.content.find(
-        (b): b is Anthropic.TextBlock => b.type === 'text',
-      );
-      const text = block?.text?.trim() ?? '';
-      const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
+      const cleaned = res.text
+        .trim()
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/```\s*$/, '');
       try {
         const parsed = JSON.parse(cleaned) as {
           ai_summary?: unknown;
@@ -494,31 +455,6 @@ export class AttachmentsService {
       } catch {
         // mantém summary=transcript fallback
       }
-
-      const cost =
-        (res.usage.input_tokens * SONNET_INPUT_PER_MTOK +
-          res.usage.output_tokens * SONNET_OUTPUT_PER_MTOK) /
-        1_000_000;
-      void this.supabase.adminClient
-        .from('ai_interactions')
-        .insert({
-          org_id: att.org_id,
-          interaction_type: 'attachment_audio_summary',
-          model: VISION_MODEL,
-          provider: 'anthropic',
-          input_tokens: res.usage.input_tokens,
-          output_tokens: res.usage.output_tokens,
-          cost_usd: Math.round(cost * 1_000_000) / 1_000_000,
-          latency_ms: Math.round(performance.now() - startTs),
-          result_summary: aiSummary.slice(0, 200),
-          metadata: {
-            source: 'attachments_worker',
-            attachment_id: att.id,
-            message_id: att.message_id,
-          },
-        })
-        .then(() => {})
-        .then(undefined, () => {});
     } catch (err) {
       this.logger.warn(
         `att ${att.id} sonnet summary falhou (transcript salvo): ${err instanceof Error ? err.message : String(err)}`,

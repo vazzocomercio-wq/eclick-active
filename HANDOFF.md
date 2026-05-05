@@ -1,30 +1,46 @@
 # HANDOFF — eclick-active
 
 > Documento vivo de continuidade entre sessões. **Lê isso primeiro ao começar nova sessão.**
-> Última atualização: **2026-05-05** (responsividade Fase 1 + design do Active Intelligence)
+> Última atualização: **2026-05-05** (Bloco A do Active Intelligence completo — LlmProvider abstraction)
 
 ---
 
 ## 🎯 Próximo trabalho planejado
 
-**Active Intelligence (Ads & Social Analytics + Hub)** — design fechado, aguardando GO.
+**Active Intelligence (Ads & Social Analytics + Hub)** — Bloco A entregue, próximo é Bloco B.
 
 📄 **Doc canônico**: [`docs/analytics-design.md`](./docs/analytics-design.md)
 
-Resumo:
-- Sistema de monitoramento ativo (Meta + Google Ads) + alertas WhatsApp
-- 8 blocos sequenciais (A-H), ~27h total
-- **Próxima ação**: implementar **Bloco A** (LlmProvider abstraction)
+Estado:
+- ✅ **Bloco A** (LlmProvider abstraction) — entregue em A.1 + A.2
+- ⏭️ **Próxima ação**: implementar **Bloco B** (Ad Integrations + OAuth Meta, ~3h)
+- ⚠️ Antes do Bloco B, **solicitar `GOOGLE_ADS_DEVELOPER_TOKEN`** via https://ads.google.com/aw/apicenter (3-7 dias de approval) pra ter pronto quando chegar no Bloco D
 - Decisões 1-7 fechadas (ver doc)
 - ⚠️ **NÃO** confundir com Intelligence Hub do `eclick-backend` (SaaS) — em prod lá, projeto distinto
+
+### Bloco A entregue — sumário
+
+- Migration `040_org_llm_credentials.sql` aplicada (cred per org cifrada AES-GCM)
+- `apps/api/src/common/llm/`: interface `LlmProvider`, `LlmService`, providers Anthropic+OpenAI+Google(stub)
+- `GET/PATCH /settings/llm` (owner/admin) — UI escolhe provider+modelo+api_key
+- 7 services migrados pra `LlmService`: `re-engagement`, `ai-concierge`, `pages/ai-page-generator`, `attachments` (Vision+audio), `copilot` (via escape hatch `getAnthropicClientForOrg` enquanto interface não cobre tool-loop)
+- `AnthropicClient` virou adapter sobre `LlmService` — os 3 services do `ai/` (ai.service, data-collection, transfer) ganham cred per org sem mudança de código
+- **Env nova**: `LLM_CRED_ENCRYPTION_KEY` (32 bytes hex) — DEVE estar em `apps/api/.env` local + Railway `active-api`
+
+### Limitações conhecidas / follow-ups do Bloco A
+
+- Copilot tool-loop ainda é Anthropic-only (escape hatch). Quando interface cobrir tool_use/tool_result blocks multi-provider, copilot pode migrar.
+- OpenAI provider rejeita PDF inline (Anthropic suporta nativo). Documentado no `LlmContentBlock.pdf_base64`.
+- Google provider em stub — implementar quando precisar.
+- `AIInteractionType` em `@eclick-active/shared` ainda é union restritiva e ficou desalinhada com features novas (`re_engagement`, `attachment_vision`, `page_generate`, etc.). DB aceita string crua, mas vale atualizar shared num bloco futuro pra ganhar type-safety.
 
 ---
 
 ## Estado atual
 
-**Última migration aplicada via API**: `039_re_engagement.sql`
+**Última migration aplicada via API**: `040_org_llm_credentials.sql`
 **Migration aplicada via Studio**: `038_message_media_storage_policy.sql` (2026-05-05)
-**Próxima migration livre**: `040_*.sql`
+**Próxima migration livre**: `041_*.sql`
 
 **Helper pra aplicar migrations rapidão (Claude usa esse)**:
 ```bash

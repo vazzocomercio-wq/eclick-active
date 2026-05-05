@@ -18,10 +18,13 @@ export type LlmProviderName = 'anthropic' | 'openai' | 'google';
 
 export type LlmRole = 'user' | 'assistant';
 
-/** Bloco de conteúdo dentro de uma message — text simples ou imagem inline. */
+/** Bloco de conteúdo dentro de uma message — text simples, imagem ou PDF inline. */
 export type LlmContentBlock =
   | { type: 'text'; text: string }
-  | { type: 'image_base64'; media_type: string; data: string };
+  | { type: 'image_base64'; media_type: string; data: string }
+  /** PDF inline base64. Provider-specific: Anthropic suporta nativo;
+   *  OpenAI/Google rejeitam (precisaria converter pra image antes). */
+  | { type: 'pdf_base64'; data: string };
 
 /** Message dentro do array messages do chat. */
 export interface LlmMessage {

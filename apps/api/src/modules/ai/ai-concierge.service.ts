@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { performance } from 'node:perf_hooks';
-import Anthropic from '@anthropic-ai/sdk';
 import type {
   AiAgentPersona,
   AiPersonaTone,
@@ -8,6 +7,7 @@ import type {
 } from '@eclick-active/shared';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { ChannelDispatcherService } from '../../common/channels/channel-dispatcher.service';
+import { LlmService } from '../../common/llm/llm.service';
 import { getOrgTimezone } from '../../common/org-settings.helper';
 import { AiPersonaService } from '../ai-persona/ai-persona.service';
 import { TagsService } from '../tags/tags.service';
@@ -18,15 +18,10 @@ import type {
   TagDefinition,
 } from '@eclick-active/shared';
 
-const SONNET_MODEL_ID = 'claude-sonnet-4-6';
 const HISTORY_MAX_MESSAGES = 6;
 
 /** Limite de delay por humanização — evita persona com delay maluco travar request */
 const MAX_DELAY_MS = 30_000;
-
-/** Pricing Sonnet 4.6 (USD por milhão de tokens) — pra calcular custo log */
-const SONNET_INPUT_PER_MTOK = 3.0;
-const SONNET_OUTPUT_PER_MTOK = 15.0;
 
 type ConciergeState =
   | 'idle'
@@ -133,6 +128,9 @@ interface RouteDecision {
     inputTokens: number;
     outputTokens: number;
     latencyMs: number;
+    costUsd: number;
+    provider: string;
+    model: string;
   };
 }
 
@@ -163,7 +161,6 @@ interface RouteDecision {
 @Injectable()
 export class AiConciergeService {
   private readonly logger = new Logger(AiConciergeService.name);
-  private _client?: Anthropic;
 
   /**
    * Lock in-process por conversation_id. Quando o cliente manda várias
@@ -190,15 +187,8 @@ export class AiConciergeService {
     private readonly tags: TagsService,
     private readonly appointments: AppointmentsService,
     private readonly events: EventsGateway,
+    private readonly llm: LlmService,
   ) {}
-
-  private getClient(): Anthropic {
-    if (this._client) return this._client;
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) throw new Error('ANTHROPIC_API_KEY ausente');
-    this._client = new Anthropic({ apiKey, maxRetries: 2 });
-    return this._client;
-  }
 
   // ──────────────────────────────────────────────────────────
   // Entry point — chamado pelo processInbound
@@ -360,10 +350,6 @@ export class AiConciergeService {
     const { orgId, conversationId, conversation, settings, persona } = args;
 
     let greeting: string;
-    let usedAi = false;
-    let inputTokens = 0;
-    let outputTokens = 0;
-    let latencyMs = 0;
 
     const customGreeting = persona.greeting_message?.trim() ?? '';
     if (customGreeting) {
@@ -377,35 +363,16 @@ export class AiConciergeService {
         .replaceAll('{{contact.first_name}}', firstName);
     } else {
       // Sem greeting customizada — gera na hora baseada na persona.
+      // LlmService já loga em ai_interactions com feature='concierge_greeting'.
       const generated = await this.generateGreeting(
+        orgId,
+        conversationId,
+        conversation.contact_id,
         persona,
         settings.business_context,
         await this.fetchContactName(orgId, conversation.contact_id),
       );
       greeting = generated.text;
-      usedAi = generated.aiGenerated;
-      inputTokens = generated.inputTokens;
-      outputTokens = generated.outputTokens;
-      latencyMs = generated.latencyMs;
-    }
-
-    // Log da interação (custo + tokens) — só quando IA foi de fato chamada
-    if (usedAi) {
-      void this.logInteraction({
-        orgId,
-        interactionType: 'concierge_greeting',
-        inputTokens,
-        outputTokens,
-        latencyMs,
-        conversationId,
-        contactId: conversation.contact_id,
-        resultSummary: greeting,
-        metadata: {
-          source: 'ai_concierge',
-          persona_name: persona.name,
-          tone: persona.tone ?? null,
-        },
-      });
     }
 
     if (settings.auto_reply) {
@@ -430,34 +397,30 @@ export class AiConciergeService {
   }
 
   /**
-   * Loga interação de IA em active.ai_interactions com custo + tokens.
-   * Best-effort — falha aqui não derruba o concierge.
+   * Loga interação de IA em active.ai_interactions com custo já computado
+   * pelo LlmService. Usado nos casos `concierge_qualify`/`concierge_route`,
+   * onde o tipo da interação é decidido APÓS o call (vide `disable_logging`
+   * em askIaToRoute).
    */
   private async logInteraction(args: {
     orgId: string;
-    interactionType: 'concierge_greeting' | 'concierge_route' | 'concierge_qualify';
-    inputTokens: number;
-    outputTokens: number;
-    latencyMs: number;
+    interactionType: 'concierge_qualify' | 'concierge_route';
+    usage: NonNullable<RouteDecision['_usage']>;
     conversationId: string;
     contactId: string | null;
     resultSummary: string;
     metadata: Record<string, unknown>;
   }): Promise<void> {
-    const cost =
-      (args.inputTokens * SONNET_INPUT_PER_MTOK +
-        args.outputTokens * SONNET_OUTPUT_PER_MTOK) /
-      1_000_000;
     try {
       await this.supabase.adminClient.from('ai_interactions').insert({
         org_id: args.orgId,
         interaction_type: args.interactionType,
-        model: SONNET_MODEL_ID,
-        provider: 'anthropic',
-        input_tokens: args.inputTokens,
-        output_tokens: args.outputTokens,
-        cost_usd: Math.round(cost * 1_000_000) / 1_000_000,
-        latency_ms: args.latencyMs,
+        model: args.usage.model,
+        provider: args.usage.provider,
+        input_tokens: args.usage.inputTokens,
+        output_tokens: args.usage.outputTokens,
+        cost_usd: args.usage.costUsd,
+        latency_ms: args.usage.latencyMs,
         conversation_id: args.conversationId,
         contact_id: args.contactId,
         user_id: null,
@@ -472,16 +435,13 @@ export class AiConciergeService {
   }
 
   private async generateGreeting(
+    orgId: string,
+    conversationId: string,
+    contactId: string | null,
     persona: AiAgentPersona,
     businessContext: string,
     contactName: string | null,
-  ): Promise<{
-    text: string;
-    inputTokens: number;
-    outputTokens: number;
-    latencyMs: number;
-    aiGenerated: boolean;
-  }> {
+  ): Promise<{ text: string; aiGenerated: boolean }> {
     const tonePt = this.tonePt(persona.tone);
     const role = persona.role ?? 'assistant';
     const personality = persona.personality ?? '';
@@ -505,26 +465,25 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
       ? `Cliente: ${contactName}`
       : 'Cliente novo (sem nome conhecido)';
 
-    const start = performance.now();
     try {
-      const res = await this.getClient().messages.create({
-        model: SONNET_MODEL_ID,
-        max_tokens: 256,
+      const res = await this.llm.chat({
+        orgId,
+        feature: 'concierge_greeting',
         system,
-        messages: [{ role: 'user', content: user }],
+        user,
+        max_tokens: 256,
+        context: {
+          conversation_id: conversationId,
+          ...(contactId ? { contact_id: contactId } : {}),
+        },
+        metadata: {
+          source: 'ai_concierge',
+          persona_name: persona.name,
+          tone: persona.tone ?? null,
+        },
       });
-      const block = res.content.find(
-        (b): b is Anthropic.TextBlock => b.type === 'text',
-      );
-      const text = block?.text?.trim() ?? '';
-      if (text) {
-        return {
-          text,
-          inputTokens: res.usage.input_tokens,
-          outputTokens: res.usage.output_tokens,
-          latencyMs: Math.round(performance.now() - start),
-          aiGenerated: true,
-        };
+      if (res.text) {
+        return { text: res.text, aiGenerated: true };
       }
     } catch (err) {
       this.logger.warn(
@@ -534,13 +493,7 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
 
     const fallback =
       persona.fallback_message?.trim() || 'Olá! Como posso te ajudar hoje?';
-    return {
-      text: fallback,
-      inputTokens: 0,
-      outputTokens: 0,
-      latencyMs: Math.round(performance.now() - start),
-      aiGenerated: false,
-    };
+    return { text: fallback, aiGenerated: false };
   }
 
   // ──────────────────────────────────────────────────────────
@@ -600,6 +553,7 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
 
     // 6. IA decide: qualifica mais OU roteia agora
     const decision = await this.askIaToRoute({
+      orgId,
       pipelines,
       history,
       latestMessage: messageText,
@@ -627,9 +581,7 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
         void this.logInteraction({
           orgId,
           interactionType: 'concierge_qualify',
-          inputTokens: decision._usage.inputTokens,
-          outputTokens: decision._usage.outputTokens,
-          latencyMs: decision._usage.latencyMs,
+          usage: decision._usage,
           conversationId,
           contactId: conversation.contact_id,
           resultSummary: `turno ${qualifyingTurns + 1}: ${decision.next_question.slice(0, 120)}`,
@@ -675,9 +627,7 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
       void this.logInteraction({
         orgId,
         interactionType: 'concierge_route',
-        inputTokens: decision._usage.inputTokens,
-        outputTokens: decision._usage.outputTokens,
-        latencyMs: decision._usage.latencyMs,
+        usage: decision._usage,
         conversationId,
         contactId: conversation.contact_id,
         resultSummary: `${decision.intent_label} → ${decision.temperature}`,
@@ -790,6 +740,7 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
   }
 
   private async askIaToRoute(args: {
+    orgId: string;
     pipelines: PipelineWithStages[];
     history: HistoryItem[];
     latestMessage: string;
@@ -980,23 +931,26 @@ ${historyText || '(sem histórico anterior)'}
 
 Decida o roteamento.`;
 
-    const start = performance.now();
     try {
-      const res = await this.getClient().messages.create({
-        model: SONNET_MODEL_ID,
-        max_tokens: 600,
+      const res = await this.llm.chat({
+        orgId: args.orgId,
+        feature: 'concierge_route',
         system,
-        messages: [{ role: 'user', content: user }],
+        user,
+        max_tokens: 600,
+        // Logging fica com o caller — ele decide entre 'concierge_qualify'
+        // (quando IA pede mais info) ou 'concierge_route' (quando decide).
+        disable_logging: true,
       });
       const usage = {
-        inputTokens: res.usage.input_tokens,
-        outputTokens: res.usage.output_tokens,
-        latencyMs: Math.round(performance.now() - start),
+        inputTokens: res.input_tokens,
+        outputTokens: res.output_tokens,
+        latencyMs: res.latency_ms,
+        costUsd: res.cost_usd,
+        provider: res.provider,
+        model: res.model,
       };
-      const block = res.content.find(
-        (b): b is Anthropic.TextBlock => b.type === 'text',
-      );
-      const text = block?.text?.trim() ?? '';
+      const text = res.text;
       if (!text) return null;
 
       const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');

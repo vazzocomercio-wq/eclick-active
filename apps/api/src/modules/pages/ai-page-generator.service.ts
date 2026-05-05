@@ -1,5 +1,4 @@
 import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
-import Anthropic from '@anthropic-ai/sdk';
 import type {
   AiPageGenerationInput,
   AiPageImprovement,
@@ -8,93 +7,7 @@ import type {
   PageType,
 } from '@eclick-active/shared';
 import { SupabaseService } from '../../common/supabase/supabase.service';
-
-const SONNET_MODEL_ID = 'claude-sonnet-4-6';
-
-/**
- * Schemas Anthropic — output_config.format = json_schema
- * Forçamos shape do JSON pra ele bater com PageBlock[] + metadata.
- */
-const PAGE_GENERATION_SCHEMA = {
-  type: 'object',
-  required: ['name', 'page_type', 'seo', 'global_styles', 'blocks'],
-  properties: {
-    name: { type: 'string' },
-    page_type: { type: 'string' },
-    seo: {
-      type: 'object',
-      properties: {
-        title: { type: 'string' },
-        description: { type: 'string' },
-        og_title: { type: 'string' },
-        og_description: { type: 'string' },
-      },
-    },
-    global_styles: {
-      type: 'object',
-      properties: {
-        primary_color: { type: 'string' },
-        secondary_color: { type: 'string' },
-        background: { type: 'string' },
-        font_heading: { type: 'string' },
-        font_body: { type: 'string' },
-        border_radius: { type: 'number' },
-      },
-    },
-    blocks: {
-      type: 'array',
-      items: {
-        type: 'object',
-        required: ['type', 'content'],
-        properties: {
-          type: { type: 'string' },
-          content: { type: 'object' },
-          settings: {
-            type: 'object',
-            properties: {
-              padding: { type: 'string' },
-              max_width: { type: 'string' },
-              background: { type: 'string' },
-              anchor_id: { type: 'string' },
-            },
-          },
-        },
-      },
-    },
-  },
-};
-
-const BLOCK_GENERATION_SCHEMA = {
-  type: 'object',
-  required: ['type', 'content'],
-  properties: {
-    type: { type: 'string' },
-    content: { type: 'object' },
-    settings: { type: 'object' },
-  },
-};
-
-const IMPROVEMENTS_SCHEMA = {
-  type: 'object',
-  required: ['improvements'],
-  properties: {
-    improvements: {
-      type: 'array',
-      items: {
-        type: 'object',
-        required: ['severity', 'category', 'title', 'description'],
-        properties: {
-          block_id: { type: 'string' },
-          severity: { type: 'string' },
-          category: { type: 'string' },
-          title: { type: 'string' },
-          description: { type: 'string' },
-          action: { type: 'string' },
-        },
-      },
-    },
-  },
-};
+import { LlmService } from '../../common/llm/llm.service';
 
 interface OrgContext {
   org_name: string;
@@ -107,17 +20,11 @@ interface OrgContext {
 @Injectable()
 export class AiPageGeneratorService {
   private readonly logger = new Logger(AiPageGeneratorService.name);
-  private _client?: Anthropic;
 
-  constructor(private readonly supabase: SupabaseService) {}
-
-  private getClient(): Anthropic {
-    if (this._client) return this._client;
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) throw new InternalServerErrorException('ANTHROPIC_API_KEY não configurada');
-    this._client = new Anthropic({ apiKey, maxRetries: 2 });
-    return this._client;
-  }
+  constructor(
+    private readonly supabase: SupabaseService,
+    private readonly llm: LlmService,
+  ) {}
 
   // ──────────────────────────────────────────────────────────
   // Org context — coletado uma vez por chamada pra enriquecer o prompt
@@ -207,8 +114,7 @@ export class AiPageGeneratorService {
 
     this.logger.log(`Gerando página AI: type=${input.page_type}, ctx_products=${catalogProducts.length}`);
 
-    const response = await this.callClaude(systemPrompt, userPrompt, PAGE_GENERATION_SCHEMA, 8192);
-    const json = this.extractJson(response);
+    const json = await this.callLlmJson(orgId, 'page_generate', systemPrompt, userPrompt, 8192);
 
     const blocks = this.normalizeBlocks(
       (json.blocks as Record<string, unknown>[]) ?? [],
@@ -262,8 +168,7 @@ Tipos de bloco disponíveis: hero, hero_video, heading, text, image, video, gall
 
 Retorne JSON com { type, content, settings }.`;
 
-    const response = await this.callClaude(system, user, BLOCK_GENERATION_SCHEMA, 2048);
-    const json = this.extractJson(response);
+    const json = await this.callLlmJson(orgId, 'page_generate_block', system, user, 2048);
 
     return {
       id: this.uuid(),
@@ -297,14 +202,8 @@ Instrução: ${instruction}
 
 Reescreva e retorne APENAS o objeto content.`;
 
-    const response = await this.callClaude(
-      system,
-      user,
-      { type: 'object' },
-      2048,
-    );
-    const json = this.extractJson(response);
-    return json as Record<string, unknown>;
+    const json = await this.callLlmJson(orgId, 'page_rewrite_block', system, user, 2048);
+    return json;
   }
 
   // ──────────────────────────────────────────────────────────
@@ -335,8 +234,7 @@ description: ${page.seo.description ?? 'AUSENTE'}
 
 Que melhorias você sugere?`;
 
-    const response = await this.callClaude(system, user, IMPROVEMENTS_SCHEMA, 2048);
-    const json = this.extractJson(response);
+    const json = await this.callLlmJson(orgId, 'page_improvements', system, user, 2048);
     const list = (json.improvements as AiPageImprovement[]) ?? [];
     return list.slice(0, 10);
   }
@@ -359,22 +257,7 @@ ${products.map((p, i) => `${i + 1}. ${p.name}${p.current_description ? ` — atu
 
 Reescreva cada um com descrição vendedora.`;
 
-    const schema = {
-      type: 'object',
-      required: ['items'],
-      properties: {
-        items: {
-          type: 'array',
-          items: {
-            type: 'object',
-            required: ['name', 'description'],
-            properties: { name: { type: 'string' }, description: { type: 'string' } },
-          },
-        },
-      },
-    };
-    const response = await this.callClaude(system, user, schema, 2048);
-    const json = this.extractJson(response);
+    const json = await this.callLlmJson(orgId, 'page_product_descriptions', system, user, 2048);
     return ((json.items as { name: string; description: string }[]) ?? []).slice(0, products.length);
   }
 
@@ -472,49 +355,33 @@ ESTRUTURA DOS BLOCOS:
     return { catalogProducts: (data ?? []) as never };
   }
 
-  private async callClaude(
+  /**
+   * Chama LlmService com json_mode e parseia a resposta como JSON.
+   * Tolerância: tira markdown fences se vierem, regex pra primeiro {...} se
+   * o parse direto falhar. Lança 500 com texto amigável se nada bate.
+   */
+  private async callLlmJson(
+    orgId: string,
+    feature: string,
     system: string,
     user: string,
-    _schema: object,
     maxTokens: number,
-  ): Promise<unknown> {
-    // Nota: deliberadamente NÃO usamos output_config.format.json_schema porque
-    // ele exige additionalProperties: false em todo objeto, o que engessa
-    // campos flexíveis (content/settings de blocos). Em vez disso, reforçamos
-    // no system prompt que a IA deve retornar APENAS JSON e usamos extractJson
-    // para parsear com fallback.
-    const reinforcedSystem = `${system}\n\nIMPORTANTE: Sua resposta deve ser EXCLUSIVAMENTE um objeto JSON válido, sem markdown, sem \`\`\`json, sem texto explicativo. Apenas o JSON puro começando com { e terminando com }.`;
-    const params: Record<string, unknown> = {
-      model: SONNET_MODEL_ID,
+  ): Promise<Record<string, unknown>> {
+    const res = await this.llm.chat({
+      orgId,
+      feature,
+      system,
+      user,
       max_tokens: maxTokens,
-      system: reinforcedSystem,
-      messages: [{ role: 'user', content: user }],
-    };
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const res = await this.getClient().messages.create(params as any);
-      return res;
-    } catch (err) {
-      this.logger.error(
-        `Claude call falhou: ${err instanceof Error ? err.message : String(err)}`,
-      );
-      throw new InternalServerErrorException(
-        `Falha ao gerar com IA: ${err instanceof Error ? err.message : 'erro'}`,
-      );
-    }
-  }
-
-  private extractJson(response: unknown): Record<string, unknown> {
-    const r = response as { content?: { type: string; text?: string }[] };
-    const block = r.content?.find((b) => b.type === 'text');
-    if (!block?.text) throw new InternalServerErrorException('Resposta vazia da IA');
-    const text = block.text.trim();
-    // Remove markdown fences se vieram
-    const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
+      json_mode: true,
+    });
+    const cleaned = res.text
+      .trim()
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/```\s*$/, '');
     try {
       return JSON.parse(cleaned) as Record<string, unknown>;
     } catch {
-      // Tentar achar { ... } no meio do texto
       const m = cleaned.match(/\{[\s\S]*\}/);
       if (m) {
         try {

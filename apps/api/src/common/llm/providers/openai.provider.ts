@@ -118,10 +118,15 @@ function toOpenAIMessage(m: LlmMessage): OpenAI.Chat.ChatCompletionMessageParam 
 
 function toOpenAIPart(b: LlmContentBlock): OpenAI.Chat.ChatCompletionContentPart {
   if (b.type === 'text') return { type: 'text', text: b.text };
-  return {
-    type: 'image_url',
-    image_url: { url: `data:${b.media_type};base64,${b.data}` },
-  };
+  if (b.type === 'image_base64') {
+    return {
+      type: 'image_url',
+      image_url: { url: `data:${b.media_type};base64,${b.data}` },
+    };
+  }
+  throw new Error(
+    'PDF inline não é suportado pelo provider OpenAI. Use Anthropic ou converta o PDF em imagens antes.',
+  );
 }
 
 function mapFinishReason(

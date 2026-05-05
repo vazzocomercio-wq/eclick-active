@@ -1,4 +1,5 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import Anthropic from '@anthropic-ai/sdk';
 import { SupabaseService } from '../supabase/supabase.service';
 import {
   LlmChatInput,
@@ -37,6 +38,12 @@ interface ChatRequest {
   };
   /** Metadata livre pra logar junto. */
   metadata?: Record<string, unknown>;
+  /**
+   * Quando true, pula o insert em ai_interactions. Use só quando o caller
+   * loga manualmente (ex: concierge decide pós-fato qual interaction_type
+   * usar — `qualify` vs `route` — baseado no resultado da IA).
+   */
+  disable_logging?: boolean;
 }
 
 interface ChatResponse extends LlmChatResult {
@@ -159,6 +166,51 @@ export class LlmService implements OnModuleInit {
     this.cache.delete(`__fallback__${orgId}`);
   }
 
+  /**
+   * Escape hatch pra features que ainda dependem do SDK Anthropic direto
+   * (ex: copilot tool-use loop). Resolve a cred da org; se a org configurou
+   * provider != anthropic, devolve o fallback ANTHROPIC_API_KEY env (com
+   * warning). Quando a interface LlmProvider cobrir tool-use multi-turn,
+   * este método pode ser removido.
+   */
+  async getAnthropicClientForOrg(orgId: string): Promise<{ client: Anthropic; model: string }> {
+    const { data } = await this.supabase.adminClient
+      .from('org_llm_credentials')
+      .select('provider, model_default, api_key_ciphertext')
+      .eq('org_id', orgId)
+      .maybeSingle();
+
+    const row = data as
+      | {
+          provider: LlmProviderName;
+          model_default: string;
+          api_key_ciphertext: string;
+        }
+      | null;
+
+    if (row && row.provider === 'anthropic') {
+      const apiKey = decryptApiKey(row.api_key_ciphertext);
+      return { client: new Anthropic({ apiKey, maxRetries: 2 }), model: row.model_default };
+    }
+
+    if (row && row.provider !== 'anthropic') {
+      this.logger.warn(
+        `[copilot/anthropic-direct] org=${orgId} configurada com ${row.provider} mas feature exige Anthropic — caindo no fallback env`,
+      );
+    }
+
+    const fallbackKey = process.env.ANTHROPIC_API_KEY;
+    if (!fallbackKey) {
+      throw new Error(
+        'Esta funcionalidade exige Anthropic. Configure provider=anthropic em /configuracoes > IA, ou defina ANTHROPIC_API_KEY no servidor.',
+      );
+    }
+    return {
+      client: new Anthropic({ apiKey: fallbackKey, maxRetries: 2 }),
+      model: LLM_DEFAULT_MODEL.anthropic,
+    };
+  }
+
   // ──────────────────────────────────────────────────────────
   // Chat
   // ──────────────────────────────────────────────────────────
@@ -203,19 +255,23 @@ export class LlmService implements OnModuleInit {
       throw err;
     }
 
-    const interaction_id = await this.logInteraction({
-      org_id: req.orgId,
-      interaction_type: req.feature,
-      provider: providerName,
-      model,
-      input_tokens: result.input_tokens,
-      output_tokens: result.output_tokens,
-      cost_usd: result.cost_usd,
-      latency_ms: result.latency_ms,
-      result_summary: result.text.slice(0, 200) || `(tool_use ${result.tool_calls.map((t) => t.name).join(',')})`,
-      ...req.context,
-      metadata: req.metadata ?? {},
-    });
+    const interaction_id = req.disable_logging
+      ? null
+      : await this.logInteraction({
+          org_id: req.orgId,
+          interaction_type: req.feature,
+          provider: providerName,
+          model,
+          input_tokens: result.input_tokens,
+          output_tokens: result.output_tokens,
+          cost_usd: result.cost_usd,
+          latency_ms: result.latency_ms,
+          result_summary:
+            result.text.slice(0, 200) ||
+            `(tool_use ${result.tool_calls.map((t) => t.name).join(',')})`,
+          ...req.context,
+          metadata: req.metadata ?? {},
+        });
 
     return { ...result, interaction_id };
   }

@@ -2,11 +2,12 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
-  OnModuleInit,
 } from '@nestjs/common';
 import { performance } from 'node:perf_hooks';
 import Anthropic from '@anthropic-ai/sdk';
 import { SupabaseService } from '../../common/supabase/supabase.service';
+import { LlmService } from '../../common/llm/llm.service';
+import { computeCost } from '../../common/llm/llm-pricing';
 import { KnowledgeService } from '../knowledge/knowledge.service';
 import { LiveSourcesService } from '../knowledge/live-sources.service';
 import { AiPersonaService } from '../ai-persona/ai-persona.service';
@@ -18,8 +19,6 @@ import {
   COPILOT_SYSTEM_PROMPT,
   MAX_HISTORY_MESSAGES,
   MAX_TOOL_ITERATIONS,
-  SONNET_MODEL_ID,
-  SONNET_PRICING,
 } from './copilot.types';
 import { COPILOT_TOOLS, type CopilotToolName } from './copilot.tools';
 
@@ -69,12 +68,12 @@ export interface ProcessQueryResult {
 // ──────────────────────────────────────────────────────────
 
 @Injectable()
-export class CopilotService implements OnModuleInit {
+export class CopilotService {
   private readonly logger = new Logger(CopilotService.name);
-  private _client?: Anthropic;
 
   constructor(
     private readonly supabase: SupabaseService,
+    private readonly llm: LlmService,
     private readonly knowledge: KnowledgeService,
     private readonly liveSources: LiveSourcesService,
     private readonly persona: AiPersonaService,
@@ -83,20 +82,6 @@ export class CopilotService implements OnModuleInit {
     private readonly calendarIntegrations: CalendarIntegrationsService,
     private readonly calendly: CalendlyService,
   ) {}
-
-  onModuleInit(): void {
-    if (!process.env.ANTHROPIC_API_KEY) {
-      this.logger.warn('ANTHROPIC_API_KEY ausente — Copiloto vai falhar até a env ser configurada.');
-    }
-  }
-
-  private getClient(): Anthropic {
-    if (this._client) return this._client;
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) throw new Error('ANTHROPIC_API_KEY não configurada');
-    this._client = new Anthropic({ apiKey, maxRetries: 2 });
-    return this._client;
-  }
 
   // ────────────────────────────────────────────
   // Histórico
@@ -192,7 +177,7 @@ export class CopilotService implements OnModuleInit {
       : COPILOT_SYSTEM_PROMPT;
 
     const ctx: ToolContext = { orgId, userId };
-    const result = await this.runToolLoop(messages, ctx, systemPrompt);
+    const result = await this.runToolLoop(orgId, messages, ctx, systemPrompt);
 
     // 5. Loga ai_interactions ANTES de persistir o assistant message — assim
     //    o id da interação entra no metadata do copilot_messages e o
@@ -200,6 +185,8 @@ export class CopilotService implements OnModuleInit {
     const aiInteractionId = await this.logAiInteraction({
       orgId,
       userId,
+      model: result.model,
+      costUsd: result.costUsd,
       inputTokens: result.totalInputTokens,
       outputTokens: result.totalOutputTokens,
       latencyMs: Math.round(performance.now() - start),
@@ -241,6 +228,7 @@ export class CopilotService implements OnModuleInit {
   // ────────────────────────────────────────────
 
   private async runToolLoop(
+    orgId: string,
     initialMessages: Anthropic.MessageParam[],
     ctx: ToolContext,
     systemPrompt: string = COPILOT_SYSTEM_PROMPT,
@@ -251,7 +239,12 @@ export class CopilotService implements OnModuleInit {
     iterations: number;
     totalInputTokens: number;
     totalOutputTokens: number;
+    model: string;
   }> {
+    // Resolve cliente Anthropic + modelo da cred per-org. Se org configurou
+    // outro provider, o LlmService faz fallback pro env (com warning).
+    const { client, model } = await this.llm.getAnthropicClientForOrg(orgId);
+
     const messages = [...initialMessages];
     const toolCalls: ToolCallRecord[] = [];
     let totalCost = 0;
@@ -263,8 +256,8 @@ export class CopilotService implements OnModuleInit {
       iterations += 1;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const response = (await this.getClient().messages.create({
-        model: SONNET_MODEL_ID,
+      const response = (await client.messages.create({
+        model,
         max_tokens: 1024,
         system: systemPrompt,
         tools: COPILOT_TOOLS,
@@ -274,7 +267,12 @@ export class CopilotService implements OnModuleInit {
 
       totalInputTokens += response.usage.input_tokens;
       totalOutputTokens += response.usage.output_tokens;
-      totalCost += computeSonnetCost(response.usage.input_tokens, response.usage.output_tokens);
+      totalCost += computeCost(
+        'anthropic',
+        model,
+        response.usage.input_tokens,
+        response.usage.output_tokens,
+      );
 
       const toolUses = response.content.filter(
         (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use',
@@ -293,6 +291,7 @@ export class CopilotService implements OnModuleInit {
           iterations,
           totalInputTokens,
           totalOutputTokens,
+          model,
         };
       }
 
@@ -342,6 +341,7 @@ export class CopilotService implements OnModuleInit {
       iterations,
       totalInputTokens,
       totalOutputTokens,
+      model,
     };
   }
 
@@ -1250,22 +1250,23 @@ export class CopilotService implements OnModuleInit {
   private async logAiInteraction(args: {
     orgId: string;
     userId: string;
+    model: string;
+    costUsd: number;
     inputTokens: number;
     outputTokens: number;
     latencyMs: number;
     summary: string;
   }): Promise<string | null> {
-    const cost = computeSonnetCost(args.inputTokens, args.outputTokens);
     const { data, error } = await this.supabase.adminClient
       .from('ai_interactions')
       .insert({
         org_id: args.orgId,
         interaction_type: 'copilot',
-        model: SONNET_MODEL_ID,
+        model: args.model,
         provider: 'anthropic',
         input_tokens: args.inputTokens,
         output_tokens: args.outputTokens,
-        cost_usd: cost,
+        cost_usd: args.costUsd,
         latency_ms: args.latencyMs,
         user_id: args.userId,
         result_summary: args.summary,
@@ -1295,14 +1296,6 @@ export type CopilotContext = {
 function clampLimit(value: number, defaultValue: number, max: number): number {
   if (!Number.isFinite(value) || value <= 0) return defaultValue;
   return Math.min(Math.max(1, Math.floor(value)), max);
-}
-
-function computeSonnetCost(input_tokens: number, output_tokens: number): number {
-  const cost =
-    (input_tokens * SONNET_PRICING.input_per_mtok_usd +
-      output_tokens * SONNET_PRICING.output_per_mtok_usd) /
-    1_000_000;
-  return round6(cost);
 }
 
 function round6(n: number): number {
