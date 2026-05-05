@@ -12,6 +12,7 @@ import type {
   Plan,
 } from '@eclick-active/shared';
 import { SupabaseService } from '../../common/supabase/supabase.service';
+import { invalidateOrgTimezoneCache } from '../../common/org-settings.helper';
 import { UpdateAiFeatureDto, UpdateOrgDto } from './dto/settings.dto';
 
 export interface OrgSettings {
@@ -133,6 +134,12 @@ export class SettingsService {
       const current = ((existing as { settings: Record<string, unknown> } | null)?.settings ??
         {}) as Record<string, unknown>;
       patch.settings = { ...current, ...dto.settings };
+
+      // Invalida cache de timezone quando muda — caso contrário formatadores
+      // continuariam usando o tz antigo até expirar (5min).
+      if ('timezone' in dto.settings && dto.settings.timezone !== current.timezone) {
+        invalidateOrgTimezoneCache(orgId);
+      }
     }
 
     if (Object.keys(patch).length === 0) {
