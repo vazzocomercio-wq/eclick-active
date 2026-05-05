@@ -1,7 +1,22 @@
 # HANDOFF — eclick-active
 
 > Documento vivo de continuidade entre sessões. **Lê isso primeiro ao começar nova sessão.**
-> Última atualização: **2026-05-05** (sessão Concierge agendamento + Vision OCR)
+> Última atualização: **2026-05-05** (responsividade Fase 1 + design do Active Intelligence)
+
+---
+
+## 🎯 Próximo trabalho planejado
+
+**Active Intelligence (Ads & Social Analytics + Hub)** — design fechado, aguardando GO.
+
+📄 **Doc canônico**: [`docs/analytics-design.md`](./docs/analytics-design.md)
+
+Resumo:
+- Sistema de monitoramento ativo (Meta + Google Ads) + alertas WhatsApp
+- 8 blocos sequenciais (A-H), ~27h total
+- **Próxima ação**: implementar **Bloco A** (LlmProvider abstraction)
+- Decisões 1-7 fechadas (ver doc)
+- ⚠️ **NÃO** confundir com Intelligence Hub do `eclick-backend` (SaaS) — em prod lá, projeto distinto
 
 ---
 
@@ -205,6 +220,8 @@ Worker pega no próximo tick (30s).
 ## Commits desta sessão (cronológicos)
 
 ```
+ad74671  feat(web): responsividade Fase 1 — sidebar mobile + drawer + back nav
+b407e18  docs(handoff): atualiza com 1+2+3
 f3c2989  feat(re-engagement): cron de reativação + painel UI
 9389f9c  feat(ai-persona): templates de onboarding por nicho
 441572e  feat(attachments): vídeo inbound transcrito via ffmpeg + Whisper
