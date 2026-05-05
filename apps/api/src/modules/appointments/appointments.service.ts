@@ -16,6 +16,8 @@ import type {
   AvailabilitySlot,
 } from '@eclick-active/shared';
 import { SupabaseService } from '../../common/supabase/supabase.service';
+import { ChannelDispatcherService } from '../../common/channels/channel-dispatcher.service';
+import { getOrgTimezone } from '../../common/org-settings.helper';
 import { CalendarIntegrationsService } from '../calendar-integrations/calendar-integrations.service';
 import { GoogleCalendarService } from '../calendar-integrations/google-calendar.service';
 import { AppointmentTypesService } from './appointment-types.service';
@@ -44,6 +46,7 @@ export class AppointmentsService {
     private readonly integrations: CalendarIntegrationsService,
     @Inject(forwardRef(() => GoogleCalendarService))
     private readonly google: GoogleCalendarService,
+    private readonly dispatcher: ChannelDispatcherService,
   ) {}
 
   // ──────────────────────────────────────────────────────────
@@ -506,6 +509,161 @@ export class AppointmentsService {
   // ──────────────────────────────────────────────────────────
   // Reminders & no-show — chamado pelo worker (setInterval)
   // ──────────────────────────────────────────────────────────
+
+  /**
+   * Manda lembrete de appointment via WhatsApp pro contato. Texto é
+   * gerado em pt-BR no timezone da org (organizations.settings.timezone).
+   *
+   *   - kind='24h' → "Oi! Lembrete: amanhã às HH:mm temos seu agendamento (X)"
+   *   - kind='1h'  → "Olá! Faltam 1h pro seu agendamento (X) às HH:mm"
+   *
+   * Best-effort. Se contato não tem conversa/canal, só loga e segue.
+   */
+  async sendAppointmentReminder(
+    appointment: AppointmentDetail,
+    kind: '24h' | '1h',
+  ): Promise<void> {
+    if (!appointment.contact_id) {
+      this.logger.debug(
+        `reminder ${kind}: appt ${appointment.id} sem contact_id — skip`,
+      );
+      return;
+    }
+
+    // Procura conversa associada — preferência pra a do agendamento, senão
+    // qualquer conversa ativa do contato com canal whatsapp.
+    let conversationId: string | null = appointment.conversation_id;
+    let channelId: string | null = null;
+
+    if (conversationId) {
+      const { data } = await this.supabase.adminClient
+        .from('conversations')
+        .select('channel_id')
+        .eq('org_id', appointment.org_id)
+        .eq('id', conversationId)
+        .maybeSingle();
+      channelId = (data as { channel_id: string | null } | null)?.channel_id ?? null;
+    }
+
+    if (!channelId) {
+      // Fallback: busca conversa mais recente do contato com canal
+      const { data } = await this.supabase.adminClient
+        .from('conversations')
+        .select('id, channel_id')
+        .eq('org_id', appointment.org_id)
+        .eq('contact_id', appointment.contact_id)
+        .not('channel_id', 'is', null)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const c = data as { id: string; channel_id: string | null } | null;
+      if (c?.channel_id) {
+        conversationId = c.id;
+        channelId = c.channel_id;
+      }
+    }
+
+    if (!channelId || !conversationId) {
+      this.logger.debug(
+        `reminder ${kind}: appt ${appointment.id} sem canal/conversa — skip`,
+      );
+      return;
+    }
+
+    // Formata timestamp no tz da org
+    const tz = await getOrgTimezone(this.supabase.adminClient, appointment.org_id);
+    const dayFmt = new Intl.DateTimeFormat('pt-BR', {
+      weekday: 'long',
+      day: '2-digit',
+      month: 'long',
+      timeZone: tz,
+    });
+    const timeFmt = new Intl.DateTimeFormat('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: tz,
+    });
+    const start = new Date(appointment.start_time);
+    const dayLabel = dayFmt.format(start);
+    const timeLabel = timeFmt.format(start);
+
+    const agentSuffix = appointment.agent?.display_name
+      ? ` com ${appointment.agent.display_name}`
+      : '';
+    const titleSuffix = appointment.title ? ` (${appointment.title})` : '';
+
+    const text =
+      kind === '24h'
+        ? `Oi! 📅 Passando pra te lembrar do seu agendamento amanhã, ${dayLabel} às ${timeLabel}${agentSuffix}${titleSuffix}. Caso precise reagendar, é só me responder por aqui!`
+        : `Olá! ⏰ Faltam só 1 hora pro seu agendamento de hoje às ${timeLabel}${agentSuffix}${titleSuffix}. Te esperamos!`;
+
+    // Persiste msg outbound + dispatch (best-effort)
+    const { data: persisted, error: persistErr } = await this.supabase.adminClient
+      .from('messages')
+      .insert({
+        org_id: appointment.org_id,
+        conversation_id: conversationId,
+        direction: 'outbound',
+        sender_type: 'system',
+        content_type: 'text',
+        content: { body: text },
+        plain_text: text,
+        status: 'pending',
+        metadata: {
+          source: 'appointment_reminder',
+          appointment_id: appointment.id,
+          reminder_kind: kind,
+        },
+      })
+      .select('id, created_at')
+      .single();
+
+    if (persistErr || !persisted) {
+      this.logger.warn(
+        `reminder ${kind}: persist falhou: ${persistErr?.message ?? 'sem dados'}`,
+      );
+      return;
+    }
+    const { id: messageId, created_at: messageCreatedAt } = persisted as {
+      id: string;
+      created_at: string;
+    };
+
+    try {
+      const result = await this.dispatcher.send({
+        org_id: appointment.org_id,
+        channel_id: channelId,
+        contact_id: appointment.contact_id,
+        content_type: 'text',
+        content: { body: text },
+      });
+      await this.supabase.adminClient
+        .from('messages')
+        .update({
+          status: 'sent',
+          channel_message_id: result.channel_message_id,
+        })
+        .eq('org_id', appointment.org_id)
+        .eq('id', messageId)
+        .eq('created_at', messageCreatedAt);
+      this.logger.log(
+        `reminder ${kind} enviado appt=${appointment.id} contact=${appointment.contact_id}`,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`reminder ${kind} dispatch falhou: ${msg}`);
+      await this.supabase.adminClient
+        .from('messages')
+        .update({
+          status: 'failed',
+          error_code: 'reminder_dispatch_error',
+          error_message: msg,
+        })
+        .eq('org_id', appointment.org_id)
+        .eq('id', messageId)
+        .eq('created_at', messageCreatedAt);
+    }
+  }
 
   /**
    * Retorna appointments que precisam receber lembrete.

@@ -50,6 +50,9 @@ export class AppointmentReminderWorker implements OnModuleInit, OnModuleDestroy 
     const due = await this.appointments.findRemindersDue();
 
     for (const appt of due.twentyFourH) {
+      // 1. Manda WhatsApp pro contato (best-effort, falha silenciosa)
+      await this.appointments.sendAppointmentReminder(appt, '24h').catch(() => {});
+      // 2. Notifica UI da org pra exibir badge de lembrete
       this.events.emitToOrg(appt.org_id, 'appointment:reminder-24h', {
         appointment_id: appt.id,
         contact_id: appt.contact_id,
@@ -62,6 +65,7 @@ export class AppointmentReminderWorker implements OnModuleInit, OnModuleDestroy 
     }
 
     for (const appt of due.oneH) {
+      await this.appointments.sendAppointmentReminder(appt, '1h').catch(() => {});
       this.events.emitToOrg(appt.org_id, 'appointment:reminder-1h', {
         appointment_id: appt.id,
         contact_id: appt.contact_id,

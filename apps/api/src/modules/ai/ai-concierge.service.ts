@@ -8,6 +8,7 @@ import type {
 } from '@eclick-active/shared';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { ChannelDispatcherService } from '../../common/channels/channel-dispatcher.service';
+import { getOrgTimezone } from '../../common/org-settings.helper';
 import { AiPersonaService } from '../ai-persona/ai-persona.service';
 import { TagsService } from '../tags/tags.service';
 import { AppointmentsService } from '../appointments/appointments.service';
@@ -1330,10 +1331,11 @@ Decida o roteamento.`;
       duration_minutes: s.duration_minutes ?? 30,
     }));
 
+    const tz = await getOrgTimezone(this.supabase.adminClient, orgId);
     const intro =
       bridgeMessage?.trim() ||
       `Posso te ajudar com isso! Tenho ${picked.length === 1 ? 'um horário' : 'esses horários'} disponíve${picked.length === 1 ? 'l' : 'is'}:`;
-    const text = `${intro}\n\n${this.formatSlotsForUser(offered)}\n\nQual prefere? Pode me responder com o número (${offered.map((o) => o.index).join(', ')}).`;
+    const text = `${intro}\n\n${this.formatSlotsForUser(offered, tz)}\n\nQual prefere? Pode me responder com o número (${offered.map((o) => o.index).join(', ')}).`;
 
     await this.applyResponseDelay(persona);
     await this.sendOutbound(orgId, conversation, text);
@@ -1394,12 +1396,11 @@ Decida o roteamento.`;
   }
 
   /**
-   * Formata os slots como lista numerada amigável em pt-BR. Usa
-   * Intl.DateTimeFormat com timezone São Paulo (default da org). Inclui
-   * agente quando há múltiplos com nomes distintos.
+   * Formata os slots como lista numerada amigável em pt-BR. Recebe o
+   * timezone resolvido pela org (organizations.settings.timezone).
+   * Inclui agente quando há múltiplos com nomes distintos.
    */
-  private formatSlotsForUser(offered: OfferedSlot[]): string {
-    const tz = 'America/Sao_Paulo';
+  private formatSlotsForUser(offered: OfferedSlot[], tz: string): string {
     const dayFmt = new Intl.DateTimeFormat('pt-BR', {
       weekday: 'short',
       day: '2-digit',
@@ -1593,17 +1594,18 @@ Decida o roteamento.`;
         return;
       }
 
-      // Confirma pro lead
+      // Confirma pro lead — formata no timezone da org
+      const tz = await getOrgTimezone(this.supabase.adminClient, orgId);
       const dayFmt = new Intl.DateTimeFormat('pt-BR', {
         weekday: 'long',
         day: '2-digit',
         month: 'long',
-        timeZone: 'America/Sao_Paulo',
+        timeZone: tz,
       });
       const timeFmt = new Intl.DateTimeFormat('pt-BR', {
         hour: '2-digit',
         minute: '2-digit',
-        timeZone: 'America/Sao_Paulo',
+        timeZone: tz,
       });
       const d = new Date(chosen.start_time);
       const dayLabel = dayFmt.format(d);
@@ -1653,7 +1655,8 @@ Decida o roteamento.`;
 
     // Re-pergunta
     if (settings.auto_reply) {
-      const list = this.formatSlotsForUser(meta.offered_slots);
+      const tz = await getOrgTimezone(this.supabase.adminClient, orgId);
+      const list = this.formatSlotsForUser(meta.offered_slots, tz);
       const text = `Não entendi qual você prefere. Pode me responder só com o número (${meta.offered_slots.map((o) => o.index).join(', ')})?\n\n${list}`;
       await this.applyResponseDelay(persona);
       await this.sendOutbound(orgId, conversation, text);
