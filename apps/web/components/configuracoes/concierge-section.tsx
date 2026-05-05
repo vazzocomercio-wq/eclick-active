@@ -113,12 +113,25 @@ export function ConciergeSection({ org, onSaved }: ConciergeSectionProps) {
         send_bridge_message: bridge,
         business_context: businessContext.trim(),
       };
-      await settingsApi.updateOrg({ settings: { ai_concierge: payload } });
+      // eslint-disable-next-line no-console
+      console.log('[concierge save] payload:', payload);
+      const result = await settingsApi.updateOrg({ settings: { ai_concierge: payload } });
+      // eslint-disable-next-line no-console
+      console.log('[concierge save] resposta:', result?.settings?.ai_concierge);
       toast.success('Concierge salvo');
       await onSaved();
     } catch (err) {
-      toast.error('Falha ao salvar', {
-        description: err instanceof ApiError ? err.message : undefined,
+      // eslint-disable-next-line no-console
+      console.error('[concierge save] FALHOU:', err);
+      const detail =
+        err instanceof ApiError
+          ? `${err.status}: ${err.message}`
+          : err instanceof Error
+            ? err.message
+            : 'Erro desconhecido';
+      toast.error('Falha ao salvar Concierge', {
+        description: detail,
+        duration: 8000,
       });
     } finally {
       setSavingSetting(false);
@@ -149,10 +162,18 @@ export function ConciergeSection({ org, onSaved }: ConciergeSectionProps) {
     const stage = p.stages.find((s) => s.id === stageId);
     if (!stage) return;
     const draft = stageDrafts[stageId] ?? '';
-    if (draft === (stage.description ?? '')) return;
+    if (draft === (stage.description ?? '')) {
+      // eslint-disable-next-line no-console
+      console.log('[stage save] skip — sem mudança', { stageId, draft });
+      return;
+    }
     setSavingDescId(`s:${stageId}`);
     try {
+      // eslint-disable-next-line no-console
+      console.log('[stage save] enviando', { stageId, name: stage.name, len: draft.length });
       await pipelinesApi.updateStage(p.id, stageId, { description: draft });
+      // eslint-disable-next-line no-console
+      console.log('[stage save] OK', stageId);
       toast.success('Descrição salva');
       setPipelines((prev) =>
         prev.map((row) =>
@@ -167,8 +188,17 @@ export function ConciergeSection({ org, onSaved }: ConciergeSectionProps) {
         ),
       );
     } catch (err) {
-      toast.error('Falha ao salvar', {
-        description: err instanceof ApiError ? err.message : undefined,
+      // eslint-disable-next-line no-console
+      console.error('[stage save] FALHOU', { stageId, err });
+      const detail =
+        err instanceof ApiError
+          ? `${err.status}: ${err.message}`
+          : err instanceof Error
+            ? err.message
+            : 'Erro desconhecido';
+      toast.error('Falha ao salvar descrição', {
+        description: detail,
+        duration: 8000,
       });
     } finally {
       setSavingDescId(null);
