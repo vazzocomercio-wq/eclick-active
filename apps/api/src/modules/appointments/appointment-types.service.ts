@@ -85,6 +85,7 @@ export class AppointmentTypesService {
         max_per_day: dto.max_per_day ?? 10,
         is_active: dto.is_active ?? true,
         metadata: dto.metadata ?? {},
+        custom_fields_schema: dto.custom_fields_schema ?? [],
       })
       .select('*')
       .single();
@@ -113,6 +114,7 @@ export class AppointmentTypesService {
       'max_per_day',
       'is_active',
       'metadata',
+      'custom_fields_schema',
     ] as const) {
       if (dto[k] !== undefined) patch[k] = dto[k];
     }

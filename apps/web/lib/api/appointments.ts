@@ -1,5 +1,6 @@
 import type {
   AgentAvailability,
+  AppointmentCustomField,
   AppointmentDetail,
   AppointmentLocationType,
   AppointmentType,
@@ -31,6 +32,8 @@ export interface CreateAppointmentInput {
   location_details?: string;
   notes?: string;
   metadata?: Record<string, unknown>;
+  /** Valores dos campos definidos em appointment_type.custom_fields_schema */
+  custom_fields?: Record<string, unknown>;
 }
 
 export interface UpdateAppointmentInput {
@@ -58,6 +61,7 @@ export interface CreateAppointmentTypeInput {
   min_advance_hours?: number;
   max_per_day?: number;
   is_active?: boolean;
+  custom_fields_schema?: AppointmentCustomField[];
 }
 
 export const appointmentsApi = {

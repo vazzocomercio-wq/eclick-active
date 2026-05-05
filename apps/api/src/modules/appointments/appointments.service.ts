@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import type {
   Appointment,
+  AppointmentCustomField,
   AppointmentDetail,
   AppointmentType,
   AvailabilitySlot,
@@ -64,10 +65,23 @@ export class AppointmentsService {
       await this.assertNoConflict(orgId, dto.assigned_to, start, end);
     }
 
+    let validatedCustomFields: Record<string, unknown> | null = null;
     if (dto.appointment_type_id) {
       const type = await this.types.findById(orgId, dto.appointment_type_id);
       await this.assertWithinTypeRules(orgId, type, start, dto.assigned_to);
+      validatedCustomFields = this.validateCustomFields(
+        type.custom_fields_schema ?? [],
+        dto.custom_fields ?? {},
+      );
     }
+
+    // Mescla custom_fields validados em metadata.custom_fields. Mantém
+    // resto da metadata (source, etc.) intacto.
+    const baseMetadata = dto.metadata ?? {};
+    const finalMetadata =
+      validatedCustomFields !== null
+        ? { ...baseMetadata, custom_fields: validatedCustomFields }
+        : baseMetadata;
 
     const { data, error } = await this.supabase.adminClient
       .from('appointments')
@@ -86,7 +100,7 @@ export class AppointmentsService {
         location_details: dto.location_details ?? null,
         notes: dto.notes ?? null,
         created_by_ai: createdByAi,
-        metadata: dto.metadata ?? {},
+        metadata: finalMetadata,
       })
       .select('*')
       .single();
@@ -821,6 +835,130 @@ export class AppointmentsService {
       );
       return [];
     }
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // Custom fields — valida valores contra o schema do appointment_type
+  // ──────────────────────────────────────────────────────────
+
+  /**
+   * Valida `values` (key→value) contra o schema do appointment_type.
+   *   - Campos `required` precisam estar presentes e não-vazios
+   *   - Tipos coercivos (number, boolean, date) viram valores tipados
+   *   - select valida options
+   *   - text/textarea respeita max_length
+   * Lança BadRequestException com lista de erros consolidada.
+   * Retorna objeto saneado pra persistir em appointment.metadata.custom_fields.
+   */
+  private validateCustomFields(
+    schema: AppointmentCustomField[],
+    values: Record<string, unknown>,
+  ): Record<string, unknown> {
+    if (!Array.isArray(schema) || schema.length === 0) {
+      // Schema vazio — permite metadata arbitrária mas não a inclui.
+      return {};
+    }
+
+    const errors: string[] = [];
+    const out: Record<string, unknown> = {};
+    const seen = new Set<string>();
+
+    for (const field of schema) {
+      seen.add(field.key);
+      const raw = values[field.key];
+      const isEmpty =
+        raw === undefined ||
+        raw === null ||
+        (typeof raw === 'string' && raw.trim() === '');
+
+      if (isEmpty) {
+        if (field.required) {
+          errors.push(`Campo "${field.label}" é obrigatório`);
+        }
+        continue;
+      }
+
+      switch (field.type) {
+        case 'text':
+        case 'textarea': {
+          if (typeof raw !== 'string') {
+            errors.push(`"${field.label}" deve ser texto`);
+            break;
+          }
+          if (field.max_length && raw.length > field.max_length) {
+            errors.push(
+              `"${field.label}" excede ${field.max_length} caracteres`,
+            );
+            break;
+          }
+          out[field.key] = raw;
+          break;
+        }
+        case 'number': {
+          const n = typeof raw === 'number' ? raw : Number(raw);
+          if (!Number.isFinite(n)) {
+            errors.push(`"${field.label}" deve ser número`);
+            break;
+          }
+          if (field.min !== undefined && n < field.min) {
+            errors.push(`"${field.label}" mínimo ${field.min}`);
+            break;
+          }
+          if (field.max !== undefined && n > field.max) {
+            errors.push(`"${field.label}" máximo ${field.max}`);
+            break;
+          }
+          out[field.key] = n;
+          break;
+        }
+        case 'select': {
+          if (typeof raw !== 'string') {
+            errors.push(`"${field.label}" deve ser string`);
+            break;
+          }
+          if (
+            !Array.isArray(field.options) ||
+            !field.options.includes(raw)
+          ) {
+            errors.push(
+              `"${field.label}" deve ser uma das opções: ${field.options?.join(', ') ?? '(nenhuma)'}`,
+            );
+            break;
+          }
+          out[field.key] = raw;
+          break;
+        }
+        case 'date': {
+          if (typeof raw !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+            errors.push(`"${field.label}" deve ser data YYYY-MM-DD`);
+            break;
+          }
+          out[field.key] = raw;
+          break;
+        }
+        case 'boolean': {
+          if (typeof raw === 'boolean') {
+            out[field.key] = raw;
+          } else if (raw === 'true' || raw === 'false') {
+            out[field.key] = raw === 'true';
+          } else {
+            errors.push(`"${field.label}" deve ser true/false`);
+          }
+          break;
+        }
+      }
+    }
+
+    // Avisa sobre keys extras (não derruba — só ignora silenciosamente)
+    // pra não bloquear se schema mudou após criação.
+    if (errors.length > 0) {
+      throw new BadRequestException({
+        message: 'Validação de custom_fields falhou',
+        errors,
+      });
+    }
+
+    return out;
   }
 
   // ──────────────────────────────────────────────────────────

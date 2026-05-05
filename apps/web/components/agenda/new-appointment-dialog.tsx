@@ -23,6 +23,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { appointmentsApi } from '@/lib/api/appointments';
 import { ApiError } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
+import { CustomFieldsForm } from './custom-fields-form';
 
 interface NewAppointmentDialogProps {
   open: boolean;
@@ -61,6 +62,7 @@ export function NewAppointmentDialog({
   const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<AvailabilitySlot | null>(null);
   const [notes, setNotes] = useState('');
+  const [customFields, setCustomFields] = useState<Record<string, unknown>>({});
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -82,9 +84,15 @@ export function NewAppointmentDialog({
     if (!open) return;
     setTitle('');
     setNotes('');
+    setCustomFields({});
     setSelectedSlot(null);
     setDate(defaultDate ?? new Date().toISOString().slice(0, 10));
   }, [open, defaultDate]);
+
+  // Reset custom_fields quando trocar tipo (cada tipo tem seu schema)
+  useEffect(() => {
+    setCustomFields({});
+  }, [typeId]);
 
   // Busca slots quando data ou tipo mudam
   useEffect(() => {
@@ -132,6 +140,9 @@ export function NewAppointmentDialog({
         ...(defaultConversationId ? { conversation_id: defaultConversationId } : {}),
         assigned_to: selectedSlot.agent_id,
         ...(notes.trim() ? { notes: notes.trim() } : {}),
+        ...(Object.keys(customFields).length > 0
+          ? { custom_fields: customFields }
+          : {}),
       });
       toast.success('Agendamento criado', {
         description: new Date(selectedSlot.start_time).toLocaleString('pt-BR', {
@@ -255,6 +266,15 @@ export function NewAppointmentDialog({
               </div>
             )}
           </div>
+
+          {selectedType?.custom_fields_schema &&
+            selectedType.custom_fields_schema.length > 0 && (
+              <CustomFieldsForm
+                schema={selectedType.custom_fields_schema}
+                values={customFields}
+                onChange={setCustomFields}
+              />
+            )}
 
           <div className="flex flex-col gap-1.5">
             <Label>Notas</Label>

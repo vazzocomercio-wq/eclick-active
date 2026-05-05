@@ -2,6 +2,47 @@ import type { ISODateString, UUID } from './common';
 
 export type AppointmentLocationType = 'online' | 'presencial' | 'telefone' | 'flexivel';
 
+/**
+ * Tipos de campo suportados em custom_fields_schema.
+ *  - text/textarea: string
+ *  - number: number
+ *  - select: string (uma das `options`)
+ *  - date: string YYYY-MM-DD
+ *  - boolean: true/false
+ */
+export type AppointmentCustomFieldType =
+  | 'text'
+  | 'textarea'
+  | 'number'
+  | 'select'
+  | 'date'
+  | 'boolean';
+
+/**
+ * Definição de um campo customizado dentro de appointment_type. Genérico
+ * por nicho — cada org pode configurar sua própria taxonomia.
+ *
+ * Ex: clínica de nutrição registra peso/altura/restrições; oficina
+ * registra marca/modelo/ano/sintoma; salão registra comprimento/alergia.
+ */
+export interface AppointmentCustomField {
+  /** Chave estável snake_case (não muda com tradução). */
+  key: string;
+  /** Label amigável pra UI. */
+  label: string;
+  type: AppointmentCustomFieldType;
+  required: boolean;
+  /** Opções pra type='select'. */
+  options?: string[];
+  placeholder?: string;
+  help_text?: string;
+  /** Validação numérica (type='number'). */
+  min?: number;
+  max?: number;
+  /** Validação de comprimento de string (type='text'/'textarea'). */
+  max_length?: number;
+}
+
 export type AppointmentStatus =
   | 'scheduled'
   | 'confirmed'
@@ -36,6 +77,12 @@ export interface AppointmentType {
   max_per_day: number;
   is_active: boolean;
   metadata: Record<string, unknown>;
+  /**
+   * Lista de campos customizados a coletar quando criar appointment desse
+   * tipo. Default `[]`. Configurável por org pra cobrir qualquer nicho.
+   * Veja migration 037.
+   */
+  custom_fields_schema: AppointmentCustomField[];
   created_at: ISODateString;
   updated_at: ISODateString;
 }

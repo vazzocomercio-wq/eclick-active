@@ -75,6 +75,15 @@ export class CreateAppointmentDto {
   @IsOptional()
   @IsObject()
   metadata?: Record<string, unknown>;
+
+  /**
+   * Valores dos campos customizados definidos em
+   * appointment_type.custom_fields_schema. Validado contra o schema no
+   * service. Persistido em appointment.metadata.custom_fields.
+   */
+  @IsOptional()
+  @IsObject()
+  custom_fields?: Record<string, unknown>;
 }
 
 export class UpdateAppointmentDto {
