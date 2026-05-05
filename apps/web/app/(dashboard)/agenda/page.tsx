@@ -31,7 +31,11 @@ const LOCATION_ICON: Record<AppointmentLocationType, typeof CalendarClock> = {
   flexivel: Users,
 };
 
-const HOURS = Array.from({ length: 14 }, (_, i) => i + 7); // 7h–20h
+// Grid 06h–22h cobre o range comum de atendimentos sem scroll horizontal.
+// Antes era 7h-20h e agendamentos fora desse range (ex: cedo da manhã ou
+// fim de noite) sumiam silenciosamente do grid — appointment existia no DB
+// mas computeBlockPosition retornava null pra startHour < minHour.
+const HOURS = Array.from({ length: 17 }, (_, i) => i + 6); // 6h–22h
 const DAYS_PT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 export default function AgendaPage() {
@@ -237,6 +241,15 @@ export default function AgendaPage() {
                   </div>
                   {appt.contact?.name && (
                     <div className="truncate text-muted-foreground">{appt.contact.name}</div>
+                  )}
+                  {appt.agent?.display_name && (
+                    <div
+                      className="truncate text-[9px] font-medium"
+                      style={{ color }}
+                      title={`Profissional: ${appt.agent.display_name}`}
+                    >
+                      👤 {appt.agent.display_name}
+                    </div>
                   )}
                   <div className="truncate text-muted-foreground">
                     {new Date(appt.start_time).toLocaleTimeString('pt-BR', {
