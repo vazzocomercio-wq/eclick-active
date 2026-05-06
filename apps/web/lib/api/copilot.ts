@@ -21,7 +21,14 @@ export type CopilotToolName =
   | 'generate_social_content'
   | 'list_pending_social_content'
   | 'get_social_dashboard'
-  | 'schedule_social_content';
+  | 'schedule_social_content'
+  | 'search_products'
+  | 'get_product_details'
+  | 'manage_cart'
+  | 'apply_coupon'
+  | 'checkout'
+  | 'check_whatsapp_order'
+  | 'recommend_products';
 
 export interface ToolCallRecord {
   tool: CopilotToolName;

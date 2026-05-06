@@ -6,6 +6,7 @@ import { CalendarIntegrationsModule } from '../calendar-integrations/calendar-in
 import { SacModule } from '../sac/sac.module';
 import { BridgeModule } from '../bridge/bridge.module';
 import { SocialModule } from '../social/social.module';
+import { WhatsAppCommerceModule } from '../whatsapp-commerce/whatsapp-commerce.module';
 import { CopilotController } from './copilot.controller';
 import { CopilotService } from './copilot.service';
 
@@ -18,6 +19,7 @@ import { CopilotService } from './copilot.service';
     SacModule,
     BridgeModule,
     SocialModule,
+    WhatsAppCommerceModule,
   ],
   controllers: [CopilotController],
   providers: [CopilotService],

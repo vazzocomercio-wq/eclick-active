@@ -445,6 +445,122 @@ export const COPILOT_TOOLS: Anthropic.Tool[] = [
       required: ['content_id', 'scheduled_for'],
     },
   },
+  // ── WhatsApp Commerce tools ──
+  {
+    name: 'search_products',
+    description:
+      'Busca produtos no catálogo da loja. Use quando o cliente perguntar sobre produtos, preços, disponibilidade ou quiser ver opções. Apresente os produtos com nome, preço, disponibilidade e diferenciais — não despeje tudo de uma vez.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Texto de busca (nome, sku, marca, tag)' },
+        category: { type: 'string', description: 'Filtrar por categoria (opcional)' },
+        min_price: { type: 'number', description: 'Preço mínimo (opcional)' },
+        max_price: { type: 'number', description: 'Preço máximo (opcional)' },
+        in_stock_only: { type: 'boolean', description: 'Apenas com estoque', default: true },
+        limit: { type: 'number', description: 'Máximo de resultados', default: 5 },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'get_product_details',
+    description:
+      'Detalhes completos de um produto específico. Use quando o cliente pedir mais informações: medidas, material, ficha técnica, FAQ.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        product_id: { type: 'string', description: 'UUID do produto' },
+      },
+      required: ['product_id'],
+    },
+  },
+  {
+    name: 'manage_cart',
+    description:
+      'Gerencia o carrinho do cliente. Use quando ele quiser adicionar/remover produto, mudar quantidade, ver carrinho ou esvaziar. Sempre confirme antes de adicionar.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['add', 'remove', 'update_quantity', 'view', 'clear'],
+        },
+        product_id: { type: 'string', description: 'UUID do produto (não precisa pra view/clear)' },
+        quantity: { type: 'number', description: 'Quantidade pra add/update', default: 1 },
+      },
+      required: ['action'],
+    },
+  },
+  {
+    name: 'apply_coupon',
+    description:
+      'Aplica cupom de desconto no carrinho. Use quando o cliente mencionar um código.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        coupon_code: { type: 'string', description: 'Código do cupom' },
+      },
+      required: ['coupon_code'],
+    },
+  },
+  {
+    name: 'checkout',
+    description:
+      'Finaliza compra criando pedido + link de pagamento. SEMPRE confirme itens e total antes de chamar. Após chamar, retorna order_number e link/QR pix.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        payment_method: {
+          type: 'string',
+          enum: ['pix', 'credit_card', 'boleto', 'link', 'manual'],
+          description: 'Método de pagamento escolhido',
+        },
+        shipping_zip: {
+          type: 'string',
+          description: 'CEP de entrega (opcional, usa do contato se omitir)',
+        },
+        customer_notes: { type: 'string', description: 'Observações (opcional)' },
+      },
+      required: ['payment_method'],
+    },
+  },
+  {
+    name: 'check_whatsapp_order',
+    description:
+      'Consulta status de pedido WhatsApp existente (não confundir com pedidos do marketplace via check_order_status). Use quando cliente perguntar sobre WA-XXXX.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        display_number: {
+          type: 'string',
+          description: 'Número do pedido (ex: WA-0042)',
+        },
+      },
+      required: ['display_number'],
+    },
+  },
+  {
+    name: 'recommend_products',
+    description:
+      'Recomenda produtos baseado em descrição da necessidade do cliente. Use quando ele descreveu o que precisa de forma vaga ou quer sugestões.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        context_description: {
+          type: 'string',
+          description: 'O que o cliente precisa em linguagem natural',
+        },
+        budget_max: { type: 'number', description: 'Orçamento máximo (opcional)' },
+        exclude_product_ids: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'IDs de produtos já mostrados',
+        },
+      },
+      required: ['context_description'],
+    },
+  },
 ];
 
 export type CopilotToolName =
@@ -468,4 +584,11 @@ export type CopilotToolName =
   | 'generate_social_content'
   | 'list_pending_social_content'
   | 'get_social_dashboard'
-  | 'schedule_social_content';
+  | 'schedule_social_content'
+  | 'search_products'
+  | 'get_product_details'
+  | 'manage_cart'
+  | 'apply_coupon'
+  | 'checkout'
+  | 'check_whatsapp_order'
+  | 'recommend_products';

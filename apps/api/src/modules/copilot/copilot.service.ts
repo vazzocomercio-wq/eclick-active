@@ -21,6 +21,9 @@ import { BridgeService } from '../bridge/bridge.service';
 import { SocialContentsService } from '../social/social-contents.service';
 import { SocialBrandsService } from '../social/social-brands.service';
 import { SocialAiGeneratorService } from '../social/social-ai/social-ai-generator.service';
+import { CatalogService } from '../whatsapp-commerce/catalog/catalog.service';
+import { WhatsAppCartService } from '../whatsapp-commerce/cart/cart.service';
+import { WhatsAppOrderService } from '../whatsapp-commerce/order/order.service';
 import {
   COPILOT_SYSTEM_PROMPT,
   MAX_HISTORY_MESSAGES,
@@ -93,6 +96,9 @@ export class CopilotService {
     private readonly socialContents: SocialContentsService,
     private readonly socialBrands: SocialBrandsService,
     private readonly socialAi: SocialAiGeneratorService,
+    private readonly catalog: CatalogService,
+    private readonly waCart: WhatsAppCartService,
+    private readonly waOrders: WhatsAppOrderService,
   ) {}
 
   // ────────────────────────────────────────────
@@ -407,6 +413,20 @@ export class CopilotService {
         return this.toolGetSocialDashboard(input, ctx);
       case 'schedule_social_content':
         return this.toolScheduleSocialContent(input, ctx);
+      case 'search_products':
+        return this.toolSearchProducts(input, ctx);
+      case 'get_product_details':
+        return this.toolGetProductDetails(input, ctx);
+      case 'manage_cart':
+        return this.toolManageCart(input, ctx);
+      case 'apply_coupon':
+        return this.toolApplyCoupon(input, ctx);
+      case 'checkout':
+        return this.toolCheckout(input, ctx);
+      case 'check_whatsapp_order':
+        return this.toolCheckWhatsAppOrder(input, ctx);
+      case 'recommend_products':
+        return this.toolRecommendProducts(input, ctx);
       case 'send_scheduling_link':
         return this.toolSendSchedulingLink(input, ctx);
       default:
@@ -1586,6 +1606,365 @@ export class CopilotService {
       record: {
         tool: 'check_order_status',
         summary: `${order.marketplace ?? 'Pedido'} #${order.marketplace_order_id ?? '?'}: ${order.shipping_status ?? '?'}`,
+      },
+    };
+  }
+
+  // ────────────────────────────────────────────
+  // WhatsApp Commerce tools
+  // ────────────────────────────────────────────
+
+  private async toolSearchProducts(
+    input: Record<string, unknown>,
+    ctx: ToolContext,
+  ): Promise<{ result: unknown; record: ToolCallRecord }> {
+    const products = await this.catalog.list(ctx.orgId, {
+      query: typeof input.query === 'string' ? input.query : undefined,
+      category: typeof input.category === 'string' ? input.category : undefined,
+      min_price: typeof input.min_price === 'number' ? input.min_price : undefined,
+      max_price: typeof input.max_price === 'number' ? input.max_price : undefined,
+      in_stock_only: input.in_stock_only !== false,
+      limit: clampLimit(Number(input.limit ?? 0), 5, 25),
+    });
+    return {
+      result: {
+        total_found: products.length,
+        products: products.map((p) => ({
+          id: p.product_id,
+          name: p.name,
+          price: p.price,
+          in_stock: p.in_stock,
+          stock: p.stock,
+          short_description: p.short_description ?? p.description?.slice(0, 200),
+          thumbnail: p.thumbnail_url,
+          brand: p.brand,
+          differentials: p.differentials,
+          bullets: (p.bullets ?? []).slice(0, 3),
+        })),
+      },
+      record: {
+        tool: 'search_products',
+        summary: `${products.length} produto(s) encontrado(s)`,
+      },
+    };
+  }
+
+  private async toolGetProductDetails(
+    input: Record<string, unknown>,
+    ctx: ToolContext,
+  ): Promise<{ result: unknown; record: ToolCallRecord }> {
+    const id = typeof input.product_id === 'string' ? input.product_id : '';
+    if (!id) {
+      return {
+        result: { error: 'product_id obrigatório' },
+        record: { tool: 'get_product_details', summary: 'product_id vazio' },
+      };
+    }
+    const product = await this.catalog.getById(ctx.orgId, id);
+    if (!product) {
+      return {
+        result: { found: false },
+        record: { tool: 'get_product_details', summary: 'Produto não encontrado' },
+      };
+    }
+    const config = await this.catalog.getConfig(ctx.orgId, id);
+    return {
+      result: {
+        ...product,
+        whatsapp_price: config?.whatsapp_price_override ?? product.price,
+        can_negotiate: config?.allow_negotiation ?? false,
+        min_quantity: config?.min_quantity_per_order ?? 1,
+        max_quantity: config?.max_quantity_per_order ?? 10,
+      },
+      record: {
+        tool: 'get_product_details',
+        summary: `${product.name} — R$ ${product.price}`,
+      },
+    };
+  }
+
+  private async toolManageCart(
+    input: Record<string, unknown>,
+    ctx: ToolContext,
+  ): Promise<{ result: unknown; record: ToolCallRecord }> {
+    const contactId = typeof input.contact_id === 'string' ? input.contact_id : '';
+    if (!contactId) {
+      return {
+        result: { error: 'contact_id obrigatório (passe o UUID do contato)' },
+        record: { tool: 'manage_cart', summary: 'contact_id ausente' },
+      };
+    }
+    const action = (input.action as string) ?? 'view';
+    const cart = await this.waCart.getOrCreateCart(ctx.orgId, contactId);
+
+    switch (action) {
+      case 'view':
+        return {
+          result: { cart, message: this.waCart.formatForWhatsApp(cart) },
+          record: {
+            tool: 'manage_cart',
+            summary: `${cart.items.length} item(s), R$ ${cart.total.toFixed(2)}`,
+          },
+        };
+      case 'add': {
+        const productId =
+          typeof input.product_id === 'string' ? input.product_id : '';
+        const product = productId
+          ? await this.catalog.getById(ctx.orgId, productId)
+          : null;
+        if (!product) {
+          return {
+            result: { error: 'product_id inválido' },
+            record: { tool: 'manage_cart', summary: 'Produto não encontrado' },
+          };
+        }
+        if (!product.in_stock) {
+          return {
+            result: { error: 'Produto sem estoque', product },
+            record: { tool: 'manage_cart', summary: 'Sem estoque' },
+          };
+        }
+        const updated = await this.waCart.addItem(ctx.orgId, cart.id, {
+          product_id: product.product_id,
+          name: product.name,
+          sku: product.sku,
+          quantity: Math.max(1, Number(input.quantity ?? 1)),
+          unit_price: product.price,
+          thumbnail_url: product.thumbnail_url,
+        });
+        await this.catalog.incrementMetric(
+          ctx.orgId,
+          product.product_id,
+          'added_to_cart',
+        );
+        return {
+          result: { cart: updated, message: this.waCart.formatForWhatsApp(updated) },
+          record: {
+            tool: 'manage_cart',
+            summary: `+ ${product.name}`,
+            resource_id: cart.id,
+          },
+        };
+      }
+      case 'remove': {
+        const productId =
+          typeof input.product_id === 'string' ? input.product_id : '';
+        if (!productId) {
+          return {
+            result: { error: 'product_id obrigatório pra remove' },
+            record: { tool: 'manage_cart', summary: 'product_id ausente' },
+          };
+        }
+        const updated = await this.waCart.removeItem(ctx.orgId, cart.id, productId);
+        return {
+          result: { cart: updated, message: this.waCart.formatForWhatsApp(updated) },
+          record: { tool: 'manage_cart', summary: 'Item removido' },
+        };
+      }
+      case 'update_quantity': {
+        const productId =
+          typeof input.product_id === 'string' ? input.product_id : '';
+        const qty = Number(input.quantity ?? 1);
+        if (!productId) {
+          return {
+            result: { error: 'product_id obrigatório' },
+            record: { tool: 'manage_cart', summary: 'product_id ausente' },
+          };
+        }
+        const updated = await this.waCart.updateQuantity(
+          ctx.orgId,
+          cart.id,
+          productId,
+          qty,
+        );
+        return {
+          result: { cart: updated, message: this.waCart.formatForWhatsApp(updated) },
+          record: { tool: 'manage_cart', summary: `Quantidade → ${qty}` },
+        };
+      }
+      case 'clear': {
+        const updated = await this.waCart.clear(ctx.orgId, cart.id);
+        return {
+          result: { cart: updated, message: '🛒 Carrinho esvaziado' },
+          record: { tool: 'manage_cart', summary: 'Carrinho limpo' },
+        };
+      }
+      default:
+        return {
+          result: { error: 'action inválida' },
+          record: { tool: 'manage_cart', summary: `Action ${action} desconhecida` },
+        };
+    }
+  }
+
+  private async toolApplyCoupon(
+    input: Record<string, unknown>,
+    ctx: ToolContext,
+  ): Promise<{ result: unknown; record: ToolCallRecord }> {
+    const contactId = typeof input.contact_id === 'string' ? input.contact_id : '';
+    const code =
+      typeof input.coupon_code === 'string' ? input.coupon_code.toUpperCase() : '';
+    if (!contactId || !code) {
+      return {
+        result: { error: 'contact_id e coupon_code obrigatórios' },
+        record: { tool: 'apply_coupon', summary: 'Argumentos ausentes' },
+      };
+    }
+    const cart = await this.waCart.getOrCreateCart(ctx.orgId, contactId);
+    // MVP: lookup simples no settings.recovery_coupon_code; expandir
+    // depois pra tabela de cupons própria.
+    // Por ora aceita qualquer código com 10% de desconto fixo se não tiver
+    // sistema de cupons na org.
+    const discount = +(cart.subtotal * 0.1).toFixed(2);
+    const updated = await this.waCart.applyCoupon(ctx.orgId, cart.id, code, discount);
+    return {
+      result: {
+        cart: updated,
+        applied_discount: discount,
+        message: `Cupom *${code}* aplicado! Desconto: R$ ${discount.toFixed(2)}`,
+      },
+      record: {
+        tool: 'apply_coupon',
+        summary: `${code} → -R$ ${discount.toFixed(2)}`,
+      },
+    };
+  }
+
+  private async toolCheckout(
+    input: Record<string, unknown>,
+    ctx: ToolContext,
+  ): Promise<{ result: unknown; record: ToolCallRecord }> {
+    const contactId = typeof input.contact_id === 'string' ? input.contact_id : '';
+    const paymentMethod =
+      typeof input.payment_method === 'string' ? input.payment_method : 'pix';
+    if (!contactId) {
+      return {
+        result: { error: 'contact_id obrigatório' },
+        record: { tool: 'checkout', summary: 'contact_id ausente' },
+      };
+    }
+    const cart = await this.waCart.getOrCreateCart(ctx.orgId, contactId);
+    if (cart.items.length === 0) {
+      return {
+        result: { error: 'Carrinho vazio' },
+        record: { tool: 'checkout', summary: 'Carrinho vazio' },
+      };
+    }
+    try {
+      const { order, payment_link } = await this.waOrders.createFromCart(ctx.orgId, {
+        cart_id: cart.id,
+        payment_method: paymentMethod as never,
+        shipping_address: input.shipping_zip
+          ? { zip: String(input.shipping_zip) }
+          : undefined,
+        customer_notes:
+          typeof input.customer_notes === 'string'
+            ? input.customer_notes
+            : undefined,
+      });
+      return {
+        result: {
+          order_number: order.display_number,
+          total: order.total,
+          payment_method: order.payment_method,
+          payment_link: payment_link?.url,
+          pix_copy_paste: payment_link?.pix_copy_paste,
+        },
+        record: {
+          tool: 'checkout',
+          summary: `Pedido ${order.display_number} R$ ${order.total.toFixed(2)}`,
+          resource_id: order.id,
+        },
+      };
+    } catch (err) {
+      return {
+        result: { error: err instanceof Error ? err.message : String(err) },
+        record: { tool: 'checkout', summary: 'Falha no checkout' },
+      };
+    }
+  }
+
+  private async toolCheckWhatsAppOrder(
+    input: Record<string, unknown>,
+    ctx: ToolContext,
+  ): Promise<{ result: unknown; record: ToolCallRecord }> {
+    const display =
+      typeof input.display_number === 'string' ? input.display_number : '';
+    if (!display) {
+      return {
+        result: { error: 'display_number obrigatório' },
+        record: { tool: 'check_whatsapp_order', summary: 'display_number ausente' },
+      };
+    }
+    const order = await this.waOrders.findByDisplayNumber(ctx.orgId, display);
+    if (!order) {
+      return {
+        result: { found: false, display_number: display },
+        record: {
+          tool: 'check_whatsapp_order',
+          summary: `${display} não encontrado`,
+        },
+      };
+    }
+    return {
+      result: {
+        order_number: order.display_number,
+        status: order.status,
+        payment_status: order.payment_status,
+        shipping_status: order.shipping_status,
+        tracking_code: order.tracking_code,
+        total: order.total,
+        created_at: order.created_at,
+        paid_at: order.paid_at,
+        shipped_at: order.shipped_at,
+        delivered_at: order.delivered_at,
+      },
+      record: {
+        tool: 'check_whatsapp_order',
+        summary: `${order.display_number}: ${order.status}/${order.payment_status}`,
+        resource_id: order.id,
+      },
+    };
+  }
+
+  private async toolRecommendProducts(
+    input: Record<string, unknown>,
+    ctx: ToolContext,
+  ): Promise<{ result: unknown; record: ToolCallRecord }> {
+    const desc =
+      typeof input.context_description === 'string'
+        ? input.context_description
+        : '';
+    if (!desc) {
+      return {
+        result: { error: 'context_description obrigatório' },
+        record: { tool: 'recommend_products', summary: 'Sem contexto' },
+      };
+    }
+    const exclude = Array.isArray(input.exclude_product_ids)
+      ? (input.exclude_product_ids as string[])
+      : [];
+    const products = await this.catalog.list(ctx.orgId, {
+      query: desc,
+      max_price: typeof input.budget_max === 'number' ? input.budget_max : undefined,
+      in_stock_only: true,
+      limit: 5,
+    });
+    const filtered = products.filter((p) => !exclude.includes(p.product_id));
+    return {
+      result: {
+        recommendations: filtered.slice(0, 3).map((p) => ({
+          id: p.product_id,
+          name: p.name,
+          price: p.price,
+          short_description: p.short_description ?? p.description?.slice(0, 200),
+          thumbnail: p.thumbnail_url,
+          why: 'Produto relevante baseado na descrição da necessidade',
+        })),
+      },
+      record: {
+        tool: 'recommend_products',
+        summary: `${filtered.slice(0, 3).length} recomendação(ões)`,
       },
     };
   }
