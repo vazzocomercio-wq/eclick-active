@@ -26,6 +26,7 @@ import { SocialSignalsService } from './analytics/social-signals.service';
 import { SocialAdBoostService } from './boost/social-ad-boost.service';
 import { SocialHashtagsService } from './analytics/social-hashtags.service';
 import { SocialCompetitorService } from './analytics/social-competitor.service';
+import { SocialAbTestService } from './ab-test/social-ab-test.service';
 import type { PublishingChannel } from './publishing/publishing.types';
 import type { BoostStatus, SocialAdBoostDraft } from './boost/social-ad-boost.types';
 import type { CreateBrandDto, UpdateBrandDto } from './dto/brand.dto';
@@ -61,6 +62,7 @@ export class SocialController {
     private readonly boost: SocialAdBoostService,
     private readonly hashtags: SocialHashtagsService,
     private readonly competitor: SocialCompetitorService,
+    private readonly abTests: SocialAbTestService,
   ) {}
 
   // ─── Brands ─────────────────────────────────────
@@ -446,6 +448,57 @@ export class SocialController {
   @Post('brands/:id/competitor-analysis')
   competitorGenerate(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.competitor.generate(user.org_id, id);
+  }
+
+  // ─── A/B Testing ────────────────────────────────
+
+  @Get('ab-tests')
+  listAbTests(
+    @CurrentUser() user: AuthUser,
+    @Query('status') status?: string,
+    @Query('brand_id') brandId?: string,
+  ) {
+    return this.abTests.list(user.org_id, {
+      status: status as 'draft' | 'running' | 'completed' | 'cancelled' | undefined,
+      brand_id: brandId,
+    });
+  }
+
+  @Get('ab-tests/:id')
+  getAbTest(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.abTests.findById(user.org_id, id);
+  }
+
+  @Post('ab-tests')
+  createAbTest(
+    @CurrentUser() user: AuthUser,
+    @Body()
+    body: {
+      brand_id: string;
+      name: string;
+      hypothesis?: string;
+      theme: string;
+      pillar?: string;
+      content_type?: 'post' | 'carousel';
+      test_duration_days?: number;
+    },
+  ) {
+    return this.abTests.createTest(user.org_id, body as never);
+  }
+
+  @Post('ab-tests/:id/start')
+  startAbTest(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.abTests.start(user.org_id, id);
+  }
+
+  @Post('ab-tests/:id/evaluate')
+  evaluateAbTest(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.abTests.evaluate(user.org_id, id);
+  }
+
+  @Post('ab-tests/:id/cancel')
+  cancelAbTest(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.abTests.cancel(user.org_id, id);
   }
 
   // ─── Analytics — signals ─────────────────────────

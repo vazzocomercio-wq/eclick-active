@@ -437,6 +437,32 @@ export interface CompetitorAnalysis {
   created_at: string;
 }
 
+// ─── A/B Testing ──────────────────────────────────
+
+export type AbTestStatus = 'draft' | 'running' | 'completed' | 'cancelled';
+export type WinnerVariant = 'a' | 'b' | 'tie';
+
+export interface SocialAbTest {
+  id: string;
+  org_id: string;
+  brand_id: string;
+  name: string;
+  hypothesis: string | null;
+  variant_a_content_id: string;
+  variant_b_content_id: string;
+  test_duration_days: number;
+  status: AbTestStatus;
+  winner_variant: WinnerVariant | null;
+  winner_content_id: string | null;
+  variant_a_engagement_rate: number | null;
+  variant_b_engagement_rate: number | null;
+  decision_rationale: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // ─── API ──────────────────────────────────────────
 
 export interface ContentListFilters {
@@ -641,6 +667,32 @@ export const socialApi = {
         `/social/brands/${brandId}/competitor-analysis`,
         {},
       ),
+  },
+
+  // A/B Testing
+  abTests: {
+    list: (
+      params: { status?: AbTestStatus; brand_id?: string } = {},
+      signal?: AbortSignal,
+    ) =>
+      api.get<SocialAbTest[]>('/social/ab-tests', { query: params, signal }),
+    get: (id: string, signal?: AbortSignal) =>
+      api.get<SocialAbTest>(`/social/ab-tests/${id}`, { signal }),
+    create: (body: {
+      brand_id: string;
+      name: string;
+      hypothesis?: string;
+      theme: string;
+      pillar?: ContentPillar;
+      content_type?: 'post' | 'carousel';
+      test_duration_days?: number;
+    }) => api.post<SocialAbTest>('/social/ab-tests', body),
+    start: (id: string) =>
+      api.post<SocialAbTest>(`/social/ab-tests/${id}/start`, {}),
+    evaluate: (id: string) =>
+      api.post<SocialAbTest>(`/social/ab-tests/${id}/evaluate`, {}),
+    cancel: (id: string) =>
+      api.post<SocialAbTest>(`/social/ab-tests/${id}/cancel`, {}),
   },
 
   // Ad Boost — promover post como ad

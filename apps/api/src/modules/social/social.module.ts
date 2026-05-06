@@ -28,6 +28,7 @@ import { SocialSignalAlerter } from './analytics/social-signal-alerter.service';
 import { SocialMetricsWorkerService } from './analytics/social-metrics-worker.service';
 import { SocialHashtagsService } from './analytics/social-hashtags.service';
 import { SocialCompetitorService } from './analytics/social-competitor.service';
+import { SocialAbTestService } from './ab-test/social-ab-test.service';
 import { SocialAdBoostService } from './boost/social-ad-boost.service';
 import { AlertsModule } from '../alerts/alerts.module';
 import { ChannelsModule as ChannelDispatcherModule } from '../../common/channels/channels.module';
@@ -67,6 +68,7 @@ import { ChannelsModule as ChannelDispatcherModule } from '../../common/channels
     SocialMetricsWorkerService,
     SocialHashtagsService,
     SocialCompetitorService,
+    SocialAbTestService,
     SocialAdBoostService,
   ],
   exports: [
