@@ -1,7 +1,115 @@
 # HANDOFF — eclick-active
 
 > Documento vivo de continuidade entre sessões. **Lê isso primeiro ao começar nova sessão.**
-> Última atualização: **2026-05-05** (Active Intelligence — sprint completo + UI das 3 telas /configuracoes)
+> Última atualização: **2026-05-06** (Onda 4 / A3 — Automation Bridge SaaS↔Active entregue + smoke test ok)
+
+---
+
+## 🆕 ENTREGA DESTA SESSÃO — Onda 4 / A3 (Automation Bridge)
+
+**Status: 100% COMPLETO E VALIDADO EM PROD.** SaaS já tem envs configuradas, aguardando Sprint 4 do motor `StoreAutomationEngine`.
+
+### O que foi feito
+Receivers no Active pra que o `StoreAutomationEngine` do SaaS (projeto `eclick-backend`) dispare ações que dependem da infra WhatsApp/cart do Active.
+
+**Endpoints novos** (server-to-server, autenticados via shared secret):
+- `POST /commerce/automation-bridge/notify-lojista` — notifica owner da org no WhatsApp
+  - Severity `critical|high` → envio imediato
+  - Severity `medium` → fila pra digest 4h
+  - Severity `low|opportunity` → fila pra digest diário 9h
+- `POST /commerce/automation-bridge/trigger-cart-recovery` — dispara WhatsApp pra carrinhos abandonados
+  - Aceita `cart_ids[]` direto OU segmento (`abandoned_24h|48h|7d`)
+  - Sequencial com `rate_limit_ms` configurável; pula carts convertidos/cancelados
+
+**Arquivos novos**:
+- `supabase/migrations/068_automation_bridge.sql` — tabela `active.automation_executions` (audit trail)
+- `apps/api/src/modules/automation-bridge/`:
+  - `automation-bridge.types.ts` — DTOs + interface `OrgAutomationBridgeSettings`
+  - `automation-bridge.guard.ts` — valida header `X-Automation-Bridge-Token` (constant-time compare, fail-safe)
+  - `automation-bridge.service.ts` — `notifyLojista`, `triggerCartRecovery`, `runDigest`, `resolveOwnerTarget`
+  - `automation-bridge.controller.ts` — 2 POST sob `/commerce/automation-bridge/*` (sem AuthGuard, só Guard de secret)
+  - `notify-digest.worker.ts` — setInterval 4h (medium) + 30min check pro daily 9h
+  - `automation-bridge.module.ts` — registrado em `app.module.ts`
+
+**Arquivos modificados**:
+- `apps/api/src/app.module.ts` — `+ AutomationBridgeModule`
+- `apps/api/src/modules/automations/automations.service.ts` — bugfix B6 (`sendCommerceMessage`)
+- `apps/api/.env.example` — `AUTOMATION_BRIDGE_SECRET=` + `DISABLE_AUTOMATION_DIGEST_WORKER`
+
+### Bugfix relevante (Onda 2 também)
+O resolver de canal WhatsApp filtrava `channel_type='whatsapp'` + `is_active=true`. Mas:
+- Active usa `channel_type='whatsapp_free'` (Baileys) **e** `'whatsapp'` (Z-API) — precisa do `.in([...])`
+- Coluna correta é `status` (text) com valor `'active'` — não existe `is_active`
+
+Corrigido nos dois lugares (bridge novo + B6 antigo) no commit `7c8b2f5`.
+
+### Configuração operacional (já feita)
+
+**Active Railway (`active-api`)**: env `AUTOMATION_BRIDGE_SECRET` configurada (gerada com `openssl rand -hex 32`).
+
+**SaaS Railway (`eclick-backend`)**: envs configuradas
+- `ACTIVE_AUTOMATION_BRIDGE_SECRET` (deve bater com a do Active — verificar visualmente comparando primeiros/últimos 8 chars)
+- `ACTIVE_AUTOMATION_BRIDGE_URL=https://api.active.eclick.app.br`
+
+**Org Vazzo configurada** via SQL:
+```sql
+UPDATE active.organizations
+SET settings = settings || jsonb_build_object(
+  'automation_bridge', jsonb_build_object(
+    'owner_contact_id', '<UUID_DO_CONTATO_SILVIO>'
+  )
+)
+WHERE name ILIKE '%vazzo%';
+```
+Contato `Silvio Júnior` com phone `5571993167000` virou owner notification target.
+
+### Smoke tests validados ✅
+
+1. **Critical → imediato**: `curl POST /notify-lojista severity=critical` → mensagem chegou no WhatsApp do Silvio (5571993167000)
+2. **Medium → digest queue**: `curl POST /notify-lojista severity=medium` → row criada em `automation_executions` com status=pending, queued_for_digest=true (vai disparar no próximo tick 4h)
+3. **Cart recovery vazio**: `curl POST /trigger-cart-recovery segment=abandoned_24h` → dispatched=0 (sem carts no momento, comportamento correto)
+4. **Audit trail**: rows persistidas corretamente em `active.automation_executions` com payload, severity, status, digest_id
+
+### Pendências externas (não bloqueia Active)
+
+- **SaaS Sprint 4**: enable auto-execution do `StoreAutomationEngine` chamando os endpoints. Quando o time SaaS terminar, basta. Não tem trabalho aqui no Active.
+- **UI opcional futura**: `/configuracoes/integracoes` ganhar seção pra editar `automation_bridge.owner_contact_id` (hoje só via SQL)
+
+### ⚠️ Dívida de segurança aberta — ROTACIONAR SECRET
+
+O `AUTOMATION_BRIDGE_SECRET` atual em prod **vazou em chat + screenshot** durante o desenvolvimento. Não bloqueia nada hoje, mas precisa rotacionar quando der:
+
+1. Gerar novo: `openssl rand -hex 32` (NÃO colar em chat)
+2. Atualizar nos **dois** Railways simultaneamente:
+   - `active-api` → env `AUTOMATION_BRIDGE_SECRET`
+   - `eclick-backend` (SaaS) → env `ACTIVE_AUTOMATION_BRIDGE_SECRET`
+3. Smoke test pós-rotação: `curl POST /notify-lojista` com `severity=critical` → esperar `200 OK` + WhatsApp chegando. Se vier `401`, secrets não bateram.
+
+Usuário confirmou ciência da pendência (sessão 2026-05-06).
+
+### Commits desta sessão
+```
+9661132  feat(automation-bridge): A3 SaaS↔Active receivers + digest worker
+7c8b2f5  fix(channels): whatsapp_free + status='active' em bridge e B6
+[novo]   fix(automation-bridge): drop FK org_id (referência LÓGICA cross-project)
+```
+
+### Bugfix pós-deploy — FK física em `automation_executions.org_id`
+
+**Sintoma**: inserts vindos do SaaS quebravam com FK violation em `automation_executions_org_id_fkey`.
+
+**Causa**: o SaaS dispara com seu próprio `organization_id` (`public.organizations` do projeto SaaS), que não bate com nenhuma row em `active.organizations`. Apesar de o Supabase Auth ser compartilhado, os schemas têm tabelas de orgs DISTINTAS — a referência é lógica, não física.
+
+**Fix**: migration `069_automation_bridge_drop_org_fk.sql`
+```sql
+ALTER TABLE active.automation_executions
+  DROP CONSTRAINT IF EXISTS automation_executions_org_id_fkey;
+```
+Mantém o índice `idx_auto_exec_org` (não é tocado pelo DROP CONSTRAINT).
+
+**Validação**: insert com `org_id='00000000-0000-0000-0000-000000000001'` (UUID inexistente em active.organizations) passou após o drop. Cleanup feito.
+
+**Smoke test SaaS-side esperado** após este fix: `GET /store-automation/bridge-health` deve retornar `{ configured: true, reachable: true, authenticated: true, response: { ok: true, queued_for_digest: true } }`.
 
 ---
 
@@ -142,9 +250,9 @@ Sprint principal **completo**. Tudo aguardando envs externas pra ativar produç�
 
 ## Estado atual
 
-**Última migration aplicada via API**: `050_alert_deliveries.sql`
+**Última migration aplicada via API**: `068_automation_bridge.sql` (Onda 4 / A3, 2026-05-06)
 **Migration aplicada via Studio**: `038_message_media_storage_policy.sql` (2026-05-05)
-**Próxima migration livre**: `046_*.sql` (reservada pro Bloco F — Lead Ads webhook quando o app Meta estiver configurado) ou `051_*.sql`
+**Próxima migration livre**: `046_*.sql` (reservada pro Bloco F — Lead Ads webhook quando o app Meta estiver configurado) ou `069_*.sql`
 
 **Helper pra aplicar migrations rapidão (Claude usa esse)**:
 ```bash
@@ -332,6 +440,33 @@ Estimativa: ~5h backend + ~4h UI + ~2h embed JS.
 node scripts/apply-migration.mjs supabase/migrations/038_NOVA.sql
 ```
 
+### Configurar owner do Automation Bridge (notify-lojista)
+```sql
+-- Pega o contact_id do dono e cola no settings JSONB
+UPDATE active.organizations
+SET settings = settings || jsonb_build_object(
+  'automation_bridge', jsonb_build_object(
+    'owner_contact_id', '<UUID_DO_CONTATO>'
+  )
+)
+WHERE id = 'ORG_UUID';
+```
+
+### Smoke test manual do Automation Bridge
+```bash
+# Critical (envia imediato)
+curl -i -X POST https://api.active.eclick.app.br/commerce/automation-bridge/notify-lojista \
+  -H "X-Automation-Bridge-Token: $AUTOMATION_BRIDGE_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"org_id":"<ORG_UUID>","severity":"critical","title":"Teste","body":"Teste smoke critical"}'
+
+# Medium (vai pra digest 4h)
+curl -i -X POST https://api.active.eclick.app.br/commerce/automation-bridge/notify-lojista \
+  -H "X-Automation-Bridge-Token: $AUTOMATION_BRIDGE_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"org_id":"<ORG_UUID>","severity":"medium","title":"Teste digest","body":"Teste smoke medium"}'
+```
+
 ### Configurar timezone de uma org
 ```sql
 UPDATE active.organizations
@@ -386,6 +521,8 @@ Worker pega no próximo tick (30s).
 ## Commits desta sessão (cronológicos)
 
 ```
+7c8b2f5  fix(channels): whatsapp_free + status='active' em bridge e B6
+9661132  feat(automation-bridge): A3 SaaS↔Active receivers + digest worker
 ad74671  feat(web): responsividade Fase 1 — sidebar mobile + drawer + back nav
 b407e18  docs(handoff): atualiza com 1+2+3
 f3c2989  feat(re-engagement): cron de reativação + painel UI
