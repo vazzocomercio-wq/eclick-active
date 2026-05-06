@@ -4,11 +4,16 @@ import {
   CalendarClock,
   CheckCircle2,
   Clock,
+  CreditCard,
   type LucideIcon,
   MessageCircle,
   MessageSquare,
+  Package,
   RefreshCw,
+  ShoppingCart,
+  Sparkles,
   Tag,
+  Truck,
   UserPlus,
   Workflow,
 } from 'lucide-react';
@@ -82,6 +87,36 @@ export const TRIGGER_VISUALS: Record<AutomationTriggerType, TriggerVisual> = {
     bg: 'bg-slate-500/15',
     label: 'Webhook',
   },
+  cart_abandoned: {
+    icon: ShoppingCart,
+    color: 'text-amber-400',
+    bg: 'bg-amber-500/15',
+    label: 'Carrinho abandonado',
+  },
+  cart_recovered: {
+    icon: Sparkles,
+    color: 'text-emerald-400',
+    bg: 'bg-emerald-500/15',
+    label: 'Carrinho recuperado',
+  },
+  order_created: {
+    icon: Package,
+    color: 'text-blue-400',
+    bg: 'bg-blue-500/15',
+    label: 'Pedido criado',
+  },
+  order_paid: {
+    icon: CreditCard,
+    color: 'text-emerald-500',
+    bg: 'bg-emerald-500/15',
+    label: 'Pedido pago',
+  },
+  order_shipped: {
+    icon: Truck,
+    color: 'text-cyan-400',
+    bg: 'bg-cyan-500/15',
+    label: 'Pedido enviado',
+  },
 };
 
 export const TRIGGER_OPTIONS: AutomationTriggerType[] = [
@@ -92,6 +127,11 @@ export const TRIGGER_OPTIONS: AutomationTriggerType[] = [
   'whatsapp_verified',
   'task_overdue',
   'manual',
+  'cart_abandoned',
+  'cart_recovered',
+  'order_created',
+  'order_paid',
+  'order_shipped',
 ];
 
 export function TriggerBadge({

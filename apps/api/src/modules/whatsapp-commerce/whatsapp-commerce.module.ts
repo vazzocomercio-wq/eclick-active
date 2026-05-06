@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { SupabaseModule } from '../../common/supabase/supabase.module';
 import { AuthModule } from '../../common/auth/auth.module';
 import { EventsModule } from '../../gateways/events.module';
+import { AutomationsModule } from '../automations/automations.module';
 import { CatalogService } from './catalog/catalog.service';
 import {
   CatalogController,
@@ -18,7 +19,7 @@ import { PixManualProvider } from './order/providers/pix-manual.provider';
 import { PaymentWebhooksController } from './webhooks/payment-webhooks.controller';
 
 @Module({
-  imports: [SupabaseModule, AuthModule, EventsModule],
+  imports: [SupabaseModule, AuthModule, EventsModule, AutomationsModule],
   controllers: [
     CatalogController,
     CommerceSettingsController,

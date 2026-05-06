@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { SupabaseService } from '../../../common/supabase/supabase.service';
 import { EventsGateway } from '../../../gateways/events.gateway';
+import { AutomationsService } from '../../automations/automations.service';
 import { WhatsAppCartService } from '../cart/cart.service';
 import { CatalogService } from '../catalog/catalog.service';
 import { MercadoPagoProvider } from './providers/mercado-pago.provider';
@@ -36,6 +37,7 @@ export class WhatsAppOrderService {
     private readonly catalog: CatalogService,
     private readonly mp: MercadoPagoProvider,
     private readonly pix: PixManualProvider,
+    private readonly automations: AutomationsService,
   ) {}
 
   // ─── CRUD ───────────────────────────────────────
@@ -194,6 +196,21 @@ export class WhatsAppOrderService {
       /* best-effort */
     }
 
+    // Dispara automation order_created (fire-and-forget)
+    void this.automations
+      .checkTriggers({
+        event: 'order_created',
+        org_id: orgId,
+        order_id: order.id,
+        display_number: order.display_number,
+        contact_id: order.contact_id,
+        conversation_id: cart.conversation_id ?? null,
+        total: Number(order.total ?? 0),
+      })
+      .catch((err) =>
+        this.log.warn(`automations order_created falhou: ${String(err)}`),
+      );
+
     return { order, payment_link: paymentLink };
   }
 
@@ -254,6 +271,21 @@ export class WhatsAppOrderService {
       /* best-effort */
     }
 
+    // Dispara automation order_paid (fire-and-forget)
+    void this.automations
+      .checkTriggers({
+        event: 'order_paid',
+        org_id: orgId,
+        order_id: order.id,
+        display_number: order.display_number,
+        contact_id: order.contact_id,
+        conversation_id: null,
+        total: Number(order.total ?? 0),
+      })
+      .catch((err) =>
+        this.log.warn(`automations order_paid falhou: ${String(err)}`),
+      );
+
     return order;
   }
 
@@ -293,6 +325,22 @@ export class WhatsAppOrderService {
     } catch {
       /* best-effort */
     }
+
+    // Dispara automation order_shipped (fire-and-forget)
+    void this.automations
+      .checkTriggers({
+        event: 'order_shipped',
+        org_id: orgId,
+        order_id: order.id,
+        display_number: order.display_number,
+        contact_id: order.contact_id,
+        conversation_id: null,
+        tracking_code: order.tracking_code ?? null,
+        carrier: args.carrier ?? null,
+      })
+      .catch((err) =>
+        this.log.warn(`automations order_shipped falhou: ${String(err)}`),
+      );
 
     return order;
   }

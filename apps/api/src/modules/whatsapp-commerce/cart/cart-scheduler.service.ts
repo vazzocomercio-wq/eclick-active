@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { SupabaseService } from '../../../common/supabase/supabase.service';
 import { EventsGateway } from '../../../gateways/events.gateway';
+import { AutomationsService } from '../../automations/automations.service';
 
 const TICK_MS = 5 * 60 * 1000; // 5min — checa abandono
 const EXPIRE_TICK_MS = 60 * 60 * 1000; // 1h — checa expiração
@@ -31,6 +32,7 @@ export class CartSchedulerService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly supabase: SupabaseService,
     private readonly events: EventsGateway,
+    private readonly automations: AutomationsService,
   ) {}
 
   onModuleInit(): void {
@@ -81,9 +83,15 @@ export class CartSchedulerService implements OnModuleInit, OnModuleDestroy {
           .eq('org_id', s.org_id)
           .eq('status', 'active')
           .lt('last_interaction_at', threshold)
-          .select('id, contact_id');
+          .select('id, contact_id, conversation_id, items, total');
 
-        for (const cart of (marked ?? []) as Array<{ id: string; contact_id: string }>) {
+        for (const cart of (marked ?? []) as Array<{
+          id: string;
+          contact_id: string;
+          conversation_id: string | null;
+          items: Array<{ quantity?: number }> | null;
+          total: number | null;
+        }>) {
           try {
             this.events.emitToOrg(s.org_id, 'cart:abandoned', {
               cart_id: cart.id,
@@ -92,6 +100,25 @@ export class CartSchedulerService implements OnModuleInit, OnModuleDestroy {
           } catch {
             /* best-effort */
           }
+          // Dispara automation runner pra cart_abandoned
+          void this.automations
+            .checkTriggers({
+              event: 'cart_abandoned',
+              org_id: s.org_id,
+              cart_id: cart.id,
+              contact_id: cart.contact_id,
+              conversation_id: cart.conversation_id,
+              items_count: (cart.items ?? []).reduce(
+                (acc, it) => acc + (it.quantity ?? 0),
+                0,
+              ),
+              total: Number(cart.total ?? 0),
+            })
+            .catch((err) =>
+              this.log.warn(
+                `automations.checkTriggers cart_abandoned falhou: ${String(err)}`,
+              ),
+            );
         }
 
         if ((marked ?? []).length > 0) {

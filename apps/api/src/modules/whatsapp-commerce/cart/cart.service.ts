@@ -5,6 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { SupabaseService } from '../../../common/supabase/supabase.service';
+import { AutomationsService } from '../../automations/automations.service';
 import type {
   WhatsAppCart,
   CartItem,
@@ -26,7 +27,10 @@ import type {
 export class WhatsAppCartService {
   private readonly log = new Logger(WhatsAppCartService.name);
 
-  constructor(private readonly supabase: SupabaseService) {}
+  constructor(
+    private readonly supabase: SupabaseService,
+    private readonly automations: AutomationsService,
+  ) {}
 
   /**
    * Pega carrinho ativo do contato. Se houver abandoned, ressuscita
@@ -81,7 +85,7 @@ export class WhatsAppCartService {
         })
         .eq('id', old.id);
       // Cria novo active com mesmos items
-      return this.create(orgId, contactId, conversationId ?? null, {
+      const created = await this.create(orgId, contactId, conversationId ?? null, {
         items: old.items,
         subtotal: old.subtotal,
         total: old.total,
@@ -89,6 +93,22 @@ export class WhatsAppCartService {
         coupon_discount: old.coupon_discount,
         shipping_cost: old.shipping_cost,
       });
+      // Dispara automation cart_recovered (fire-and-forget)
+      void this.automations
+        .checkTriggers({
+          event: 'cart_recovered',
+          org_id: orgId,
+          cart_id: created.id,
+          contact_id: contactId,
+          conversation_id: conversationId ?? null,
+          total: Number(created.total ?? 0),
+        })
+        .catch((err) =>
+          this.log.warn(
+            `automations cart_recovered falhou: ${String(err)}`,
+          ),
+        );
+      return created;
     }
 
     // Cria novo

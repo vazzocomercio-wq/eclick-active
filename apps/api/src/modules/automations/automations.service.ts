@@ -348,6 +348,19 @@ Gere o JSON da automação seguindo o schema. Use textos PT-BR claros e específ
       return true;
     }
 
+    // Commerce: filtros opcionais por valor mínimo
+    if (
+      event.event === 'cart_abandoned' ||
+      event.event === 'cart_recovered' ||
+      event.event === 'order_created' ||
+      event.event === 'order_paid'
+    ) {
+      const minTotal = Number(cfg.min_total ?? 0);
+      const evtTotal = (event as { total?: number }).total ?? 0;
+      if (minTotal > 0 && evtTotal < minTotal) return false;
+      return true;
+    }
+
     return true;
   }
 
@@ -804,12 +817,29 @@ Gere o JSON da automação seguindo o schema. Use textos PT-BR claros e específ
    * cobre o fast-path (legacy {{contact.name}} + {{contact.first_name}}).
    */
   private interpolate(text: string, ctx: ExecuteContext): string {
-    return text
+    let out = text
       .replace(/\{\{contact\.name\}\}/g, ctx.contactName ?? 'cliente')
       .replace(
         /\{\{contact\.first_name\}\}/g,
         (ctx.contactName ?? 'cliente').split(' ')[0] ?? 'cliente',
       );
+
+    if (ctx.cart) {
+      out = out
+        .replace(/\{\{cart\.total\}\}/g, formatBRL(ctx.cart.total))
+        .replace(/\{\{cart\.items_count\}\}/g, String(ctx.cart.items_count));
+    }
+    if (ctx.order) {
+      out = out
+        .replace(/\{\{order\.number\}\}/g, ctx.order.display_number)
+        .replace(/\{\{order\.total\}\}/g, formatBRL(ctx.order.total))
+        .replace(
+          /\{\{order\.tracking_code\}\}/g,
+          ctx.order.tracking_code ?? '—',
+        )
+        .replace(/\{\{order\.carrier\}\}/g, ctx.order.carrier ?? '—');
+    }
+    return out;
   }
 
   /**
@@ -848,6 +878,32 @@ Gere o JSON da automação seguindo o schema. Use textos PT-BR claros e específ
       ctx.contactId = event.contact_id ?? undefined;
     } else if (event.event === 'contact_created') {
       ctx.contactId = event.contact_id;
+    } else if (
+      event.event === 'cart_abandoned' ||
+      event.event === 'cart_recovered'
+    ) {
+      ctx.contactId = event.contact_id;
+      ctx.conversationId = event.conversation_id ?? undefined;
+      ctx.cart = {
+        id: event.cart_id,
+        total: event.total,
+        items_count:
+          (event as { items_count?: number }).items_count ?? 0,
+      };
+    } else if (
+      event.event === 'order_created' ||
+      event.event === 'order_paid' ||
+      event.event === 'order_shipped'
+    ) {
+      ctx.contactId = event.contact_id;
+      ctx.conversationId = event.conversation_id ?? undefined;
+      ctx.order = {
+        id: event.order_id,
+        display_number: event.display_number,
+        total: (event as { total?: number }).total ?? 0,
+        tracking_code: (event as { tracking_code?: string | null }).tracking_code ?? null,
+        carrier: (event as { carrier?: string | null }).carrier ?? null,
+      };
     }
 
     // Hidrata nome do contato + assigned_to da conversa em uma única query
@@ -972,6 +1028,27 @@ interface ExecuteContext {
   channelId?: string;
   dealId?: string;
   assignedToUserId?: string;
+  /** Hidratado em buildContext pra cart_abandoned/cart_recovered */
+  cart?: {
+    id: string;
+    total: number;
+    items_count: number;
+  };
+  /** Hidratado em buildContext pra order_* */
+  order?: {
+    id: string;
+    display_number: string;
+    total: number;
+    tracking_code: string | null;
+    carrier: string | null;
+  };
+}
+
+function formatBRL(value: number): string {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(Number(value) || 0);
 }
 
 const AUTOMATION_TO_TEXT_SYSTEM = `Você converte automações de CRM em descrições legíveis em português do Brasil.

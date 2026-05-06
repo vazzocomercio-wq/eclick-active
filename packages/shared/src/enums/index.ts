@@ -131,7 +131,12 @@ export type AutomationTriggerType =
   | 'task_overdue'
   | 'time_based'
   | 'manual'
-  | 'webhook';
+  | 'webhook'
+  | 'cart_abandoned'
+  | 'cart_recovered'
+  | 'order_created'
+  | 'order_paid'
+  | 'order_shipped';
 
 export type AutomationLogStatus = 'success' | 'partial' | 'failed';
 

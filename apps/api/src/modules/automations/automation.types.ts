@@ -206,12 +206,69 @@ export interface WhatsAppVerifiedEvent extends TriggerEventBase {
   provider: string;
 }
 
+// ── Commerce events ──
+
+export interface CartAbandonedEvent extends TriggerEventBase {
+  event: 'cart_abandoned';
+  org_id: string;
+  cart_id: string;
+  contact_id: string;
+  conversation_id: string | null;
+  items_count: number;
+  total: number;
+}
+
+export interface CartRecoveredEvent extends TriggerEventBase {
+  event: 'cart_recovered';
+  org_id: string;
+  cart_id: string;
+  contact_id: string;
+  conversation_id: string | null;
+  total: number;
+}
+
+export interface OrderCreatedEvent extends TriggerEventBase {
+  event: 'order_created';
+  org_id: string;
+  order_id: string;
+  display_number: string;
+  contact_id: string;
+  conversation_id: string | null;
+  total: number;
+}
+
+export interface OrderPaidEvent extends TriggerEventBase {
+  event: 'order_paid';
+  org_id: string;
+  order_id: string;
+  display_number: string;
+  contact_id: string;
+  conversation_id: string | null;
+  total: number;
+}
+
+export interface OrderShippedEvent extends TriggerEventBase {
+  event: 'order_shipped';
+  org_id: string;
+  order_id: string;
+  display_number: string;
+  contact_id: string;
+  conversation_id: string | null;
+  tracking_code: string | null;
+  carrier: string | null;
+}
+
 export type AnyTriggerEvent =
   | MessageReceivedEvent
   | DealCreatedEvent
   | DealStageChangedEvent
   | ContactCreatedEvent
-  | WhatsAppVerifiedEvent;
+  | WhatsAppVerifiedEvent
+  | CartAbandonedEvent
+  | CartRecoveredEvent
+  | OrderCreatedEvent
+  | OrderPaidEvent
+  | OrderShippedEvent;
 
 // ──────────────────────────────────────────────────────────
 // Log de execução
@@ -255,6 +312,11 @@ export const GENERATE_SCHEMA = {
         'whatsapp_verified',
         'task_overdue',
         'manual',
+        'cart_abandoned',
+        'cart_recovered',
+        'order_created',
+        'order_paid',
+        'order_shipped',
       ],
     },
     trigger_config: {
@@ -322,6 +384,11 @@ Triggers disponíveis:
 - whatsapp_verified: contato foi verificado como WhatsApp ativo. Use pra disparar boas-vindas, criar tarefa de primeiro contato, ou marcar tag.
 - task_overdue: tarefa atrasou. Config: task_type.
 - manual: dispara manualmente.
+- cart_abandoned: carrinho WhatsApp marcado como abandonado pelo scheduler. Use pra disparar mensagem de recuperação ({{cart.total}}, {{cart.items_count}}).
+- cart_recovered: cliente voltou e ressuscitou um carrinho abandoned. Use pra agradecer ou aplicar cupom.
+- order_created: novo pedido criado a partir do carrinho. Use pra notificar agente, mover deal pra "fechado" ou pedir review.
+- order_paid: pagamento confirmado. Use pra enviar comprovante, criar tarefa de envio, mover deal.
+- order_shipped: pedido marcado como enviado. Use pra mandar tracking ({{order.tracking_code}}, {{order.carrier}}).
 
 Actions disponíveis (execute em ordem):
 - send_message: { type, text, channel_id? }. text suporta {{contact.name}}.
