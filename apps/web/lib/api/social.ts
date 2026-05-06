@@ -322,6 +322,61 @@ export interface TopPerformerRow {
   avg_engagement_rate: number;
 }
 
+// ─── Ad Boost types ────────────────────────────────
+
+export type BoostObjective =
+  | 'OUTCOME_AWARENESS' | 'OUTCOME_TRAFFIC' | 'OUTCOME_ENGAGEMENT'
+  | 'OUTCOME_LEADS' | 'OUTCOME_APP_PROMOTION' | 'OUTCOME_SALES';
+
+export type BoostStatus =
+  | 'draft' | 'reviewed' | 'sent_to_platform' | 'live'
+  | 'paused' | 'completed' | 'cancelled';
+
+export interface SocialAdBoostDraft {
+  id: string;
+  org_id: string;
+  content_id: string;
+  brand_id: string | null;
+  signal_id: string | null;
+  platform: 'meta' | 'google' | 'tiktok_ads';
+  objective: BoostObjective;
+  daily_budget_cents: number;
+  duration_days: number;
+  target_locations: string[];
+  target_age_min: number | null;
+  target_age_max: number | null;
+  target_genders: string[];
+  target_interests: string[];
+  target_audience_summary: string | null;
+  ai_budget_rationale: string | null;
+  ai_audience_rationale: string | null;
+  ai_copy_suggestions: Array<{ caption: string; reason: string }>;
+  status: BoostStatus;
+  external_campaign_id: string | null;
+  external_account_id: string | null;
+  meta_deep_link: string | null;
+  reviewed_at: string | null;
+  sent_to_platform_at: string | null;
+  reviewed_by: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BoostSuggestion {
+  daily_budget_cents: number;
+  budget_rationale: string;
+  duration_days: number;
+  objective: BoostObjective;
+  audience_summary: string;
+  age_min: number;
+  age_max: number;
+  genders: string[];
+  interests: string[];
+  locations: string[];
+  copy_suggestions: Array<{ caption: string; reason: string }>;
+}
+
 // ─── API ──────────────────────────────────────────
 
 export interface ContentListFilters {
@@ -499,6 +554,35 @@ export const socialApi = {
       api.post<void>(`/social/signals/${id}/acknowledge`, {}),
     detect: () =>
       api.post<{ created: number }>('/social/signals/detect', {}),
+  },
+
+  // Ad Boost — promover post como ad
+  boost: {
+    suggest: (contentId: string, signal?: AbortSignal) =>
+      api.get<BoostSuggestion>(`/social/contents/${contentId}/boost-suggestion`, {
+        signal,
+      }),
+    createDraft: (contentId: string, signalId?: string) =>
+      api.post<SocialAdBoostDraft>(
+        `/social/contents/${contentId}/boost-draft`,
+        signalId ? { signal_id: signalId } : {},
+      ),
+    listDrafts: (
+      params: { status?: BoostStatus; content_id?: string } = {},
+      signal?: AbortSignal,
+    ) =>
+      api.get<SocialAdBoostDraft[]>('/social/boost-drafts', {
+        query: params,
+        signal,
+      }),
+    getDraft: (id: string, signal?: AbortSignal) =>
+      api.get<SocialAdBoostDraft>(`/social/boost-drafts/${id}`, { signal }),
+    updateDraft: (id: string, body: Partial<SocialAdBoostDraft>) =>
+      api.patch<SocialAdBoostDraft>(`/social/boost-drafts/${id}`, body),
+    markSent: (id: string) =>
+      api.post<SocialAdBoostDraft>(`/social/boost-drafts/${id}/sent`, {}),
+    deleteDraft: (id: string) =>
+      api.delete<void>(`/social/boost-drafts/${id}`),
   },
 
   // Generation atalhos (cria + gera num call só)

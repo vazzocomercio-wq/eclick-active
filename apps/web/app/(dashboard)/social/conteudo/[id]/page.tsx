@@ -16,11 +16,13 @@ import {
   Send,
   AlertTriangle,
   ExternalLink,
+  Megaphone,
 } from 'lucide-react';
 import { useContent, useBrand } from '@/hooks/use-social';
 import { socialApi } from '@/lib/api/social';
 import { InstagramMockup } from '@/components/social/instagram-mockup';
 import { StatusBadge, PillarBadge, TypeBadge } from '@/components/social/social-badges';
+import { BoostDialog } from '@/components/social/boost-dialog';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -41,6 +43,7 @@ export default function ContentDetailPage() {
   const [showReject, setShowReject] = useState(false);
   const [rewriteInstr, setRewriteInstr] = useState('');
   const [suggestions, setSuggestions] = useState<string[] | null>(null);
+  const [boostOpen, setBoostOpen] = useState(false);
 
   if (loading || !content) {
     return (
@@ -217,6 +220,17 @@ export default function ContentDetailPage() {
             >
               <Send className="h-3.5 w-3.5" />
               <span className="hidden md:inline ml-1">Publicar agora</span>
+            </Button>
+          )}
+          {content.status === 'published' && (
+            <Button
+              size="sm"
+              className="bg-pink-600 hover:bg-pink-700"
+              onClick={() => setBoostOpen(true)}
+              disabled={busy}
+            >
+              <Megaphone className="h-3.5 w-3.5" />
+              <span className="hidden md:inline ml-1">Promover como ad</span>
             </Button>
           )}
           <Button size="sm" variant="outline" onClick={exportContent}>
@@ -447,6 +461,13 @@ export default function ContentDetailPage() {
           </div>
         </aside>
       </div>
+
+      {boostOpen && (
+        <BoostDialog
+          contentId={content.id}
+          onClose={() => setBoostOpen(false)}
+        />
+      )}
 
       {/* Modal Rejeitar */}
       {showReject && (

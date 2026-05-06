@@ -25,6 +25,7 @@ import { InstagramInsightsService } from './analytics/instagram-insights.service
 import { SocialMetricsService } from './analytics/social-metrics.service';
 import { SocialSignalsService } from './analytics/social-signals.service';
 import { SocialMetricsWorkerService } from './analytics/social-metrics-worker.service';
+import { SocialAdBoostService } from './boost/social-ad-boost.service';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { SocialMetricsWorkerService } from './analytics/social-metrics-worker.se
     SocialMetricsService,
     SocialSignalsService,
     SocialMetricsWorkerService,
+    SocialAdBoostService,
   ],
   exports: [
     SocialBrandsService,
@@ -65,6 +67,7 @@ import { SocialMetricsWorkerService } from './analytics/social-metrics-worker.se
     SocialChannelCredentialsService,
     SocialMetricsService,
     SocialSignalsService,
+    SocialAdBoostService,
   ],
 })
 export class SocialModule {}

@@ -23,7 +23,9 @@ import { SocialChannelCredentialsService } from './publishing/social-channel-cre
 import { SocialPublishingService } from './publishing/social-publishing.service';
 import { SocialMetricsService } from './analytics/social-metrics.service';
 import { SocialSignalsService } from './analytics/social-signals.service';
+import { SocialAdBoostService } from './boost/social-ad-boost.service';
 import type { PublishingChannel } from './publishing/publishing.types';
+import type { BoostStatus, SocialAdBoostDraft } from './boost/social-ad-boost.types';
 import type { CreateBrandDto, UpdateBrandDto } from './dto/brand.dto';
 import type {
   CreateCalendarDto,
@@ -54,6 +56,7 @@ export class SocialController {
     private readonly publishing: SocialPublishingService,
     private readonly metrics: SocialMetricsService,
     private readonly signals: SocialSignalsService,
+    private readonly boost: SocialAdBoostService,
   ) {}
 
   // ─── Brands ─────────────────────────────────────
@@ -417,6 +420,61 @@ export class SocialController {
   @Post('signals/detect')
   manualDetect(@CurrentUser() user: AuthUser) {
     return this.signals.detectAll(user.org_id);
+  }
+
+  // ─── Ad Boost ────────────────────────────────────
+
+  @Get('contents/:id/boost-suggestion')
+  boostSuggestion(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.boost.suggestBoost(user.org_id, id);
+  }
+
+  @Post('contents/:id/boost-draft')
+  createBoostDraft(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: { signal_id?: string },
+  ) {
+    return this.boost.createDraft(user.org_id, id, {
+      signal_id: body?.signal_id,
+      user_id: user.id,
+    });
+  }
+
+  @Get('boost-drafts')
+  listBoostDrafts(
+    @CurrentUser() user: AuthUser,
+    @Query('status') status?: string,
+    @Query('content_id') contentId?: string,
+  ) {
+    return this.boost.listDrafts(user.org_id, {
+      status: status as BoostStatus | undefined,
+      content_id: contentId,
+    });
+  }
+
+  @Get('boost-drafts/:id')
+  getBoostDraft(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.boost.findById(user.org_id, id);
+  }
+
+  @Patch('boost-drafts/:id')
+  updateBoostDraft(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: Partial<SocialAdBoostDraft>,
+  ) {
+    return this.boost.updateDraft(user.org_id, id, body);
+  }
+
+  @Post('boost-drafts/:id/sent')
+  markBoostSent(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.boost.markSentToPlatform(user.org_id, id);
+  }
+
+  @Delete('boost-drafts/:id')
+  deleteBoostDraft(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.boost.deleteDraft(user.org_id, id);
   }
 
   // Note: assets endpoints (CRUD da biblioteca) ficam pra próxima fase.

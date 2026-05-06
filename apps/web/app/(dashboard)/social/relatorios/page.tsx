@@ -15,6 +15,7 @@ import {
   Bookmark,
   AlertTriangle,
   CheckCircle2,
+  Megaphone,
 } from 'lucide-react';
 import {
   socialApi,
@@ -28,6 +29,7 @@ import { useBrands } from '@/hooks/use-social';
 import { Button } from '@/components/ui/button';
 import { ContentCard } from '@/components/social/content-card';
 import { socialLabels } from '@/components/social/social-badges';
+import { BoostDialog } from '@/components/social/boost-dialog';
 import { cn } from '@/lib/utils';
 
 export default function SocialReportsPage() {
@@ -41,6 +43,7 @@ export default function SocialReportsPage() {
   const [byHour, setByHour] = useState<HourReportRow[]>([]);
   const [topPerformers, setTopPerformers] = useState<TopPerformerRow[]>([]);
   const [signals, setSignals] = useState<SocialSignal[]>([]);
+  const [boostTarget, setBoostTarget] = useState<{ contentId: string; signalId?: string } | null>(null);
 
   const params = brandId === 'all' ? { days } : { days, brand_id: brandId };
 
@@ -192,18 +195,43 @@ export default function SocialReportsPage() {
                       </p>
                     )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => ackSignal(s.id)}
-                    className="rounded p-0.5 text-muted-foreground hover:text-foreground"
-                    title="Marcar como visto"
-                  >
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                  </button>
+                  <div className="flex flex-col items-end gap-1">
+                    {s.signal_type === 'hit_post' && s.content_id && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setBoostTarget({
+                            contentId: s.content_id as string,
+                            signalId: s.id,
+                          })
+                        }
+                        className="inline-flex items-center gap-1 rounded-md border border-pink-500/40 bg-pink-500/10 px-1.5 py-0.5 text-[10px] font-medium text-pink-700 dark:text-pink-300 hover:bg-pink-500/20"
+                      >
+                        <Megaphone className="h-3 w-3" />
+                        Promover
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => ackSignal(s.id)}
+                      className="rounded p-0.5 text-muted-foreground hover:text-foreground"
+                      title="Marcar como visto"
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
           </section>
+        )}
+
+        {boostTarget && (
+          <BoostDialog
+            contentId={boostTarget.contentId}
+            signalId={boostTarget.signalId}
+            onClose={() => setBoostTarget(null)}
+          />
         )}
 
         {/* KPIs principais */}
