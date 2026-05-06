@@ -91,7 +91,7 @@ Usuário confirmou ciência da pendência (sessão 2026-05-06).
 ```
 9661132  feat(automation-bridge): A3 SaaS↔Active receivers + digest worker
 7c8b2f5  fix(channels): whatsapp_free + status='active' em bridge e B6
-[novo]   fix(automation-bridge): drop FK org_id (referência LÓGICA cross-project)
+1db3656  fix(automation-bridge): drop FK org_id (referência LÓGICA cross-project)
 ```
 
 ### Bugfix pós-deploy — FK física em `automation_executions.org_id`
