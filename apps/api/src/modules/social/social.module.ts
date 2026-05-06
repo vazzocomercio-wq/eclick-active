@@ -21,6 +21,10 @@ import { SocialPublishingService } from './publishing/social-publishing.service'
 import { SocialPublisherWorkerService } from './publishing/social-publisher-worker.service';
 import { InstagramGraphProvider } from './publishing/providers/instagram-graph.provider';
 import { TikTokBusinessProvider } from './publishing/providers/tiktok.provider';
+import { InstagramInsightsService } from './analytics/instagram-insights.service';
+import { SocialMetricsService } from './analytics/social-metrics.service';
+import { SocialSignalsService } from './analytics/social-signals.service';
+import { SocialMetricsWorkerService } from './analytics/social-metrics-worker.service';
 
 @Module({
   imports: [
@@ -48,6 +52,10 @@ import { TikTokBusinessProvider } from './publishing/providers/tiktok.provider';
     SocialPublisherWorkerService,
     InstagramGraphProvider,
     TikTokBusinessProvider,
+    InstagramInsightsService,
+    SocialMetricsService,
+    SocialSignalsService,
+    SocialMetricsWorkerService,
   ],
   exports: [
     SocialBrandsService,
@@ -55,6 +63,8 @@ import { TikTokBusinessProvider } from './publishing/providers/tiktok.provider';
     SocialAiGeneratorService,
     SocialPublishingService,
     SocialChannelCredentialsService,
+    SocialMetricsService,
+    SocialSignalsService,
   ],
 })
 export class SocialModule {}

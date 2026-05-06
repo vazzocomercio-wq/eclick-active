@@ -21,6 +21,8 @@ import { SocialAiGeneratorService } from './social-ai/social-ai-generator.servic
 import { SocialExportService } from './social-export.service';
 import { SocialChannelCredentialsService } from './publishing/social-channel-credentials.service';
 import { SocialPublishingService } from './publishing/social-publishing.service';
+import { SocialMetricsService } from './analytics/social-metrics.service';
+import { SocialSignalsService } from './analytics/social-signals.service';
 import type { PublishingChannel } from './publishing/publishing.types';
 import type { CreateBrandDto, UpdateBrandDto } from './dto/brand.dto';
 import type {
@@ -50,6 +52,8 @@ export class SocialController {
     private readonly exporter: SocialExportService,
     private readonly creds: SocialChannelCredentialsService,
     private readonly publishing: SocialPublishingService,
+    private readonly metrics: SocialMetricsService,
+    private readonly signals: SocialSignalsService,
   ) {}
 
   // ─── Brands ─────────────────────────────────────
@@ -342,6 +346,77 @@ export class SocialController {
   @Get('contents/:id/publish-attempts')
   publishAttempts(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.publishing.listAttempts(user.org_id, id);
+  }
+
+  // ─── Analytics — reports ─────────────────────────
+
+  @Get('reports/summary')
+  reportSummary(
+    @CurrentUser() user: AuthUser,
+    @Query('days', new DefaultValuePipe(30), ParseIntPipe) days?: number,
+    @Query('brand_id') brandId?: string,
+  ) {
+    return this.metrics.getSummary(user.org_id, days ?? 30, brandId);
+  }
+
+  @Get('reports/by-pillar')
+  reportByPillar(
+    @CurrentUser() user: AuthUser,
+    @Query('days', new DefaultValuePipe(30), ParseIntPipe) days?: number,
+    @Query('brand_id') brandId?: string,
+  ) {
+    return this.metrics.getByPillar(user.org_id, days ?? 30, brandId);
+  }
+
+  @Get('reports/by-hour')
+  reportByHour(
+    @CurrentUser() user: AuthUser,
+    @Query('days', new DefaultValuePipe(30), ParseIntPipe) days?: number,
+    @Query('brand_id') brandId?: string,
+  ) {
+    return this.metrics.getByHour(user.org_id, days ?? 30, brandId);
+  }
+
+  @Get('reports/top-performers')
+  reportTopPerformers(
+    @CurrentUser() user: AuthUser,
+    @Query('days', new DefaultValuePipe(30), ParseIntPipe) days?: number,
+    @Query('brand_id') brandId?: string,
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit?: number,
+  ) {
+    return this.metrics.getTopPerformers(user.org_id, days ?? 30, brandId, limit ?? 10);
+  }
+
+  @Get('contents/:id/metrics')
+  contentMetrics(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.metrics.getMetricsForContent(user.org_id, id);
+  }
+
+  // ─── Analytics — signals ─────────────────────────
+
+  @Get('signals')
+  listSignals(
+    @CurrentUser() user: AuthUser,
+    @Query('only_unacked') onlyUnacked?: string,
+  ) {
+    return this.signals.list(user.org_id, onlyUnacked === 'true');
+  }
+
+  @Post('signals/:id/acknowledge')
+  ackSignal(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.signals.acknowledge(user.org_id, id, user.id);
+  }
+
+  // ─── Analytics — manual trigger ──────────────────
+
+  @Post('reports/refresh')
+  manualRefresh(@CurrentUser() user: AuthUser) {
+    return this.metrics.refreshAllRecent(user.org_id, 30, 100);
+  }
+
+  @Post('signals/detect')
+  manualDetect(@CurrentUser() user: AuthUser) {
+    return this.signals.detectAll(user.org_id);
   }
 
   // Note: assets endpoints (CRUD da biblioteca) ficam pra próxima fase.
