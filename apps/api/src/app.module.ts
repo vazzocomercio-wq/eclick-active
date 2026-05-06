@@ -25,6 +25,7 @@ import { FormsModule } from './modules/forms/forms.module';
 import { BusinessHoursModule } from './modules/business-hours/business-hours.module';
 import { ChannelsModule } from './modules/channels/channels.module';
 import { ContactsModule } from './modules/contacts/contacts.module';
+import { ContentCalendarModule } from './modules/content-calendar/content-calendar.module';
 import { ConversationsModule } from './modules/conversations/conversations.module';
 import { CopilotModule } from './modules/copilot/copilot.module';
 import { CustomFieldsModule } from './modules/custom-fields/custom-fields.module';
@@ -93,6 +94,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     SocialModule,
     AgencyModule,
     WhatsAppCommerceModule,
+    ContentCalendarModule,
   ],
   controllers: [AppController],
 })

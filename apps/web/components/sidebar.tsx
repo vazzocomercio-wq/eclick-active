@@ -10,6 +10,7 @@ import {
   Bot,
   Calendar,
   CalendarClock,
+  CalendarRange,
   CheckSquare,
   ChevronLeft,
   FileText,
@@ -54,6 +55,7 @@ const PRIMARY_NAV: NavItem[] = [
   { href: '/agenda', icon: CalendarClock, label: 'Agenda', tag: 'AI' },
   { href: '/copiloto', icon: Bot, label: 'Copiloto IA', tag: 'AI' },
   { href: '/automacoes', icon: Zap, label: 'Automações' },
+  { href: '/calendario-conteudo', icon: CalendarRange, label: 'Calendário de Conteúdo', tag: 'AI' },
   { href: '/formularios', icon: FileText, label: 'Formulários' },
   { href: '/paginas', icon: Layout, label: 'Páginas', tag: 'AI' },
   // Social AI badge é injetado via useSocialPendingCount
