@@ -8,7 +8,16 @@ export type CopilotToolName =
   | 'list_tasks'
   | 'get_agent_stats'
   | 'create_task'
-  | 'create_deal';
+  | 'create_deal'
+  | 'search_knowledge'
+  | 'search_live_sources'
+  | 'check_available_slots'
+  | 'schedule_appointment'
+  | 'send_scheduling_link'
+  | 'list_sac_tickets'
+  | 'get_sac_dashboard'
+  | 'get_sac_performance'
+  | 'check_order_status';
 
 export interface ToolCallRecord {
   tool: CopilotToolName;

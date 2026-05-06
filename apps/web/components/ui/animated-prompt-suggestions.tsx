@@ -132,6 +132,8 @@ function Chip({
   onClick?: (text: string) => void;
   compact: boolean;
 }) {
+  // Defensive: caller passou undefined no array? Skip esse chip silenciosamente.
+  if (!item) return null;
   const Icon = item.icon;
   const accent = item.accent ?? '#00E5FF';
   const label = item.label ?? item.text;
