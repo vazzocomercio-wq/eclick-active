@@ -17,6 +17,7 @@ import {
   Kanban,
   Layout,
   LayoutDashboard,
+  Building2,
   Megaphone,
   MessageSquare,
   Settings,
@@ -59,6 +60,7 @@ const PRIMARY_NAV: NavItem[] = [
   { href: '/social', icon: Megaphone, label: 'Social AI', tag: 'AI' },
   { href: '/conhecimento', icon: BookOpen, label: 'Conhecimento' },
   { href: '/relatorios', icon: BarChart3, label: 'Relatórios' },
+  { href: '/agencia', icon: Building2, label: 'Agência' },
   { href: '/equipe', icon: UserCog, label: 'Equipe' },
 ];
 

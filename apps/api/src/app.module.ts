@@ -7,6 +7,7 @@ import { PlaceholderModule } from './common/placeholder/placeholder.module';
 import { LlmModule } from './common/llm/llm.module';
 import { MessagingRealtimeModule } from './common/messaging-realtime/messaging-realtime.module';
 import { SlackModule } from './common/slack/slack.module';
+import { AgencyModule } from './modules/agency/agency.module';
 import { EventsModule } from './gateways/events.module';
 import { AdsModule } from './modules/ads/ads.module';
 import { AlertsModule } from './modules/alerts/alerts.module';
@@ -89,6 +90,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     BridgeModule,
     SacModule,
     SocialModule,
+    AgencyModule,
   ],
   controllers: [AppController],
 })
