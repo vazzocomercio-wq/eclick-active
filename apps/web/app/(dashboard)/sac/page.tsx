@@ -6,6 +6,7 @@ import { Headphones, Sparkles, RefreshCw, AlertTriangle, Clock, CheckCircle2, Sh
 import { useSacDashboard, useSacTickets } from '@/hooks/use-sac';
 import { sacApi } from '@/lib/api/sac';
 import { SacTicketsTable } from '@/components/sac/sac-tickets-table';
+import { DiagnosticoIaCard } from '@/components/sac/diagnostico-ia-card';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -133,14 +134,12 @@ export default function SacDashboardPage() {
 
         {/* Diagnóstico IA */}
         {analysis !== null && (
-          <div className="mt-4 rounded-lg border border-cyan-500/30 bg-cyan-500/5 p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-cyan-700 dark:text-cyan-300">
-              <Sparkles className="h-4 w-4" />
-              Diagnóstico IA — últimos 7 dias
-            </div>
-            <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap text-xs text-foreground/80">
-              {JSON.stringify(analysis, null, 2)}
-            </pre>
+          <div className="mt-4">
+            <DiagnosticoIaCard
+              analysis={analysis}
+              period="week"
+              onClose={() => setAnalysis(null)}
+            />
           </div>
         )}
 
@@ -163,9 +162,7 @@ export default function SacDashboardPage() {
           </Section>
 
           <Section title="Recomendações IA" icon={Sparkles}>
-            <div className="rounded-lg border border-dashed border-border bg-muted/20 p-3 text-sm text-muted-foreground">
-              Clique em &quot;Diagnóstico IA&quot; pra gerar recomendações personalizadas.
-            </div>
+            <RecomendacoesPreview analysis={analysis} onAnalyze={runAnalysis} loading={analyzing} />
           </Section>
         </div>
 
@@ -243,6 +240,47 @@ function EmptyHint({ children }: { children: React.ReactNode }) {
   return (
     <div className="rounded-lg border border-dashed border-border bg-muted/10 p-4 text-center text-xs text-muted-foreground">
       {children}
+    </div>
+  );
+}
+
+function RecomendacoesPreview({
+  analysis,
+  onAnalyze,
+  loading,
+}: {
+  analysis: unknown;
+  onAnalyze: () => void;
+  loading: boolean;
+}) {
+  // Tenta extrair recommendations do output
+  const recs = (() => {
+    if (!analysis || typeof analysis !== 'object') return null;
+    const r = (analysis as { recommendations?: unknown }).recommendations;
+    if (!Array.isArray(r)) return null;
+    return r.filter((x): x is string => typeof x === 'string').slice(0, 5);
+  })();
+
+  if (recs && recs.length > 0) {
+    return (
+      <ul className="flex flex-col gap-2 rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3 text-xs">
+        {recs.map((r, i) => (
+          <li key={i} className="flex gap-2 leading-relaxed text-foreground/85">
+            <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-cyan-500" />
+            <span>{r}</span>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-dashed border-border bg-muted/20 p-3 text-center text-sm text-muted-foreground">
+      <p className="mb-2 text-xs">Sem análise ainda</p>
+      <Button size="sm" variant="outline" onClick={onAnalyze} disabled={loading}>
+        <Sparkles className="h-3 w-3" />
+        <span className="ml-1">{loading ? 'Analisando…' : 'Gerar agora'}</span>
+      </Button>
     </div>
   );
 }

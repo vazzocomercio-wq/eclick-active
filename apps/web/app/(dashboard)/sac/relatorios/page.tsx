@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { BarChart3, Sparkles, Clock, CheckCircle2 } from 'lucide-react';
 import { useSacSlaStats, useSacDashboard } from '@/hooks/use-sac';
 import { sacApi } from '@/lib/api/sac';
+import { DiagnosticoIaCard } from '@/components/sac/diagnostico-ia-card';
 import { Button } from '@/components/ui/button';
 
 export default function SacReportsPage() {
@@ -95,15 +96,11 @@ export default function SacReportsPage() {
           </div>
 
           {analysis !== null && (
-            <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/5 p-4">
-              <h2 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-cyan-700 dark:text-cyan-300">
-                <Sparkles className="h-4 w-4" />
-                Diagnóstico IA
-              </h2>
-              <pre className="max-h-96 overflow-auto whitespace-pre-wrap text-xs text-foreground/80">
-                {JSON.stringify(analysis, null, 2)}
-              </pre>
-            </div>
+            <DiagnosticoIaCard
+              analysis={analysis}
+              period={days <= 7 ? 'week' : 'month'}
+              onClose={() => setAnalysis(null)}
+            />
           )}
         </div>
       </div>
