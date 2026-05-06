@@ -16,6 +16,11 @@ import { ImageGenerationService } from './image-generation/image-generation.serv
 import { CanvaImageProvider } from './image-generation/providers/canva.provider';
 import { OpenAIImageProvider } from './image-generation/providers/openai.provider';
 import { PlaceholderImageProvider } from './image-generation/providers/placeholder.provider';
+import { SocialChannelCredentialsService } from './publishing/social-channel-credentials.service';
+import { SocialPublishingService } from './publishing/social-publishing.service';
+import { SocialPublisherWorkerService } from './publishing/social-publisher-worker.service';
+import { InstagramGraphProvider } from './publishing/providers/instagram-graph.provider';
+import { TikTokBusinessProvider } from './publishing/providers/tiktok.provider';
 
 @Module({
   imports: [
@@ -38,11 +43,18 @@ import { PlaceholderImageProvider } from './image-generation/providers/placehold
     CanvaImageProvider,
     OpenAIImageProvider,
     PlaceholderImageProvider,
+    SocialChannelCredentialsService,
+    SocialPublishingService,
+    SocialPublisherWorkerService,
+    InstagramGraphProvider,
+    TikTokBusinessProvider,
   ],
   exports: [
     SocialBrandsService,
     SocialContentsService,
     SocialAiGeneratorService,
+    SocialPublishingService,
+    SocialChannelCredentialsService,
   ],
 })
 export class SocialModule {}

@@ -19,6 +19,9 @@ import { SocialCalendarsService } from './social-calendars.service';
 import { SocialContentsService } from './social-contents.service';
 import { SocialAiGeneratorService } from './social-ai/social-ai-generator.service';
 import { SocialExportService } from './social-export.service';
+import { SocialChannelCredentialsService } from './publishing/social-channel-credentials.service';
+import { SocialPublishingService } from './publishing/social-publishing.service';
+import type { PublishingChannel } from './publishing/publishing.types';
 import type { CreateBrandDto, UpdateBrandDto } from './dto/brand.dto';
 import type {
   CreateCalendarDto,
@@ -45,6 +48,8 @@ export class SocialController {
     private readonly contents: SocialContentsService,
     private readonly ai: SocialAiGeneratorService,
     private readonly exporter: SocialExportService,
+    private readonly creds: SocialChannelCredentialsService,
+    private readonly publishing: SocialPublishingService,
   ) {}
 
   // ─── Brands ─────────────────────────────────────
@@ -288,6 +293,55 @@ export class SocialController {
     @Body() dto: GenerateCarouselDto,
   ) {
     return this.ai.createAndGenerateCarousel(user.org_id, dto);
+  }
+
+  // ─── Publishing — credentials ───────────────────
+
+  @Get('credentials')
+  listCreds(@CurrentUser() user: AuthUser) {
+    return this.creds.list(user.org_id);
+  }
+
+  @Post('credentials')
+  saveCred(
+    @CurrentUser() user: AuthUser,
+    @Body()
+    dto: {
+      channel: PublishingChannel;
+      brand_id?: string;
+      external_account_id: string;
+      external_username?: string;
+      external_account_name?: string;
+      access_token: string;
+      refresh_token?: string;
+      expires_at?: string;
+      scopes?: string[];
+      metadata?: Record<string, unknown>;
+    },
+  ) {
+    return this.creds.saveCredential(user.org_id, dto);
+  }
+
+  @Delete('credentials/:id')
+  deleteCred(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.creds.delete(user.org_id, id);
+  }
+
+  @Post('credentials/:id/deactivate')
+  deactivateCred(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.creds.deactivate(user.org_id, id);
+  }
+
+  // ─── Publishing — publish actions ────────────────
+
+  @Post('contents/:id/publish-now')
+  publishNow(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.publishing.publishContent(user.org_id, id);
+  }
+
+  @Get('contents/:id/publish-attempts')
+  publishAttempts(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.publishing.listAttempts(user.org_id, id);
   }
 
   // Note: assets endpoints (CRUD da biblioteca) ficam pra próxima fase.

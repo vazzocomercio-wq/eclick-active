@@ -120,6 +120,10 @@ export interface SocialContent {
   ai_prompt: string | null;
   ai_generation_time_ms: number | null;
   published_at: string | null;
+  external_post_ids: Record<string, unknown>;
+  performance_metrics: Record<string, unknown>;
+  publish_attempts_count: number;
+  last_publish_error: string | null;
   metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -172,6 +176,61 @@ export interface ExportPackage {
 export interface ListResponse<T> {
   rows: T[];
   total: number;
+}
+
+// ─── Publishing types ─────────────────────────────
+
+export type PublishingChannel =
+  | 'instagram_business' | 'tiktok_business' | 'facebook_page';
+
+export interface SocialChannelCredential {
+  id: string;
+  org_id: string;
+  brand_id: string | null;
+  channel: PublishingChannel;
+  external_account_id: string;
+  external_username: string | null;
+  external_account_name: string | null;
+  expires_at: string | null;
+  scopes: string[];
+  metadata: Record<string, unknown>;
+  is_active: boolean;
+  last_validated_at: string | null;
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SocialPublishAttempt {
+  id: string;
+  org_id: string;
+  content_id: string;
+  channel: string;
+  credential_id: string | null;
+  status: 'pending' | 'success' | 'failed' | 'partial';
+  external_post_id: string | null;
+  external_post_url: string | null;
+  provider_response: Record<string, unknown>;
+  error_message: string | null;
+  error_code: string | null;
+  attempted_at: string;
+  completed_at: string | null;
+  duration_ms: number | null;
+}
+
+export interface PublishContentResult {
+  content_id: string;
+  outcomes: Array<{
+    channel: PublishingChannel;
+    result: {
+      success: boolean;
+      external_post_id?: string;
+      external_post_url?: string;
+      error_message?: string;
+      error_code?: string;
+    };
+  }>;
+  any_success: boolean;
 }
 
 // ─── API ──────────────────────────────────────────
@@ -291,6 +350,37 @@ export const socialApi = {
       api.post<{ suggestions: string[] }>(
         `/social/contents/${id}/suggest-improvements`,
         {},
+      ),
+  },
+
+  // Publishing — credenciais
+  credentials: {
+    list: (signal?: AbortSignal) =>
+      api.get<SocialChannelCredential[]>('/social/credentials', { signal }),
+    save: (body: {
+      channel: PublishingChannel;
+      brand_id?: string;
+      external_account_id: string;
+      external_username?: string;
+      external_account_name?: string;
+      access_token: string;
+      refresh_token?: string;
+      expires_at?: string;
+      scopes?: string[];
+    }) => api.post<SocialChannelCredential>('/social/credentials', body),
+    delete: (id: string) => api.delete<void>(`/social/credentials/${id}`),
+    deactivate: (id: string) =>
+      api.post<void>(`/social/credentials/${id}/deactivate`, {}),
+  },
+
+  // Publishing — actions
+  publish: {
+    now: (id: string) =>
+      api.post<PublishContentResult>(`/social/contents/${id}/publish-now`, {}),
+    attempts: (id: string, signal?: AbortSignal) =>
+      api.get<SocialPublishAttempt[]>(
+        `/social/contents/${id}/publish-attempts`,
+        { signal },
       ),
   },
 

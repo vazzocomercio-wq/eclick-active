@@ -128,6 +128,8 @@ export interface SocialContent {
   published_at: string | null;
   external_post_ids: Record<string, unknown>;
   performance_metrics: Record<string, unknown>;
+  publish_attempts_count: number;
+  last_publish_error: string | null;
   metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;

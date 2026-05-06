@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -13,14 +13,18 @@ import {
   Trash2,
   Download,
   RotateCw,
+  Send,
+  AlertTriangle,
+  ExternalLink,
 } from 'lucide-react';
 import { useContent, useBrand } from '@/hooks/use-social';
 import { socialApi } from '@/lib/api/social';
 import { InstagramMockup } from '@/components/social/instagram-mockup';
 import { StatusBadge, PillarBadge, TypeBadge } from '@/components/social/social-badges';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
-type Tab = 'content' | 'schedule' | 'ai' | 'versions';
+type Tab = 'content' | 'schedule' | 'publish' | 'ai' | 'versions';
 
 export default function ContentDetailPage() {
   const params = useParams<{ id: string }>();
@@ -140,6 +144,31 @@ export default function ContentDetailPage() {
     }
   };
 
+  const publishNow = async () => {
+    if (!id) return;
+    if (!confirm('Publicar agora nos canais selecionados? Isso é definitivo.')) return;
+    setBusy(true);
+    try {
+      const r = await socialApi.publish.now(id);
+      const successes = r.outcomes.filter((o) => o.result.success).length;
+      const failures = r.outcomes.filter((o) => !o.result.success);
+      if (successes > 0 && failures.length === 0) {
+        alert(`✅ Publicado em ${successes} canal(is)`);
+      } else if (successes > 0) {
+        alert(
+          `Parcial: ${successes} OK, ${failures.length} falhou:\n${failures.map((f) => `${f.channel}: ${f.result.error_message}`).join('\n')}`,
+        );
+      } else {
+        alert(
+          `❌ Falhou em todos:\n${failures.map((f) => `${f.channel}: ${f.result.error_message}`).join('\n')}`,
+        );
+      }
+      refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       <header className="flex flex-wrap items-center gap-2 border-b border-border bg-background px-4 py-2">
@@ -178,6 +207,17 @@ export default function ContentDetailPage() {
                 <span className="hidden md:inline ml-1">Rejeitar</span>
               </Button>
             </>
+          )}
+          {(content.status === 'approved' || content.status === 'scheduled') && (
+            <Button
+              size="sm"
+              className="bg-blue-600 hover:bg-blue-700"
+              onClick={publishNow}
+              disabled={busy}
+            >
+              <Send className="h-3.5 w-3.5" />
+              <span className="hidden md:inline ml-1">Publicar agora</span>
+            </Button>
           )}
           <Button size="sm" variant="outline" onClick={exportContent}>
             <Download className="h-3.5 w-3.5" />
@@ -219,6 +259,7 @@ export default function ContentDetailPage() {
               {([
                 ['content', 'Conteúdo'],
                 ['schedule', 'Agenda'],
+                ['publish', 'Publicação'],
                 ['ai', 'IA'],
                 ['versions', 'Versões'],
               ] as Array<[Tab, string]>).map(([k, l]) => (
@@ -396,6 +437,10 @@ export default function ContentDetailPage() {
               </div>
             )}
 
+            {tab === 'publish' && (
+              <PublishPanel contentId={content.id} content={content} />
+            )}
+
             {tab === 'versions' && (
               <VersionsPanel contentId={content.id} />
             )}
@@ -423,6 +468,134 @@ export default function ContentDetailPage() {
           </div>
         </Modal>
       )}
+    </div>
+  );
+}
+
+function PublishPanel({
+  contentId,
+  content,
+}: {
+  contentId: string;
+  content: { status: string; published_at: string | null; external_post_ids: Record<string, unknown>; last_publish_error: string | null; publish_attempts_count: number };
+}) {
+  const [attempts, setAttempts] = useState<
+    Array<{
+      id: string;
+      channel: string;
+      status: string;
+      external_post_id: string | null;
+      external_post_url: string | null;
+      error_message: string | null;
+      attempted_at: string;
+    }>
+  >([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const r = await socialApi.publish.attempts(contentId);
+        setAttempts(r);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [contentId]);
+
+  const externalIds = content.external_post_ids as Record<string, string>;
+
+  return (
+    <div className="flex flex-col gap-3 text-xs">
+      {/* Status atual */}
+      <div className="rounded-md border border-border bg-background p-2">
+        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+          Status
+        </p>
+        <p className="mt-1 text-sm font-medium">
+          {content.published_at
+            ? `Publicado em ${new Date(content.published_at).toLocaleString('pt-BR')}`
+            : content.status === 'failed'
+              ? 'Falha na publicação'
+              : 'Não publicado ainda'}
+        </p>
+        {content.last_publish_error && (
+          <div className="mt-2 flex items-start gap-1 rounded border border-red-500/30 bg-red-500/5 p-2 text-[11px] text-red-700 dark:text-red-300">
+            <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+            <span>{content.last_publish_error}</span>
+          </div>
+        )}
+        {Object.entries(externalIds).length > 0 && (
+          <div className="mt-2 flex flex-col gap-1">
+            {Object.entries(externalIds).map(([channel, postId]) => (
+              <p key={channel} className="text-[11px]">
+                <span className="text-muted-foreground">{channel}:</span>{' '}
+                <span className="font-mono">{String(postId)}</span>
+              </p>
+            ))}
+          </div>
+        )}
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          {content.publish_attempts_count} tentativa(s) totais
+        </p>
+      </div>
+
+      {/* Histórico de attempts */}
+      {loading ? (
+        <p className="text-muted-foreground">Carregando histórico…</p>
+      ) : attempts.length === 0 ? (
+        <p className="text-muted-foreground">Nenhuma tentativa de publicação ainda</p>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+            Histórico
+          </p>
+          {attempts.map((a) => (
+            <div
+              key={a.id}
+              className={cn(
+                'rounded-md border p-2',
+                a.status === 'success'
+                  ? 'border-emerald-500/30 bg-emerald-500/5'
+                  : 'border-red-500/30 bg-red-500/5',
+              )}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-medium">{a.channel}</span>
+                <span className="text-[10px] text-muted-foreground">
+                  {new Date(a.attempted_at).toLocaleString('pt-BR')}
+                </span>
+              </div>
+              {a.external_post_url ? (
+                <a
+                  href={a.external_post_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-1 inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+                >
+                  Ver no canal
+                  <ExternalLink className="h-2.5 w-2.5" />
+                </a>
+              ) : a.external_post_id ? (
+                <p className="mt-1 font-mono text-[10px]">{a.external_post_id}</p>
+              ) : null}
+              {a.error_message && (
+                <p className="mt-1 text-[10px] text-red-700 dark:text-red-300">
+                  {a.error_message}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="rounded border border-cyan-500/30 bg-cyan-500/5 p-2 text-[11px]">
+        💡 Pra publicar automático, conecte canais em{' '}
+        <Link href="/configuracoes/social" className="text-primary underline">
+          /configuracoes/social
+        </Link>
+        .
+      </div>
     </div>
   );
 }
