@@ -152,6 +152,19 @@ export interface SocialContentEventPayload {
   scheduled_for?: string;
 }
 
+// ── WhatsApp Commerce events ──
+export interface CartEventPayload {
+  cart_id: string;
+  contact_id: string;
+}
+
+export interface OrderEventPayload {
+  order_id: string;
+  display_number?: string;
+  contact_id: string;
+  total?: number;
+}
+
 export type EventName =
   | 'message:new'
   | 'message:updated'
@@ -179,7 +192,12 @@ export type EventName =
   | 'sac:sla-breached'
   | 'social:content-ready'
   | 'social:scheduled-soon'
-  | 'social:ready-to-publish';
+  | 'social:ready-to-publish'
+  | 'cart:abandoned'
+  | 'cart:converted'
+  | 'order:created'
+  | 'order:paid'
+  | 'order:shipped';
 
 export interface EventPayloadMap {
   'message:new': MessageNewPayload;
@@ -209,6 +227,11 @@ export interface EventPayloadMap {
   'social:content-ready': SocialContentEventPayload;
   'social:scheduled-soon': SocialContentEventPayload;
   'social:ready-to-publish': SocialContentEventPayload;
+  'cart:abandoned': CartEventPayload;
+  'cart:converted': CartEventPayload;
+  'order:created': OrderEventPayload;
+  'order:paid': OrderEventPayload;
+  'order:shipped': OrderEventPayload;
 }
 
 const ROOM_PREFIX = 'org';
