@@ -144,6 +144,14 @@ export interface SacSlaBreachedPayload {
   priority?: string;
 }
 
+// ── Social AI Studio events ──
+export interface SocialContentEventPayload {
+  content_id: string;
+  content_type?: string;
+  title?: string | null;
+  scheduled_for?: string;
+}
+
 export type EventName =
   | 'message:new'
   | 'message:updated'
@@ -168,7 +176,10 @@ export type EventName =
   | 'sac:ticket-reopened'
   | 'sac:ticket-escalated'
   | 'sac:preventive-created'
-  | 'sac:sla-breached';
+  | 'sac:sla-breached'
+  | 'social:content-ready'
+  | 'social:scheduled-soon'
+  | 'social:ready-to-publish';
 
 export interface EventPayloadMap {
   'message:new': MessageNewPayload;
@@ -195,6 +206,9 @@ export interface EventPayloadMap {
   'sac:ticket-escalated': SacTicketEventPayload;
   'sac:preventive-created': SacTicketEventPayload;
   'sac:sla-breached': SacSlaBreachedPayload;
+  'social:content-ready': SocialContentEventPayload;
+  'social:scheduled-soon': SocialContentEventPayload;
+  'social:ready-to-publish': SocialContentEventPayload;
 }
 
 const ROOM_PREFIX = 'org';

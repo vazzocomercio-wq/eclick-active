@@ -35,6 +35,7 @@ import { PipelinesModule } from './modules/pipelines/pipelines.module';
 import { ReEngagementModule } from './modules/re-engagement/re-engagement.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { SacModule } from './modules/sac/sac.module';
+import { SocialModule } from './modules/social/social.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { TagsModule } from './modules/tags/tags.module';
 import { TasksModule } from './modules/tasks/tasks.module';
@@ -85,6 +86,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     AlertsModule,
     BridgeModule,
     SacModule,
+    SocialModule,
   ],
   controllers: [AppController],
 })
