@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Megaphone, Sparkles, Plus, Calendar, Image as ImageIcon, ChevronRight, BarChart3 } from 'lucide-react';
+import { Megaphone, Sparkles, Plus, Calendar, Image as ImageIcon, ChevronRight, BarChart3, GitCompareArrows } from 'lucide-react';
 import { useSocialDashboard, useContents, useBrands } from '@/hooks/use-social';
 import { ContentCard } from '@/components/social/content-card';
 import { Button } from '@/components/ui/button';
@@ -54,6 +54,14 @@ export default function SocialDashboardPage() {
               <span className="hidden md:inline ml-1">Relatórios</span>
             </Link>
           </Button>
+          {brands.length > 1 && (
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/social/comparativo">
+                <GitCompareArrows className="h-3.5 w-3.5" />
+                <span className="hidden md:inline ml-1">Comparativo</span>
+              </Link>
+            </Button>
+          )}
           <Button size="sm" asChild>
             <Link href="/social/criar">
               <Sparkles className="h-3.5 w-3.5" />
