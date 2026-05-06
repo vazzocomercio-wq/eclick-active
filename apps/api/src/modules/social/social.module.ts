@@ -29,6 +29,9 @@ import { SocialMetricsWorkerService } from './analytics/social-metrics-worker.se
 import { SocialHashtagsService } from './analytics/social-hashtags.service';
 import { SocialCompetitorService } from './analytics/social-competitor.service';
 import { SocialAbTestService } from './ab-test/social-ab-test.service';
+import { SocialApprovalService } from './approval/social-approval.service';
+import { SocialApprovalController } from './approval/social-approval.controller';
+import { SocialApprovalPublicController } from './approval/social-approval-public.controller';
 import { SocialAdBoostService } from './boost/social-ad-boost.service';
 import { AlertsModule } from '../alerts/alerts.module';
 import { ChannelsModule as ChannelDispatcherModule } from '../../common/channels/channels.module';
@@ -46,7 +49,11 @@ import { SlackModule } from '../../common/slack/slack.module';
     ChannelDispatcherModule,
     SlackModule,
   ],
-  controllers: [SocialController],
+  controllers: [
+    SocialController,
+    SocialApprovalController,
+    SocialApprovalPublicController,
+  ],
   providers: [
     SocialBrandsService,
     SocialCalendarsService,
@@ -71,6 +78,7 @@ import { SlackModule } from '../../common/slack/slack.module';
     SocialHashtagsService,
     SocialCompetitorService,
     SocialAbTestService,
+    SocialApprovalService,
     SocialAdBoostService,
   ],
   exports: [
