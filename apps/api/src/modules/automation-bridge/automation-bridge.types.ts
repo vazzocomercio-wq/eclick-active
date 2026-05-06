@@ -17,6 +17,12 @@ export type CartSegment =
   | 'abandoned_48h'
   | 'abandoned_7d';
 
+export type BroadcastSegment =
+  | 'todos'
+  | 'compradores'
+  | 'interessados'
+  | 'inativos';
+
 export type ExecutionType =
   | 'whatsapp_notify_lojista'
   | 'cart_recovery_send'
@@ -65,6 +71,34 @@ export interface TriggerCartRecoveryResult {
   skipped: number;
   errors: number;
   /** IDs das rows em automation_executions criadas. */
+  execution_ids: string[];
+}
+
+export interface SendBroadcastInput {
+  organization_id: string;
+  /** Texto pronto da mensagem — IA do SaaS já formatou. */
+  message: string;
+  target_segment: BroadcastSegment;
+  include_image?: boolean;
+  image_url?: string;
+  include_link?: boolean;
+  link_url?: string;
+  /** social_content.id (FK lógica cross-project, sem constraint física). */
+  source_content_id?: string;
+  rate_limit_ms?: number;
+  /**
+   * Permite audiência > 1000. Default false — recusa pra evitar spam
+   * acidental e ban do número WhatsApp.
+   */
+  force_large_audience?: boolean;
+}
+
+export interface SendBroadcastResult {
+  ok: true;
+  dispatched: number;
+  skipped: number;
+  errors: number;
+  audience_size: number;
   execution_ids: string[];
 }
 

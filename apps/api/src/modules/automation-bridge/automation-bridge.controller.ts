@@ -11,6 +11,8 @@ import { AutomationBridgeGuard } from './automation-bridge.guard';
 import type {
   NotifyLojistaInput,
   NotifyLojistaResult,
+  SendBroadcastInput,
+  SendBroadcastResult,
   TriggerCartRecoveryInput,
   TriggerCartRecoveryResult,
 } from './automation-bridge.types';
@@ -72,5 +74,34 @@ export class AutomationBridgeController {
     @Body() body: TriggerCartRecoveryInput,
   ): Promise<TriggerCartRecoveryResult> {
     return this.service.triggerCartRecovery(body);
+  }
+
+  /**
+   * POST /commerce/automation-bridge/send-broadcast
+   *
+   * Dispara WhatsApp Broadcast pra audiência segmentada — chamado pelo
+   * módulo Conteúdo Social do SaaS (Onda 3 / S1) quando lojista clica
+   * "Publicar agora" numa peça `whatsapp_broadcast`.
+   *
+   * Body:
+   *   organization_id: string
+   *   message: string                                          (texto pronto)
+   *   target_segment: todos|compradores|interessados|inativos
+   *   include_image?: boolean
+   *   image_url?: string                                       (se include_image)
+   *   include_link?: boolean
+   *   link_url?: string                                        (se include_link)
+   *   source_content_id?: string                               (social_content.id)
+   *   rate_limit_ms?: number                                   (default 3000, min 1000)
+   *   force_large_audience?: boolean                           (default false; necessário pra >1000)
+   *
+   * Retorna { ok, dispatched, skipped, errors, audience_size, execution_ids }
+   */
+  @Post('send-broadcast')
+  @HttpCode(HttpStatus.OK)
+  sendBroadcast(
+    @Body() body: SendBroadcastInput,
+  ): Promise<SendBroadcastResult> {
+    return this.service.sendBroadcast(body);
   }
 }

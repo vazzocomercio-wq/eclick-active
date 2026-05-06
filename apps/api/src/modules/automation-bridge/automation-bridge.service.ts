@@ -10,11 +10,14 @@ import { ChannelDispatcherService } from '../../common/channels/channel-dispatch
 import type {
   AutomationExecutionRow,
   AutomationSeverity,
+  BroadcastSegment,
   CartSegment,
   ExecutionType,
   NotifyLojistaInput,
   NotifyLojistaResult,
   OrgAutomationBridgeSettings,
+  SendBroadcastInput,
+  SendBroadcastResult,
   TriggerCartRecoveryInput,
   TriggerCartRecoveryResult,
 } from './automation-bridge.types';
@@ -39,6 +42,22 @@ const SEGMENT_THRESHOLDS_HOURS: Record<CartSegment, [number, number]> = {
 
 const DEFAULT_RATE_LIMIT_MS = 3000;
 const MAX_CART_BATCH = 500;
+
+// Broadcast safety knobs
+const BROADCAST_MIN_RATE_MS = 1000;
+const BROADCAST_LARGE_AUDIENCE = 1000;
+const BROADCAST_TODOS_WARN = 500;
+const BROADCAST_HARD_LIMIT = 10_000;
+const BROADCAST_PLACEHOLDER = '[LINK DO PRODUTO]';
+
+// Pedido "concretizado" no Active = whatsapp_orders já avançado de pending/cancelled
+const BUYER_ORDER_STATUSES = ['confirmed', 'processing', 'shipped', 'delivered'];
+
+interface AudienceContact {
+  id: string;
+  phone: string | null;
+  channel_profiles: Record<string, unknown> | null;
+}
 
 /**
  * Service do Automation Bridge — recebe chamadas do SaaS e executa via
@@ -492,6 +511,296 @@ export class AutomationBridgeService {
   }
 
   // ────────────────────────────────────────────
+  // 3) WhatsApp Broadcast (Onda 3 / S1 — bridge SaaS Conteúdo Social)
+  // ────────────────────────────────────────────
+
+  async sendBroadcast(
+    input: SendBroadcastInput,
+  ): Promise<SendBroadcastResult> {
+    const orgId = input.organization_id;
+
+    // Validações de input
+    const message = (input.message ?? '').trim();
+    if (!message) {
+      throw new BadRequestException('message é obrigatório');
+    }
+    if (input.include_image && !input.image_url) {
+      throw new BadRequestException(
+        'include_image=true requer image_url',
+      );
+    }
+    if (input.include_link && !input.link_url) {
+      throw new BadRequestException(
+        'include_link=true requer link_url',
+      );
+    }
+
+    const rateLimit = Math.max(
+      input.rate_limit_ms ?? DEFAULT_RATE_LIMIT_MS,
+      BROADCAST_MIN_RATE_MS,
+    );
+
+    // Resolve audiência e checa limites
+    const audience = await this.resolveBroadcastAudience(
+      orgId,
+      input.target_segment,
+    );
+
+    if (audience.length === 0) {
+      return {
+        ok: true,
+        dispatched: 0,
+        skipped: 0,
+        errors: 0,
+        audience_size: 0,
+        execution_ids: [],
+      };
+    }
+
+    if (
+      audience.length > BROADCAST_LARGE_AUDIENCE &&
+      !input.force_large_audience
+    ) {
+      throw new BadRequestException(
+        `Audiência ${audience.length} excede ${BROADCAST_LARGE_AUDIENCE}. ` +
+          `Inclua force_large_audience:true pra confirmar (cuidado: pode causar ban do WhatsApp).`,
+      );
+    }
+    if (
+      input.target_segment === 'todos' &&
+      audience.length > BROADCAST_TODOS_WARN
+    ) {
+      this.log.warn(
+        `[broadcast] segment=todos org=${orgId} audience=${audience.length} ` +
+          `(>${BROADCAST_TODOS_WARN}) — risco de ban WhatsApp`,
+      );
+    }
+
+    const finalMessage = buildBroadcastMessage(input, message);
+    const isImage = !!(input.include_image && input.image_url);
+
+    // Insere todas as execuções como pending — audit trail completo mesmo
+    // se crashar no meio do dispatch.
+    const executionIds: string[] = [];
+    for (const c of audience) {
+      const exec = await this.insertExecution({
+        org_id: orgId,
+        execution_type: 'whatsapp_broadcast',
+        severity: null,
+        source_action_id: input.source_content_id ?? null,
+        target_ref: c.phone ?? c.id,
+        payload: {
+          source_content_id: input.source_content_id ?? null,
+          target_segment: input.target_segment,
+          message_preview: finalMessage.slice(0, 200),
+          has_image: isImage,
+          has_link: !!input.include_link,
+        },
+      });
+      executionIds.push(exec.id);
+    }
+
+    let dispatched = 0;
+    let skipped = 0;
+    let errors = 0;
+
+    // Dispatch sequencial respeitando rate limit
+    for (let i = 0; i < audience.length; i++) {
+      const contact = audience[i]!;
+      const execId = executionIds[i]!;
+
+      const outcome = await this.deliverBroadcast(
+        orgId,
+        execId,
+        contact,
+        finalMessage,
+        isImage,
+        input.image_url,
+      );
+      if (outcome === 'sent') dispatched++;
+      else if (outcome === 'skipped') skipped++;
+      else errors++;
+
+      if (rateLimit > 0 && i < audience.length - 1) {
+        await sleep(rateLimit);
+      }
+    }
+
+    return {
+      ok: true,
+      dispatched,
+      skipped,
+      errors,
+      audience_size: audience.length,
+      execution_ids: executionIds,
+    };
+  }
+
+  private async deliverBroadcast(
+    orgId: string,
+    executionId: string,
+    contact: AudienceContact,
+    body: string,
+    isImage: boolean,
+    imageUrl: string | undefined,
+  ): Promise<'sent' | 'skipped' | 'failed'> {
+    try {
+      const channelId = await this.resolveContactWhatsAppChannel(
+        orgId,
+        contact.id,
+      );
+      if (!channelId) {
+        await this.markExecution(executionId, {
+          status: 'skipped',
+          error_message: 'Contato sem canal WhatsApp ativo',
+        });
+        return 'skipped';
+      }
+
+      const result = await this.dispatcher.send({
+        org_id: orgId,
+        channel_id: channelId,
+        contact_id: contact.id,
+        content_type: isImage ? 'image' : 'text',
+        content: isImage
+          ? { url: imageUrl!, caption: body }
+          : { body },
+      });
+
+      await this.markExecution(executionId, {
+        status: 'sent',
+        result: {
+          channel_message_id: result.channel_message_id,
+          status: result.status,
+        },
+      });
+      return 'sent';
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.log.warn(`broadcast falhou exec=${executionId}: ${msg}`);
+      await this.markExecution(executionId, {
+        status: 'failed',
+        error_message: msg.slice(0, 500),
+      });
+      return 'failed';
+    }
+  }
+
+  /**
+   * Resolve a audiência do broadcast filtrando por segmento. Retorna
+   * apenas contacts com `opted_out=false` e com algum identificador
+   * WhatsApp (phone). RLS é segunda camada.
+   */
+  private async resolveBroadcastAudience(
+    orgId: string,
+    segment: BroadcastSegment,
+  ): Promise<AudienceContact[]> {
+    const fetchByIds = async (
+      ids?: string[],
+    ): Promise<AudienceContact[]> => {
+      if (ids && ids.length === 0) return [];
+      let q = this.supabase.adminClient
+        .from('contacts')
+        .select('id, phone, channel_profiles')
+        .eq('org_id', orgId)
+        .eq('opted_out', false)
+        .not('phone', 'is', null);
+      if (ids) q = q.in('id', ids);
+      const { data, error } = await q.limit(BROADCAST_HARD_LIMIT);
+      if (error) {
+        throw new InternalServerErrorException(
+          `Audience query falhou: ${error.message}`,
+        );
+      }
+      return (data ?? []) as AudienceContact[];
+    };
+
+    const fetchBuyerIds = async (): Promise<Set<string>> => {
+      const { data } = await this.supabase.adminClient
+        .from('whatsapp_orders')
+        .select('contact_id')
+        .eq('org_id', orgId)
+        .or(
+          `payment_status.eq.paid,status.in.(${BUYER_ORDER_STATUSES.join(',')})`,
+        )
+        .limit(BROADCAST_HARD_LIMIT);
+      const rows = (data ?? []) as Array<{ contact_id: string }>;
+      return new Set(rows.map((r) => r.contact_id));
+    };
+
+    if (segment === 'todos') {
+      return fetchByIds();
+    }
+
+    if (segment === 'compradores') {
+      const ids = [...(await fetchBuyerIds())];
+      return fetchByIds(ids);
+    }
+
+    if (segment === 'interessados') {
+      const since30d = new Date(
+        Date.now() - 30 * 24 * 3600_000,
+      ).toISOString();
+      const { data: convs } = await this.supabase.adminClient
+        .from('conversations')
+        .select('contact_id')
+        .eq('org_id', orgId)
+        .gte('last_message_at', since30d)
+        .not('contact_id', 'is', null)
+        .limit(BROADCAST_HARD_LIMIT);
+      const recent = new Set(
+        ((convs ?? []) as Array<{ contact_id: string }>).map(
+          (r) => r.contact_id,
+        ),
+      );
+      const buyers = await fetchBuyerIds();
+      const ids = [...recent].filter((id) => !buyers.has(id));
+      return fetchByIds(ids);
+    }
+
+    if (segment === 'inativos') {
+      const cutoff60d = new Date(
+        Date.now() - 60 * 24 * 3600_000,
+      ).toISOString();
+      // Contatos com QUALQUER conv mais antiga que 60d
+      const { data: oldConvs } = await this.supabase.adminClient
+        .from('conversations')
+        .select('contact_id')
+        .eq('org_id', orgId)
+        .lt('last_message_at', cutoff60d)
+        .not('contact_id', 'is', null)
+        .limit(BROADCAST_HARD_LIMIT);
+      const oldIds = [
+        ...new Set(
+          ((oldConvs ?? []) as Array<{ contact_id: string }>).map(
+            (r) => r.contact_id,
+          ),
+        ),
+      ];
+      if (oldIds.length === 0) return [];
+
+      // Excluir os que TÊM conv recente (=ainda ativos)
+      const { data: recentConvs } = await this.supabase.adminClient
+        .from('conversations')
+        .select('contact_id')
+        .eq('org_id', orgId)
+        .gte('last_message_at', cutoff60d)
+        .in('contact_id', oldIds);
+      const stillActive = new Set(
+        ((recentConvs ?? []) as Array<{ contact_id: string }>).map(
+          (r) => r.contact_id,
+        ),
+      );
+      const ids = oldIds.filter((id) => !stillActive.has(id));
+      return fetchByIds(ids);
+    }
+
+    throw new BadRequestException(
+      `target_segment inválido: ${segment}`,
+    );
+  }
+
+  // ────────────────────────────────────────────
   // Digest worker — chamado pelo NotifyDigestWorker
   // ────────────────────────────────────────────
 
@@ -647,6 +956,26 @@ function formatCartRecoveryMessage(
     ``,
     `Posso te ajudar a fechar? Se preferir, é só responder aqui.`,
   ].join('\n');
+}
+
+/**
+ * Constrói o texto final do broadcast — substitui placeholder
+ * `[LINK DO PRODUTO]` se existir; senão appenda link no final.
+ * `messageTrimmed` é o input.message já trimado.
+ */
+function buildBroadcastMessage(
+  input: SendBroadcastInput,
+  messageTrimmed: string,
+): string {
+  let text = messageTrimmed;
+  if (input.include_link && input.link_url) {
+    if (text.includes(BROADCAST_PLACEHOLDER)) {
+      text = text.split(BROADCAST_PLACEHOLDER).join(input.link_url);
+    } else {
+      text = `${text}\n\n👉 ${input.link_url}`;
+    }
+  }
+  return text;
 }
 
 function formatBRL(value: number): string {
