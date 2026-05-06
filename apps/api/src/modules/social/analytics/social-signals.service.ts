@@ -43,10 +43,78 @@ export class SocialSignalsService {
       created += await this.detectHitsAndFlops(orgId);
       created += await this.detectBestPillar(orgId);
       created += await this.detectBestTimeWindow(orgId);
+      created += await this.detectDecliningTrend(orgId);
     } catch (err) {
       this.log.warn(`detectAll falhou: ${String(err)}`);
     }
     return { created };
+  }
+
+  /**
+   * Compara média de engagement_rate dos últimos 7 dias vs 7-14d atrás.
+   * Se queda > 20% E ambas janelas têm baseline mínimo, gera signal
+   * declining_trend (severity warning, dispara WhatsApp via alerter).
+   */
+  private async detectDecliningTrend(orgId: string): Promise<number> {
+    const today = new Date();
+    const day7 = new Date(today.getTime() - 7 * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    const day14 = new Date(today.getTime() - 14 * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+
+    try {
+      const { data } = await this.supabase.adminClient
+        .from('social_metrics_daily')
+        .select('engagement_rate, date, brand_id')
+        .eq('org_id', orgId)
+        .gte('date', day14);
+      const rows = (data ?? []) as Array<{
+        engagement_rate: number;
+        date: string;
+        brand_id: string | null;
+      }>;
+      if (rows.length < MIN_POSTS_FOR_BASELINE * 2) return 0;
+
+      const recent = rows.filter((r) => r.date >= day7);
+      const baseline = rows.filter((r) => r.date < day7);
+      if (
+        recent.length < MIN_POSTS_FOR_BASELINE ||
+        baseline.length < MIN_POSTS_FOR_BASELINE
+      ) {
+        return 0;
+      }
+
+      const avg = (xs: typeof rows) =>
+        xs.reduce((s, x) => s + x.engagement_rate, 0) / xs.length;
+      const recentAvg = avg(recent);
+      const baselineAvg = avg(baseline);
+      if (baselineAvg < 0.005) return 0;
+
+      const delta = (recentAvg - baselineAvg) / baselineAvg;
+      if (delta > -0.2) return 0; // não caiu o suficiente
+
+      const todayStr = today.toISOString().slice(0, 10);
+      await this.upsertSignal({
+        org_id: orgId,
+        brand_id: null,
+        content_id: null,
+        signal_type: 'declining_trend',
+        severity: 'warning',
+        title: `📉 Engagement em queda nos últimos 7 dias`,
+        description: `Média atual ${(recentAvg * 100).toFixed(2)}% vs ${(baselineAvg * 100).toFixed(2)}% na semana anterior. Queda de ${Math.round(Math.abs(delta) * 100)}%.`,
+        metric_name: 'engagement_rate',
+        metric_value: recentAvg,
+        benchmark_value: baselineAvg,
+        delta_pct: Math.round(delta * 100),
+        dedupe_key: `decline:${todayStr}`,
+      });
+      return 1;
+    } catch (err) {
+      this.log.warn(`detectDecliningTrend falhou: ${String(err)}`);
+      return 0;
+    }
   }
 
   // ─── Hit / Flop detection ───────────────────────
