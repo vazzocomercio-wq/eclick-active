@@ -282,6 +282,21 @@ export default function BrandEditorPage() {
               Apenas referência — a IA não acessa essas contas, mas pode considerar o
               estilo se mencionado.
             </p>
+            {form.reference_accounts && form.reference_accounts.length > 0 && (
+              <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/5 p-3">
+                <p className="text-xs font-medium">
+                  ✨ Análise IA disponível
+                </p>
+                <p className="mt-1 text-xs text-foreground/80">
+                  Veja análise comparativa estratégica baseada nesses concorrentes.
+                </p>
+                <Button size="sm" variant="outline" className="mt-2" asChild>
+                  <Link href={`/social/marcas/${id}/concorrentes`}>
+                    Ver análise de concorrentes →
+                  </Link>
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </div>

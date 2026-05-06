@@ -25,6 +25,7 @@ import { SocialMetricsService } from './analytics/social-metrics.service';
 import { SocialSignalsService } from './analytics/social-signals.service';
 import { SocialAdBoostService } from './boost/social-ad-boost.service';
 import { SocialHashtagsService } from './analytics/social-hashtags.service';
+import { SocialCompetitorService } from './analytics/social-competitor.service';
 import type { PublishingChannel } from './publishing/publishing.types';
 import type { BoostStatus, SocialAdBoostDraft } from './boost/social-ad-boost.types';
 import type { CreateBrandDto, UpdateBrandDto } from './dto/brand.dto';
@@ -59,6 +60,7 @@ export class SocialController {
     private readonly signals: SocialSignalsService,
     private readonly boost: SocialAdBoostService,
     private readonly hashtags: SocialHashtagsService,
+    private readonly competitor: SocialCompetitorService,
   ) {}
 
   // ─── Brands ─────────────────────────────────────
@@ -432,6 +434,18 @@ export class SocialController {
     @Body() body: { theme: string; brand_id: string },
   ) {
     return this.hashtags.suggest(user.org_id, body);
+  }
+
+  // ─── Competitor analysis ────────────────────────
+
+  @Get('brands/:id/competitor-analysis')
+  competitorLatest(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.competitor.latest(user.org_id, id);
+  }
+
+  @Post('brands/:id/competitor-analysis')
+  competitorGenerate(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.competitor.generate(user.org_id, id);
   }
 
   // ─── Analytics — signals ─────────────────────────

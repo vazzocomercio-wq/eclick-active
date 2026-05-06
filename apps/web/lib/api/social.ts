@@ -405,6 +405,38 @@ export interface HashtagSuggestion {
   mix: 'niche' | 'broad' | 'mixed' | 'minimal';
 }
 
+// ─── Competitor analysis ──────────────────────────
+
+export interface CompetitorAnalysis {
+  id: string;
+  org_id: string;
+  brand_id: string;
+  competitor_handles: string[];
+  summary: string | null;
+  strengths: Array<{ title: string; description: string }>;
+  weaknesses: Array<{ title: string; description: string }>;
+  opportunities: Array<{
+    title: string;
+    description: string;
+    priority: 'high' | 'medium' | 'low';
+  }>;
+  competitor_estimates: Array<{
+    handle: string;
+    estimated_strategy: string;
+    estimated_strengths: string[];
+    differentiation_opportunity: string;
+  }>;
+  recommendations: Array<{
+    action: string;
+    rationale: string;
+    effort: 'low' | 'medium' | 'high';
+  }>;
+  ai_model: string | null;
+  ai_generation_time_ms: number | null;
+  generated_at: string;
+  created_at: string;
+}
+
 // ─── API ──────────────────────────────────────────
 
 export interface ContentListFilters {
@@ -595,6 +627,20 @@ export const socialApi = {
       ),
     suggest: (body: { theme: string; brand_id: string }) =>
       api.post<HashtagSuggestion>('/social/hashtags/suggest', body),
+  },
+
+  // Competitor analysis
+  competitor: {
+    latest: (brandId: string, signal?: AbortSignal) =>
+      api.get<CompetitorAnalysis | null>(
+        `/social/brands/${brandId}/competitor-analysis`,
+        { signal },
+      ),
+    generate: (brandId: string) =>
+      api.post<CompetitorAnalysis>(
+        `/social/brands/${brandId}/competitor-analysis`,
+        {},
+      ),
   },
 
   // Ad Boost — promover post como ad
