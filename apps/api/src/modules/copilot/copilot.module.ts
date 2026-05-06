@@ -9,6 +9,8 @@ import { SocialModule } from '../social/social.module';
 import { WhatsAppCommerceModule } from '../whatsapp-commerce/whatsapp-commerce.module';
 import { CopilotController } from './copilot.controller';
 import { CopilotService } from './copilot.service';
+import { CopilotHelpController } from './copilot-help.controller';
+import { CopilotHelpService } from './copilot-help.service';
 
 @Module({
   imports: [
@@ -21,7 +23,7 @@ import { CopilotService } from './copilot.service';
     SocialModule,
     WhatsAppCommerceModule,
   ],
-  controllers: [CopilotController],
-  providers: [CopilotService],
+  controllers: [CopilotController, CopilotHelpController],
+  providers: [CopilotService, CopilotHelpService],
 })
 export class CopilotModule {}

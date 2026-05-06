@@ -1,0 +1,418 @@
+/**
+ * KB estática do Copiloto Flutuante v1 do e-Click Active.
+ *
+ * Cada entry tem:
+ *   - routes:   patterns Next.js (ex '/whatsapp', '/automacoes/:id', '/*')
+ *               '*' como segmento = wildcard de 1 segmento; final '/*' = qualquer suffix.
+ *               ':param' = qualquer valor naquele segmento.
+ *   - category: agrupamento pra UI de "ver todos os tópicos"
+ *   - title/content: markdown PT-BR
+ *
+ * Ordem de match: `matchKbEntries` retorna entries cujo route bate, na ordem
+ * em que aparecem na constante. Convenção: entries específicas primeiro,
+ * '/*' por último.
+ */
+
+export interface KbEntry {
+  routes: string[];
+  category: string;
+  title: string;
+  content: string;
+  tags?: string[];
+}
+
+export const KB_CATEGORIES = [
+  'GENERAL',
+  'INBOX',
+  'WHATSAPP',
+  'AUTOMATIONS',
+  'CONTACTS',
+  'DEALS',
+  'TASKS',
+  'KNOWLEDGE',
+  'INTELLIGENCE',
+  'COMMERCE',
+  'SAC',
+  'AGENDA',
+  'SOCIAL',
+  'CONFIG',
+] as const;
+
+export type KbCategory = (typeof KB_CATEGORIES)[number];
+
+export const KB: KbEntry[] = [
+  // ── INBOX / CONVERSAS ─────────────────────────────────
+  {
+    routes: ['/conversas', '/conversas/:id'],
+    category: 'INBOX',
+    title: 'Caixa unificada de conversas',
+    content: [
+      'A caixa unificada agrupa **todas as conversas** dos canais conectados (WhatsApp, Instagram, formulários de site, etc).',
+      '',
+      '- **Filtros**: status (aberta/fechada), atribuição, tags, canal.',
+      '- **IA**: classifica intent (orçamento, dúvida, reclamação) e sugere respostas no rodapé.',
+      '- **Atalho**: `j`/`k` navega entre conversas.',
+      '- Clique numa conversa pra abrir o painel de mensagens com contexto do contato/deal vinculado.',
+    ].join('\n'),
+    tags: ['inbox', 'conversas', 'mensagens'],
+  },
+  {
+    routes: ['/conversas/:id'],
+    category: 'INBOX',
+    title: 'Detalhe da conversa',
+    content: [
+      'Esta tela mostra o thread completo + painel lateral com:',
+      '- **Contato vinculado**: nome, telefone, tags, temperatura.',
+      '- **Deal aberto** (se houver): valor, etapa, próxima ação.',
+      '- **Tarefas e notas** relacionadas.',
+      '',
+      'Botões importantes:',
+      '- **Atribuir** muda o responsável.',
+      '- **Resolver** fecha a conversa (move pra lista de fechadas).',
+      '- **Mesclar contato** combina duplicidades.',
+    ].join('\n'),
+    tags: ['conversa', 'thread'],
+  },
+
+  // ── WHATSAPP ──────────────────────────────────────────
+  {
+    routes: ['/configuracoes/whatsapp', '/configuracoes/canais'],
+    category: 'WHATSAPP',
+    title: 'Conectar WhatsApp via Baileys',
+    content: [
+      'O Active usa **Baileys** (multi-device, sem API oficial) pra conectar.',
+      '',
+      '1. Vá em *Configurações → Canais → Adicionar WhatsApp*.',
+      '2. Escaneie o QR code com seu celular (WhatsApp → Aparelhos conectados).',
+      '3. A sessão é **persistida** — não precisa reconectar a cada reload.',
+      '',
+      '**Sinal verde** no header do canal = sessão ativa. **Vermelho** = sessão caiu (reabra a tela ou clique *Reconectar*).',
+      '',
+      '⚠ Use um número dedicado pra evitar bloqueio. Spam massivo é a causa #1 de bloqueio.',
+    ].join('\n'),
+    tags: ['whatsapp', 'baileys', 'qr', 'sessao'],
+  },
+  {
+    routes: ['/configuracoes/whatsapp', '/configuracoes/canais'],
+    category: 'WHATSAPP',
+    title: 'Erros comuns de sessão WhatsApp',
+    content: [
+      '**QR não aparece** → atualize a página; verifique se o backend está rodando (`/health`).',
+      '**Sessão cai sozinha** → telefone offline >14 dias; reconecte escaneando QR novamente.',
+      '**Mensagens não chegam** → verifique se o channel está marcado como `is_active`.',
+      '**Limite de envio** → WhatsApp barra envios em massa de números novos. Aqueça gradualmente.',
+    ].join('\n'),
+    tags: ['whatsapp', 'troubleshooting'],
+  },
+  {
+    routes: ['/whatsapp-commerce', '/whatsapp-commerce/:slug', '/loja'],
+    category: 'COMMERCE',
+    title: 'WhatsApp Commerce — vendas pelo chat',
+    content: [
+      'Loja AI Commerce transforma o WhatsApp em canal de venda completo:',
+      '- Catálogo lê do SaaS via bridge (cross-schema view).',
+      '- Carrinho persistente por contato; abandono detectado em ~30min.',
+      '- Pagamento via Mercado Pago Preferences ou PIX manual (BR Code).',
+      '- 7 tools no Copilot (search_products, manage_cart, checkout…).',
+      '- Recovery: automação default `cart_abandoned` envia mensagem 1h após.',
+    ].join('\n'),
+    tags: ['commerce', 'loja', 'pagamento'],
+  },
+
+  // ── AUTOMACOES ────────────────────────────────────────
+  {
+    routes: ['/automacoes', '/automacoes/:id'],
+    category: 'AUTOMATIONS',
+    title: 'Como funciona o motor de automações',
+    content: [
+      'Toda automação tem 3 partes:',
+      '1. **Trigger** (gatilho): `message_received`, `deal_stage_changed`, `cart_abandoned`, `order_paid`, etc.',
+      '2. **Trigger config**: filtros opcionais (canal, intent, valor mínimo…).',
+      '3. **Actions**: lista ordenada — `send_message`, `create_task`, `move_deal`, `wait`, `condition` (if/else), e ações de commerce (`send_tracking`, `request_review`).',
+      '',
+      'O execute roda actions em sequência **best-effort**: erro em uma não para as próximas. Logs ficam em `/automacoes/:id/logs`.',
+    ].join('\n'),
+    tags: ['automacoes', 'trigger', 'action'],
+  },
+  {
+    routes: ['/automacoes', '/automacoes/:id'],
+    category: 'AUTOMATIONS',
+    title: 'Placeholders nas mensagens',
+    content: [
+      'Em `send_message` (e templates) você pode interpolar:',
+      '- `{{contact.name}}` / `{{contact.first_name}}`',
+      '- `{{cart.total}}` / `{{cart.items_count}}` (em triggers `cart_*`)',
+      '- `{{order.number}}` / `{{order.total}}` / `{{order.tracking_code}}` / `{{order.carrier}}` (em triggers `order_*`)',
+      '- Campos canônicos via `PlaceholderService`: `{{contato.email}}`, `{{deal.titulo}}` etc.',
+      '',
+      'Se o campo não resolver, vira string vazia.',
+    ].join('\n'),
+    tags: ['placeholder', 'template'],
+  },
+  {
+    routes: ['/automacoes', '/automacoes/:id'],
+    category: 'AUTOMATIONS',
+    title: 'Automações vinculadas a estágio do funil',
+    content: [
+      'Você pode atrelar uma automação a uma **stage específica** do pipeline.',
+      'Quando o trigger é `deal_stage_changed` (ou `deal_created`), o engine só dispara se o deal estiver no `stage_id` da automação.',
+      'Se `stage_id` é null, a automação é **global** e dispara independente de stage.',
+      'Use isso pra montar fluxos por etapa do funil sem misturar.',
+    ].join('\n'),
+    tags: ['stage', 'pipeline', 'funil'],
+  },
+  {
+    routes: ['/automacoes', '/automacoes/:id'],
+    category: 'AUTOMATIONS',
+    title: 'Webhooks de automação',
+    content: [
+      'Triggers `webhook` aceitam POST externo em `/webhooks/automation/:id` com HMAC opcional.',
+      'O payload vai pro `trigger_event.payload` e pode ser usado nas actions (futuro: extração de campos via JSONPath).',
+      'Cada execução gera log em `/automacoes/:id/logs` com status (success/partial/failed) + duração.',
+    ].join('\n'),
+    tags: ['webhook', 'integracao'],
+  },
+
+  // ── CONTACTS ──────────────────────────────────────────
+  {
+    routes: ['/contatos', '/contatos/:id'],
+    category: 'CONTACTS',
+    title: 'Gerenciar contatos',
+    content: [
+      'Lista paginada com filtros (tag, temperatura, fonte, busca por nome/telefone/email).',
+      '- **Temperatura**: `cold/warm/hot/very_hot` — atualizada por automação ou manual.',
+      '- **Tags**: livres (cor por hash). Use pra segmentação em re-engajamento.',
+      '- **WhatsApp verified**: badge verde quando o número foi confirmado pelo Baileys.',
+      '',
+      '**Importar CSV**: Configurações → Importar contatos.',
+    ].join('\n'),
+    tags: ['contatos', 'crm'],
+  },
+  {
+    routes: ['/contatos/:id'],
+    category: 'CONTACTS',
+    title: 'Detalhe do contato',
+    content: [
+      'Mostra timeline completa: conversas, deals, tarefas, notas, atividades de IA.',
+      'No header você vê tags, temperatura, fonte e canal preferido.',
+      'Botão **Mesclar** combina duplicidades — o contato selecionado vira o canônico.',
+    ].join('\n'),
+    tags: ['contato', 'timeline'],
+  },
+
+  // ── DEALS / FUNIS ─────────────────────────────────────
+  {
+    routes: ['/funis', '/funis/:id'],
+    category: 'DEALS',
+    title: 'Funis e deals',
+    content: [
+      'Cada funil tem stages ordenadas. Deals são cards arrastados entre stages.',
+      '- **Drag & drop** atualiza `stage_id` + dispara `deal_stage_changed`.',
+      '- **WIP limits** por stage avisam quando entupir.',
+      '- **AI score** (0-100) sugere prioridade — calculado pelo intelligence hub.',
+    ].join('\n'),
+    tags: ['funil', 'pipeline', 'kanban'],
+  },
+
+  // ── TASKS ─────────────────────────────────────────────
+  {
+    routes: ['/tarefas'],
+    category: 'TASKS',
+    title: 'Tarefas e follow-ups',
+    content: [
+      'Tarefas podem ser criadas manualmente ou por automação (`create_task`).',
+      'Status: `pending`, `in_progress`, `completed`, `cancelled`, `overdue`.',
+      'Quando uma tarefa **vence sem ser concluída**, dispara `task_overdue` — útil pra alertar agente.',
+    ].join('\n'),
+    tags: ['tarefa', 'todo'],
+  },
+
+  // ── KNOWLEDGE ─────────────────────────────────────────
+  {
+    routes: ['/conhecimento'],
+    category: 'KNOWLEDGE',
+    title: 'Base de conhecimento (RAG)',
+    content: [
+      'A base de conhecimento usa **pgvector** pra busca semântica.',
+      '- Adicione documentos (FAQs, scripts, políticas) por categoria.',
+      'O atendente IA usa esses docs como contexto ao responder em conversas.',
+      '- **Chunking**: docs são fatiados automaticamente em ~500 tokens.',
+      '- **Reembedding**: rode quando trocar o modelo de embedding.',
+    ].join('\n'),
+    tags: ['rag', 'kb', 'embeddings'],
+  },
+
+  // ── INTELLIGENCE ──────────────────────────────────────
+  {
+    routes: ['/intelligence', '/intelligence/:tab'],
+    category: 'INTELLIGENCE',
+    title: 'Intelligence Hub — analytics A-H',
+    content: [
+      'O Intelligence Hub do Active organiza analytics em 8 blocos (A-H):',
+      '- **A**: Provider de LLM (multi-provider, fallback automático).',
+      '- **B**: Métricas de atendimento (tempo de resposta, NPS).',
+      '- **C**: Performance de funil (conversão por stage).',
+      '- **D**: Análise de conversas (intents, sentiment).',
+      '- **E-H**: alertas, previsão, segmentação, recomendações.',
+      '',
+      'Doc canônico: `eclick-active/docs/analytics-design.md`.',
+    ].join('\n'),
+    tags: ['analytics', 'intelligence'],
+  },
+
+  // ── SAC ───────────────────────────────────────────────
+  {
+    routes: ['/sac', '/sac/:tab'],
+    category: 'SAC',
+    title: 'Central de Atendimento (SAC)',
+    content: [
+      'O SAC organiza tickets de pós-venda separados das conversas comuns.',
+      '- **Riscos** (`/sac/riscos`): identifica clientes em risco de churn via IA.',
+      '- **Performance**: KPIs do time (TMA, FCR, CSAT).',
+      '- **Templates**: respostas prontas com placeholders.',
+    ].join('\n'),
+    tags: ['sac', 'suporte', 'pos-venda'],
+  },
+
+  // ── AGENDA ────────────────────────────────────────────
+  {
+    routes: ['/agenda', '/agenda/:date'],
+    category: 'AGENDA',
+    title: 'Agenda + Google Calendar / Calendly',
+    content: [
+      'Agenda própria + sync bidirecional com Google Calendar e Calendly.',
+      '- **IA detecta intent de agendamento** nas conversas e sugere slots.',
+      '- **Tools no Copilot**: `check_available_slots`, `schedule_appointment`, `send_scheduling_link`.',
+      'Setup em *Configurações → Integrações*.',
+    ].join('\n'),
+    tags: ['agenda', 'calendario', 'agendamento'],
+  },
+
+  // ── SOCIAL ────────────────────────────────────────────
+  {
+    routes: ['/social', '/producao/conteudo', '/producao/criativos'],
+    category: 'SOCIAL',
+    title: 'Produção de conteúdo + multi-stage approval',
+    content: [
+      'Produção AI gera conteúdo pra Instagram/TikTok/LinkedIn:',
+      '- **Drafts** com IA (descrição, bullets, capa).',
+      '- **Multi-stage approval**: link público pra cliente revisar antes de publicar.',
+      '- **A/B tests** automáticos depois do post.',
+    ].join('\n'),
+    tags: ['social', 'conteudo', 'criativos'],
+  },
+
+  // ── CONFIG ────────────────────────────────────────────
+  {
+    routes: ['/configuracoes', '/configuracoes/:tab'],
+    category: 'CONFIG',
+    title: 'Configurações importantes',
+    content: [
+      '**Canais**: WhatsApp Baileys, Z-API, Instagram, formulários.',
+      '**Equipe**: convide membros (roles `owner/admin/agent`).',
+      '**LLM**: chave Anthropic/OpenAI/Google + modelo default. Sem chave configurada, cai pro `ANTHROPIC_API_KEY` env.',
+      '**Integrações**: Google Calendar, Calendly, Mercado Pago, Slack.',
+      '**Marca**: logo, cores e nome usados em e-mails e landing pages.',
+    ].join('\n'),
+    tags: ['config', 'setup'],
+  },
+  {
+    routes: ['/configuracoes/integracoes', '/configuracoes/llm'],
+    category: 'CONFIG',
+    title: 'Configurar provedor de LLM',
+    content: [
+      'Active suporta multi-provider: Anthropic (default), OpenAI, Google.',
+      '- Cole a API key do provedor — fica criptografada (AES-256-GCM) no banco.',
+      '- Selecione modelo padrão (ex: `claude-haiku-4-5-20251001`, `gpt-4o-mini`).',
+      '- Cada feature pode ter override de modelo (ex: `copilot_help` usa Haiku).',
+      '- **Fallback**: se a key cair, o provider Anthropic do env é usado (mas perde isolamento por org).',
+    ].join('\n'),
+    tags: ['llm', 'provider', 'anthropic', 'openai'],
+  },
+
+  // ── GENERAL fallback ──────────────────────────────────
+  {
+    routes: ['/*'],
+    category: 'GENERAL',
+    title: 'Tour rápido pelo Active',
+    content: [
+      'O e-Click Active é o CRM de **WhatsApp + IA** pra times de venda e atendimento.',
+      '',
+      '**Top features:**',
+      '- 📥 *Caixa unificada* de conversas (WhatsApp, Insta, web).',
+      '- 🤖 *Atendente IA* responde com base na sua KB.',
+      '- ⚡ *Automações visuais* com triggers + actions.',
+      '- 📊 *Funis Kanban* drag-and-drop.',
+      '- 🛒 *Loja AI Commerce* — vender direto no chat.',
+      '',
+      'Use `Cmd/Ctrl + K` pra me chamar em qualquer tela. 👋',
+    ].join('\n'),
+    tags: ['intro', 'tour'],
+  },
+  {
+    routes: ['/'],
+    category: 'GENERAL',
+    title: 'Por onde começar?',
+    content: [
+      '1. Conecte um canal de WhatsApp (*Configurações → Canais*).',
+      '2. Importe seus contatos via CSV.',
+      '3. Crie 1-2 automações simples (boas-vindas + cart abandonado).',
+      '4. Ative o atendente IA com sua base de conhecimento.',
+      '5. Acompanhe em */intelligence*.',
+    ].join('\n'),
+    tags: ['onboarding'],
+  },
+];
+
+// ───────────────────────────────────────────────
+// Matching: pattern Next.js → regex
+// ───────────────────────────────────────────────
+
+/**
+ * Converte um pattern (`'/automacoes/:id'`, `'/whatsapp/*'`) em regex.
+ * Suporta:
+ *  - `:param` casa qualquer valor exceto `/`
+ *  - `*` casa "qualquer caminho a partir daqui" (greedy até o fim)
+ *  - rotas literais casam exato (com ou sem trailing slash)
+ */
+function patternToRegex(pattern: string): RegExp {
+  // Escape regex specials, depois substitui :param e *
+  const escaped = pattern
+    .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+    .replace(/\/\*$/g, '(?:/.*)?') // /* no final = sufixo opcional
+    .replace(/\*/g, '[^/]+') // * em meio de path = um segmento
+    .replace(/:[^/]+/g, '[^/]+'); // :param = um segmento
+
+  return new RegExp(`^${escaped}/?$`);
+}
+
+const COMPILED_KB = KB.map((entry) => ({
+  entry,
+  regexes: entry.routes.map(patternToRegex),
+}));
+
+/**
+ * Retorna entries da KB cujo route casa com o pathname dado.
+ * Resultado preserva ordem da KB (entries específicas vêm antes de '/*').
+ */
+export function matchKbEntries(pathname: string): KbEntry[] {
+  const normalized = pathname.split('?')[0]?.split('#')[0] ?? pathname;
+  const out: KbEntry[] = [];
+  for (const { entry, regexes } of COMPILED_KB) {
+    if (regexes.some((r) => r.test(normalized))) {
+      out.push(entry);
+    }
+  }
+  return out;
+}
+
+/** Agrupa KB inteira por category — usado no fallback "ver todos os tópicos". */
+export function listKbByCategory(): Record<string, KbEntry[]> {
+  const grouped: Record<string, KbEntry[]> = {};
+  for (const entry of KB) {
+    const c = entry.category;
+    if (!grouped[c]) grouped[c] = [];
+    grouped[c].push(entry);
+  }
+  return grouped;
+}

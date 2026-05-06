@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Sidebar } from '@/components/sidebar';
 import { MobileTopBar } from '@/components/mobile-top-bar';
+import FloatingCopilot from '@/components/copilot/FloatingCopilot';
 
 export default function DashboardLayout({
   children,
@@ -24,6 +25,8 @@ export default function DashboardLayout({
         <MobileTopBar onMenuClick={() => setSidebarOpen(true)} />
         <div className="flex flex-1 flex-col overflow-hidden">{children}</div>
       </main>
+      {/* Copiloto flutuante v1 — fica sobreposto a tudo (z-50) com Cmd/Ctrl+K. */}
+      <FloatingCopilot />
     </div>
   );
 }
