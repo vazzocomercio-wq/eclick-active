@@ -384,12 +384,15 @@ export class AutomationBridgeService {
   private async resolvePrimaryWhatsAppChannel(
     orgId: string,
   ): Promise<string | null> {
+    // Active suporta múltiplas variantes WA — `whatsapp` (Z-API),
+    // `whatsapp_free` (Baileys). Coluna real é `status='active'`,
+    // não `is_active`.
     const { data } = await this.supabase.adminClient
       .from('channels')
       .select('id')
       .eq('org_id', orgId)
-      .eq('channel_type', 'whatsapp')
-      .eq('is_active', true)
+      .in('channel_type', ['whatsapp', 'whatsapp_free'])
+      .eq('status', 'active')
       .order('created_at', { ascending: true })
       .limit(1)
       .maybeSingle();
@@ -422,7 +425,7 @@ export class AutomationBridgeService {
     };
     const found = ((convs ?? []) as unknown as ConvRow[]).find((c) => {
       const ch = Array.isArray(c.channels) ? c.channels[0] : c.channels;
-      return ch?.channel_type === 'whatsapp';
+      return ch?.channel_type === 'whatsapp' || ch?.channel_type === 'whatsapp_free';
     });
     if (found) return found.channel_id;
 

@@ -957,20 +957,22 @@ Gere o JSON da automação seguindo o schema. Use textos PT-BR claros e específ
     };
     const wa = ((convs ?? []) as unknown as ConvRow[]).find((c) => {
       const ch = Array.isArray(c.channels) ? c.channels[0] : c.channels;
-      return ch?.channel_type === 'whatsapp';
+      return ch?.channel_type === 'whatsapp' || ch?.channel_type === 'whatsapp_free';
     });
 
     if (wa) {
       return { conversationId: wa.id, channelId: wa.channel_id };
     }
 
-    // Fallback: pega primeiro channel WhatsApp ativo da org
+    // Fallback: pega primeiro channel WhatsApp ativo da org. Active aceita
+    // duas variantes: `whatsapp` (Z-API) e `whatsapp_free` (Baileys).
+    // Coluna real é `status='active'`, não `is_active`.
     const { data: ch } = await this.supabase.adminClient
       .from('channels')
       .select('id')
       .eq('org_id', orgId)
-      .eq('channel_type', 'whatsapp')
-      .eq('is_active', true)
+      .in('channel_type', ['whatsapp', 'whatsapp_free'])
+      .eq('status', 'active')
       .limit(1)
       .maybeSingle();
 
