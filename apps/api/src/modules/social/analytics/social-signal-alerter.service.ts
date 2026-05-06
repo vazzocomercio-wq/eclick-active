@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SupabaseService } from '../../../common/supabase/supabase.service';
 import { ChannelDispatcherService } from '../../../common/channels/channel-dispatcher.service';
+import { SlackNotifierService } from '../../../common/slack/slack-notifier.service';
 import { AlertManagersService } from '../../alerts/alert-managers.service';
 import type { SocialSignal } from './analytics.types';
 
@@ -53,6 +54,7 @@ export class SocialSignalAlerter {
     private readonly supabase: SupabaseService,
     private readonly dispatcher: ChannelDispatcherService,
     private readonly managers: AlertManagersService,
+    private readonly slack: SlackNotifierService,
   ) {}
 
   /**
@@ -62,31 +64,68 @@ export class SocialSignalAlerter {
   async maybeNotify(signal: SocialSignal): Promise<{ delivered: number; skipped: boolean }> {
     if (!this.shouldNotify(signal)) return { delivered: 0, skipped: true };
 
+    let delivered = 0;
     try {
+      // WhatsApp pros managers
       const managers = await this.managers.listActive(signal.org_id);
-      if (managers.length === 0) return { delivered: 0, skipped: true };
-
-      const text = this.formatMessage(signal);
-      let delivered = 0;
-
-      for (const m of managers) {
-        try {
-          await this.sendToManager(signal, m as ManagerForAlert, text);
-          delivered += 1;
-        } catch (err) {
-          this.log.warn(
-            `Manager ${m.id} (${m.name}) falhou: ${
-              err instanceof Error ? err.message : String(err)
-            }`,
-          );
+      if (managers.length > 0) {
+        const text = this.formatMessage(signal);
+        for (const m of managers) {
+          try {
+            await this.sendToManager(signal, m as ManagerForAlert, text);
+            delivered += 1;
+          } catch (err) {
+            this.log.warn(
+              `Manager ${m.id} (${m.name}) falhou: ${
+                err instanceof Error ? err.message : String(err)
+              }`,
+            );
+          }
         }
+      }
+
+      // Slack webhooks (best-effort)
+      try {
+        const slackResult = await this.slack.notify(signal.org_id, {
+          category: 'social',
+          severity: signal.severity,
+          title: signal.title,
+          description: signal.description ?? undefined,
+          fields: this.buildSlackFields(signal),
+          url: process.env.PUBLIC_APP_URL
+            ? `${process.env.PUBLIC_APP_URL}/social/relatorios`
+            : undefined,
+        });
+        delivered += slackResult.delivered;
+      } catch (err) {
+        this.log.warn(`Slack notify falhou: ${String(err)}`);
       }
 
       return { delivered, skipped: false };
     } catch (err) {
       this.log.warn(`maybeNotify falhou (signal=${signal.id}): ${String(err)}`);
-      return { delivered: 0, skipped: true };
+      return { delivered, skipped: true };
     }
+  }
+
+  private buildSlackFields(
+    signal: SocialSignal,
+  ): Array<{ label: string; value: string }> {
+    const out: Array<{ label: string; value: string }> = [];
+    if (signal.delta_pct !== null && signal.delta_pct !== undefined) {
+      out.push({
+        label: 'Delta',
+        value: `${signal.delta_pct > 0 ? '+' : ''}${signal.delta_pct}%`,
+      });
+    }
+    if (signal.metric_value !== null && signal.metric_name) {
+      const formatted =
+        signal.metric_name === 'engagement_rate'
+          ? `${(signal.metric_value * 100).toFixed(2)}%`
+          : signal.metric_value.toLocaleString('pt-BR');
+      out.push({ label: signal.metric_name, value: formatted });
+    }
+    return out;
   }
 
   // ─── decisão ─────────────────────────────────────

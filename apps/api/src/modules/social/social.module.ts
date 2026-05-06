@@ -32,6 +32,7 @@ import { SocialAbTestService } from './ab-test/social-ab-test.service';
 import { SocialAdBoostService } from './boost/social-ad-boost.service';
 import { AlertsModule } from '../alerts/alerts.module';
 import { ChannelsModule as ChannelDispatcherModule } from '../../common/channels/channels.module';
+import { SlackModule } from '../../common/slack/slack.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { ChannelsModule as ChannelDispatcherModule } from '../../common/channels
     AiPersonaModule,
     AlertsModule,
     ChannelDispatcherModule,
+    SlackModule,
   ],
   controllers: [SocialController],
   providers: [
