@@ -456,6 +456,14 @@ Gere o JSON da automação seguindo o schema. Use textos PT-BR claros e específ
         return this.actionWait(action);
       case 'condition':
         return this.actionCondition(action, ctx);
+      case 'send_order_update':
+        return this.actionSendOrderUpdate(action, ctx);
+      case 'send_tracking':
+        return this.actionSendTracking(action, ctx);
+      case 'request_review':
+        return this.actionRequestReview(action, ctx);
+      case 'suggest_reorder':
+        return this.actionSuggestReorder(action, ctx);
       default:
         throw new Error(`Action type desconhecido: ${(action as { type: string }).type}`);
     }
@@ -768,6 +776,217 @@ Gere o JSON da automação seguindo o schema. Use textos PT-BR claros e específ
     const ms = Math.min(Math.max(0, action.minutes), 5) * 60_000;
     await new Promise((resolve) => setTimeout(resolve, ms));
     return { waited_minutes: ms / 60_000 };
+  }
+
+  // ────────────────────────────────────────────
+  // ACTIONS B6: pós-venda
+  // ────────────────────────────────────────────
+
+  private async actionSendOrderUpdate(
+    action: Extract<AutomationAction, { type: 'send_order_update' }>,
+    ctx: ExecuteContext,
+  ): Promise<Record<string, unknown>> {
+    if (!ctx.order) throw new Error('send_order_update requer order no contexto');
+    const text =
+      action.text ??
+      this.defaultOrderUpdateTemplate(ctx);
+    return this.sendCommerceMessage(text, ctx, {
+      kind: 'order_update',
+      order_id: ctx.order.id,
+    });
+  }
+
+  private async actionSendTracking(
+    action: Extract<AutomationAction, { type: 'send_tracking' }>,
+    ctx: ExecuteContext,
+  ): Promise<Record<string, unknown>> {
+    if (!ctx.order) throw new Error('send_tracking requer order no contexto');
+    if (!ctx.order.tracking_code) {
+      throw new Error('send_tracking: pedido sem tracking_code');
+    }
+    const carrierLine = ctx.order.carrier
+      ? `Transportadora: ${ctx.order.carrier}\n`
+      : '';
+    const text =
+      action.text ??
+      `📦 Boa notícia, {{contact.first_name}}! Seu pedido {{order.number}} foi enviado.\n\n${carrierLine}Código de rastreio: *{{order.tracking_code}}*`;
+    return this.sendCommerceMessage(text, ctx, {
+      kind: 'tracking',
+      order_id: ctx.order.id,
+      tracking_code: ctx.order.tracking_code,
+    });
+  }
+
+  private async actionRequestReview(
+    action: Extract<AutomationAction, { type: 'request_review' }>,
+    ctx: ExecuteContext,
+  ): Promise<Record<string, unknown>> {
+    if (!ctx.order) throw new Error('request_review requer order no contexto');
+    const text =
+      action.text ??
+      `Oi {{contact.first_name}}! 😊 Seu pedido {{order.number}} chegou ok? Sua opinião ajuda muito a gente — pode responder aqui mesmo o que achou?`;
+    return this.sendCommerceMessage(text, ctx, {
+      kind: 'review_request',
+      order_id: ctx.order.id,
+    });
+  }
+
+  private async actionSuggestReorder(
+    action: Extract<AutomationAction, { type: 'suggest_reorder' }>,
+    ctx: ExecuteContext,
+  ): Promise<Record<string, unknown>> {
+    if (!ctx.order) throw new Error('suggest_reorder requer order no contexto');
+
+    // Busca items do pedido pra montar sugestão (best-effort)
+    const { data: order } = await this.supabase.adminClient
+      .from('whatsapp_orders')
+      .select('items')
+      .eq('id', ctx.order.id)
+      .maybeSingle();
+    const items =
+      ((order as { items?: Array<{ name: string; quantity: number }> } | null)
+        ?.items ?? []) as Array<{ name: string; quantity: number }>;
+
+    const itemList = items
+      .slice(0, 5)
+      .map((i) => `• ${i.name} (${i.quantity}x)`)
+      .join('\n');
+
+    const text =
+      action.text ??
+      `Oi {{contact.first_name}}! 👋 Já faz um tempinho desde seu último pedido. Quer repor:\n\n${itemList || '(itens do pedido anterior)'}\n\nÉ só responder e a gente te ajuda!`;
+
+    return this.sendCommerceMessage(text, ctx, {
+      kind: 'reorder_suggestion',
+      order_id: ctx.order.id,
+      items_count: items.length,
+    });
+  }
+
+  /**
+   * Envia mensagem em uma conversa do contato + loga evento na timeline.
+   * Resolve channelId e conversationId se não vierem no ctx (busca via
+   * última conversa WhatsApp do contato).
+   */
+  private async sendCommerceMessage(
+    text: string,
+    ctx: ExecuteContext,
+    timelineMeta: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    if (!ctx.contactId) throw new Error('Requer contact_id no contexto');
+
+    const { conversationId, channelId } = await this.resolveContactChannel(
+      ctx.orgId,
+      ctx.contactId,
+      ctx.conversationId ?? null,
+      ctx.channelId ?? null,
+    );
+    if (!conversationId || !channelId) {
+      throw new Error(
+        'Contato sem conversa WhatsApp ativa pra enviar mensagem',
+      );
+    }
+
+    const finalText = await this.interpolateRich(text, ctx);
+
+    const result = await this.dispatcher.send({
+      org_id: ctx.orgId,
+      channel_id: channelId,
+      contact_id: ctx.contactId,
+      content_type: 'text',
+      content: { body: finalText },
+    });
+
+    // Loga evento na timeline (best-effort)
+    if (ctx.order) {
+      try {
+        await this.supabase.adminClient
+          .from('whatsapp_order_events')
+          .insert({
+            org_id: ctx.orgId,
+            order_id: ctx.order.id,
+            event_type: `message:${(timelineMeta.kind as string) ?? 'manual'}`,
+            description: finalText.slice(0, 200),
+            actor_type: 'automation',
+            metadata: {
+              ...timelineMeta,
+              channel_message_id: result.channel_message_id,
+            },
+          });
+      } catch {
+        /* best-effort */
+      }
+    }
+
+    return {
+      channel_message_id: result.channel_message_id,
+      status: result.status,
+      kind: timelineMeta.kind,
+    };
+  }
+
+  /**
+   * Resolve channel + conversation pra enviar mensagem ao contato.
+   * Prioridade: ctx values → primary_whatsapp_channel + última conversa.
+   */
+  private async resolveContactChannel(
+    orgId: string,
+    contactId: string,
+    ctxConversationId: string | null,
+    ctxChannelId: string | null,
+  ): Promise<{ conversationId: string | null; channelId: string | null }> {
+    if (ctxConversationId && ctxChannelId) {
+      return { conversationId: ctxConversationId, channelId: ctxChannelId };
+    }
+
+    // Busca última conversa WhatsApp do contato
+    const { data: convs } = await this.supabase.adminClient
+      .from('conversations')
+      .select('id, channel_id, channels:channel_id(channel_type)')
+      .eq('org_id', orgId)
+      .eq('contact_id', contactId)
+      .order('last_message_at', { ascending: false, nullsFirst: false })
+      .limit(5);
+
+    type ConvRow = {
+      id: string;
+      channel_id: string;
+      // PostgREST embed pode vir como objeto OU array dependendo da relação;
+      // tratamos como array pra ser robusto.
+      channels: Array<{ channel_type: string }> | { channel_type: string } | null;
+    };
+    const wa = ((convs ?? []) as unknown as ConvRow[]).find((c) => {
+      const ch = Array.isArray(c.channels) ? c.channels[0] : c.channels;
+      return ch?.channel_type === 'whatsapp';
+    });
+
+    if (wa) {
+      return { conversationId: wa.id, channelId: wa.channel_id };
+    }
+
+    // Fallback: pega primeiro channel WhatsApp ativo da org
+    const { data: ch } = await this.supabase.adminClient
+      .from('channels')
+      .select('id')
+      .eq('org_id', orgId)
+      .eq('channel_type', 'whatsapp')
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle();
+
+    return {
+      conversationId: ctxConversationId ?? null,
+      channelId:
+        ctxChannelId ?? (ch as { id: string } | null)?.id ?? null,
+    };
+  }
+
+  private defaultOrderUpdateTemplate(ctx: ExecuteContext): string {
+    return (
+      `Oi {{contact.first_name}}! Atualização do seu pedido {{order.number}}:\n\n` +
+      `Total: {{order.total}}\n\n` +
+      `Qualquer dúvida é só responder aqui. 🛒`
+    );
   }
 
   // ────────────────────────────────────────────

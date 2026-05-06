@@ -740,6 +740,11 @@ function defaultActionFor(type: AutomationActionType): AutomationAction {
       return { type, message: '' };
     case 'wait':
       return { type, minutes: 1 };
+    case 'send_order_update':
+    case 'send_tracking':
+    case 'request_review':
+    case 'suggest_reorder':
+      return { type, text: '' };
   }
 }
 

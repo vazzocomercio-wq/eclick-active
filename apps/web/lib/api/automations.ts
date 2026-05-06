@@ -12,7 +12,11 @@ export type AutomationActionType =
   | 'update_contact'
   | 'assign_conversation'
   | 'notify_agent'
-  | 'wait';
+  | 'wait'
+  | 'send_order_update'
+  | 'send_tracking'
+  | 'request_review'
+  | 'suggest_reorder';
 
 export interface AutomationAction {
   type: AutomationActionType;

@@ -13,6 +13,7 @@ import { MercadoPagoProvider } from './providers/mercado-pago.provider';
 import { PixManualProvider } from './providers/pix-manual.provider';
 import type {
   WhatsAppOrder,
+  WhatsAppOrderEvent,
   CreateOrderFromCartInput,
   OrderStatus,
   OrderPaymentStatus,
@@ -395,6 +396,59 @@ export class WhatsAppOrderService {
       .single();
     if (error) throw error;
     return data as WhatsAppOrder;
+  }
+
+  // ─── Timeline (B6) ───────────────────────────
+
+  async listEvents(
+    orgId: string,
+    orderId: string,
+    limit = 100,
+  ): Promise<WhatsAppOrderEvent[]> {
+    // Garante que o pedido pertence à org
+    await this.findById(orgId, orderId);
+
+    const { data, error } = await this.supabase.adminClient
+      .from('whatsapp_order_events')
+      .select('*')
+      .eq('org_id', orgId)
+      .eq('order_id', orderId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return (data ?? []) as WhatsAppOrderEvent[];
+  }
+
+  /**
+   * Adiciona evento manual à timeline (anotação do agente, etc).
+   */
+  async addEvent(
+    orgId: string,
+    orderId: string,
+    args: {
+      event_type: string;
+      description?: string;
+      actor_type?: WhatsAppOrderEvent['actor_type'];
+      actor_id?: string | null;
+      metadata?: Record<string, unknown>;
+    },
+  ): Promise<WhatsAppOrderEvent> {
+    await this.findById(orgId, orderId);
+    const { data, error } = await this.supabase.adminClient
+      .from('whatsapp_order_events')
+      .insert({
+        org_id: orgId,
+        order_id: orderId,
+        event_type: args.event_type,
+        description: args.description ?? null,
+        actor_type: args.actor_type ?? 'agent',
+        actor_id: args.actor_id ?? null,
+        metadata: args.metadata ?? {},
+      })
+      .select('*')
+      .single();
+    if (error) throw error;
+    return data as WhatsAppOrderEvent;
   }
 
   // ─── helpers ────────────────────────────────

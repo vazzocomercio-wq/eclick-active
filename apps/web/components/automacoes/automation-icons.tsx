@@ -204,6 +204,26 @@ export const ACTION_VISUALS: Record<AutomationActionType, ActionVisual> = {
     color: 'text-slate-400',
     label: 'Aguardar',
   },
+  send_order_update: {
+    icon: Package,
+    color: 'text-blue-400',
+    label: 'Atualizar pedido',
+  },
+  send_tracking: {
+    icon: Truck,
+    color: 'text-cyan-400',
+    label: 'Enviar rastreio',
+  },
+  request_review: {
+    icon: Sparkles,
+    color: 'text-pink-400',
+    label: 'Pedir review',
+  },
+  suggest_reorder: {
+    icon: ShoppingCart,
+    color: 'text-amber-400',
+    label: 'Sugerir recompra',
+  },
 };
 
 export const ACTION_OPTIONS: AutomationActionType[] = [
@@ -214,6 +234,10 @@ export const ACTION_OPTIONS: AutomationActionType[] = [
   'assign_conversation',
   'notify_agent',
   'wait',
+  'send_order_update',
+  'send_tracking',
+  'request_review',
+  'suggest_reorder',
 ];
 
 export function ActionIcon({

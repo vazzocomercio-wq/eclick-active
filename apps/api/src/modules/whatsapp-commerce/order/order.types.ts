@@ -92,3 +92,28 @@ export interface PaymentLink {
   external_id?: string;
   provider: 'mercado_pago' | 'pix_manual' | 'manual';
 }
+
+/**
+ * Evento da timeline de um pedido. Inserido por trigger SQL pra
+ * mudanças de status + por automation runners pra mensagens.
+ */
+export type OrderEventActor =
+  | 'system'
+  | 'automation'
+  | 'agent'
+  | 'ai'
+  | 'customer'
+  | 'webhook';
+
+export interface WhatsAppOrderEvent {
+  id: string;
+  org_id: string;
+  order_id: string;
+  /** ex: 'status:confirmed', 'payment:paid', 'message:tracking', 'note' */
+  event_type: string;
+  description: string | null;
+  actor_type: OrderEventActor;
+  actor_id: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}

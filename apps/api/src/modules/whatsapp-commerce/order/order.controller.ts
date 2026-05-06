@@ -99,4 +99,39 @@ export class OrderController {
   ) {
     return this.orders.cancel(user.org_id, id, body?.reason);
   }
+
+  // ─── Timeline (B6) ───────────────────────────
+
+  @Get(':id/events')
+  listEvents(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.orders.listEvents(
+      user.org_id,
+      id,
+      limit ? Math.min(parseInt(limit, 10) || 100, 500) : 100,
+    );
+  }
+
+  @Post(':id/events')
+  addEvent(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body()
+    body: {
+      event_type: string;
+      description?: string;
+      metadata?: Record<string, unknown>;
+    },
+  ) {
+    return this.orders.addEvent(user.org_id, id, {
+      event_type: body.event_type,
+      description: body.description,
+      actor_type: 'agent',
+      actor_id: user.id,
+      metadata: body.metadata ?? {},
+    });
+  }
 }

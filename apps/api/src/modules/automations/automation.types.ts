@@ -55,7 +55,11 @@ export type AutomationActionType =
   | 'assign_conversation'
   | 'notify_agent'
   | 'wait'
-  | 'condition';
+  | 'condition'
+  | 'send_order_update'
+  | 'send_tracking'
+  | 'request_review'
+  | 'suggest_reorder';
 
 export type AutomationAction =
   | SendMessageAction
@@ -65,7 +69,11 @@ export type AutomationAction =
   | AssignConversationAction
   | NotifyAgentAction
   | WaitAction
-  | ConditionAction;
+  | ConditionAction
+  | SendOrderUpdateAction
+  | SendTrackingAction
+  | RequestReviewAction
+  | SuggestReorderAction;
 
 // ──────────────────────────────────────────────────────────
 // Condition action (Bloco F — ramificação if/else)
@@ -146,6 +154,48 @@ export interface WaitAction {
   type: 'wait';
   /** Atraso em minutos */
   minutes: number;
+}
+
+// ──────────────────────────────────────────────────────────
+// Commerce (B6) — actions específicas de pós-venda
+// ──────────────────────────────────────────────────────────
+
+/**
+ * Envia mensagem de atualização de status do pedido. Suporta placeholders
+ * `{{order.number}}`, `{{order.total}}`, `{{contact.first_name}}`.
+ * Se omitido, usa template padrão por status.
+ */
+export interface SendOrderUpdateAction {
+  type: 'send_order_update';
+  /** Texto opcional — se omitido usa template default conforme order.status */
+  text?: string;
+}
+
+/**
+ * Envia código + URL de rastreamento. Pega de `ctx.order.tracking_code` /
+ * `metadata.tracking_url`. Falha se não houver tracking_code.
+ */
+export interface SendTrackingAction {
+  type: 'send_tracking';
+  text?: string;
+}
+
+/**
+ * Pede review/avaliação do pedido. Texto livre — recomenda mencionar
+ * `{{order.number}}` e link de avaliação.
+ */
+export interface RequestReviewAction {
+  type: 'request_review';
+  text?: string;
+}
+
+/**
+ * Sugere recompra dos itens do pedido. Lista produtos do snapshot do
+ * pedido, ideal pra produtos consumíveis.
+ */
+export interface SuggestReorderAction {
+  type: 'suggest_reorder';
+  text?: string;
 }
 
 // ──────────────────────────────────────────────────────────
@@ -348,6 +398,10 @@ export const GENERATE_SCHEMA = {
               'assign_conversation',
               'notify_agent',
               'wait',
+              'send_order_update',
+              'send_tracking',
+              'request_review',
+              'suggest_reorder',
             ],
           },
           text: { type: 'string' },
@@ -398,6 +452,10 @@ Actions disponíveis (execute em ordem):
 - assign_conversation: { type, assigned_to (UUID) }.
 - notify_agent: { type, message, user_id? }.
 - wait: { type, minutes }.
+- send_order_update: { type, text? }. Pra triggers order_*. Suporta {{order.number}}, {{order.total}}.
+- send_tracking: { type, text? }. Pra trigger order_shipped. Falha se sem tracking_code.
+- request_review: { type, text? }. Mensagem pedindo review/avaliação.
+- suggest_reorder: { type, text? }. Sugere recompra dos itens do pedido.
 
 Diretrizes:
 - Use linguagem PT-BR clara nos textos
