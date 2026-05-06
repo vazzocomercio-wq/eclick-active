@@ -20,6 +20,7 @@ import { AiTestModule } from './modules/ai-test/ai-test.module';
 import { AppointmentsModule } from './modules/appointments/appointments.module';
 import { AttachmentsModule } from './modules/attachments/attachments.module';
 import { AutomationsModule } from './modules/automations/automations.module';
+import { AutomationBridgeModule } from './modules/automation-bridge/automation-bridge.module';
 import { CalendarIntegrationsModule } from './modules/calendar-integrations/calendar-integrations.module';
 import { FormsModule } from './modules/forms/forms.module';
 import { BusinessHoursModule } from './modules/business-hours/business-hours.module';
@@ -95,6 +96,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     AgencyModule,
     WhatsAppCommerceModule,
     ContentCalendarModule,
+    AutomationBridgeModule,
   ],
   controllers: [AppController],
 })
