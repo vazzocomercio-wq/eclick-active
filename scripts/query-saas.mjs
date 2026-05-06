@@ -1,11 +1,13 @@
 /**
  * Roda query arbitrária no Supabase via PostgREST e imprime o JSON.
  *
- * Uso (3 modos):
+ * Uso (4 modos):
  *   1) GET via tabela:    node scripts/query-saas.mjs from <tabela> "<query-string>"
  *      ex:                 node scripts/query-saas.mjs from organizations "name=ilike.*vazzo*&select=id,name"
- *   2) RPC:               node scripts/query-saas.mjs rpc <funcao> '<json-args>'
- *   3) DDL/UPDATE/INSERT: node scripts/query-saas.mjs sql "UPDATE ..."
+ *   2) GET schema active: node scripts/query-saas.mjs active <tabela> "<query-string>"
+ *      ex:                 node scripts/query-saas.mjs active attachments "select=*&limit=5"
+ *   3) RPC:               node scripts/query-saas.mjs rpc <funcao> '<json-args>'
+ *   4) DDL/UPDATE/INSERT: node scripts/query-saas.mjs sql "UPDATE ..."
  *      (usa _admin_exec_sql — não retorna rows)
  *
  * Lê env de apps/api/.env (mesma instância usada pelo Active/Bridge).
@@ -46,6 +48,13 @@ async function main() {
     const [table, qs] = rest;
     const url = `${env.SUPABASE_URL}/rest/v1/${table}${qs ? `?${qs}` : ''}`;
     res = await fetch(url, { method: 'GET', headers: baseHeaders });
+  } else if (mode === 'active') {
+    const [table, qs] = rest;
+    const url = `${env.SUPABASE_URL}/rest/v1/${table}${qs ? `?${qs}` : ''}`;
+    res = await fetch(url, {
+      method: 'GET',
+      headers: { ...baseHeaders, 'Accept-Profile': 'active' },
+    });
   } else if (mode === 'rpc') {
     const [fn, jsonArgs] = rest;
     res = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/${fn}`, {

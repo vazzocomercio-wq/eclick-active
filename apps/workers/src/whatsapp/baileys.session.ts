@@ -987,7 +987,11 @@ export class BaileysSession {
     }
 
     // 3) Upload pro Storage
-    const storagePath = `${this.ctx.orgId}/${conversationId}/${messageId}/${randomUUID()}-${fileName}`;
+    // Sanitiza fileName pro path: Supabase Storage rejeita acentos/espaços/
+    // chars especiais. NFD-decompose remove diacríticos (ó→o), depois mantém
+    // só [A-Za-z0-9._-]. Mantemos `file_name` original na DB pra UI exibir.
+    const safeName = sanitizeForStorage(fileName, ext);
+    const storagePath = `${this.ctx.orgId}/${conversationId}/${messageId}/${randomUUID()}-${safeName}`;
     const { error: uploadErr } = await supabase.storage
       .from('message-media')
       .upload(storagePath, buffer, {
@@ -1362,6 +1366,36 @@ function extFromMime(mime: string): string | null {
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
   };
   return map[mime] ?? null;
+}
+
+/**
+ * Sanitiza nome de arquivo pro path do Supabase Storage. Bucket rejeita
+ * acentos, espaços e chars especiais com erro "Invalid key". Estratégia:
+ *   1. NFD-decompose pra separar caracteres-base de diacríticos (é→e + ́)
+ *   2. Strip combining marks (̀-ͯ) — remove acentos
+ *   3. Mantém só [A-Za-z0-9._-], substitui resto por '_'
+ *   4. Colapsa múltiplos '_' consecutivos
+ *   5. Garante extensão; se vazio depois de sanitizar, usa fallback "file.<ext>"
+ *
+ * O nome original continua sendo persistido em `attachments.file_name` —
+ * essa sanitização afeta APENAS o storage_path.
+ */
+function sanitizeForStorage(name: string, fallbackExt: string): string {
+  if (!name) return `file.${fallbackExt}`;
+  const cleaned = name
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '') // remove combining marks (acentos)
+    .replace(/[^A-Za-z0-9._-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  if (!cleaned || cleaned === '.' || cleaned === '..') {
+    return `file.${fallbackExt}`;
+  }
+  // Garante ao menos uma extensão
+  if (!/\.[A-Za-z0-9]{1,8}$/.test(cleaned)) {
+    return `${cleaned}.${fallbackExt}`;
+  }
+  return cleaned;
 }
 
 function extractPhoneFromJid(jid: string): string | null {
