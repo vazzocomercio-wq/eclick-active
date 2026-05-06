@@ -17,6 +17,7 @@ import {
   Kanban,
   Layout,
   LayoutDashboard,
+  Megaphone,
   MessageSquare,
   Settings,
   UserCog,
@@ -29,6 +30,7 @@ import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { useUnreadCount } from '@/hooks/use-unread-count';
 import { useSacCriticalCount } from '@/hooks/use-sac';
+import { useSocialPendingCount } from '@/hooks/use-social';
 
 interface NavItem {
   href: string;
@@ -53,6 +55,8 @@ const PRIMARY_NAV: NavItem[] = [
   { href: '/automacoes', icon: Zap, label: 'Automações' },
   { href: '/formularios', icon: FileText, label: 'Formulários' },
   { href: '/paginas', icon: Layout, label: 'Páginas', tag: 'AI' },
+  // Social AI badge é injetado via useSocialPendingCount
+  { href: '/social', icon: Megaphone, label: 'Social AI', tag: 'AI' },
   { href: '/conhecimento', icon: BookOpen, label: 'Conhecimento' },
   { href: '/relatorios', icon: BarChart3, label: 'Relatórios' },
   { href: '/equipe', icon: UserCog, label: 'Equipe' },
@@ -77,6 +81,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps = {}
   const [mounted, setMounted] = useState(false);
   const unreadCount = useUnreadCount();
   const sacCriticalCount = useSacCriticalCount();
+  const socialPendingCount = useSocialPendingCount();
 
   useEffect(() => {
     try {
@@ -235,6 +240,8 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps = {}
                 itemWithBadge = { ...item, badge: unreadCount };
               } else if (item.href === '/sac' && sacCriticalCount > 0) {
                 itemWithBadge = { ...item, badge: sacCriticalCount };
+              } else if (item.href === '/social' && socialPendingCount > 0) {
+                itemWithBadge = { ...item, badge: socialPendingCount };
               }
               return (
                 <NavLink

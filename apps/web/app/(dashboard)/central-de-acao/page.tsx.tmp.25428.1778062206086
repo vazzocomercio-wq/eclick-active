@@ -104,11 +104,11 @@ export default function CentralDeAcaoPage() {
             <AttentionList items={data?.attention ?? []} loading={loading && !data} />
           </section>
 
-          {/* BLOCOS SAC + Social (lado a lado em telas largas) */}
-          <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <SacAttentionCard />
-            <SocialAttentionCard />
-          </section>
+          {/* BLOCO SAC — Atenção imediata (entre atenção geral e hot leads) */}
+          <SacAttentionCard />
+
+          {/* BLOCO Social AI — Conteúdo pendente */}
+          <SocialAttentionCard />
 
           {/* BLOCOS 3 & 4 — Hot leads + Top deals */}
           <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">

@@ -370,6 +370,81 @@ export const COPILOT_TOOLS: Anthropic.Tool[] = [
       required: ['query'],
     },
   },
+  // ── Social AI Studio tools ──
+  {
+    name: 'generate_social_content',
+    description:
+      'Cria + gera conteúdo de Instagram (post estático ou carrossel) com IA. Use quando o usuário pedir "cria um post sobre X", "faz carrossel disso", "gera conteúdo de Y". Retorna ID do conteúdo criado pra usuário aprovar depois.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        brand_id: {
+          type: 'string',
+          description: 'UUID da marca (omita pra usar a primeira ativa).',
+        },
+        type: {
+          type: 'string',
+          enum: ['post', 'carousel'],
+          description: 'Tipo de conteúdo. Default post.',
+        },
+        theme: {
+          type: 'string',
+          description: 'Tema/brief do conteúdo. Obrigatório.',
+        },
+        pillar: {
+          type: 'string',
+          enum: [
+            'educational', 'promotional', 'social_proof', 'entertainment',
+            'institutional', 'engagement', 'product', 'behind_scenes',
+          ],
+          description: 'Pilar editorial. Default educational.',
+        },
+        slide_count: {
+          type: 'number',
+          description: 'Apenas pra carrossel. Default 7. Range 3-10.',
+        },
+      },
+      required: ['theme'],
+    },
+  },
+  {
+    name: 'list_pending_social_content',
+    description:
+      'Lista conteúdos de Social AI aguardando aprovação. Use quando o usuário perguntar "o que tá pendente pra aprovar?", "tem post novo da IA?", "ver conteúdos novos".',
+    input_schema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', description: 'Default 10, máx 25.' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'get_social_dashboard',
+    description:
+      'Retorna métricas atuais do Social AI Studio: contagem de pendentes aprovação, agendados próximos 7 dias, rascunhos, publicados no mês, distribuição por pilar. Use pra "como tá o conteúdo?", "resumo do social".',
+    input_schema: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'schedule_social_content',
+    description:
+      'Agenda conteúdo aprovado pra publicação manual. Use quando o usuário disser "agenda o post X pra amanhã 14h", "marca o conteúdo Y pra terça". Aceita ISO datetime ou formato relativo.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        content_id: { type: 'string', description: 'UUID do conteúdo.' },
+        scheduled_for: {
+          type: 'string',
+          description: 'ISO datetime (ex: 2026-05-10T14:00:00-03:00).',
+        },
+      },
+      required: ['content_id', 'scheduled_for'],
+    },
+  },
 ];
 
 export type CopilotToolName =
@@ -389,4 +464,8 @@ export type CopilotToolName =
   | 'get_sac_dashboard'
   | 'get_sac_performance'
   | 'check_order_status'
-  | 'send_scheduling_link';
+  | 'send_scheduling_link'
+  | 'generate_social_content'
+  | 'list_pending_social_content'
+  | 'get_social_dashboard'
+  | 'schedule_social_content';

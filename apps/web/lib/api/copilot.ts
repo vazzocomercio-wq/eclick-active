@@ -17,7 +17,11 @@ export type CopilotToolName =
   | 'list_sac_tickets'
   | 'get_sac_dashboard'
   | 'get_sac_performance'
-  | 'check_order_status';
+  | 'check_order_status'
+  | 'generate_social_content'
+  | 'list_pending_social_content'
+  | 'get_social_dashboard'
+  | 'schedule_social_content';
 
 export interface ToolCallRecord {
   tool: CopilotToolName;

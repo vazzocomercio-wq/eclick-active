@@ -18,6 +18,9 @@ import { CalendlyService } from '../calendar-integrations/calendly.service';
 import { SacTicketsService } from '../sac/sac-tickets.service';
 import { SacAiService } from '../sac/sac-ai.service';
 import { BridgeService } from '../bridge/bridge.service';
+import { SocialContentsService } from '../social/social-contents.service';
+import { SocialBrandsService } from '../social/social-brands.service';
+import { SocialAiGeneratorService } from '../social/social-ai/social-ai-generator.service';
 import {
   COPILOT_SYSTEM_PROMPT,
   MAX_HISTORY_MESSAGES,
@@ -87,6 +90,9 @@ export class CopilotService {
     private readonly sacTickets: SacTicketsService,
     private readonly sacAi: SacAiService,
     private readonly bridge: BridgeService,
+    private readonly socialContents: SocialContentsService,
+    private readonly socialBrands: SocialBrandsService,
+    private readonly socialAi: SocialAiGeneratorService,
   ) {}
 
   // ────────────────────────────────────────────
@@ -393,6 +399,14 @@ export class CopilotService {
         return this.toolGetSacPerformance(input, ctx);
       case 'check_order_status':
         return this.toolCheckOrderStatus(input, ctx);
+      case 'generate_social_content':
+        return this.toolGenerateSocialContent(input, ctx);
+      case 'list_pending_social_content':
+        return this.toolListPendingSocialContent(input, ctx);
+      case 'get_social_dashboard':
+        return this.toolGetSocialDashboard(input, ctx);
+      case 'schedule_social_content':
+        return this.toolScheduleSocialContent(input, ctx);
       case 'send_scheduling_link':
         return this.toolSendSchedulingLink(input, ctx);
       default:
@@ -1375,6 +1389,164 @@ export class CopilotService {
         summary: `Diagnóstico SAC (${period}) gerado`,
       },
     };
+  }
+
+  // ────────────────────────────────────────────
+  // Social tools
+  // ────────────────────────────────────────────
+
+  private async toolGenerateSocialContent(
+    input: Record<string, unknown>,
+    ctx: ToolContext,
+  ): Promise<{ result: unknown; record: ToolCallRecord }> {
+    const theme = typeof input.theme === 'string' ? input.theme.trim() : '';
+    if (!theme) {
+      return {
+        result: { error: 'theme é obrigatório' },
+        record: { tool: 'generate_social_content', summary: 'Tema vazio' },
+      };
+    }
+    const type = input.type === 'carousel' ? 'carousel' : 'post';
+
+    let brandId = typeof input.brand_id === 'string' ? input.brand_id : '';
+    if (!brandId) {
+      const brands = await this.socialBrands.findAll(ctx.orgId);
+      const active = brands.find((b) => b.is_active);
+      if (!active) {
+        return {
+          result: { error: 'Nenhuma marca ativa configurada' },
+          record: {
+            tool: 'generate_social_content',
+            summary: 'Sem marca configurada',
+          },
+        };
+      }
+      brandId = active.id;
+    }
+
+    const pillar =
+      typeof input.pillar === 'string' ? (input.pillar as never) : 'educational';
+    const slideCount =
+      typeof input.slide_count === 'number' ? input.slide_count : 7;
+
+    try {
+      const content =
+        type === 'carousel'
+          ? await this.socialAi.createAndGenerateCarousel(ctx.orgId, {
+              brand_id: brandId,
+              theme,
+              pillar,
+              slide_count: slideCount,
+            })
+          : await this.socialAi.createAndGeneratePost(ctx.orgId, {
+              brand_id: brandId,
+              theme,
+              pillar,
+            });
+      return {
+        result: {
+          content_id: content.id,
+          content_type: content.content_type,
+          status: content.status,
+          caption_preview: content.caption?.slice(0, 160),
+          cover_image_url: content.cover_image_url,
+        },
+        record: {
+          tool: 'generate_social_content',
+          summary: `${type === 'carousel' ? 'Carrossel' : 'Post'} gerado: "${theme.slice(0, 40)}"`,
+          resource_id: content.id,
+        },
+      };
+    } catch (err) {
+      return {
+        result: { error: err instanceof Error ? err.message : String(err) },
+        record: {
+          tool: 'generate_social_content',
+          summary: 'Falha ao gerar conteúdo',
+        },
+      };
+    }
+  }
+
+  private async toolListPendingSocialContent(
+    input: Record<string, unknown>,
+    ctx: ToolContext,
+  ): Promise<{ result: unknown; record: ToolCallRecord }> {
+    const limit = clampLimit(Number(input.limit ?? 0), 10, 25);
+    const { rows, total } = await this.socialContents.findAll(ctx.orgId, {
+      status: 'pending_approval',
+      page_size: limit,
+    });
+    return {
+      result: {
+        total,
+        contents: rows.map((c) => ({
+          id: c.id,
+          type: c.content_type,
+          title: c.title,
+          caption_preview: c.caption?.slice(0, 100),
+          pillar: c.pillar,
+          created_at: c.created_at,
+        })),
+      },
+      record: {
+        tool: 'list_pending_social_content',
+        summary: `${rows.length} conteúdo(s) aguardando aprovação`,
+      },
+    };
+  }
+
+  private async toolGetSocialDashboard(
+    _input: Record<string, unknown>,
+    ctx: ToolContext,
+  ): Promise<{ result: unknown; record: ToolCallRecord }> {
+    const dash = await this.socialContents.getDashboard(ctx.orgId);
+    return {
+      result: dash,
+      record: {
+        tool: 'get_social_dashboard',
+        summary: `${dash.pending_approval} pendente(s), ${dash.scheduled_next_7d} agendado(s) próx 7d`,
+      },
+    };
+  }
+
+  private async toolScheduleSocialContent(
+    input: Record<string, unknown>,
+    ctx: ToolContext,
+  ): Promise<{ result: unknown; record: ToolCallRecord }> {
+    const contentId = typeof input.content_id === 'string' ? input.content_id : '';
+    const scheduledFor =
+      typeof input.scheduled_for === 'string' ? input.scheduled_for : '';
+    if (!contentId || !scheduledFor) {
+      return {
+        result: { error: 'content_id e scheduled_for são obrigatórios' },
+        record: {
+          tool: 'schedule_social_content',
+          summary: 'Argumentos faltando',
+        },
+      };
+    }
+    try {
+      const c = await this.socialContents.schedule(ctx.orgId, contentId, {
+        scheduled_for: scheduledFor,
+      });
+      return {
+        result: { content_id: c.id, scheduled_for: c.scheduled_for },
+        record: {
+          tool: 'schedule_social_content',
+          summary: `Agendado pra ${new Date(scheduledFor).toLocaleString('pt-BR')}`,
+          resource_id: c.id,
+        },
+      };
+    } catch (err) {
+      return {
+        result: { error: err instanceof Error ? err.message : String(err) },
+        record: {
+          tool: 'schedule_social_content',
+          summary: 'Falha ao agendar',
+        },
+      };
+    }
   }
 
   private async toolCheckOrderStatus(

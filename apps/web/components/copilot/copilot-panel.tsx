@@ -11,6 +11,7 @@ import {
   FileText,
   Headphones,
   Lightbulb,
+  Megaphone,
   MessageSquare,
   Package,
   Sparkles,
@@ -280,6 +281,11 @@ const QUICK_SUGGESTIONS: Record<CopilotContextType, string[]> = {
     'Tickets com SLA vencido',
     'Pedidos atrasados sem ticket',
     'Quais produtos têm mais reclamações?',
+    // ── Social AI ──
+    'Cria um post sobre lançamento',
+    'Faz carrossel de prova social',
+    'Conteúdos pendentes de aprovação',
+    'Resumo do Social AI hoje',
   ],
   deal: [
     'Próxima ação?',
@@ -338,6 +344,7 @@ const SUGGESTION_ICON_HINTS: Array<{
   { match: /comparar|relatório|gráfic/i, icon: BarChart3, accent: '#67e8f9' },
   { match: /ticket|sac|reclama|atendimento|sla/i, icon: Headphones, accent: '#06b6d4' },
   { match: /pedido|atras|entrega|rastreio|reembolso|troca|devolu/i, icon: Package, accent: '#f59e0b' },
+  { match: /post|carrossel|conte[uú]do|social|insta|reel|story/i, icon: Megaphone, accent: '#ec4899' },
 ];
 
 function pickIcon(text: string): { icon: LucideIcon; accent: string } {

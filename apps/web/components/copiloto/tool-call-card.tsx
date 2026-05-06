@@ -11,6 +11,7 @@ import {
   Headphones,
   LayoutDashboard,
   ListChecks,
+  Megaphone,
   MessageCircle,
   Package,
   PieChart,
@@ -90,4 +91,8 @@ const TOOL_VISUAL: Record<ToolCallRecord['tool'], { icon: LucideIcon; color: str
   get_sac_dashboard: { icon: LayoutDashboard, color: 'text-cyan-400' },
   get_sac_performance: { icon: Sparkles, color: 'text-cyan-400' },
   check_order_status: { icon: Package, color: 'text-orange-400' },
+  generate_social_content: { icon: Megaphone, color: 'text-pink-400' },
+  list_pending_social_content: { icon: Megaphone, color: 'text-amber-400' },
+  get_social_dashboard: { icon: Megaphone, color: 'text-pink-400' },
+  schedule_social_content: { icon: Megaphone, color: 'text-blue-400' },
 };
