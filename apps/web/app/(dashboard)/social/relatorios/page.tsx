@@ -24,6 +24,7 @@ import {
   type HourReportRow,
   type TopPerformerRow,
   type SocialSignal,
+  type HashtagTopRow,
 } from '@/lib/api/social';
 import { useBrands } from '@/hooks/use-social';
 import { Button } from '@/components/ui/button';
@@ -43,24 +44,27 @@ export default function SocialReportsPage() {
   const [byHour, setByHour] = useState<HourReportRow[]>([]);
   const [topPerformers, setTopPerformers] = useState<TopPerformerRow[]>([]);
   const [signals, setSignals] = useState<SocialSignal[]>([]);
+  const [hashtags, setHashtags] = useState<HashtagTopRow[]>([]);
   const [boostTarget, setBoostTarget] = useState<{ contentId: string; signalId?: string } | null>(null);
 
   const params = brandId === 'all' ? { days } : { days, brand_id: brandId };
 
   const load = async () => {
     try {
-      const [s, p, h, t, sig] = await Promise.all([
+      const [s, p, h, t, sig, hh] = await Promise.all([
         socialApi.reports.summary(params),
         socialApi.reports.byPillar(params),
         socialApi.reports.byHour(params),
         socialApi.reports.topPerformers({ ...params, limit: 8 }),
         socialApi.signals.list(true),
+        socialApi.hashtags.top({ ...params, limit: 12 }),
       ]);
       setSummary(s);
       setByPillar(p);
       setByHour(h);
       setTopPerformers(t);
       setSignals(sig);
+      setHashtags(hh);
     } catch {
       /* silent */
     }
@@ -280,6 +284,65 @@ export default function SocialReportsPage() {
             )}
           </section>
         </div>
+
+        {/* Hashtags campeãs */}
+        {hashtags.length > 0 && (
+          <section className="mb-6">
+            <h2 className="mb-3 text-sm font-semibold">
+              Hashtags campeãs ({hashtags.length})
+            </h2>
+            <div className="overflow-hidden rounded-lg border border-border bg-card">
+              <table className="w-full text-sm">
+                <thead className="border-b border-border bg-muted/30 text-xs uppercase tracking-wider text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-2 text-left">Hashtag</th>
+                    <th className="px-3 py-2 text-right">Usos</th>
+                    <th className="px-3 py-2 text-right">Engajamento</th>
+                    <th className="px-3 py-2 text-right">Alcance médio</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {hashtags.map((h, i) => (
+                    <tr
+                      key={h.hashtag}
+                      className={cn(
+                        'border-b border-border/60',
+                        i === 0 && 'bg-cyan-500/5',
+                      )}
+                    >
+                      <td className="px-3 py-2">
+                        <span className="inline-flex items-center gap-1.5 font-mono text-xs text-blue-600 dark:text-blue-400">
+                          {i === 0 && <span>👑</span>}
+                          #{h.hashtag}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right text-xs">
+                        {h.total_uses}×
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono text-xs">
+                        <span
+                          className={cn(
+                            h.avg_engagement_rate >= 0.05
+                              ? 'text-emerald-600 dark:text-emerald-400 font-medium'
+                              : 'text-foreground/70',
+                          )}
+                        >
+                          {(h.avg_engagement_rate * 100).toFixed(2)}%
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono text-xs text-muted-foreground">
+                        {fmtNum(Math.round(h.avg_reach))}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              👑 = top performer · clique numa hashtag pra ver posts que usaram (em breve)
+            </p>
+          </section>
+        )}
 
         {/* Top performers */}
         {topPerformers.length > 0 && (

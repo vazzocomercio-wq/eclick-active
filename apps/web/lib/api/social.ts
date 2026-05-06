@@ -377,6 +377,34 @@ export interface BoostSuggestion {
   copy_suggestions: Array<{ caption: string; reason: string }>;
 }
 
+// ─── Hashtag analytics types ──────────────────────
+
+export interface HashtagTopRow {
+  hashtag: string;
+  total_uses: number;
+  avg_engagement_rate: number;
+  avg_reach: number;
+  avg_likes: number;
+  total_interactions: number;
+}
+
+export interface HashtagDetailRow {
+  content_id: string;
+  title: string | null;
+  pillar: string | null;
+  cover_image_url: string | null;
+  engagement_rate: number;
+  reach: number;
+  total_interactions: number;
+  published_at: string;
+}
+
+export interface HashtagSuggestion {
+  hashtags: string[];
+  rationale: string;
+  mix: 'niche' | 'broad' | 'mixed' | 'minimal';
+}
+
 // ─── API ──────────────────────────────────────────
 
 export interface ContentListFilters {
@@ -554,6 +582,19 @@ export const socialApi = {
       api.post<void>(`/social/signals/${id}/acknowledge`, {}),
     detect: () =>
       api.post<{ created: number }>('/social/signals/detect', {}),
+  },
+
+  // Hashtag analytics
+  hashtags: {
+    top: (params: { brand_id?: string; days?: number; limit?: number } = {}, signal?: AbortSignal) =>
+      api.get<HashtagTopRow[]>('/social/hashtags/top', { query: params, signal }),
+    detail: (hashtag: string, params: { brand_id?: string; days?: number } = {}, signal?: AbortSignal) =>
+      api.get<HashtagDetailRow[]>(
+        `/social/hashtags/detail/${encodeURIComponent(hashtag)}`,
+        { query: params, signal },
+      ),
+    suggest: (body: { theme: string; brand_id: string }) =>
+      api.post<HashtagSuggestion>('/social/hashtags/suggest', body),
   },
 
   // Ad Boost — promover post como ad

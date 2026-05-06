@@ -24,6 +24,7 @@ import { SocialPublishingService } from './publishing/social-publishing.service'
 import { SocialMetricsService } from './analytics/social-metrics.service';
 import { SocialSignalsService } from './analytics/social-signals.service';
 import { SocialAdBoostService } from './boost/social-ad-boost.service';
+import { SocialHashtagsService } from './analytics/social-hashtags.service';
 import type { PublishingChannel } from './publishing/publishing.types';
 import type { BoostStatus, SocialAdBoostDraft } from './boost/social-ad-boost.types';
 import type { CreateBrandDto, UpdateBrandDto } from './dto/brand.dto';
@@ -57,6 +58,7 @@ export class SocialController {
     private readonly metrics: SocialMetricsService,
     private readonly signals: SocialSignalsService,
     private readonly boost: SocialAdBoostService,
+    private readonly hashtags: SocialHashtagsService,
   ) {}
 
   // ─── Brands ─────────────────────────────────────
@@ -393,6 +395,43 @@ export class SocialController {
   @Get('contents/:id/metrics')
   contentMetrics(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.metrics.getMetricsForContent(user.org_id, id);
+  }
+
+  // ─── Hashtag analytics ──────────────────────────
+
+  @Get('hashtags/top')
+  hashtagsTop(
+    @CurrentUser() user: AuthUser,
+    @Query('brand_id') brandId?: string,
+    @Query('days', new DefaultValuePipe(60), ParseIntPipe) days?: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit?: number,
+  ) {
+    return this.hashtags.top(user.org_id, {
+      brand_id: brandId,
+      days: days ?? 60,
+      limit: limit ?? 20,
+    });
+  }
+
+  @Get('hashtags/detail/:hashtag')
+  hashtagsDetail(
+    @CurrentUser() user: AuthUser,
+    @Param('hashtag') hashtag: string,
+    @Query('brand_id') brandId?: string,
+    @Query('days', new DefaultValuePipe(60), ParseIntPipe) days?: number,
+  ) {
+    return this.hashtags.detail(user.org_id, decodeURIComponent(hashtag), {
+      brand_id: brandId,
+      days: days ?? 60,
+    });
+  }
+
+  @Post('hashtags/suggest')
+  hashtagsSuggest(
+    @CurrentUser() user: AuthUser,
+    @Body() body: { theme: string; brand_id: string },
+  ) {
+    return this.hashtags.suggest(user.org_id, body);
   }
 
   // ─── Analytics — signals ─────────────────────────

@@ -25,6 +25,7 @@ import { InstagramInsightsService } from './analytics/instagram-insights.service
 import { SocialMetricsService } from './analytics/social-metrics.service';
 import { SocialSignalsService } from './analytics/social-signals.service';
 import { SocialMetricsWorkerService } from './analytics/social-metrics-worker.service';
+import { SocialHashtagsService } from './analytics/social-hashtags.service';
 import { SocialAdBoostService } from './boost/social-ad-boost.service';
 
 @Module({
@@ -57,6 +58,7 @@ import { SocialAdBoostService } from './boost/social-ad-boost.service';
     SocialMetricsService,
     SocialSignalsService,
     SocialMetricsWorkerService,
+    SocialHashtagsService,
     SocialAdBoostService,
   ],
   exports: [
@@ -67,6 +69,7 @@ import { SocialAdBoostService } from './boost/social-ad-boost.service';
     SocialChannelCredentialsService,
     SocialMetricsService,
     SocialSignalsService,
+    SocialHashtagsService,
     SocialAdBoostService,
   ],
 })

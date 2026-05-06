@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Sparkles, Lock } from 'lucide-react';
+import { ArrowLeft, Sparkles, Lock, Hash } from 'lucide-react';
 import { useBrands } from '@/hooks/use-social';
 import { socialApi, type ContentPillar, type SocialContent } from '@/lib/api/social';
 import { Button } from '@/components/ui/button';
@@ -57,6 +57,11 @@ export default function CreateContentPage() {
 
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState<SocialContent | null>(null);
+  const [suggestedTags, setSuggestedTags] = useState<{
+    hashtags: string[];
+    rationale: string;
+  } | null>(null);
+  const [tagsLoading, setTagsLoading] = useState(false);
 
   useEffect(() => {
     if (!brandId && brands.length > 0 && brands[0]) setBrandId(brands[0].id);
@@ -93,6 +98,22 @@ export default function CreateContentPage() {
 
   const goToDetail = () => {
     if (result) router.push(`/social/conteudo/${result.id}`);
+  };
+
+  const suggestHashtags = async () => {
+    if (!brandId || !theme.trim()) return;
+    setTagsLoading(true);
+    try {
+      const r = await socialApi.hashtags.suggest({
+        brand_id: brandId,
+        theme: theme.trim(),
+      });
+      setSuggestedTags(r);
+    } catch {
+      setSuggestedTags(null);
+    } finally {
+      setTagsLoading(false);
+    }
   };
 
   if (brands.length === 0) {
@@ -257,6 +278,43 @@ export default function CreateContentPage() {
                   </select>
                 </Field>
               </>
+            )}
+
+            {/* Hashtag preview */}
+            {theme.trim().length > 5 && (
+              <div className="rounded-md border border-border bg-muted/20 p-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                    Hashtags sugeridas pela IA
+                  </span>
+                  <button
+                    type="button"
+                    onClick={suggestHashtags}
+                    disabled={tagsLoading || !brandId}
+                    className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-1.5 py-0.5 text-[10px] hover:bg-muted disabled:opacity-50"
+                  >
+                    <Hash className="h-3 w-3" />
+                    {tagsLoading ? 'IA…' : suggestedTags ? 'Refazer' : 'Sugerir'}
+                  </button>
+                </div>
+                {suggestedTags && (
+                  <>
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {suggestedTags.hashtags.map((h) => (
+                        <span
+                          key={h}
+                          className="rounded-md border border-border bg-card px-1.5 py-0.5 font-mono text-[11px] text-blue-600 dark:text-blue-400"
+                        >
+                          #{h}
+                        </span>
+                      ))}
+                    </div>
+                    <p className="mt-1 text-[10px] italic text-muted-foreground">
+                      {suggestedTags.rationale}
+                    </p>
+                  </>
+                )}
+              </div>
             )}
 
             <Button onClick={generate} disabled={generating || !theme.trim()}>
