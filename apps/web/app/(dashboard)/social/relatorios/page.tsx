@@ -163,10 +163,18 @@ export default function SocialReportsPage() {
         {/* Signals (alerts) */}
         {signals.length > 0 && (
           <section className="mb-6">
-            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-              <Sparkles className="h-4 w-4 text-cyan-500" />
-              Insights da IA ({signals.length})
-            </h2>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 text-sm font-semibold">
+                <Sparkles className="h-4 w-4 text-cyan-500" />
+                Insights da IA ({signals.length})
+              </h2>
+              <Link
+                href="/configuracoes/alerts"
+                className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+              >
+                📲 Configurar alertas WhatsApp
+              </Link>
+            </div>
             <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
               {signals.slice(0, 6).map((s) => (
                 <div

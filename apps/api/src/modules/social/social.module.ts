@@ -24,9 +24,12 @@ import { TikTokBusinessProvider } from './publishing/providers/tiktok.provider';
 import { InstagramInsightsService } from './analytics/instagram-insights.service';
 import { SocialMetricsService } from './analytics/social-metrics.service';
 import { SocialSignalsService } from './analytics/social-signals.service';
+import { SocialSignalAlerter } from './analytics/social-signal-alerter.service';
 import { SocialMetricsWorkerService } from './analytics/social-metrics-worker.service';
 import { SocialHashtagsService } from './analytics/social-hashtags.service';
 import { SocialAdBoostService } from './boost/social-ad-boost.service';
+import { AlertsModule } from '../alerts/alerts.module';
+import { ChannelsModule as ChannelDispatcherModule } from '../../common/channels/channels.module';
 
 @Module({
   imports: [
@@ -36,6 +39,8 @@ import { SocialAdBoostService } from './boost/social-ad-boost.service';
     EventsModule,
     KnowledgeModule,
     AiPersonaModule,
+    AlertsModule,
+    ChannelDispatcherModule,
   ],
   controllers: [SocialController],
   providers: [
@@ -57,6 +62,7 @@ import { SocialAdBoostService } from './boost/social-ad-boost.service';
     InstagramInsightsService,
     SocialMetricsService,
     SocialSignalsService,
+    SocialSignalAlerter,
     SocialMetricsWorkerService,
     SocialHashtagsService,
     SocialAdBoostService,

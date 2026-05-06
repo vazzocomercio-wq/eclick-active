@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SupabaseService } from '../../../common/supabase/supabase.service';
+import { SocialSignalAlerter } from './social-signal-alerter.service';
 import type { SocialSignal, SignalType } from './analytics.types';
 
 interface PostMetrics {
@@ -31,7 +32,10 @@ const MIN_POSTS_FOR_BASELINE = 5;
 export class SocialSignalsService {
   private readonly log = new Logger(SocialSignalsService.name);
 
-  constructor(private readonly supabase: SupabaseService) {}
+  constructor(
+    private readonly supabase: SupabaseService,
+    private readonly alerter: SocialSignalAlerter,
+  ) {}
 
   async detectAll(orgId: string): Promise<{ created: number }> {
     let created = 0;
@@ -251,15 +255,25 @@ export class SocialSignalsService {
       | 'metadata'
     > & { metadata?: Record<string, unknown> },
   ): Promise<void> {
-    await this.supabase.adminClient
+    const { data, error } = await this.supabase.adminClient
       .from('social_signals')
       .upsert(
         { ...payload, metadata: payload.metadata ?? {} },
         { onConflict: 'org_id,dedupe_key' },
       )
-      .then(({ error }) => {
-        if (error) this.log.warn(`upsertSignal falhou: ${error.message}`);
+      .select('*')
+      .single();
+    if (error) {
+      this.log.warn(`upsertSignal falhou: ${error.message}`);
+      return;
+    }
+    // Notifica managers via WhatsApp se qualificado (best-effort)
+    const fullSignal = data as SocialSignal;
+    if (fullSignal) {
+      void this.alerter.maybeNotify(fullSignal).catch((err) => {
+        this.log.warn(`alerter.maybeNotify falhou: ${String(err)}`);
       });
+    }
   }
 
   // ─── List API ────────────────────────────────
