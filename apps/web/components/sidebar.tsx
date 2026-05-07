@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   BarChart3,
   BookOpen,
@@ -12,9 +12,11 @@ import {
   CalendarClock,
   CalendarRange,
   CheckSquare,
+  ChevronDown,
   ChevronLeft,
   FileText,
   Headphones,
+  Inbox,
   Kanban,
   Layout,
   LayoutDashboard,
@@ -22,6 +24,7 @@ import {
   Megaphone,
   MessageSquare,
   Settings,
+  TrendingUp,
   UserCog,
   Users,
   X,
@@ -34,43 +37,83 @@ import { useUnreadCount } from '@/hooks/use-unread-count';
 import { useSacCriticalCount } from '@/hooks/use-sac';
 import { useSocialPendingCount } from '@/hooks/use-social';
 
+// ────────────────────────────────────────────────────────────────────────
+// Estrutura
+// ────────────────────────────────────────────────────────────────────────
+
 interface NavItem {
-  href: string;
-  icon: LucideIcon;
-  label: string;
+  type:   'item';
+  href:   string;
+  icon:   LucideIcon;
+  label:  string;
   badge?: number;
-  tag?: string;
+  tag?:   string;
 }
 
-const PRIMARY_NAV: NavItem[] = [
-  { href: '/central-de-acao', icon: LayoutDashboard, label: 'Central de Ação' },
-  // O badge de Conversas é injetado dinamicamente via useUnreadCount no render
-  { href: '/conversas', icon: MessageSquare, label: 'Conversas' },
-  { href: '/funis', icon: Kanban, label: 'Funis' },
-  { href: '/contatos', icon: Users, label: 'Contatos' },
-  { href: '/tarefas', icon: CheckSquare, label: 'Tarefas' },
-  // O badge de SAC é injetado dinamicamente via useSacCriticalCount no render
-  { href: '/sac', icon: Headphones, label: 'SAC', tag: 'AI' },
-  { href: '/calendario', icon: Calendar, label: 'Calendário' },
-  { href: '/agenda', icon: CalendarClock, label: 'Agenda', tag: 'AI' },
-  { href: '/copiloto', icon: Bot, label: 'Copiloto IA', tag: 'AI' },
-  { href: '/automacoes', icon: Zap, label: 'Automações' },
-  { href: '/calendario-conteudo', icon: CalendarRange, label: 'Calendário de Conteúdo', tag: 'AI' },
-  { href: '/formularios', icon: FileText, label: 'Formulários' },
-  { href: '/paginas', icon: Layout, label: 'Páginas', tag: 'AI' },
-  // Social AI badge é injetado via useSocialPendingCount
-  { href: '/social', icon: Megaphone, label: 'Social AI', tag: 'AI' },
-  { href: '/conhecimento', icon: BookOpen, label: 'Conhecimento' },
-  { href: '/relatorios', icon: BarChart3, label: 'Relatórios' },
-  { href: '/agencia', icon: Building2, label: 'Agência' },
-  { href: '/equipe', icon: UserCog, label: 'Equipe' },
+interface NavGroup {
+  type:   'group';
+  key:    string;       // chave estável pra localStorage
+  icon:   LucideIcon;
+  label:  string;
+  items:  NavItem[];
+}
+
+type NavEntry = NavItem | NavGroup;
+
+// Dois itens avulsos no topo + 4 grupos por fluxo:
+//   Atender → Vender (CRM) → Atrair (Marketing) → Medir (Análise)
+const PRIMARY_NAV: NavEntry[] = [
+  { type: 'item', href: '/central-de-acao', icon: LayoutDashboard, label: 'Central de Ação' },
+  { type: 'item', href: '/copiloto',        icon: Bot,             label: 'Copiloto IA', tag: 'AI' },
+  {
+    type: 'group', key: 'atendimento', icon: Inbox, label: 'Atendimento',
+    items: [
+      { type: 'item', href: '/conversas',  icon: MessageSquare, label: 'Conversas' },
+      { type: 'item', href: '/sac',        icon: Headphones,    label: 'SAC',           tag: 'AI' },
+      { type: 'item', href: '/tarefas',    icon: CheckSquare,   label: 'Tarefas' },
+      { type: 'item', href: '/agenda',     icon: CalendarClock, label: 'Agenda',        tag: 'AI' },
+      { type: 'item', href: '/calendario', icon: Calendar,      label: 'Calendário' },
+    ],
+  },
+  {
+    type: 'group', key: 'crm', icon: Users, label: 'CRM',
+    items: [
+      { type: 'item', href: '/funis',       icon: Kanban,   label: 'Funis' },
+      { type: 'item', href: '/contatos',    icon: Users,    label: 'Contatos' },
+      { type: 'item', href: '/formularios', icon: FileText, label: 'Formulários' },
+    ],
+  },
+  {
+    type: 'group', key: 'marketing', icon: Megaphone, label: 'Marketing',
+    items: [
+      { type: 'item', href: '/calendario-conteudo', icon: CalendarRange, label: 'Calendário de Conteúdo', tag: 'AI' },
+      { type: 'item', href: '/social',              icon: Megaphone,     label: 'Social AI',              tag: 'AI' },
+      { type: 'item', href: '/paginas',             icon: Layout,        label: 'Páginas',                tag: 'AI' },
+      { type: 'item', href: '/automacoes',          icon: Zap,           label: 'Automações' },
+    ],
+  },
+  {
+    type: 'group', key: 'analise', icon: TrendingUp, label: 'Análise',
+    items: [
+      { type: 'item', href: '/relatorios',   icon: BarChart3, label: 'Relatórios' },
+      { type: 'item', href: '/conhecimento', icon: BookOpen,  label: 'Conhecimento' },
+    ],
+  },
 ];
 
-const FOOTER_NAV: NavItem[] = [
-  { href: '/configuracoes', icon: Settings, label: 'Configurações' },
+const FOOTER_NAV: NavEntry[] = [
+  {
+    type: 'group', key: 'conta', icon: Settings, label: 'Conta',
+    items: [
+      { type: 'item', href: '/equipe',        icon: UserCog,   label: 'Equipe' },
+      { type: 'item', href: '/agencia',       icon: Building2, label: 'Agência' },
+      { type: 'item', href: '/configuracoes', icon: Settings,  label: 'Configurações' },
+    ],
+  },
 ];
 
 const COLLAPSED_KEY = 'sidebar:collapsed';
+const GROUP_KEY = (key: string) => `sidebar:group:${key}`;
 
 interface SidebarProps {
   /** Quando true, em mobile a sidebar fica visível (translate-x-0). */
@@ -141,6 +184,15 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps = {}
   // Em mobile (drawer aberto), nunca colapsa.
   const isCollapsed = mounted && collapsed && !mobileOpen;
 
+  // Mapa de badges injetados dinamicamente (rota -> count)
+  const dynamicBadges = useMemo<Record<string, number>>(() => {
+    const m: Record<string, number> = {};
+    if (unreadCount > 0)        m['/conversas'] = unreadCount;
+    if (sacCriticalCount > 0)   m['/sac']       = sacCriticalCount;
+    if (socialPendingCount > 0) m['/social']    = socialPendingCount;
+    return m;
+  }, [unreadCount, sacCriticalCount, socialPendingCount]);
+
   return (
     <>
       {/* Backdrop (mobile drawer aberto) */}
@@ -156,10 +208,8 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps = {}
       <aside
         className={cn(
           'fixed inset-y-0 left-0 z-50 flex h-screen flex-col border-r border-border bg-background transition-transform duration-200',
-          // Desktop: comportamento normal (estático, largura controlada)
           'lg:static lg:translate-x-0 lg:transition-[width]',
           isCollapsed ? 'lg:w-16' : 'lg:w-64',
-          // Mobile: translate-x off-canvas
           'w-64',
           mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
         )}
@@ -173,7 +223,6 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps = {}
           )}
         >
           {isCollapsed ? (
-            // Quando colapsado, o ícone é o próprio botão de expandir
             <button
               type="button"
               onClick={toggleCollapse}
@@ -207,7 +256,6 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps = {}
             </Link>
           )}
 
-          {/* Botão collapse (desktop) — escondido em mobile pra não confundir com close */}
           {!isCollapsed && (
             <button
               type="button"
@@ -221,7 +269,6 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps = {}
             </button>
           )}
 
-          {/* Botão fechar (mobile) */}
           {mobileOpen && (
             <button
               type="button"
@@ -237,38 +284,17 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps = {}
         {/* Primary nav */}
         <nav className="flex-1 overflow-y-auto py-2 scrollbar-auto-hide">
           <ul className="flex flex-col gap-0.5 px-2">
-            {PRIMARY_NAV.map((item) => {
-              // Injeta badges dinâmicos: /conversas (não-lidas) e /sac (críticos)
-              let itemWithBadge: NavItem = item;
-              if (item.href === '/conversas' && unreadCount > 0) {
-                itemWithBadge = { ...item, badge: unreadCount };
-              } else if (item.href === '/sac' && sacCriticalCount > 0) {
-                itemWithBadge = { ...item, badge: sacCriticalCount };
-              } else if (item.href === '/social' && socialPendingCount > 0) {
-                itemWithBadge = { ...item, badge: socialPendingCount };
-              }
-              return (
-                <NavLink
-                  key={item.href}
-                  item={itemWithBadge}
-                  active={isActive(pathname, item.href)}
-                  collapsed={isCollapsed}
-                />
-              );
-            })}
+            {PRIMARY_NAV.map((entry) =>
+              renderEntry(entry, { pathname, isCollapsed, dynamicBadges }),
+            )}
           </ul>
 
           <div className="mx-3 my-2 border-t border-border" />
 
           <ul className="flex flex-col gap-0.5 px-2">
-            {FOOTER_NAV.map((item) => (
-              <NavLink
-                key={item.href}
-                item={item}
-                active={isActive(pathname, item.href)}
-                collapsed={isCollapsed}
-              />
-            ))}
+            {FOOTER_NAV.map((entry) =>
+              renderEntry(entry, { pathname, isCollapsed, dynamicBadges }),
+            )}
           </ul>
         </nav>
 
@@ -286,18 +312,61 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps = {}
   );
 }
 
+// ────────────────────────────────────────────────────────────────────────
+// Helpers
+// ────────────────────────────────────────────────────────────────────────
+
 function isActive(pathname: string | null, href: string): boolean {
   if (!pathname) return false;
   return pathname === href || pathname.startsWith(href + '/');
 }
 
-interface NavLinkProps {
-  item: NavItem;
-  active: boolean;
-  collapsed: boolean;
+function groupHasActiveChild(group: NavGroup, pathname: string | null): boolean {
+  return group.items.some((it) => isActive(pathname, it.href));
 }
 
-function NavLink({ item, active, collapsed }: NavLinkProps) {
+interface RenderCtx {
+  pathname:       string | null;
+  isCollapsed:    boolean;
+  dynamicBadges:  Record<string, number>;
+}
+
+function applyDynamic(item: NavItem, dyn: Record<string, number>): NavItem {
+  const count = dyn[item.href];
+  if (typeof count === 'number' && count > 0) {
+    return { ...item, badge: count };
+  }
+  return item;
+}
+
+function renderEntry(entry: NavEntry, ctx: RenderCtx) {
+  if (entry.type === 'item') {
+    const item = applyDynamic(entry, ctx.dynamicBadges);
+    return (
+      <NavLink
+        key={item.href}
+        item={item}
+        active={isActive(ctx.pathname, item.href)}
+        collapsed={ctx.isCollapsed}
+      />
+    );
+  }
+  return <NavGroupRenderer key={entry.key} group={entry} ctx={ctx} />;
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// Componentes
+// ────────────────────────────────────────────────────────────────────────
+
+interface NavLinkProps {
+  item:      NavItem;
+  active:    boolean;
+  collapsed: boolean;
+  /** Quando true, recua o item indicando que está dentro de um grupo. */
+  nested?:   boolean;
+}
+
+function NavLink({ item, active, collapsed, nested = false }: NavLinkProps) {
   const Icon = item.icon;
   return (
     <li>
@@ -312,6 +381,7 @@ function NavLink({ item, active, collapsed }: NavLinkProps) {
             ? 'border-primary bg-card text-foreground'
             : 'text-muted-foreground hover:bg-card/50 hover:text-foreground',
           collapsed && 'justify-center px-2',
+          nested && !collapsed && 'pl-8',
         )}
       >
         <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
@@ -331,6 +401,132 @@ function NavLink({ item, active, collapsed }: NavLinkProps) {
           </>
         )}
       </Link>
+    </li>
+  );
+}
+
+interface NavGroupRendererProps {
+  group: NavGroup;
+  ctx:   RenderCtx;
+}
+
+function NavGroupRenderer({ group, ctx }: NavGroupRendererProps) {
+  const Icon = group.icon;
+  const hasActiveChild = groupHasActiveChild(group, ctx.pathname);
+
+  // Estado expandido — abre se tem filho ativo ou se localStorage salvou aberto.
+  // Default: aberto na primeira visita.
+  const [open, setOpen] = useState<boolean>(true);
+  const [readyOpen, setReadyOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(GROUP_KEY(group.key));
+      if (saved === '0')      setOpen(false);
+      else if (saved === '1') setOpen(true);
+      else                    setOpen(true); // default
+    } catch {
+      /* ignore */
+    }
+    setReadyOpen(true);
+  }, [group.key]);
+
+  // Se rota ativa entrou nesse grupo, força abrir
+  useEffect(() => {
+    if (hasActiveChild) setOpen(true);
+  }, [hasActiveChild]);
+
+  function toggleOpen() {
+    setOpen((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(GROUP_KEY(group.key), next ? '1' : '0');
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }
+
+  // Em sidebar icon-only, achata: mostra todos os filhos diretamente sem header
+  // Mantém UX simples (tooltip com label do filho).
+  if (ctx.isCollapsed) {
+    return (
+      <>
+        {group.items.map((item) => {
+          const withDyn = applyDynamic(item, ctx.dynamicBadges);
+          return (
+            <NavLink
+              key={item.href}
+              item={withDyn}
+              active={isActive(ctx.pathname, item.href)}
+              collapsed
+            />
+          );
+        })}
+      </>
+    );
+  }
+
+  // Soma badges + acumula tags pra mostrar no header colapsado
+  const childItems = group.items.map((it) => applyDynamic(it, ctx.dynamicBadges));
+  const totalBadge = childItems.reduce((acc, it) => acc + (it.badge ?? 0), 0);
+  const hasAiChild = childItems.some((it) => it.tag === 'AI');
+
+  // Enquanto não leu localStorage, segue default (open=true) sem flicker
+  const isOpen = readyOpen ? open : true;
+
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={toggleOpen}
+        aria-expanded={isOpen}
+        className={cn(
+          'group relative flex w-full items-center gap-3 rounded-md px-3 py-1.5 text-sm transition-colors',
+          'border-l-2 border-transparent',
+          hasActiveChild
+            ? 'text-foreground'
+            : 'text-muted-foreground hover:bg-card/50 hover:text-foreground',
+        )}
+      >
+        <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+        <span className="flex-1 truncate text-left font-medium">{group.label}</span>
+
+        {/* Badges/tags acumulados quando fechado */}
+        {!isOpen && totalBadge > 0 && (
+          <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary/15 px-1.5 text-xs font-medium text-primary">
+            {totalBadge}
+          </span>
+        )}
+        {!isOpen && hasAiChild && totalBadge === 0 && (
+          <span className="rounded-sm bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
+            AI
+          </span>
+        )}
+
+        <ChevronDown
+          className={cn(
+            'h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform',
+            isOpen ? 'rotate-0' : '-rotate-90',
+          )}
+          aria-hidden="true"
+        />
+      </button>
+
+      {isOpen && (
+        <ul className="flex flex-col gap-0.5 mt-0.5">
+          {childItems.map((item) => (
+            <NavLink
+              key={item.href}
+              item={item}
+              active={isActive(ctx.pathname, item.href)}
+              collapsed={false}
+              nested
+            />
+          ))}
+        </ul>
+      )}
     </li>
   );
 }
