@@ -103,6 +103,48 @@ export interface SendBroadcastResult {
 }
 
 // ──────────────────────────────────────────────────────────
+// Campaign card (M4) — SaaS Campaign Center cria card+task
+// ──────────────────────────────────────────────────────────
+
+/** Input do create-campaign-card.
+ *
+ *  SaaS Campaign Center IA chama isto quando dispara um deadline alert ou
+ *  quando uma recomendação cai em pending_manager_approval. Cria 1 card
+ *  no funil + 1 task vinculada pra forçar ação humana. */
+export interface CreateCampaignCardInput {
+  organization_id:    string;
+  pipeline_id:        string;
+  stage_id:           string;
+  /** Quem vai ficar dono do card e da task (auth.users.id). */
+  assigned_to:        string;
+  /** Título do card no kanban (ex: "DEAL Dia das Mães — D-2"). */
+  title:              string;
+  /** Texto da task vinculada (ex: "Revisar 13 candidatos antes do deadline"). */
+  task_title:         string;
+  /** Prazo da task (ISO 8601) — geralmente o deadline da campanha. */
+  due_date?:          string;
+  /** Valor estimado da oportunidade (BRL). Opcional. */
+  value?:             number;
+  /** Tags pro card (ex: ['campaign-center', 'deadline', 'DEAL']). */
+  tags?:              string[];
+  /** Metadados livres (ml_campaign_id, ml_promotion_type, alert_type, etc). */
+  metadata?:          Record<string, unknown>;
+  /** Se já existe card pra esse contexto, evita duplicar.
+   *  Snapshot de chave lógica — ex: "campaign:<uuid>:deadline_warning". */
+  dedup_key?:         string;
+}
+
+export interface CreateCampaignCardResult {
+  ok:        true;
+  /** UUID do deal criado (ou existente se dedup_key bateu). */
+  deal_id:   string;
+  /** UUID da task criada (ou null se card já existia e task também). */
+  task_id:   string | null;
+  /** True se deal+task foram criados agora; false se foi reuso. */
+  created:   boolean;
+}
+
+// ──────────────────────────────────────────────────────────
 // Internal — automation_executions row
 // ──────────────────────────────────────────────────────────
 

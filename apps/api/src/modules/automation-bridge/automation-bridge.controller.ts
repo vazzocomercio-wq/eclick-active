@@ -9,6 +9,8 @@ import {
 import { AutomationBridgeService } from './automation-bridge.service';
 import { AutomationBridgeGuard } from './automation-bridge.guard';
 import type {
+  CreateCampaignCardInput,
+  CreateCampaignCardResult,
   NotifyLojistaInput,
   NotifyLojistaResult,
   SendBroadcastInput,
@@ -103,5 +105,38 @@ export class AutomationBridgeController {
     @Body() body: SendBroadcastInput,
   ): Promise<SendBroadcastResult> {
     return this.service.sendBroadcast(body);
+  }
+
+  /**
+   * POST /commerce/automation-bridge/create-campaign-card
+   *
+   * M4 (2026-05-08) — chamado pelo Campaign Center IA do SaaS quando um
+   * alerta de deadline dispara OU quando uma recomendação cai em
+   * pending_manager_approval. Cria 1 deal no funil + 1 task vinculada.
+   *
+   * Idempotência via dedup_key (custom_fields.dedup_key). Se ja existe
+   * deal com mesma key, reusa (não cria duplicado).
+   *
+   * Body:
+   *   organization_id: string
+   *   pipeline_id: string                          (uuid do funil)
+   *   stage_id: string                             (uuid do estágio inicial)
+   *   assigned_to: string                          (uuid do user dono do card+task)
+   *   title: string                                (título do card)
+   *   task_title: string                           (texto da task)
+   *   due_date?: string                            (ISO 8601)
+   *   value?: number                               (BRL)
+   *   tags?: string[]
+   *   metadata?: Record<string, unknown>
+   *   dedup_key?: string                           (chave lógica pra dedup)
+   *
+   * Retorna { ok, deal_id, task_id, created }
+   */
+  @Post('create-campaign-card')
+  @HttpCode(HttpStatus.OK)
+  createCampaignCard(
+    @Body() body: CreateCampaignCardInput,
+  ): Promise<CreateCampaignCardResult> {
+    return this.service.createCampaignCard(body);
   }
 }

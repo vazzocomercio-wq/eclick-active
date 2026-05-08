@@ -7,11 +7,15 @@ import {
 } from '@nestjs/common';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { ChannelDispatcherService } from '../../common/channels/channel-dispatcher.service';
+import { DealsService } from '../deals/deals.service';
+import { TasksService } from '../tasks/tasks.service';
 import type {
   AutomationExecutionRow,
   AutomationSeverity,
   BroadcastSegment,
   CartSegment,
+  CreateCampaignCardInput,
+  CreateCampaignCardResult,
   ExecutionType,
   NotifyLojistaInput,
   NotifyLojistaResult,
@@ -82,6 +86,8 @@ export class AutomationBridgeService {
   constructor(
     private readonly supabase: SupabaseService,
     private readonly dispatcher: ChannelDispatcherService,
+    private readonly deals: DealsService,
+    private readonly tasks: TasksService,
   ) {}
 
   // ────────────────────────────────────────────
@@ -895,6 +901,93 @@ export class AutomationBridgeService {
     }
 
     return { orgs: byOrg.size, sent, failed };
+  }
+
+  // ────────────────────────────────────────────
+  // 5) Create Campaign Card (M4 — Campaign Center IA do SaaS)
+  // ────────────────────────────────────────────
+
+  /** Cria 1 deal no kanban + 1 task vinculada ao deal.
+   *
+   *  Chamado pelo SaaS quando um alerta de deadline dispara OU quando
+   *  uma recomendação cai em pending_manager_approval. Permite que o
+   *  operador veja a pendência no funil de Campanhas/Promoção do Active
+   *  além de receber o WhatsApp.
+   *
+   *  Idempotência via dedup_key: se já existe deal com `metadata.dedup_key`
+   *  igual, reusa esse deal (não cria duplicado). Task vai sempre se card
+   *  for novo; se reuso de deal, task NÃO é recriada (operador já tem
+   *  uma na lista).
+   *
+   *  Falha graciosa: se pipeline_id/stage_id/assigned_to inválidos, lança
+   *  exception (SaaS captura no try/catch do alerts service).
+   */
+  async createCampaignCard(input: CreateCampaignCardInput): Promise<CreateCampaignCardResult> {
+    if (!input.organization_id || !input.pipeline_id || !input.stage_id || !input.assigned_to) {
+      throw new BadRequestException('organization_id, pipeline_id, stage_id, assigned_to são obrigatórios');
+    }
+
+    // Dedup: se vier dedup_key, busca deal existente com mesma chave
+    if (input.dedup_key) {
+      const { data: existing } = await this.supabase.adminClient
+        .from('deals')
+        .select('id')
+        .eq('org_id', input.organization_id)
+        .filter('custom_fields->>dedup_key', 'eq', input.dedup_key)
+        .limit(1)
+        .maybeSingle();
+
+      if (existing?.id) {
+        this.log.log(`[campaign-card] dedup hit: deal ${existing.id} já existe pra ${input.dedup_key}`);
+        return { ok: true, deal_id: existing.id, task_id: null, created: false };
+      }
+    }
+
+    // 1. Cria deal via DealsService (passa por validação + emit event + webhook)
+    const customFields: Record<string, unknown> = {
+      ...(input.metadata ?? {}),
+      ...(input.dedup_key ? { dedup_key: input.dedup_key } : {}),
+      source: 'saas:ml-campaigns',
+    };
+
+    const deal = await this.deals.create(input.organization_id, {
+      title:               input.title,
+      pipeline_id:         input.pipeline_id,
+      stage_id:            input.stage_id,
+      assigned_to:         input.assigned_to,
+      value:               input.value,
+      currency:            'BRL',
+      expected_close_date: input.due_date,
+      tags:                input.tags ?? ['campaign-center'],
+      custom_fields:       customFields,
+    });
+
+    // 2. Cria task vinculada ao deal
+    let taskId: string | null = null;
+    try {
+      const task = await this.tasks.create(
+        input.organization_id,
+        {
+          title:        input.task_title,
+          description:  `Task gerada automaticamente pelo Campaign Center IA do SaaS.\n\nDedup: ${input.dedup_key ?? '-'}`,
+          task_type:    'follow_up',
+          priority:     'high',
+          deal_id:      deal.id,
+          assigned_to:  input.assigned_to,
+          due_date:     input.due_date,
+          created_by_ai: true,
+          ai_context:   `ml-campaigns:${input.dedup_key ?? deal.id}`,
+          metadata:     input.metadata ?? {},
+        },
+        null, // createdBy: null pois é server-to-server (não tem auth.users)
+      );
+      taskId = task.id;
+    } catch (e) {
+      // Falha na task NÃO desfaz o deal — log e segue.
+      this.log.warn(`[campaign-card] task create failed pra deal ${deal.id}: ${(e as Error).message}`);
+    }
+
+    return { ok: true, deal_id: deal.id, task_id: taskId, created: true };
   }
 }
 
