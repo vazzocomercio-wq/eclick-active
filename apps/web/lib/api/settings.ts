@@ -75,6 +75,51 @@ export interface UpdateAiFeatureInput {
   config?: Record<string, unknown>;
 }
 
+export interface AiBudget {
+  configured: boolean;
+  monthly_budget_usd: number | null;
+  alert_threshold_pct: number;
+  hard_cap: boolean;
+  updated_at: string | null;
+}
+
+export interface UpdateAiBudgetInput {
+  monthly_budget_usd?: number | null;
+  alert_threshold_pct?: number;
+  hard_cap?: boolean;
+}
+
+export interface AiUsageBreakdownRow {
+  key: string;
+  calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  usd: number;
+}
+
+export interface AiUsageSummary {
+  period_start: string;
+  total_calls: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  total_usd: number;
+  by_feature: AiUsageBreakdownRow[];
+  by_model: AiUsageBreakdownRow[];
+  budget: AiBudget;
+  pct_used: number;
+}
+
+export interface AiUsageTimelinePoint {
+  date: string;
+  calls: number;
+  usd: number;
+}
+
+export interface AiUsageTimeline {
+  days: number;
+  series: AiUsageTimelinePoint[];
+}
+
 export const settingsApi = {
   getOrg(signal?: AbortSignal): Promise<OrgSettings> {
     return api.get<OrgSettings>('/settings/org', { signal });
@@ -87,5 +132,17 @@ export const settingsApi = {
   },
   updateAi(featureName: AIFeatureName, input: UpdateAiFeatureInput): Promise<AiFeature> {
     return api.patch<AiFeature>(`/settings/ai/${featureName}`, input);
+  },
+  getAiBudget(signal?: AbortSignal): Promise<AiBudget> {
+    return api.get<AiBudget>('/settings/ai-budget', { signal });
+  },
+  updateAiBudget(input: UpdateAiBudgetInput): Promise<AiBudget> {
+    return api.patch<AiBudget>('/settings/ai-budget', input);
+  },
+  getAiUsageSummary(signal?: AbortSignal): Promise<AiUsageSummary> {
+    return api.get<AiUsageSummary>('/settings/ai-usage/summary', { signal });
+  },
+  getAiUsageTimeline(days = 30, signal?: AbortSignal): Promise<AiUsageTimeline> {
+    return api.get<AiUsageTimeline>(`/settings/ai-usage/timeline?days=${days}`, { signal });
   },
 };

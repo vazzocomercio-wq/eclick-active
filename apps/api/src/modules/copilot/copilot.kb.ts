@@ -329,6 +329,29 @@ export const KB: KbEntry[] = [
     ].join('\n'),
     tags: ['llm', 'provider', 'anthropic', 'openai'],
   },
+  {
+    routes: ['/configuracoes', '/configuracoes/ai-usage'],
+    category: 'CONFIG',
+    title: 'Uso de IA — custos e orçamento mensal',
+    content: [
+      'A aba **Uso de IA** mostra o gasto real com chamadas LLM no mês corrente, com:',
+      '- **Gasto total** em USD + número de chamadas',
+      '- **Tokens** de entrada/saída acumulados',
+      '- **Sparkline** dos últimos 30 dias',
+      '- **Breakdown** por feature (suggest_response, classify_intent, alert_narrative…) e por modelo',
+      '',
+      '**Orçamento mensal opcional:**',
+      '- Defina valor em USD pra ver % consumido em tempo real',
+      '- Threshold (default 80%) dispara alerta no Intelligence Hub',
+      '- **Hard cap** liga uma trava: ao atingir 100%, novas chamadas de IA são',
+      '  bloqueadas com erro 400 ("Orçamento mensal de IA atingido…") até virar o mês',
+      '  ou aumentar o orçamento. Útil pra evitar surpresas na fatura Anthropic.',
+      '',
+      'Sem orçamento configurado, a página funciona só como telemetria — nada é bloqueado.',
+      'Tracking é registrado em `active.ai_interactions` a cada chamada via `LlmService`.',
+    ].join('\n'),
+    tags: ['ia', 'custos', 'budget', 'cap', 'observabilidade'],
+  },
 
   // ── GENERAL fallback ──────────────────────────────────
   {

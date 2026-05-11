@@ -12,6 +12,7 @@ import {
   CalendarClock,
   ChevronRight,
   Plug,
+  Receipt,
   Settings,
   Sliders,
   Sparkles,
@@ -35,12 +36,14 @@ import { TagsSection } from '@/components/configuracoes/tags-section';
 import { AdIntegrationsSection } from '@/components/configuracoes/ad-integrations-section';
 import { AdMetricsSection } from '@/components/configuracoes/ad-metrics-section';
 import { IntelligenceSection } from '@/components/configuracoes/intelligence-section';
+import { AiUsageSection } from '@/components/configuracoes/ai-usage-section';
 import { cn } from '@/lib/utils';
 
 type Section =
   | 'org'
   | 'channels'
   | 'ai'
+  | 'ai-usage'
   | 'agente-ia'
   | 'concierge'
   | 'agenda'
@@ -61,6 +64,12 @@ const SECTIONS: Array<{
   { id: 'org', label: 'Organização', icon: Building2, description: 'Nome, slug, plano' },
   { id: 'channels', label: 'Canais', icon: Cable, description: 'WhatsApp e outros' },
   { id: 'ai', label: 'Inteligência Artificial', icon: Bot, description: 'Features de IA' },
+  {
+    id: 'ai-usage',
+    label: 'Uso de IA',
+    icon: Receipt,
+    description: 'Custos mensais + orçamento',
+  },
   {
     id: 'agente-ia',
     label: 'Agente de IA',
@@ -233,6 +242,8 @@ export default function ConfiguracoesPage() {
             {section === 'channels' && <ChannelsSection />}
 
             {section === 'ai' && <AiFeaturesSection />}
+
+            {section === 'ai-usage' && <AiUsageSection />}
 
             {section === 'agenda' && (
               <div className="flex flex-col gap-4">
