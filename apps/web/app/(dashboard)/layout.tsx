@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Sidebar } from '@/components/sidebar';
 import { MobileTopBar } from '@/components/mobile-top-bar';
 import FloatingCopilot from '@/components/copilot/FloatingCopilot';
+import { AdSignalToastListener } from '@/components/intelligence/ad-signal-toast-listener';
 
 export default function DashboardLayout({
   children,
@@ -27,6 +28,8 @@ export default function DashboardLayout({
       </main>
       {/* Copiloto flutuante v1 — fica sobreposto a tudo (z-50) com Cmd/Ctrl+K. */}
       <FloatingCopilot />
+      {/* Listener global de signals do Active Intelligence — toast in-app. */}
+      <AdSignalToastListener />
     </div>
   );
 }

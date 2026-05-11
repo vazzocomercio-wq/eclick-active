@@ -152,6 +152,20 @@ export interface SocialContentEventPayload {
   scheduled_for?: string;
 }
 
+// ── Active Intelligence — Ad Signals ──
+// Emitido pelo SignalDetector quando insere um ad_signal pending (Camada 1/2/3).
+// Frontend usa pra mostrar toast in-app além da delivery WhatsApp por managers.
+export interface AdSignalNewPayload {
+  signal_id: string;
+  signal_type: string;
+  severity: 'warning' | 'critical';
+  campaign_id: string | null;
+  campaign_name?: string | null;
+  metric_key: string | null;
+  /** Texto curto pra UI exibir no toast — vem do payload do signal. */
+  display_message?: string;
+}
+
 // ── WhatsApp Commerce events ──
 export interface CartEventPayload {
   cart_id: string;
@@ -197,7 +211,8 @@ export type EventName =
   | 'cart:converted'
   | 'order:created'
   | 'order:paid'
-  | 'order:shipped';
+  | 'order:shipped'
+  | 'ad-signal:new';
 
 export interface EventPayloadMap {
   'message:new': MessageNewPayload;
@@ -232,6 +247,7 @@ export interface EventPayloadMap {
   'order:created': OrderEventPayload;
   'order:paid': OrderEventPayload;
   'order:shipped': OrderEventPayload;
+  'ad-signal:new': AdSignalNewPayload;
 }
 
 const ROOM_PREFIX = 'org';

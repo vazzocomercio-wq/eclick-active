@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SupabaseService } from '../../../common/supabase/supabase.service';
+import { EventsGateway } from '../../../gateways/events.gateway';
 import {
   AdMetricConfig,
   MetricConfigService,
@@ -100,6 +101,7 @@ export class SignalDetectorService {
     private readonly supabase: SupabaseService,
     private readonly metricConfig: MetricConfigService,
     private readonly coverage: MetricCoverageService,
+    private readonly events: EventsGateway,
   ) {}
 
   // ────────────────────────────────────────────
@@ -706,19 +708,23 @@ export class SignalDetectorService {
 
       if (existing) continue; // já tem pendente igual
 
-      const { error } = await this.supabase.adminClient.from('ad_signals').insert({
-        org_id: d.org_id,
-        integration_id: d.integration_id,
-        campaign_id: d.campaign_id,
-        platform: d.platform,
-        signal_type: d.signal_type,
-        metric_key: d.metric_key,
-        severity: d.severity,
-        current_value: d.current_value,
-        threshold_value: d.threshold_value,
-        payload: d.payload,
-        dedupe_key: d.dedupe_key,
-      });
+      const { data: inserted, error } = await this.supabase.adminClient
+        .from('ad_signals')
+        .insert({
+          org_id: d.org_id,
+          integration_id: d.integration_id,
+          campaign_id: d.campaign_id,
+          platform: d.platform,
+          signal_type: d.signal_type,
+          metric_key: d.metric_key,
+          severity: d.severity,
+          current_value: d.current_value,
+          threshold_value: d.threshold_value,
+          payload: d.payload,
+          dedupe_key: d.dedupe_key,
+        })
+        .select('id')
+        .maybeSingle();
       if (error) {
         // Race condition no UNIQUE — outro tick inseriu primeiro. Ignora.
         if (!error.message.includes('duplicate key')) {
@@ -727,6 +733,26 @@ export class SignalDetectorService {
         continue;
       }
       persisted += 1;
+
+      // Emit in-app toast event (best-effort; falha não derruba persist)
+      const signalId = (inserted as { id: string } | null)?.id;
+      if (signalId) {
+        try {
+          this.events.emitToOrg(d.org_id, 'ad-signal:new', {
+            signal_id: signalId,
+            signal_type: d.signal_type,
+            severity: d.severity,
+            campaign_id: d.campaign_id,
+            campaign_name: (d.payload?.campaign_name as string | undefined) ?? null,
+            metric_key: d.metric_key,
+            display_message: buildDisplayMessage(d),
+          });
+        } catch (e) {
+          this.logger.warn(
+            `emit ad-signal:new falhou (non-fatal): ${e instanceof Error ? e.message : String(e)}`,
+          );
+        }
+      }
     }
     return persisted;
   }
@@ -942,6 +968,29 @@ function avgRoas(rows: MetricRow[]): number {
     .filter((v): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0);
   if (values.length === 0) return 0;
   return values.reduce((a, b) => a + b, 0) / values.length;
+}
+
+/**
+ * Mensagem curta pra toast in-app. Não substitui a narrativa LLM completa
+ * (que vai pro WhatsApp), só dá feedback visual rápido pra usuário logado.
+ */
+function buildDisplayMessage(d: SignalDraft): string {
+  const campaign = (d.payload?.campaign_name as string | undefined) ?? null;
+  const target = campaign ? `em "${campaign}"` : '(conta inteira)';
+  const labels: Record<string, string> = {
+    metric_threshold: 'Métrica fora do alvo',
+    metric_anomaly: 'Métrica com desvio anômalo',
+    creative_fatigue: 'Criativo desgastando',
+    audience_burnout: 'Audiência saturada',
+    scaling_inefficiency: 'Escala ineficiente',
+    pixel_drift: 'Conversões caindo (pixel?)',
+    budget_pacing: 'Orçamento estourando',
+    cpa_inflation: 'CPA disparou',
+    roas_collapse: 'ROAS caindo',
+    lead_unattended: 'Lead sem resposta',
+  };
+  const label = labels[d.signal_type] ?? d.signal_type;
+  return `${label} ${target}`;
 }
 
 /**
