@@ -4,6 +4,7 @@ import {
   AdMetricConfig,
   MetricConfigService,
 } from '../metric-config.service';
+import { MetricCoverageService } from './metric-coverage.service';
 
 export type SignalType =
   | 'metric_threshold'
@@ -95,6 +96,7 @@ export class SignalDetectorService {
   constructor(
     private readonly supabase: SupabaseService,
     private readonly metricConfig: MetricConfigService,
+    private readonly coverage: MetricCoverageService,
   ) {}
 
   // ────────────────────────────────────────────
@@ -156,6 +158,15 @@ export class SignalDetectorService {
 
     // Persiste com dedupe (UNIQUE WHERE status='pending')
     const persistedCount = await this.persistDrafts(drafts);
+
+    // Audit non-blocking: warna sobre configs enabled que silenciosamente
+    // não disparam (mapping issue catálogo<->ad_metrics_daily). Best-effort —
+    // failure não derruba detector run.
+    void this.coverage.warnOrphans(orgId).catch((err) => {
+      this.logger.warn(
+        `coverage.warnOrphans falhou (non-fatal): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    });
 
     return {
       org_id: orgId,

@@ -14,6 +14,7 @@ import { MetaOAuthController } from './oauth/meta-oauth.controller';
 import { MetricCatalogService } from './metric-catalog.service';
 import { MetricConfigService } from './metric-config.service';
 import { AdSignalsController } from './signals/ad-signals.controller';
+import { MetricCoverageService } from './signals/metric-coverage.service';
 import { SignalDetectorService } from './signals/signal-detector.service';
 import { SignalDetectorWorker } from './signals/signal-detector.worker';
 import { AdLeadsService } from './webhooks/ad-leads.service';
@@ -54,6 +55,7 @@ import { MetaLeadAdsController } from './webhooks/meta-lead.controller';
     GoogleConnector,
     MetricCatalogService,
     MetricConfigService,
+    MetricCoverageService,
     SignalDetectorService,
     SignalDetectorWorker,
     AdLeadsService,
@@ -63,6 +65,7 @@ import { MetaLeadAdsController } from './webhooks/meta-lead.controller';
     AdsSyncService,
     MetricCatalogService,
     MetricConfigService,
+    MetricCoverageService,
     SignalDetectorService,
     AdLeadsService,
   ],

@@ -259,6 +259,29 @@ export const KB: KbEntry[] = [
     ].join('\n'),
     tags: ['analytics', 'intelligence'],
   },
+  {
+    routes: ['/configuracoes', '/configuracoes/ad-metrics', '/intelligence'],
+    category: 'INTELLIGENCE',
+    title: 'Auditoria de cobertura de métricas (signal detector)',
+    content: [
+      'Configs de métricas com `enabled=true` que **silenciosamente nunca disparam**',
+      'são detectadas pelo audit de cobertura. Causas comuns:',
+      '',
+      '- **text_incompatible**: métricas tipo ranking (quality_ranking, etc.) —',
+      '  pipeline numérico não compara. Status flagged automaticamente.',
+      '- **computed_only**: métricas derivadas (conversion_rate, link_ctr…) que',
+      '  o connector atual não preenche. Disponível em sprint futura.',
+      '- **orphan_no_value**: tem rows em ad_metrics_daily mas a chave nunca',
+      '  aparece em raw_metrics — connector não solicita esse field.',
+      '- **no_data**: sem rows em ad_metrics_daily na janela. Confirme sync',
+      '  Meta/Google (ads-sync-worker).',
+      '',
+      'Endpoint: `GET /ad-signals/metric-coverage` retorna report completo',
+      '(enabled_count, orphan_count, items[]). Também logado como warn no',
+      'detector quando rodando.',
+    ].join('\n'),
+    tags: ['audit', 'coverage', 'signals', 'troubleshooting'],
+  },
 
   // ── SAC ───────────────────────────────────────────────
   {

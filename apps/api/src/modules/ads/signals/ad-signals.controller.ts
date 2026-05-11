@@ -19,6 +19,10 @@ import {
   DetectorRunResult,
   SignalDetectorService,
 } from './signal-detector.service';
+import {
+  CoverageReport,
+  MetricCoverageService,
+} from './metric-coverage.service';
 
 class AckSignalDto {
   @IsOptional()
@@ -48,6 +52,7 @@ export class AdSignalsController {
   constructor(
     private readonly supabase: SupabaseService,
     private readonly detector: SignalDetectorService,
+    private readonly coverage: MetricCoverageService,
   ) {}
 
   @Get()
@@ -126,6 +131,19 @@ export class AdSignalsController {
   @HttpCode(HttpStatus.OK)
   detect(@CurrentUser() user: AuthUser): Promise<DetectorRunResult> {
     return this.detector.runForOrg(user.org_id);
+  }
+
+  /**
+   * Audit de cobertura — pra cada config enabled, mostra se o detector
+   * consegue extrair valor. Detecta órfãs: configs ligadas que silenciosamente
+   * nunca disparam por mismatch entre catálogo e ad_metrics_daily/connector.
+   *
+   * Roda também análise estática (text_incompatible / computed_only) mesmo
+   * quando ad_metrics_daily está vazio — útil pra org em onboarding.
+   */
+  @Get('metric-coverage')
+  metricCoverage(@CurrentUser() user: AuthUser): Promise<CoverageReport> {
+    return this.coverage.auditCoverage(user.org_id);
   }
 }
 
