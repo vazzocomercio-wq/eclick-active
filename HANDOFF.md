@@ -75,17 +75,19 @@ Contato `Silvio Júnior` com phone `5571993167000` virou owner notification targ
 - **SaaS Sprint 4**: enable auto-execution do `StoreAutomationEngine` chamando os endpoints. Quando o time SaaS terminar, basta. Não tem trabalho aqui no Active.
 - **UI opcional futura**: `/configuracoes/integracoes` ganhar seção pra editar `automation_bridge.owner_contact_id` (hoje só via SQL)
 
-### ⚠️ Dívida de segurança aberta — ROTACIONAR SECRET
+### ✅ Dívida de segurança RESOLVIDA — secret rotacionado (2026-05-11)
 
-O `AUTOMATION_BRIDGE_SECRET` atual em prod **vazou em chat + screenshot** durante o desenvolvimento. Não bloqueia nada hoje, mas precisa rotacionar quando der:
+O `AUTOMATION_BRIDGE_SECRET` foi rotacionado com sucesso:
 
-1. Gerar novo: `openssl rand -hex 32` (NÃO colar em chat)
-2. Atualizar nos **dois** Railways simultaneamente:
-   - `active-api` → env `AUTOMATION_BRIDGE_SECRET`
-   - `eclick-backend` (SaaS) → env `ACTIVE_AUTOMATION_BRIDGE_SECRET`
-3. Smoke test pós-rotação: `curl POST /notify-lojista` com `severity=critical` → esperar `200 OK` + WhatsApp chegando. Se vier `401`, secrets não bateram.
+- Novo secret gerado (32 bytes hex aleatórios)
+- Aplicado nos **dois** Railways simultaneamente:
+  - `active-api` → env `AUTOMATION_BRIDGE_SECRET`
+  - `eclick-backend` (SaaS) → env `ACTIVE_AUTOMATION_BRIDGE_SECRET`
+- Smoke tests validados:
+  - `POST /commerce/automation-bridge/notify-lojista` com secret novo → HTTP 200 (`execution_id` persistido em `automation_executions`)
+  - Mesmo endpoint com secret antigo → HTTP 401 (guard rejeita)
 
-Usuário confirmou ciência da pendência (sessão 2026-05-06).
+O secret atual NÃO foi colado em chat/screenshot. Se precisar rotacionar de novo no futuro, repita o mesmo processo (gerar com `openssl rand -hex 32`, atualizar os 2 Railways, smoke test).
 
 ### Commits desta sessão
 ```
