@@ -13,6 +13,9 @@ export type SignalType =
   | 'audience_burnout'
   | 'scaling_inefficiency'
   | 'pixel_drift'
+  | 'budget_pacing'
+  | 'cpa_inflation'
+  | 'roas_collapse'
   | 'lead_unattended';
 
 export type SignalSeverity = 'warning' | 'critical';
@@ -464,6 +467,116 @@ export class SignalDetectorService {
           dedupe_key: bucketKey('pixel_drift', camp.id),
         });
       }
+
+      // ── roas_collapse: ROAS médio cai significativamente vs janela anterior
+      const recentRoas = avgRoas(recent);
+      const priorRoas = avgRoas(prior);
+      if (priorRoas >= 1 && recentRoas > 0) {
+        const roasRatio = recentRoas / priorRoas;
+        const roasSeverity: SignalSeverity | null =
+          roasRatio < 0.5 ? 'critical' : roasRatio < 0.7 ? 'warning' : null;
+        if (roasSeverity) {
+          drafts.push({
+            org_id: args.orgId,
+            integration_id: camp.integration_id,
+            campaign_id: camp.id,
+            platform: camp.platform,
+            signal_type: 'roas_collapse',
+            metric_key: 'roas',
+            severity: roasSeverity,
+            current_value: roundForStorage(recentRoas),
+            threshold_value: roundForStorage(priorRoas),
+            payload: {
+              campaign_name: camp.name,
+              recent_roas: roundForStorage(recentRoas),
+              prior_roas: roundForStorage(priorRoas),
+              drop_pct: roundForStorage((1 - roasRatio) * 100),
+            },
+            dedupe_key: bucketKey('roas_collapse', camp.id),
+          });
+        }
+      }
+
+      // ── cpa_inflation: CPA dispara sem aumento proporcional de volume
+      // CPA = spend / conversions. Inflation = CPA recent >> CPA prior, MAS
+      // conversions não cresceu o suficiente pra justificar.
+      if (priorAgg.conversions > 5 && recentAgg.conversions > 0 && priorAgg.spend > 0) {
+        const recentCpa = recentAgg.spend / recentAgg.conversions;
+        const priorCpa = priorAgg.spend / priorAgg.conversions;
+        const cpaRatio = priorCpa > 0 ? recentCpa / priorCpa : 0;
+        const convRatio = recentAgg.conversions / priorAgg.conversions;
+
+        // Volume cresceu menos que custo médio = sinal de degradação
+        const cpaSeverity: SignalSeverity | null =
+          cpaRatio >= 2 && convRatio < 1.3
+            ? 'critical'
+            : cpaRatio >= 1.5 && convRatio < 1.2
+              ? 'warning'
+              : null;
+        if (cpaSeverity) {
+          drafts.push({
+            org_id: args.orgId,
+            integration_id: camp.integration_id,
+            campaign_id: camp.id,
+            platform: camp.platform,
+            signal_type: 'cpa_inflation',
+            metric_key: 'cost_per_conversion',
+            severity: cpaSeverity,
+            current_value: roundForStorage(recentCpa),
+            threshold_value: roundForStorage(priorCpa),
+            payload: {
+              campaign_name: camp.name,
+              recent_cpa: roundForStorage(recentCpa),
+              prior_cpa: roundForStorage(priorCpa),
+              cpa_growth_pct: roundForStorage((cpaRatio - 1) * 100),
+              conversions_growth_pct: roundForStorage((convRatio - 1) * 100),
+              recent: {
+                spend: recentAgg.spend,
+                conversions: recentAgg.conversions,
+              },
+              prior: {
+                spend: priorAgg.spend,
+                conversions: priorAgg.conversions,
+              },
+            },
+            dedupe_key: bucketKey('cpa_inflation', camp.id),
+          });
+        }
+      }
+
+      // ── budget_pacing: gasto diário médio (7d) excede daily_budget
+      // configurado. Sinaliza que orçamento vai estourar antes do mês acabar.
+      // Só dispara se daily_budget existe em raw_metrics (campanhas com
+      // lifetime budget não têm daily_budget setado).
+      const dailyBudget = extractDailyBudget(recent[0]);
+      if (dailyBudget && dailyBudget > 0) {
+        const recentDailyAvgSpend = recentAgg.spend / 7;
+        const burnRatio = recentDailyAvgSpend / dailyBudget;
+        const budgetSeverity: SignalSeverity | null =
+          burnRatio >= 1.3 ? 'critical' : burnRatio >= 1.1 ? 'warning' : null;
+        if (budgetSeverity) {
+          drafts.push({
+            org_id: args.orgId,
+            integration_id: camp.integration_id,
+            campaign_id: camp.id,
+            platform: camp.platform,
+            signal_type: 'budget_pacing',
+            metric_key: 'daily_budget',
+            severity: budgetSeverity,
+            current_value: roundForStorage(recentDailyAvgSpend),
+            threshold_value: roundForStorage(dailyBudget),
+            payload: {
+              campaign_name: camp.name,
+              daily_budget: roundForStorage(dailyBudget),
+              avg_daily_spend_7d: roundForStorage(recentDailyAvgSpend),
+              burn_ratio_pct: roundForStorage(burnRatio * 100),
+              projected_monthly_spend: roundForStorage(recentDailyAvgSpend * 30),
+              projected_monthly_budget: roundForStorage(dailyBudget * 30),
+            },
+            dedupe_key: bucketKey('budget_pacing', camp.id),
+          });
+        }
+      }
     }
 
     return drafts;
@@ -817,4 +930,35 @@ function sum(arr: number[]): number {
 
 function roundForStorage(n: number): number {
   return Math.round(n * 10000) / 10000;
+}
+
+/**
+ * Média do ROAS de N rows (coluna direta). Filtra zeros e NaN — campanha
+ * sem conversões nesse dia teria ROAS=0 que enviesa pra baixo.
+ */
+function avgRoas(rows: MetricRow[]): number {
+  const values = rows
+    .map((r) => r.roas)
+    .filter((v): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0);
+  if (values.length === 0) return 0;
+  return values.reduce((a, b) => a + b, 0) / values.length;
+}
+
+/**
+ * Daily budget vem em raw_metrics (last value). Meta envia como string;
+ * Google às vezes envia em raw_metrics.budget.amount_micros (convertido pra
+ * dólares). Tentamos as duas chaves comuns.
+ */
+function extractDailyBudget(row: MetricRow | undefined): number | null {
+  if (!row) return null;
+  const raw = row.raw_metrics as Record<string, unknown>;
+  const candidates = [raw?.daily_budget, raw?.dailyBudget];
+  for (const v of candidates) {
+    if (typeof v === 'number' && Number.isFinite(v) && v > 0) return v;
+    if (typeof v === 'string') {
+      const n = Number(v);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+  }
+  return null;
 }

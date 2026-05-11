@@ -30,6 +30,10 @@ const SIGNAL_TYPE_LABEL: Record<string, string> = {
   audience_burnout: 'Audiência saturada',
   scaling_inefficiency: 'Escala ineficiente',
   pixel_drift: 'Conversões caindo (pixel?)',
+  budget_pacing: 'Orçamento estourando',
+  cpa_inflation: 'CPA disparou',
+  roas_collapse: 'ROAS caindo',
+  lead_unattended: 'Lead sem resposta',
 };
 
 /**
