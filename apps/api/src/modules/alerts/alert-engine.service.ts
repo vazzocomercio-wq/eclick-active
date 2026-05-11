@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { ChannelDispatcherService } from '../../common/channels/channel-dispatcher.service';
-import { getOrgTimezone } from '../../common/org-settings.helper';
+import { BusinessHoursService } from '../business-hours/business-hours.service';
 import { AlertManagersService } from './alert-managers.service';
 import {
   AlertRoutingService,
@@ -15,8 +15,15 @@ import {
 
 const PENDING_BATCH_SIZE = 25;
 const MAX_RETRIES = 3;
-const BUSINESS_HOURS_START = 8; // 08:00 local
-const BUSINESS_HOURS_END = 20; // 20:00 local
+
+/**
+ * Fallback usado quando a org NÃO tem business_hours.enabled=true.
+ * Mantém compatibilidade com o comportamento legado pré-refactor.
+ * Quando o lojista habilita business_hours em /configuracoes/horario,
+ * o schedule custom (weekday + horário) passa a valer.
+ */
+const FALLBACK_BUSINESS_HOURS_START = 8; // 08:00 local
+const FALLBACK_BUSINESS_HOURS_END = 20; // 20:00 local
 
 interface PendingSignal {
   id: string;
@@ -68,6 +75,7 @@ export class AlertEngineService {
     private readonly managers: AlertManagersService,
     private readonly routing: AlertRoutingService,
     private readonly formatter: AlertMessageFormatter,
+    private readonly businessHours: BusinessHoursService,
   ) {}
 
   // ────────────────────────────────────────────
@@ -520,15 +528,47 @@ export class AlertEngineService {
     this.logger.warn(`delivery=${deliveryId} failed: ${errorMsg}`);
   }
 
+  /**
+   * Determina se a hora atual está em horário comercial pra fins de
+   * deferir alertas business_hours_only=true.
+   *
+   * Duas regras combinadas:
+   *   - Org com `business_hours.enabled=true` → respeita schedule custom
+   *     (weekday + horário em `organizations.business_hours.schedule`)
+   *   - Org com enabled=false (ou sem config) → fallback hardcode 8-20h
+   *     no tz da org. Preserva comportamento legado pré-refactor.
+   *
+   * Quando o lojista habilita em /configuracoes/horario, ganha automaticamente
+   * "fechado sábado/domingo" etc. sem mais código.
+   */
   private async isBusinessHours(orgId: string): Promise<boolean> {
-    const tz = await getOrgTimezone(this.supabase.adminClient, orgId);
-    const fmt = new Intl.DateTimeFormat('en-US', {
-      timeZone: tz,
-      hour: 'numeric',
-      hour12: false,
-    });
-    const hour = parseInt(fmt.format(new Date()), 10);
-    return hour >= BUSINESS_HOURS_START && hour < BUSINESS_HOURS_END;
+    try {
+      const cfg = await this.businessHours.get(orgId);
+      if (cfg.enabled) {
+        return this.businessHours.isWithinNow(cfg, new Date());
+      }
+      return this.fallbackHardcodeHours(cfg.timezone);
+    } catch (err) {
+      this.logger.warn(
+        `isBusinessHours falhou (assumindo dentro): ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return true;
+    }
+  }
+
+  private fallbackHardcodeHours(tz: string): boolean {
+    try {
+      const fmt = new Intl.DateTimeFormat('en-US', {
+        timeZone: tz,
+        hour: 'numeric',
+        hour12: false,
+      });
+      const hour = parseInt(fmt.format(new Date()), 10);
+      return hour >= FALLBACK_BUSINESS_HOURS_START && hour < FALLBACK_BUSINESS_HOURS_END;
+    } catch {
+      // tz inválido — assume dentro pra não silenciar alertas
+      return true;
+    }
   }
 }
 
