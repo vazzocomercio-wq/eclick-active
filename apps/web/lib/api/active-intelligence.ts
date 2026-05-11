@@ -112,6 +112,49 @@ export const adMetricsApi = {
 };
 
 // ─────────────────────────────────────────────────────────────
+// Metric Coverage — audit de configs órfãs (signal detector)
+// Endpoint exposto em adSignalsApi.metricCoverage() (mais abaixo).
+// ─────────────────────────────────────────────────────────────
+
+export type CoverageStaticClass =
+  | 'direct'
+  | 'raw_jsonb'
+  | 'text_incompatible'
+  | 'computed_only';
+
+export type CoverageStatus =
+  | 'healthy'
+  | 'no_data'
+  | 'orphan_no_value'
+  | 'text_incompatible'
+  | 'computed_only'
+  | 'disabled';
+
+export interface CoverageItem {
+  metric_key: string;
+  display_name: string;
+  platform: string;
+  category: string;
+  enabled: boolean;
+  static_class: CoverageStaticClass;
+  status: CoverageStatus;
+  coverage_pct: number;
+  rows_checked: number;
+  rows_with_value: number;
+  last_seen_with_value: string | null;
+  recommendation: string;
+}
+
+export interface CoverageReport {
+  enabled_count: number;
+  orphan_count: number;
+  total_configs: number;
+  window_days: number;
+  no_data_at_all: boolean;
+  items: CoverageItem[];
+}
+
+// ─────────────────────────────────────────────────────────────
 // Alert Managers
 // ─────────────────────────────────────────────────────────────
 
@@ -241,6 +284,8 @@ export const adSignalsApi = {
       total: number;
       duration_ms: number;
     }>('/ad-signals/detect'),
+  metricCoverage: (signal?: AbortSignal) =>
+    api.get<CoverageReport>('/ad-signals/metric-coverage', { signal }),
 };
 
 export interface AlertDelivery {

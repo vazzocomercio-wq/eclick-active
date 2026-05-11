@@ -1,7 +1,15 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import {
+  Activity,
+  AlertTriangle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Info,
+  Loader2,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,9 +17,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   adMetricsApi,
+  adSignalsApi,
   type AdMetricConfig,
-  type ThresholdMode,
   type AggregationWindow,
+  type CoverageItem,
+  type CoverageReport,
+  type CoverageStatus,
+  type ThresholdMode,
 } from '@/lib/api/active-intelligence';
 import { ApiError } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
@@ -36,6 +48,8 @@ export function AdMetricsSection() {
   const [platform, setPlatform] = useState<'all' | 'meta' | 'google' | 'shared'>('all');
   const [expanded, setExpanded] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [coverage, setCoverage] = useState<CoverageReport | null>(null);
+  const [coverageOpen, setCoverageOpen] = useState(false);
 
   async function reload() {
     setLoading(true);
@@ -49,9 +63,27 @@ export function AdMetricsSection() {
     }
   }
 
+  async function reloadCoverage() {
+    try {
+      const report = await adSignalsApi.metricCoverage();
+      setCoverage(report);
+    } catch (err) {
+      // Audit é nice-to-have — se falhar, oculta banner ao invés de quebrar a página
+      if (err instanceof ApiError) {
+        console.warn(`[ad-metrics] coverage falhou: ${err.message}`);
+      }
+    }
+  }
+
   useEffect(() => {
     void reload();
   }, [platform]);
+
+  // Coverage audit roda 1x quando a tela monta (não depende de platform filter
+  // — sempre mostra contagem global)
+  useEffect(() => {
+    void reloadCoverage();
+  }, []);
 
   async function patchConfig(metricKey: string, patch: Parameters<typeof adMetricsApi.updateConfig>[1]) {
     setSavingKey(metricKey);
@@ -89,6 +121,15 @@ export function AdMetricsSection() {
         </p>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
+        {/* Coverage audit banner */}
+        {coverage && (
+          <CoverageBanner
+            report={coverage}
+            open={coverageOpen}
+            onToggle={() => setCoverageOpen((v) => !v)}
+          />
+        )}
+
         {/* Platform filter tabs */}
         <div className="flex shrink-0 gap-1 overflow-x-auto">
           {PLATFORM_TABS.map((p) => (
@@ -295,5 +336,139 @@ function MetricRow({
         </div>
       )}
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Coverage audit banner — exposição de configs órfãs
+// ─────────────────────────────────────────────────────────────
+
+function CoverageBanner({
+  report,
+  open,
+  onToggle,
+}: {
+  report: CoverageReport;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const { enabled_count, orphan_count, no_data_at_all } = report;
+  const tone =
+    orphan_count > 0
+      ? 'warning'
+      : no_data_at_all
+        ? 'info'
+        : 'ok';
+
+  const headline =
+    orphan_count > 0
+      ? `${orphan_count} ${orphan_count === 1 ? 'config órfã' : 'configs órfãs'} de ${enabled_count} ativas`
+      : no_data_at_all
+        ? 'Sem dados de ads sincronizados ainda'
+        : `Tudo certo — ${enabled_count} configs ativas com cobertura saudável`;
+
+  const subline =
+    orphan_count > 0
+      ? 'Configs ligadas que silenciosamente não disparam por mismatch entre catálogo e dados sincronizados.'
+      : no_data_at_all
+        ? 'Conecte Meta/Google Ads em "Integrações" pra começar a sincronizar métricas.'
+        : `Analisado contra ${report.window_days} dias de ad_metrics_daily.`;
+
+  return (
+    <div
+      className={cn(
+        'flex flex-col gap-2 rounded-md border px-3 py-2.5',
+        tone === 'warning' && 'border-amber-500/40 bg-amber-500/5',
+        tone === 'info' && 'border-blue-500/40 bg-blue-500/5',
+        tone === 'ok' && 'border-emerald-500/40 bg-emerald-500/5',
+      )}
+    >
+      <div className="flex items-start gap-2">
+        <div
+          className={cn(
+            'mt-0.5 shrink-0',
+            tone === 'warning' && 'text-amber-500',
+            tone === 'info' && 'text-blue-500',
+            tone === 'ok' && 'text-emerald-500',
+          )}
+        >
+          {tone === 'warning' ? (
+            <AlertTriangle className="h-4 w-4" />
+          ) : tone === 'info' ? (
+            <Info className="h-4 w-4" />
+          ) : (
+            <CheckCircle2 className="h-4 w-4" />
+          )}
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <span className="text-xs font-semibold">{headline}</span>
+          <span className="text-[11px] text-muted-foreground">{subline}</span>
+        </div>
+        {orphan_count > 0 && (
+          <button
+            type="button"
+            onClick={onToggle}
+            className="shrink-0 text-[11px] font-medium text-primary hover:underline"
+          >
+            {open ? 'Esconder' : 'Ver detalhes'}
+          </button>
+        )}
+      </div>
+
+      {open && orphan_count > 0 && (
+        <div className="mt-1 flex flex-col gap-1.5 border-t border-border/50 pt-2">
+          {report.items
+            .filter((i) => i.enabled && ORPHAN_STATUSES.has(i.status))
+            .map((item) => (
+              <OrphanRow key={item.metric_key} item={item} />
+            ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const ORPHAN_STATUSES = new Set<CoverageStatus>([
+  'orphan_no_value',
+  'text_incompatible',
+  'computed_only',
+]);
+
+function OrphanRow({ item }: { item: CoverageItem }) {
+  return (
+    <div className="flex flex-col gap-0.5 rounded-md border border-border/50 bg-background/40 px-2.5 py-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-xs font-medium">{item.display_name}</span>
+          <code className="shrink-0 rounded-sm bg-muted px-1 py-0.5 text-[9px] text-muted-foreground">
+            {item.metric_key}
+          </code>
+          <CoverageStatusBadge status={item.status} />
+        </div>
+        {item.rows_checked > 0 && (
+          <span className="shrink-0 text-[10px] text-muted-foreground">
+            {item.rows_with_value}/{item.rows_checked} rows
+          </span>
+        )}
+      </div>
+      <span className="text-[10px] text-muted-foreground">{item.recommendation}</span>
+    </div>
+  );
+}
+
+function CoverageStatusBadge({ status }: { status: CoverageStatus }) {
+  const cfg: Record<CoverageStatus, { label: string; cls: string }> = {
+    healthy: { label: 'OK', cls: 'bg-emerald-500/15 text-emerald-600' },
+    no_data: { label: 'sem dados', cls: 'bg-blue-500/15 text-blue-500' },
+    orphan_no_value: { label: 'órfã', cls: 'bg-amber-500/15 text-amber-600' },
+    text_incompatible: { label: 'tipo text', cls: 'bg-amber-500/15 text-amber-600' },
+    computed_only: { label: 'derivada', cls: 'bg-amber-500/15 text-amber-600' },
+    disabled: { label: 'off', cls: 'bg-muted text-muted-foreground' },
+  };
+  const c = cfg[status];
+  return (
+    <span className={cn('shrink-0 rounded-sm px-1.5 py-0.5 text-[9px] font-medium', c.cls)}>
+      {c.label}
+    </span>
   );
 }
