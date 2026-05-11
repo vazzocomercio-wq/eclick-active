@@ -22,6 +22,7 @@ import {
 import { encryptApiKey, lastFour } from '../../common/llm/crypto.util';
 import { BadRequestException } from '@nestjs/common';
 import {
+  UpdateAiBudgetDto,
   UpdateAiFeatureDto,
   UpdateLlmCredentialsDto,
   UpdateOrgDto,
@@ -64,6 +65,47 @@ export interface AiFeature {
   enabled: boolean;
   config: Record<string, unknown>;
   updated_at: string;
+}
+
+export interface AiBudget {
+  configured: boolean;
+  monthly_budget_usd: number | null;
+  alert_threshold_pct: number;
+  hard_cap: boolean;
+  updated_at: string | null;
+}
+
+export interface AiUsageBreakdownRow {
+  key: string;
+  calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  usd: number;
+}
+
+export interface AiUsageSummary {
+  /** Início do mês em UTC ISO. */
+  period_start: string;
+  total_calls: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  total_usd: number;
+  by_feature: AiUsageBreakdownRow[];
+  by_model: AiUsageBreakdownRow[];
+  budget: AiBudget;
+  /** % usado do budget. 0 quando budget não configurado. */
+  pct_used: number;
+}
+
+export interface AiUsageTimelinePoint {
+  date: string; // YYYY-MM-DD
+  calls: number;
+  usd: number;
+}
+
+export interface AiUsageTimeline {
+  days: number;
+  series: AiUsageTimelinePoint[];
 }
 
 const DEFAULT_FEATURES: AIFeatureName[] = [
@@ -365,4 +407,228 @@ export class SettingsService {
 
     return this.getLlmCredentials(orgId);
   }
+
+  // ────────────────────────────────────────────
+  // AI BUDGET (org_ai_budgets) + USAGE
+  // ────────────────────────────────────────────
+
+  async getAiBudget(orgId: string): Promise<AiBudget> {
+    const { data, error } = await this.supabase.adminClient
+      .from('org_ai_budgets')
+      .select('monthly_budget_usd, alert_threshold_pct, hard_cap, updated_at')
+      .eq('org_id', orgId)
+      .maybeSingle();
+
+    if (error) {
+      this.logger.error(`getAiBudget falhou: ${error.message}`);
+      throw new InternalServerErrorException(error.message);
+    }
+
+    const row = data as {
+      monthly_budget_usd: string | number | null;
+      alert_threshold_pct: number;
+      hard_cap: boolean;
+      updated_at: string;
+    } | null;
+
+    return {
+      configured: !!row,
+      monthly_budget_usd:
+        row?.monthly_budget_usd !== null && row?.monthly_budget_usd !== undefined
+          ? Number(row.monthly_budget_usd)
+          : null,
+      alert_threshold_pct: row?.alert_threshold_pct ?? 80,
+      hard_cap: row?.hard_cap ?? false,
+      updated_at: row?.updated_at ?? null,
+    };
+  }
+
+  async upsertAiBudget(
+    orgId: string,
+    actorRole: OrgMemberRole,
+    dto: UpdateAiBudgetDto,
+  ): Promise<AiBudget> {
+    if (!['owner', 'admin'].includes(actorRole)) {
+      throw new ForbiddenException(
+        'Apenas owner/admin podem configurar orçamento de IA.',
+      );
+    }
+
+    const current = await this.getAiBudget(orgId);
+    const next = {
+      org_id: orgId,
+      monthly_budget_usd:
+        dto.monthly_budget_usd === undefined
+          ? current.monthly_budget_usd
+          : dto.monthly_budget_usd,
+      alert_threshold_pct: dto.alert_threshold_pct ?? current.alert_threshold_pct,
+      hard_cap: dto.hard_cap ?? current.hard_cap,
+    };
+
+    const { error } = await this.supabase.adminClient
+      .from('org_ai_budgets')
+      .upsert(next, { onConflict: 'org_id' });
+
+    if (error) {
+      this.logger.error(`upsertAiBudget falhou: ${error.message}`);
+      throw new InternalServerErrorException(error.message);
+    }
+
+    // Invalida cache do enforce no LlmService — próximo chat() lê o novo valor
+    this.llm.invalidateBudgetCache(orgId);
+
+    return this.getAiBudget(orgId);
+  }
+
+  /**
+   * Agrega ai_interactions do mês corrente em UTC. Volume mensal típico
+   * cabe em memória (≤10k rows = trivial); se crescer >100k vale RPC SQL
+   * dedicado com SUM agregado.
+   */
+  async getAiUsageSummary(orgId: string): Promise<AiUsageSummary> {
+    const periodStart = startOfMonthUtc(new Date()).toISOString();
+    const rows = await this.fetchInteractions(orgId, periodStart);
+
+    let total_usd = 0;
+    let total_input_tokens = 0;
+    let total_output_tokens = 0;
+    const byFeature = new Map<string, AiUsageBreakdownRow>();
+    const byModel = new Map<string, AiUsageBreakdownRow>();
+
+    for (const r of rows) {
+      total_usd += r.cost_usd;
+      total_input_tokens += r.input_tokens;
+      total_output_tokens += r.output_tokens;
+      accumulate(byFeature, r.interaction_type || '(unknown)', r);
+      accumulate(byModel, r.model || '(unknown)', r);
+    }
+
+    const budget = await this.getAiBudget(orgId);
+    const pct_used =
+      budget.monthly_budget_usd && budget.monthly_budget_usd > 0
+        ? roundPct((total_usd / budget.monthly_budget_usd) * 100)
+        : 0;
+
+    return {
+      period_start: periodStart,
+      total_calls: rows.length,
+      total_input_tokens,
+      total_output_tokens,
+      total_usd: roundUsd(total_usd),
+      by_feature: sortDesc(byFeature),
+      by_model: sortDesc(byModel),
+      budget,
+      pct_used,
+    };
+  }
+
+  async getAiUsageTimeline(orgId: string, days = 30): Promise<AiUsageTimeline> {
+    const safeDays = Math.min(Math.max(days, 1), 90);
+    const start = new Date(Date.now() - safeDays * 86_400_000);
+    start.setUTCHours(0, 0, 0, 0);
+
+    const rows = await this.fetchInteractions(orgId, start.toISOString());
+
+    const byDay = new Map<string, AiUsageTimelinePoint>();
+    for (let i = 0; i < safeDays; i++) {
+      const d = new Date(start.getTime() + i * 86_400_000);
+      const key = d.toISOString().slice(0, 10);
+      byDay.set(key, { date: key, calls: 0, usd: 0 });
+    }
+    for (const r of rows) {
+      const key = r.created_at.slice(0, 10);
+      const point = byDay.get(key);
+      if (!point) continue;
+      point.calls += 1;
+      point.usd += r.cost_usd;
+    }
+    for (const p of byDay.values()) p.usd = roundUsd(p.usd);
+
+    return {
+      days: safeDays,
+      series: Array.from(byDay.values()).sort((a, b) => a.date.localeCompare(b.date)),
+    };
+  }
+
+  private async fetchInteractions(
+    orgId: string,
+    sinceIso: string,
+  ): Promise<
+    Array<{
+      interaction_type: string;
+      model: string;
+      input_tokens: number;
+      output_tokens: number;
+      cost_usd: number;
+      created_at: string;
+    }>
+  > {
+    const { data, error } = await this.supabase.adminClient
+      .from('ai_interactions')
+      .select('interaction_type, model, input_tokens, output_tokens, cost_usd, created_at')
+      .eq('org_id', orgId)
+      .gte('created_at', sinceIso)
+      .order('created_at', { ascending: false })
+      .limit(20000);
+    if (error) {
+      this.logger.error(`fetchInteractions falhou: ${error.message}`);
+      throw new InternalServerErrorException(error.message);
+    }
+    return (data ?? []) as Array<{
+      interaction_type: string;
+      model: string;
+      input_tokens: number;
+      output_tokens: number;
+      cost_usd: number;
+      created_at: string;
+    }>;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Helpers locais
+// ─────────────────────────────────────────────────────────────
+
+function startOfMonthUtc(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1, 0, 0, 0));
+}
+
+function accumulate(
+  map: Map<string, AiUsageBreakdownRow>,
+  key: string,
+  r: {
+    cost_usd: number;
+    input_tokens: number;
+    output_tokens: number;
+  },
+): void {
+  const existing = map.get(key);
+  if (existing) {
+    existing.calls += 1;
+    existing.usd += r.cost_usd;
+    existing.input_tokens += r.input_tokens;
+    existing.output_tokens += r.output_tokens;
+  } else {
+    map.set(key, {
+      key,
+      calls: 1,
+      usd: r.cost_usd,
+      input_tokens: r.input_tokens,
+      output_tokens: r.output_tokens,
+    });
+  }
+}
+
+function sortDesc(map: Map<string, AiUsageBreakdownRow>): AiUsageBreakdownRow[] {
+  return Array.from(map.values())
+    .map((r) => ({ ...r, usd: roundUsd(r.usd) }))
+    .sort((a, b) => b.usd - a.usd);
+}
+
+function roundUsd(n: number): number {
+  return Math.round(n * 1_000_000) / 1_000_000;
+}
+
+function roundPct(n: number): number {
+  return Math.round(n * 100) / 100;
 }

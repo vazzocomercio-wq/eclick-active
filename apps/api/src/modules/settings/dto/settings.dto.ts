@@ -1,11 +1,15 @@
 import {
   IsBoolean,
   IsIn,
+  IsInt,
+  IsNumber,
   IsObject,
   IsOptional,
   IsString,
   Length,
   Matches,
+  Max,
+  Min,
 } from 'class-validator';
 
 const SLUG_REGEX = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
@@ -72,4 +76,26 @@ export class UpdateLlmCredentialsDto {
   @IsString()
   @Length(10, 500)
   api_key?: string;
+}
+
+/**
+ * Orçamento mensal de IA por org. Todos os campos opcionais — patch parcial
+ * suportado. `monthly_budget_usd: null` remove o cap (volta pra telemetria).
+ */
+export class UpdateAiBudgetDto {
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100000)
+  monthly_budget_usd?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  alert_threshold_pct?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  hard_cap?: boolean;
 }

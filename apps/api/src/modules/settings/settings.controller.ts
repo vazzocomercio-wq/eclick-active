@@ -5,7 +5,9 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseIntPipe,
   Patch,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import type { AIFeatureName } from '@eclick-active/shared';
@@ -14,11 +16,15 @@ import { CurrentUser } from '../../common/auth/current-user.decorator';
 import type { AuthUser } from '../../common/auth/auth.types';
 import {
   SettingsService,
+  type AiBudget,
   type AiFeature,
+  type AiUsageSummary,
+  type AiUsageTimeline,
   type LlmCredentials,
   type OrgSettings,
 } from './settings.service';
 import {
+  UpdateAiBudgetDto,
   UpdateAiFeatureDto,
   UpdateLlmCredentialsDto,
   UpdateOrgDto,
@@ -102,5 +108,36 @@ export class SettingsController {
     @Body() dto: UpdateLlmCredentialsDto,
   ): Promise<LlmCredentials> {
     return this.service.updateLlmCredentials(user.org_id, user.role, dto);
+  }
+
+  // ────────────────────────────────────────────
+  // AI usage + budget (org_ai_budgets + ai_interactions)
+  // ────────────────────────────────────────────
+
+  @Get('ai-usage/summary')
+  getAiUsageSummary(@CurrentUser() user: AuthUser): Promise<AiUsageSummary> {
+    return this.service.getAiUsageSummary(user.org_id);
+  }
+
+  @Get('ai-usage/timeline')
+  getAiUsageTimeline(
+    @CurrentUser() user: AuthUser,
+    @Query('days', new ParseIntPipe({ optional: true })) days?: number,
+  ): Promise<AiUsageTimeline> {
+    return this.service.getAiUsageTimeline(user.org_id, days ?? 30);
+  }
+
+  @Get('ai-budget')
+  getAiBudget(@CurrentUser() user: AuthUser): Promise<AiBudget> {
+    return this.service.getAiBudget(user.org_id);
+  }
+
+  @Patch('ai-budget')
+  @HttpCode(HttpStatus.OK)
+  updateAiBudget(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: UpdateAiBudgetDto,
+  ): Promise<AiBudget> {
+    return this.service.upsertAiBudget(user.org_id, user.role, dto);
   }
 }

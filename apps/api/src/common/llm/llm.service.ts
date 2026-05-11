@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  OnModuleInit,
+} from '@nestjs/common';
 import Anthropic from '@anthropic-ai/sdk';
 import { SupabaseService } from '../supabase/supabase.service';
 import {
@@ -216,6 +221,8 @@ export class LlmService implements OnModuleInit {
   // ──────────────────────────────────────────────────────────
 
   async chat(req: ChatRequest): Promise<ChatResponse> {
+    await this.enforceMonthlyBudget(req.orgId, req.feature);
+
     const { provider, providerName, model } = await this.resolveProvider(req.orgId);
 
     const messages =
@@ -274,6 +281,89 @@ export class LlmService implements OnModuleInit {
         });
 
     return { ...result, interaction_id };
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // Cap mensal (org_ai_budgets) — bloqueia chat() quando hard_cap=true
+  // e spend acumulado >= monthly_budget_usd. Lookup cacheado 60s pra
+  // não taxar hot path com SELECT redundante.
+  // ──────────────────────────────────────────────────────────
+
+  private budgetCache = new Map<
+    string,
+    {
+      monthly_budget_usd: number | null;
+      hard_cap: boolean;
+      expiresAt: number;
+    }
+  >();
+
+  private static readonly BUDGET_CACHE_TTL_MS = 60_000;
+
+  private async enforceMonthlyBudget(orgId: string, feature: string): Promise<void> {
+    const cached = this.budgetCache.get(orgId);
+    let budget = cached && cached.expiresAt > Date.now() ? cached : null;
+
+    if (!budget) {
+      const { data } = await this.supabase.adminClient
+        .from('org_ai_budgets')
+        .select('monthly_budget_usd, hard_cap')
+        .eq('org_id', orgId)
+        .maybeSingle();
+      const row = data as {
+        monthly_budget_usd: string | number | null;
+        hard_cap: boolean;
+      } | null;
+      budget = {
+        monthly_budget_usd:
+          row?.monthly_budget_usd !== null && row?.monthly_budget_usd !== undefined
+            ? Number(row.monthly_budget_usd)
+            : null,
+        hard_cap: row?.hard_cap ?? false,
+        expiresAt: Date.now() + LlmService.BUDGET_CACHE_TTL_MS,
+      };
+      this.budgetCache.set(orgId, budget);
+    }
+
+    // Sem hard_cap ou sem budget definido → skip (só telemetria via ai_interactions)
+    if (!budget.hard_cap || budget.monthly_budget_usd === null) return;
+    if (budget.monthly_budget_usd <= 0) return;
+
+    const periodStart = startOfMonthUtc(new Date()).toISOString();
+    const spent = await this.sumMonthlySpend(orgId, periodStart);
+
+    if (spent >= budget.monthly_budget_usd) {
+      this.logger.warn(
+        `[${feature}] org=${orgId} bloqueado por hard_cap: spent=${spent.toFixed(4)} >= budget=${budget.monthly_budget_usd}`,
+      );
+      throw new BadRequestException(
+        'Orçamento mensal de IA atingido. Ajuste em /configuracoes > Uso de IA.',
+      );
+    }
+  }
+
+  /** Invalida cache do budget — chamado por settings após PATCH em ai-budget. */
+  invalidateBudgetCache(orgId: string): void {
+    this.budgetCache.delete(orgId);
+  }
+
+  private async sumMonthlySpend(orgId: string, sinceIso: string): Promise<number> {
+    const { data, error } = await this.supabase.adminClient
+      .from('ai_interactions')
+      .select('cost_usd')
+      .eq('org_id', orgId)
+      .gte('created_at', sinceIso)
+      .limit(50000);
+    if (error) {
+      this.logger.warn(`sumMonthlySpend falhou (assumindo 0): ${error.message}`);
+      return 0;
+    }
+    let total = 0;
+    for (const r of (data ?? []) as Array<{ cost_usd: string | number }>) {
+      const v = typeof r.cost_usd === 'string' ? Number(r.cost_usd) : r.cost_usd;
+      if (Number.isFinite(v)) total += v;
+    }
+    return total;
   }
 
   // ──────────────────────────────────────────────────────────
@@ -337,4 +427,8 @@ function instantiateProvider(name: LlmProviderName, apiKey: string): LlmProvider
     case 'google':
       return new GoogleProvider(apiKey);
   }
+}
+
+function startOfMonthUtc(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1, 0, 0, 0));
 }
