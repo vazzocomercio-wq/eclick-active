@@ -11,7 +11,8 @@ export type PipelineTemplateKey =
   | 'imobiliaria'
   | 'educacao'
   | 'servicos_b2b'
-  | 'energia_solar';
+  | 'energia_solar'
+  | 'operacao_cadastro';
 
 export interface PipelineTemplateStage {
   name: string;
@@ -82,6 +83,19 @@ const ENERGIA_SOLAR: PipelineTemplateStage[] = [
   { name: 'Contrato Assinado', color: '#22C55E', probability: 95 },
 ];
 
+// F5 (2026-05-14) — Pipeline pra operação de cadastro de produtos.
+// Acoplado ao SaaS via automation-bridge: cards são criados pelo
+// SaaS quando o gestor despacha tarefas pra operador via /products/dispatch-to-operator.
+// Os stages aqui devem ser estáveis pra não quebrar UUIDs salvos em
+// product_operator_assignments. Mudanças = nova migration.
+const OPERACAO_CADASTRO: PipelineTemplateStage[] = [
+  { name: 'A Fazer', color: '#00E5FF', probability: 10 },
+  { name: 'Em Andamento', color: '#0EA5E9', probability: 40 },
+  { name: 'Aguardando Info', color: '#8B5CF6', probability: 50 },
+  { name: 'Revisão', color: '#F59E0B', probability: 80 },
+  { name: 'Concluído', color: '#22C55E', probability: 100 },
+];
+
 export const PIPELINE_TEMPLATES: Record<PipelineTemplateKey, PipelineTemplateMeta> = {
   ecommerce: {
     key: 'ecommerce',
@@ -124,6 +138,13 @@ export const PIPELINE_TEMPLATES: Record<PipelineTemplateKey, PipelineTemplateMet
     description: 'Da captação ao contrato: dimensionamento, proposta, instalação.',
     icon: 'sun',
     stages: ENERGIA_SOLAR,
+  },
+  operacao_cadastro: {
+    key: 'operacao_cadastro',
+    default_name: 'Operação de Cadastro',
+    description: 'Recebe tarefas do SaaS pra operador completar cadastro de produtos (campos ML).',
+    icon: 'clipboard-list',
+    stages: OPERACAO_CADASTRO,
   },
 };
 

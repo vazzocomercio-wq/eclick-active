@@ -11,6 +11,7 @@ import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { ListTasksQueryDto } from './dto/list-tasks.query.dto';
 import { CalendarTasksQueryDto } from './dto/calendar-tasks.query.dto';
+import { SaasCallbackClient } from './saas-callback.client';
 
 /**
  * View enriquecida com nome do contato/deal/responsável (joins client-side).
@@ -32,7 +33,10 @@ const SELECT_WITH_JOINS =
 export class TasksService {
   private readonly logger = new Logger(TasksService.name);
 
-  constructor(private readonly supabase: SupabaseService) {}
+  constructor(
+    private readonly supabase: SupabaseService,
+    private readonly saasCallback: SaasCallbackClient,
+  ) {}
 
   // ────────────────────────────────────────────
   // CREATE
@@ -161,7 +165,7 @@ export class TasksService {
   // ────────────────────────────────────────────
 
   async update(orgId: string, id: string, dto: UpdateTaskDto): Promise<Task> {
-    await this.findById(orgId, id);
+    const before = await this.findById(orgId, id);
 
     const { data, error } = await this.supabase.adminClient
       .from('tasks')
@@ -175,7 +179,20 @@ export class TasksService {
       this.logger.error(`update failed: ${error?.message}`);
       throw new InternalServerErrorException(error?.message ?? 'Failed to update task');
     }
-    return data as Task;
+
+    // F5 (2026-05-14) — Se virou completed e veio do SaaS cadastro, dispara callback
+    const updated = data as Task;
+    if (
+      (before as Task).status !== 'completed' &&
+      updated.status === 'completed'
+    ) {
+      const source = (updated.metadata as Record<string, unknown> | null)?.source;
+      if (typeof source === 'string') {
+        void this.saasCallback.notifyTaskCompleted(updated.id, source);
+      }
+    }
+
+    return updated;
   }
 
   // ────────────────────────────────────────────
@@ -183,7 +200,7 @@ export class TasksService {
   // ────────────────────────────────────────────
 
   async complete(orgId: string, id: string): Promise<Task> {
-    await this.findById(orgId, id);
+    const before = await this.findById(orgId, id);
 
     const { data, error } = await this.supabase.adminClient
       .from('tasks')
@@ -200,7 +217,17 @@ export class TasksService {
       this.logger.error(`complete failed: ${error?.message}`);
       throw new InternalServerErrorException(error?.message ?? 'Failed to complete task');
     }
-    return data as Task;
+
+    // F5 (2026-05-14) — Callback reverso pro SaaS se task veio de cadastro
+    const updated = data as Task;
+    if ((before as Task).status !== 'completed') {
+      const source = (updated.metadata as Record<string, unknown> | null)?.source;
+      if (typeof source === 'string') {
+        void this.saasCallback.notifyTaskCompleted(updated.id, source);
+      }
+    }
+
+    return updated;
   }
 
   // ────────────────────────────────────────────
