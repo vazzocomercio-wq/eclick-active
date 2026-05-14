@@ -98,7 +98,7 @@ export class TeamService {
 
     // 3. Se não existir, cria via admin.inviteUserByEmail
     if (!userId) {
-      userId = await this.inviteAuthUser(email, dto.display_name);
+      userId = await this.inviteAuthUser(orgId, email, dto.display_name);
     }
 
     // 4. Verifica se já é membro dessa org
@@ -358,6 +358,7 @@ export class TeamService {
   }
 
   private async inviteAuthUser(
+    orgId: string,
     email: string,
     displayName?: string,
   ): Promise<string> {
@@ -369,8 +370,25 @@ export class TeamService {
       );
     }
 
+    // Lookup nome da org pra incluir no email template (placeholder
+    // {{ .Data.org_name }} no template do Supabase Dashboard)
+    const orgName = await this.fetchOrgName(orgId);
+
+    // Redirect explícito > confiar só no Site URL global do Supabase.
+    // Quando o user clica "Aceitar convite" no email, Supabase manda pra
+    // aceitar-convite com tokens no hash; a página completa a sessão e
+    // pede pra setar senha.
+    const webBaseUrl =
+      process.env.WEB_BASE_URL?.replace(/\/+$/, '') ?? 'https://active.eclick.app.br';
+    const redirectTo = `${webBaseUrl}/aceitar-convite`;
+
+    const metadata: Record<string, unknown> = {};
+    if (displayName) metadata.display_name = displayName;
+    if (orgName) metadata.org_name = orgName;
+
     const { data, error } = await auth.inviteUserByEmail(email, {
-      data: displayName ? { display_name: displayName } : {},
+      data: metadata,
+      redirectTo,
     });
 
     if (error || !data?.user) {
@@ -378,7 +396,7 @@ export class TeamService {
       const created = await auth.createUser({
         email,
         email_confirm: false,
-        user_metadata: displayName ? { display_name: displayName } : {},
+        user_metadata: metadata,
       });
       if (created.error || !created.data?.user) {
         throw new InternalServerErrorException(
@@ -389,6 +407,19 @@ export class TeamService {
     }
 
     return (data.user as { id: string }).id;
+  }
+
+  private async fetchOrgName(orgId: string): Promise<string | null> {
+    try {
+      const { data } = await this.supabase.adminClient
+        .from('organizations')
+        .select('name')
+        .eq('id', orgId)
+        .maybeSingle();
+      return (data as { name?: string } | null)?.name ?? null;
+    } catch {
+      return null;
+    }
   }
 
   private async fetchEmails(userIds: string[]): Promise<Map<string, string>> {
