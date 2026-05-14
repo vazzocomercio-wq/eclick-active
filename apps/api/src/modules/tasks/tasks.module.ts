@@ -8,6 +8,6 @@ import { SaasCallbackClient } from './saas-callback.client';
   imports: [AuthModule],
   controllers: [TasksController],
   providers: [TasksService, SaasCallbackClient],
-  exports: [TasksService],
+  exports: [TasksService, SaasCallbackClient],
 })
 export class TasksModule {}

@@ -11,6 +11,7 @@ import { SupabaseService } from '../../common/supabase/supabase.service';
 import { EventsGateway } from '../../gateways/events.gateway';
 import { OutboundWebhookService } from '../webhooks/outbound/outbound-webhook.service';
 import { AiService } from '../ai/ai.service';
+import { SaasCallbackClient } from '../tasks/saas-callback.client';
 import { CreateDealDto } from './dto/create-deal.dto';
 import { UpdateDealDto } from './dto/update-deal.dto';
 import { MoveDealDto } from './dto/move-deal.dto';
@@ -103,7 +104,51 @@ export class DealsService {
     private readonly ai: AiService,
     private readonly automations: AutomationsService,
     private readonly webhooks: OutboundWebhookService,
+    private readonly saasCallback: SaasCallbackClient,
   ) {}
+
+  /**
+   * Quando um deal vira "won", fecha as tasks vinculadas pra que:
+   *   1. Status visual delas fique consistente (operador não precisa
+   *      marcar cada task individualmente)
+   *   2. Callback Active→SaaS dispare (saas_cadastro source)
+   *
+   * Fire-and-forget. Errors logados, nunca bloqueiam o win do deal.
+   */
+  private async cascadeCompleteTasks(orgId: string, dealId: string, userId?: string | null): Promise<void> {
+    try {
+      // Busca tasks abertas vinculadas ao deal
+      const { data: tasks } = await this.supabase.adminClient
+        .from('tasks')
+        .select('id, status, metadata')
+        .eq('org_id', orgId)
+        .eq('deal_id', dealId)
+        .neq('status', 'completed');
+      const openTasks = (tasks ?? []) as Array<{ id: string; status: string; metadata: Record<string, unknown> | null }>;
+      if (openTasks.length === 0) return;
+
+      // Marca todas como completed via UPDATE em batch
+      const now = new Date().toISOString();
+      const taskIds = openTasks.map(t => t.id);
+      await this.supabase.adminClient
+        .from('tasks')
+        .update({ status: 'completed', completed_at: now })
+        .eq('org_id', orgId)
+        .in('id', taskIds);
+
+      this.logger.log(`[cascade-complete] deal=${dealId} won → ${openTasks.length} tasks fechadas (user=${userId ?? '?'})`);
+
+      // Dispara callback pro SaaS pra cada task com source='saas_cadastro'
+      for (const task of openTasks) {
+        const source = task.metadata?.source;
+        if (typeof source === 'string') {
+          void this.saasCallback.notifyTaskCompleted(task.id, source);
+        }
+      }
+    } catch (e) {
+      this.logger.warn(`[cascade-complete] falhou pra deal=${dealId}: ${(e as Error).message}`);
+    }
+  }
 
   // ──────────────────────────────────────────────────────────
   // CREATE
@@ -486,6 +531,10 @@ export class DealsService {
       });
       if (targetStage.is_won) {
         void this.webhooks.deliver(orgId, 'deal.won', deal as unknown as Record<string, unknown>);
+        // Cascata: quando deal vira won, fecha as tasks vinculadas automaticamente.
+        // Isso aciona o callback Active→SaaS (saas-callback) e fecha o ciclo
+        // de cadastro sem o operador precisar marcar cada task manualmente.
+        void this.cascadeCompleteTasks(orgId, deal.id, movedByUserId);
       }
       if (targetStage.is_lost) {
         void this.webhooks.deliver(orgId, 'deal.lost', deal as unknown as Record<string, unknown>);
