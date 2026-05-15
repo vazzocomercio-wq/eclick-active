@@ -20,6 +20,11 @@ interface CadastroCallbackInput {
   task_id: string;
 }
 
+interface CadastroDealCallbackInput {
+  deal_id: string;
+  outcome: 'won' | 'lost';
+}
+
 @Injectable()
 export class SaasCallbackClient {
   private readonly log = new Logger(SaasCallbackClient.name);
@@ -61,6 +66,43 @@ export class SaasCallbackClient {
         }
       } catch (e) {
         this.log.warn(`[saas-callback] task=${taskId} falha: ${(e as Error).message}`);
+      }
+    })();
+  }
+
+  /**
+   * Dispara POST /products/cadastro-deal-callback no SaaS quando um deal de
+   * cadastro entra em stage terminal (Ganho/Perdido).
+   *
+   * Necessário porque mover o card direto pra coluna terminal não completa as
+   * tasks vinculadas — no caso de "Perdido" não há cascata nenhuma — então o
+   * `notifyTaskCompleted` nunca dispararia e o assignment no SaaS ficaria
+   * preso em 'open'. Fire-and-forget, mesmo padrão do task callback.
+   */
+  async notifyDealTerminal(dealId: string, outcome: 'won' | 'lost', source: string): Promise<void> {
+    if (source !== 'saas_cadastro') return; // não é deal de cadastro, ignora
+    if (!this.isConfigured()) {
+      this.log.warn(`[saas-callback] env não configurada — skip deal=${dealId}`);
+      return;
+    }
+    const url = (process.env.SAAS_CALLBACK_URL ?? '').replace(/\/+$/, '');
+    const secret = process.env.ACTIVE_CALLBACK_SECRET ?? process.env.ACTIVE_AUTOMATION_BRIDGE_SECRET ?? '';
+
+    void (async () => {
+      try {
+        const res = await fetch(`${url}/products/cadastro-deal-callback`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ deal_id: dealId, outcome, secret } satisfies CadastroDealCallbackInput & { secret: string }),
+        });
+        if (!res.ok) {
+          const body = await res.text().catch(() => '');
+          this.log.warn(`[saas-callback] deal HTTP ${res.status}: ${body.slice(0, 200)}`);
+        } else {
+          this.log.log(`[saas-callback] deal=${dealId} → ${outcome} OK`);
+        }
+      } catch (e) {
+        this.log.warn(`[saas-callback] deal=${dealId} falha: ${(e as Error).message}`);
       }
     })();
   }

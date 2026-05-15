@@ -539,6 +539,19 @@ export class DealsService {
       if (targetStage.is_lost) {
         void this.webhooks.deliver(orgId, 'deal.lost', deal as unknown as Record<string, unknown>);
       }
+
+      // Callback pro SaaS quando um deal de cadastro entra em stage terminal.
+      // Cobre o caso de arrastar o card direto pra Ganho/Perdido sem completar
+      // a task — o assignment no SaaS ficaria preso em 'open' sem isso.
+      if (targetStage.is_won || targetStage.is_lost) {
+        const dealMeta = (deal as { metadata?: Record<string, unknown> | null }).metadata ?? {};
+        const source = typeof dealMeta.source === 'string' ? dealMeta.source : '';
+        void this.saasCallback.notifyDealTerminal(
+          deal.id,
+          targetStage.is_won ? 'won' : 'lost',
+          source,
+        );
+      }
     }
 
     // Log extra: se mudou de stage, o trigger SQL já gravou um
