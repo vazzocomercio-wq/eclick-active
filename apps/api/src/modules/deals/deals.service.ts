@@ -60,6 +60,9 @@ export interface BoardDealItem {
   agent_avatar: string | null;
   hours_in_stage: number;
   sla_breached: boolean;
+  /** Estado terminal. NULL = deal ativo. Migration 071 propaga via view. */
+  won_at: string | null;
+  lost_at: string | null;
 }
 
 export interface BoardStageGroup {
@@ -333,7 +336,10 @@ export class DealsService {
     if (dealsErr) throw new InternalServerErrorException(dealsErr.message);
     const deals = (dealsRaw ?? []) as BoardDealItem[];
 
-    // 4. Agrupa por stage_id
+    // 4. Agrupa por stage_id. A view (migration 071) inclui deals fechados
+    //    nos últimos 30 dias pra que apareçam nas colunas Ganho/Perdido — mas
+    //    o summary do funil (total/ponderado) conta SÓ deals ativos, senão os
+    //    fechados inflariam o pipeline em aberto.
     const byStage = new Map<string, BoardDealItem[]>();
     let totalDeals = 0;
     let totalValue = 0;
@@ -342,6 +348,8 @@ export class DealsService {
       const list = byStage.get(d.stage_id) ?? [];
       list.push(d);
       byStage.set(d.stage_id, list);
+      const isClosed = !!d.won_at || !!d.lost_at;
+      if (isClosed) continue;
       totalDeals++;
       const v = Number(d.value) || 0;
       totalValue += v;
