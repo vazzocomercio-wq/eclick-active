@@ -548,18 +548,21 @@ export class DealsService {
         void this.webhooks.deliver(orgId, 'deal.lost', deal as unknown as Record<string, unknown>);
       }
 
-      // Callback pro SaaS quando um deal de cadastro entra em stage terminal.
-      // Cobre o caso de arrastar o card direto pra Ganho/Perdido sem completar
-      // a task — o assignment no SaaS ficaria preso em 'open' sem isso.
-      if (targetStage.is_won || targetStage.is_lost) {
-        const dealMeta = (deal as { metadata?: Record<string, unknown> | null }).metadata ?? {};
-        const source = typeof dealMeta.source === 'string' ? dealMeta.source : '';
-        void this.saasCallback.notifyDealTerminal(
-          deal.id,
-          targetStage.is_won ? 'won' : 'lost',
-          source,
-        );
-      }
+      // Callback pro SaaS pra sincronizar o assignment de cadastro com o
+      // estado do deal. Cobre arrastar o card no kanban sem completar a task.
+      //   stage won  → assignment 'completed'
+      //   stage lost → assignment 'cancelled'
+      //   qualquer outro stage → assignment 'in_progress' (operador trabalhando)
+      // O marcador é custom_fields.card_kind ('product_cadastro') — o campo
+      // `source` não serve, o bridge sobrescreve pra 'saas:ml-campaigns'.
+      const cf = (deal as { custom_fields?: Record<string, unknown> | null }).custom_fields ?? {};
+      const cardKind = typeof cf.card_kind === 'string' ? cf.card_kind : '';
+      const dealState: 'won' | 'lost' | 'in_progress' = targetStage.is_won
+        ? 'won'
+        : targetStage.is_lost
+          ? 'lost'
+          : 'in_progress';
+      void this.saasCallback.notifyDealState(deal.id, dealState, cardKind);
     }
 
     // Log extra: se mudou de stage, o trigger SQL já gravou um

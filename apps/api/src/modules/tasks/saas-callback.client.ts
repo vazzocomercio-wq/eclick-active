@@ -22,7 +22,7 @@ interface CadastroCallbackInput {
 
 interface CadastroDealCallbackInput {
   deal_id: string;
-  outcome: 'won' | 'lost';
+  outcome: 'won' | 'lost' | 'in_progress';
 }
 
 @Injectable()
@@ -71,16 +71,23 @@ export class SaasCallbackClient {
   }
 
   /**
-   * Dispara POST /products/cadastro-deal-callback no SaaS quando um deal de
-   * cadastro entra em stage terminal (Ganho/Perdido).
+   * Dispara POST /products/cadastro-deal-callback no SaaS quando o estado de
+   * um deal de cadastro muda (Ganho/Perdido/Em andamento).
    *
-   * Necessário porque mover o card direto pra coluna terminal não completa as
-   * tasks vinculadas — no caso de "Perdido" não há cascata nenhuma — então o
-   * `notifyTaskCompleted` nunca dispararia e o assignment no SaaS ficaria
-   * preso em 'open'. Fire-and-forget, mesmo padrão do task callback.
+   * Necessário porque mover o card no kanban não completa as tasks vinculadas
+   * (e "Perdido" não tem cascata nenhuma), então o `notifyTaskCompleted` nunca
+   * dispararia e o assignment no SaaS ficaria dessincronizado.
+   *
+   * `cardKind` vem de `deal.custom_fields.card_kind` — só dispara quando é
+   * 'product_cadastro' (o campo `source` não serve: o bridge sobrescreve pra
+   * 'saas:ml-campaigns'). Fire-and-forget, mesmo padrão do task callback.
    */
-  async notifyDealTerminal(dealId: string, outcome: 'won' | 'lost', source: string): Promise<void> {
-    if (source !== 'saas_cadastro') return; // não é deal de cadastro, ignora
+  async notifyDealState(
+    dealId: string,
+    outcome: 'won' | 'lost' | 'in_progress',
+    cardKind: string,
+  ): Promise<void> {
+    if (cardKind !== 'product_cadastro') return; // não é deal de cadastro, ignora
     if (!this.isConfigured()) {
       this.log.warn(`[saas-callback] env não configurada — skip deal=${dealId}`);
       return;

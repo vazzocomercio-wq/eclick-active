@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
 import { LostReasonDialog } from './lost-reason-dialog';
 import { DealHeader } from './deal-tabs/deal-header';
 import { DealMainTab } from './deal-tabs/main-tab';
@@ -177,6 +178,50 @@ export function DealDetailSheet({
   }
 
   /**
+   * Cards de cadastro (despachados pelo SaaS) carregam custom_fields.deeplink
+   * pro IA Criativo. Abrir o Criativo é uma ação explícita, com confirmação —
+   * e ao confirmar, o card avança pra "Em Andamento" (stage gravado no
+   * dispatch). Só avança se o card estiver ATRÁS desse stage: se o operador
+   * já moveu o card adiante manualmente, respeita a posição dele.
+   */
+  async function handleOpenCriativo() {
+    if (!detail) return;
+    const cf = detail.custom_fields ?? {};
+    const deeplink = typeof cf.deeplink === 'string' ? cf.deeplink : null;
+    if (!deeplink) {
+      toast.error('Este card não tem link do IA Criativo configurado');
+      return;
+    }
+    const inProgressStageId =
+      typeof cf.in_progress_stage_id === 'string' ? cf.in_progress_stage_id : null;
+
+    const ok = await confirm({
+      title: 'Abrir no IA Criativo?',
+      description:
+        'Você será levado ao IA Criativo no SaaS pra completar o cadastro do produto. O card será movido para "Em Andamento".',
+      confirmLabel: 'Abrir IA Criativo',
+      icon: Sparkles,
+    });
+    if (!ok) return;
+
+    // Avança pra "Em Andamento" — só se o card estiver atrás desse stage.
+    if (inProgressStageId && inProgressStageId !== detail.stage_id && pipeline) {
+      const curPos = pipeline.stages.find((s) => s.id === detail.stage_id)?.position ?? -1;
+      const tgtPos = pipeline.stages.find((s) => s.id === inProgressStageId)?.position ?? -1;
+      if (tgtPos > curPos) {
+        try {
+          await dealsApi.move(detail.id, { stage_id: inProgressStageId });
+          await handleChanged();
+        } catch {
+          // Falha no move não bloqueia a abertura do Criativo.
+        }
+      }
+    }
+
+    window.open(deeplink, '_blank', 'noopener,noreferrer');
+  }
+
+  /**
    * Disparado pelo AIGapsCard (na aba Principal) quando o vendedor clica
    * "Pedir ao cliente". Troca pra aba Conversa e injeta a sugestão no
    * banner de prefill do ChatPanel.
@@ -219,6 +264,29 @@ export function DealDetailSheet({
                 saving={saving}
                 deleting={deleting}
               />
+
+              {/* Banner de missão de cadastro — só em cards despachados pelo
+                  SaaS (custom_fields.card_kind). Atalho pro IA Criativo. */}
+              {detail.custom_fields?.card_kind === 'product_cadastro' && (
+                <div className="mx-4 mt-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
+                  <div className="flex items-start gap-2.5">
+                    <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium">Missão de cadastro</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Complete os dados do produto direto no IA Criativo do SaaS.
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    onClick={handleOpenCriativo}
+                    size="sm"
+                    className="mt-2.5 w-full"
+                  >
+                    Abrir IA Criativo →
+                  </Button>
+                </div>
+              )}
 
               <Tabs
                 value={tab}
