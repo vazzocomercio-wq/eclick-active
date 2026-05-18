@@ -37,6 +37,23 @@ interface DealDetailSheetProps {
 
 type TabKey = 'main' | 'chat' | 'insights' | 'history';
 
+/** Link de ação contextual setado pelo SaaS em custom_fields.action_link
+ *  (ex: "Criar campanha →" quando o card está em Incluir Campanha). */
+function actionLinkOf(
+  cf: Record<string, unknown> | null | undefined,
+): { label: string; url: string } | null {
+  const al = cf?.action_link;
+  if (
+    al &&
+    typeof al === 'object' &&
+    typeof (al as { label?: unknown }).label === 'string' &&
+    typeof (al as { url?: unknown }).url === 'string'
+  ) {
+    return al as { label: string; url: string };
+  }
+  return null;
+}
+
 /**
  * Hub central do Deal. Sheet lateral 520px à direita com:
  *   - Header fixo: número, título inline-edit, valor inline-edit, stage
@@ -264,6 +281,36 @@ export function DealDetailSheet({
                 saving={saving}
                 deleting={deleting}
               />
+
+              {/* Link de ação contextual — o SaaS seta custom_fields.action_link
+                  ao avançar o card no funil (ex: "Criar campanha →" em Incluir
+                  Campanha, "Criar ADS →" em Incluir ADS). */}
+              {(() => {
+                const link = actionLinkOf(detail.custom_fields);
+                if (!link) return null;
+                return (
+                  <div className="mx-4 mt-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
+                    <div className="flex items-start gap-2.5">
+                      <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium">Próximo passo</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          Continue o fluxo deste anúncio no SaaS.
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      onClick={() =>
+                        window.open(link.url, '_blank', 'noopener,noreferrer')
+                      }
+                      size="sm"
+                      className="mt-2.5 w-full"
+                    >
+                      {link.label} →
+                    </Button>
+                  </div>
+                );
+              })()}
 
               {/* Banner de missão de cadastro — só em cards despachados pelo
                   SaaS (custom_fields.card_kind). Atalho pro IA Criativo. */}

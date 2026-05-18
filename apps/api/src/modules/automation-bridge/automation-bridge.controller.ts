@@ -11,6 +11,8 @@ import { AutomationBridgeGuard } from './automation-bridge.guard';
 import type {
   CreateCampaignCardInput,
   CreateCampaignCardResult,
+  MoveCardInput,
+  MoveCardResult,
   NotifyLojistaInput,
   NotifyLojistaResult,
   SendBroadcastInput,
@@ -138,5 +140,28 @@ export class AutomationBridgeController {
     @Body() body: CreateCampaignCardInput,
   ): Promise<CreateCampaignCardResult> {
     return this.service.createCampaignCard(body);
+  }
+
+  /**
+   * POST /commerce/automation-bridge/move-card
+   *
+   * Avança um card existente de etapa — achado pelo `dedup_key`. Usado
+   * pela automação do funil "Anúncios ML": publicação → Incluir Campanha,
+   * anúncio em campanha → Incluir ADS, ADS resolvido → Concluído.
+   * Avança só pra frente. Atualiza o `action_link` (botão do card).
+   *
+   * Body:
+   *   organization_id: string
+   *   dedup_key: string                            (custom_fields.dedup_key)
+   *   to_stage_id?: string                         (uuid da etapa) — OU
+   *   to_stage_name?: string                       (nome, resolvido no funil)
+   *   action_link?: { label, url } | null          (botão do card; null limpa)
+   *
+   * Retorna { ok, found, deal_id, moved, reason? }
+   */
+  @Post('move-card')
+  @HttpCode(HttpStatus.OK)
+  moveCard(@Body() body: MoveCardInput): Promise<MoveCardResult> {
+    return this.service.moveCard(body);
   }
 }

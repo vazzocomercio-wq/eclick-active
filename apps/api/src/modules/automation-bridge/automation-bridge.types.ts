@@ -145,6 +145,43 @@ export interface CreateCampaignCardResult {
 }
 
 // ──────────────────────────────────────────────────────────
+// Move card — SaaS avança um card existente de etapa (funil Anúncios ML)
+// ──────────────────────────────────────────────────────────
+
+/** Link de ação contextual exibido dentro do card numa etapa. */
+export interface CardActionLink {
+  label: string;
+  url: string;
+}
+
+/** Input do move-card.
+ *
+ *  Chamado pelo SaaS quando um evento (publicação ML, anúncio entrou em
+ *  campanha, ADS incluído) deve avançar o card no funil de Anúncios ML.
+ *  Acha o deal pelo `dedup_key`. Avança SÓ pra frente — nunca regride. */
+export interface MoveCardInput {
+  organization_id: string;
+  /** Chave lógica do card (custom_fields.dedup_key). */
+  dedup_key: string;
+  /** Etapa destino — por id (uuid) OU por nome (resolvido no funil do deal). */
+  to_stage_id?: string;
+  to_stage_name?: string;
+  /** Link de ação a exibir no card. `null` limpa; `undefined` mantém. */
+  action_link?: CardActionLink | null;
+}
+
+export interface MoveCardResult {
+  ok: true;
+  /** False se nenhum card com esse dedup_key foi encontrado. */
+  found: boolean;
+  deal_id: string | null;
+  /** True se o card avançou de etapa agora. */
+  moved: boolean;
+  /** Motivo quando found=true mas moved=false. */
+  reason?: string;
+}
+
+// ──────────────────────────────────────────────────────────
 // Internal — automation_executions row
 // ──────────────────────────────────────────────────────────
 

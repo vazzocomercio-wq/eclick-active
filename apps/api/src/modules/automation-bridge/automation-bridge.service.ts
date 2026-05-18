@@ -17,6 +17,8 @@ import type {
   CreateCampaignCardInput,
   CreateCampaignCardResult,
   ExecutionType,
+  MoveCardInput,
+  MoveCardResult,
   NotifyLojistaInput,
   NotifyLojistaResult,
   OrgAutomationBridgeSettings,
@@ -989,11 +991,113 @@ export class AutomationBridgeService {
 
     return { ok: true, deal_id: deal.id, task_id: taskId, created: true };
   }
+
+  // ────────────────────────────────────────────
+  // 6) Move Card (funil Anúncios ML — avança card por evento do SaaS)
+  // ────────────────────────────────────────────
+
+  /**
+   * Avança um card existente de etapa, achando-o pelo `dedup_key`.
+   *
+   * Chamado pelo SaaS quando: o anúncio é publicado (→ Incluir Campanha),
+   * entra numa campanha ativa (→ Incluir ADS) ou o ADS é resolvido
+   * (→ Concluído). Atualiza também o `action_link` do card (botão
+   * contextual exibido no detalhe).
+   *
+   * Avança SÓ pra frente — se o card já está na etapa-alvo ou além, não
+   * regride (evita que um evento atrasado puxe o card pra trás). A mudança
+   * de etapa dispara as automações de `deal_stage_changed` (ex: a tarefa
+   * de 3h por etapa).
+   */
+  async moveCard(input: MoveCardInput): Promise<MoveCardResult> {
+    if (!input.organization_id || !input.dedup_key) {
+      throw new BadRequestException('organization_id e dedup_key são obrigatórios');
+    }
+    if (!input.to_stage_id && !input.to_stage_name) {
+      throw new BadRequestException('Informe to_stage_id ou to_stage_name');
+    }
+
+    const { data: dealData } = await this.supabase.adminClient
+      .from('deals')
+      .select('id, pipeline_id, stage_id, custom_fields')
+      .eq('org_id', input.organization_id)
+      .filter('custom_fields->>dedup_key', 'eq', input.dedup_key)
+      .limit(1)
+      .maybeSingle();
+
+    if (!dealData) {
+      this.log.log(`[move-card] nenhum card pra dedup_key=${input.dedup_key}`);
+      return { ok: true, found: false, deal_id: null, moved: false };
+    }
+    const deal = dealData as {
+      id: string;
+      pipeline_id: string;
+      stage_id: string;
+      custom_fields: Record<string, unknown> | null;
+    };
+
+    const { data: stagesData } = await this.supabase.adminClient
+      .from('pipeline_stages')
+      .select('id, name, position')
+      .eq('pipeline_id', deal.pipeline_id);
+    const stages = (stagesData ?? []) as Array<{ id: string; name: string; position: number }>;
+
+    const target = input.to_stage_id
+      ? stages.find((s) => s.id === input.to_stage_id)
+      : stages.find(
+          (s) => normalizeStageName(s.name) === normalizeStageName(input.to_stage_name ?? ''),
+        );
+    if (!target) {
+      throw new NotFoundException(
+        `Etapa destino não encontrada no funil: ${input.to_stage_id ?? input.to_stage_name}`,
+      );
+    }
+
+    // Atualiza o action_link do card (merge no custom_fields).
+    if (input.action_link !== undefined) {
+      const merged: Record<string, unknown> = { ...(deal.custom_fields ?? {}) };
+      if (input.action_link === null) delete merged.action_link;
+      else merged.action_link = input.action_link;
+      const { error: cfErr } = await this.supabase.adminClient
+        .from('deals')
+        .update({ custom_fields: merged })
+        .eq('org_id', input.organization_id)
+        .eq('id', deal.id);
+      if (cfErr) this.log.warn(`[move-card] patch custom_fields falhou: ${cfErr.message}`);
+    }
+
+    // Forward-only: não regride o card.
+    if (target.id === deal.stage_id) {
+      return { ok: true, found: true, deal_id: deal.id, moved: false, reason: 'já está nessa etapa' };
+    }
+    const current = stages.find((s) => s.id === deal.stage_id);
+    if (current && target.position < current.position) {
+      return {
+        ok: true,
+        found: true,
+        deal_id: deal.id,
+        moved: false,
+        reason: 'card já está numa etapa mais avançada',
+      };
+    }
+
+    await this.deals.moveToStage(input.organization_id, deal.id, { stage_id: target.id });
+    return { ok: true, found: true, deal_id: deal.id, moved: true };
+  }
 }
 
 // ──────────────────────────────────────────────────────────
 // Helpers
 // ──────────────────────────────────────────────────────────
+
+/** Normaliza nome de etapa pra casar por nome (minúsculo, sem acento). */
+function normalizeStageName(name: string): string {
+  return name
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .trim()
+    .toLowerCase();
+}
 
 function formatLojistaMessage(input: NotifyLojistaInput): string {
   const head = `${SEVERITY_LABEL[input.severity]} — Loja AI`;
