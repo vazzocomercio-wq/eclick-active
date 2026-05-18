@@ -213,6 +213,22 @@ export const KB: KbEntry[] = [
     ].join('\n'),
     tags: ['funil', 'pipeline', 'kanban'],
   },
+  {
+    routes: ['/funis', '/funis/:id'],
+    category: 'DEALS',
+    title: 'Funil "Anúncios ML" — cards avançam sozinhos',
+    content: [
+      'Os cards do funil **Anúncios ML** avançam automaticamente, guiados pelo e-Click SaaS:',
+      '- Anúncio **publicado** no Mercado Livre → card vai pra **Incluir Campanha**.',
+      '- Anúncio entra numa **campanha de promoção** ativa → card vai pra **Incluir ADS**.',
+      '- Anúncio entra numa **campanha de ADS** (publicidade paga) → card vai pra **Concluído**.',
+      'Cada card mostra um **botão de atalho** pro próximo passo (criar campanha, gerenciar ADS).',
+      'Cada mudança de etapa gera uma **tarefa** pro operador: 1 dia de prazo na criação, 3h nas demais.',
+      'O avanço é só pra frente — um evento atrasado nunca regride o card. Pra encerrar, mova de "Concluído" pra "Ganho".',
+      'Decidiu não fazer ADS? É só arrastar o card pra "Concluído" no kanban.',
+    ].join('\n'),
+    tags: ['funil', 'anuncios', 'mercado livre', 'automacao'],
+  },
 
   // ── TASKS ─────────────────────────────────────────────
   {
