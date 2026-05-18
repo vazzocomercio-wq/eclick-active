@@ -145,14 +145,16 @@ export class AutomationBridgeController {
   /**
    * POST /commerce/automation-bridge/move-card
    *
-   * Avança um card existente de etapa — achado pelo `dedup_key`. Usado
-   * pela automação do funil "Anúncios ML": publicação → Incluir Campanha,
-   * anúncio em campanha → Incluir ADS, ADS resolvido → Concluído.
-   * Avança só pra frente. Atualiza o `action_link` (botão do card).
+   * Avança um card existente de etapa. Usado pela automação do funil
+   * "Anúncios ML": publicação → Incluir Campanha, anúncio em campanha →
+   * Incluir ADS, ADS resolvido → Concluído. Avança só pra frente.
+   * Atualiza o `action_link` (botão do card).
+   *
+   * Acha o card por `deal_id` direto OU por `organization_id` + `dedup_key`.
    *
    * Body:
-   *   organization_id: string
-   *   dedup_key: string                            (custom_fields.dedup_key)
+   *   deal_id?: string                             (id do deal — deriva a org) — OU
+   *   organization_id?: string  +  dedup_key?: string  (custom_fields.dedup_key)
    *   to_stage_id?: string                         (uuid da etapa) — OU
    *   to_stage_name?: string                       (nome, resolvido no funil)
    *   action_link?: { label, url } | null          (botão do card; null limpa)

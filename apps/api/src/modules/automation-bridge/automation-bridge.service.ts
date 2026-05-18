@@ -1010,31 +1010,49 @@ export class AutomationBridgeService {
    * de 3h por etapa).
    */
   async moveCard(input: MoveCardInput): Promise<MoveCardResult> {
-    if (!input.organization_id || !input.dedup_key) {
-      throw new BadRequestException('organization_id e dedup_key são obrigatórios');
+    if (!input.deal_id && (!input.organization_id || !input.dedup_key)) {
+      throw new BadRequestException(
+        'Informe deal_id OU (organization_id + dedup_key)',
+      );
     }
     if (!input.to_stage_id && !input.to_stage_name) {
       throw new BadRequestException('Informe to_stage_id ou to_stage_name');
     }
 
-    const { data: dealData } = await this.supabase.adminClient
-      .from('deals')
-      .select('id, pipeline_id, stage_id, custom_fields')
-      .eq('org_id', input.organization_id)
-      .filter('custom_fields->>dedup_key', 'eq', input.dedup_key)
-      .limit(1)
-      .maybeSingle();
+    // Acha o deal: por id direto (deriva a org) ou por org + dedup_key.
+    let dealData: unknown;
+    if (input.deal_id) {
+      const res = await this.supabase.adminClient
+        .from('deals')
+        .select('id, org_id, pipeline_id, stage_id, custom_fields')
+        .eq('id', input.deal_id)
+        .maybeSingle();
+      dealData = res.data;
+    } else {
+      const res = await this.supabase.adminClient
+        .from('deals')
+        .select('id, org_id, pipeline_id, stage_id, custom_fields')
+        .eq('org_id', input.organization_id!)
+        .filter('custom_fields->>dedup_key', 'eq', input.dedup_key!)
+        .limit(1)
+        .maybeSingle();
+      dealData = res.data;
+    }
 
     if (!dealData) {
-      this.log.log(`[move-card] nenhum card pra dedup_key=${input.dedup_key}`);
+      this.log.log(
+        `[move-card] nenhum card pra ${input.deal_id ?? `dedup_key=${input.dedup_key}`}`,
+      );
       return { ok: true, found: false, deal_id: null, moved: false };
     }
     const deal = dealData as {
       id: string;
+      org_id: string;
       pipeline_id: string;
       stage_id: string;
       custom_fields: Record<string, unknown> | null;
     };
+    const orgId = deal.org_id;
 
     const { data: stagesData } = await this.supabase.adminClient
       .from('pipeline_stages')
@@ -1061,7 +1079,7 @@ export class AutomationBridgeService {
       const { error: cfErr } = await this.supabase.adminClient
         .from('deals')
         .update({ custom_fields: merged })
-        .eq('org_id', input.organization_id)
+        .eq('org_id', orgId)
         .eq('id', deal.id);
       if (cfErr) this.log.warn(`[move-card] patch custom_fields falhou: ${cfErr.message}`);
     }
@@ -1081,7 +1099,7 @@ export class AutomationBridgeService {
       };
     }
 
-    await this.deals.moveToStage(input.organization_id, deal.id, { stage_id: target.id });
+    await this.deals.moveToStage(orgId, deal.id, { stage_id: target.id });
     return { ok: true, found: true, deal_id: deal.id, moved: true };
   }
 }

@@ -158,11 +158,20 @@ export interface CardActionLink {
  *
  *  Chamado pelo SaaS quando um evento (publicação ML, anúncio entrou em
  *  campanha, ADS incluído) deve avançar o card no funil de Anúncios ML.
- *  Acha o deal pelo `dedup_key`. Avança SÓ pra frente — nunca regride. */
+ *  Avança SÓ pra frente — nunca regride.
+ *
+ *  Duas formas de achar o card:
+ *   - `deal_id` direto — a org é derivada do próprio deal (preferível
+ *     quando o chamador já guarda o id do deal, ex: SaaS publish flow).
+ *   - `organization_id` + `dedup_key` — acha pelo snapshot de chave lógica. */
 export interface MoveCardInput {
-  organization_id: string;
+  /** Org dona do card. Obrigatório quando se acha o card por `dedup_key`. */
+  organization_id?: string;
   /** Chave lógica do card (custom_fields.dedup_key). */
-  dedup_key: string;
+  dedup_key?: string;
+  /** Id direto do deal. Se vier, ignora organization_id/dedup_key e deriva
+   *  a org do próprio deal. */
+  deal_id?: string;
   /** Etapa destino — por id (uuid) OU por nome (resolvido no funil do deal). */
   to_stage_id?: string;
   to_stage_name?: string;
