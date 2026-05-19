@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Moon, Sun } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 
 const THEME_KEY = 'theme';
@@ -13,6 +14,7 @@ interface ThemeToggleProps {
 }
 
 export function ThemeToggle({ collapsed = false }: ThemeToggleProps) {
+  const t = useTranslations('themeToggle');
   const [theme, setTheme] = useState<Theme>('dark');
   const [mounted, setMounted] = useState(false);
 
@@ -41,7 +43,7 @@ export function ThemeToggle({ collapsed = false }: ThemeToggleProps) {
   // Antes de montar, mostra ícone neutro pra evitar mismatch
   const Icon = mounted && theme === 'dark' ? Sun : Moon;
   const label =
-    mounted && theme === 'dark' ? 'Mudar para tema claro' : 'Mudar para tema escuro';
+    mounted && theme === 'dark' ? t('switchToLight') : t('switchToDark');
 
   if (collapsed) {
     return (
@@ -69,7 +71,7 @@ export function ThemeToggle({ collapsed = false }: ThemeToggleProps) {
     >
       <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
       <span className="flex-1 text-left">
-        {mounted ? (theme === 'dark' ? 'Tema claro' : 'Tema escuro') : 'Tema'}
+        {mounted ? (theme === 'dark' ? t('light') : t('dark')) : t('theme')}
       </span>
     </button>
   );

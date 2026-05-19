@@ -1,0 +1,30 @@
+{
+  "language": {
+    "label": "Idioma"
+  },
+  "common": {
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "delete": "Excluir",
+    "edit": "Editar",
+    "create": "Criar",
+    "confirm": "Confirmar",
+    "close": "Fechar",
+    "back": "Voltar",
+    "next": "Avançar",
+    "search": "Buscar",
+    "filter": "Filtrar",
+    "loading": "Carregando...",
+    "saving": "Salvando...",
+    "noData": "Nenhum dado encontrado",
+    "yes": "Sim",
+    "no": "Não"
+  },
+  "themeToggle": {
+    "theme": "Tema",
+    "light": "Tema claro",
+    "dark": "Tema escuro",
+    "switchToLight": "Mudar para tema claro",
+    "switchToDark": "Mudar para tema escuro"
+  }
+}

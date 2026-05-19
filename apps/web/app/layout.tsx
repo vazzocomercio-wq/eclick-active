@@ -1,6 +1,9 @@
 import type { Metadata } from 'next';
 import { Toaster } from 'sonner';
+import { NextIntlClientProvider } from 'next-intl';
+import { getLocale } from 'next-intl/server';
 import { ConfirmProvider } from '@/components/ui/confirm-provider';
+import { htmlLang, type Locale } from '@/i18n/locales';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -23,18 +26,21 @@ const themeInitScript = `
 })();
 `;
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const locale = await getLocale();
   return (
-    <html lang="pt-BR" suppressHydrationWarning>
+    <html lang={htmlLang[locale as Locale] ?? 'pt-BR'} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body className="min-h-screen bg-background font-sans antialiased">
-        <ConfirmProvider>{children}</ConfirmProvider>
+        <NextIntlClientProvider>
+          <ConfirmProvider>{children}</ConfirmProvider>
+        </NextIntlClientProvider>
         <Toaster
           position="bottom-right"
           theme="dark"

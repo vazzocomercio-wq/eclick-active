@@ -1,0 +1,30 @@
+{
+  "language": {
+    "label": "Language"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "confirm": "Confirm",
+    "close": "Close",
+    "back": "Back",
+    "next": "Next",
+    "search": "Search",
+    "filter": "Filter",
+    "loading": "Loading...",
+    "saving": "Saving...",
+    "noData": "No data found",
+    "yes": "Yes",
+    "no": "No"
+  },
+  "themeToggle": {
+    "theme": "Theme",
+    "light": "Light theme",
+    "dark": "Dark theme",
+    "switchToLight": "Switch to light theme",
+    "switchToDark": "Switch to dark theme"
+  }
+}

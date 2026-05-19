@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { LanguageSwitcher } from '@/components/i18n/language-switcher';
 import { useUnreadCount } from '@/hooks/use-unread-count';
 import { useSacCriticalCount } from '@/hooks/use-sac';
 import { useSocialPendingCount } from '@/hooks/use-social';
@@ -298,13 +299,14 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps = {}
           </ul>
         </nav>
 
-        {/* Theme toggle */}
+        {/* Idioma + tema */}
         <div
           className={cn(
             'border-t border-border p-2',
-            isCollapsed ? 'flex justify-center' : '',
+            isCollapsed ? 'flex flex-col items-center gap-1' : 'space-y-1',
           )}
         >
+          <LanguageSwitcher collapsed={isCollapsed} />
           <ThemeToggle collapsed={isCollapsed} />
         </div>
       </aside>
