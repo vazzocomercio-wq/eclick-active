@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import { useTranslations } from 'next-intl';
 import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +23,7 @@ type Phase = 'verifying' | 'set_password' | 'submitting' | 'done' | 'error';
 
 function AceitarConviteInner() {
   const router = useRouter();
+  const t = useTranslations('auth');
   const [phase, setPhase] = useState<Phase>('verifying');
   const [error, setError] = useState<string | null>(null);
   const [orgName, setOrgName] = useState<string | null>(null);
@@ -50,7 +52,7 @@ function AceitarConviteInner() {
             refresh_token: refreshToken,
           });
           if (setErr) {
-            setError(translateAuthError(setErr.message));
+            setError(translateAuthError(setErr.message, t));
             setPhase('error');
             return;
           }
@@ -58,9 +60,7 @@ function AceitarConviteInner() {
 
         const { data: userData, error: userErr } = await supabase.auth.getUser();
         if (userErr || !userData.user) {
-          setError(
-            'Não foi possível validar seu convite. O link pode ter expirado — peça outro convite.',
-          );
+          setError(t('invite.errors.validationFailed'));
           setPhase('error');
           return;
         }
@@ -85,7 +85,7 @@ function AceitarConviteInner() {
 
         setPhase('set_password');
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Erro inesperado');
+        setError(err instanceof Error ? err.message : t('errors.unexpected'));
         setPhase('error');
       }
     })();
@@ -97,11 +97,11 @@ function AceitarConviteInner() {
     setError(null);
 
     if (password.length < 8) {
-      setError('A senha precisa ter pelo menos 8 caracteres.');
+      setError(t('invite.errors.passwordTooShort'));
       return;
     }
     if (password !== confirm) {
-      setError('As senhas não conferem.');
+      setError(t('invite.errors.passwordMismatch'));
       return;
     }
 
@@ -116,7 +116,7 @@ function AceitarConviteInner() {
       }
       const { error: upErr } = await supabase.auth.updateUser(updates);
       if (upErr) {
-        setError(translateAuthError(upErr.message));
+        setError(translateAuthError(upErr.message, t));
         setPhase('set_password');
         return;
       }
@@ -127,7 +127,7 @@ function AceitarConviteInner() {
         router.refresh();
       }, 1200);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro inesperado');
+      setError(err instanceof Error ? err.message : t('errors.unexpected'));
       setPhase('set_password');
     }
   }
@@ -146,13 +146,13 @@ function AceitarConviteInner() {
               priority
               className="h-16 w-auto"
             />
-            <p className="text-sm text-muted-foreground">Aceitar convite</p>
+            <p className="text-sm text-muted-foreground">{t('invite.subtitle')}</p>
           </div>
 
           {phase === 'verifying' && (
             <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Validando convite…
+              {t('invite.verifying')}
             </div>
           )}
 
@@ -167,7 +167,7 @@ function AceitarConviteInner() {
                 variant="outline"
                 onClick={() => router.replace('/login')}
               >
-                Ir pro login
+                {t('invite.goToLogin')}
               </Button>
             </div>
           )}
@@ -175,7 +175,7 @@ function AceitarConviteInner() {
           {phase === 'done' && (
             <div className="flex flex-col items-center gap-2 text-sm">
               <CheckCircle2 className="h-8 w-8 text-emerald-500" />
-              <span>Tudo certo! Entrando…</span>
+              <span>{t('invite.done')}</span>
             </div>
           )}
 
@@ -183,34 +183,37 @@ function AceitarConviteInner() {
             <>
               {orgName && (
                 <p className="rounded-md bg-primary/5 px-3 py-2 text-center text-xs">
-                  Você foi convidado para{' '}
-                  <span className="font-semibold">{orgName}</span>. Defina sua senha
-                  pra ativar o acesso.
+                  {t.rich('invite.orgBanner', {
+                    org: orgName,
+                    strong: (chunks) => (
+                      <span className="font-semibold">{chunks}</span>
+                    ),
+                  })}
                 </p>
               )}
 
               <form onSubmit={handleSubmit} className="flex flex-col gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="name">Seu nome</Label>
+                  <Label htmlFor="name">{t('invite.nameLabel')}</Label>
                   <Input
                     id="name"
                     type="text"
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
-                    placeholder="Como você quer ser chamado"
+                    placeholder={t('invite.namePlaceholder')}
                     autoComplete="name"
                     disabled={phase === 'submitting'}
                   />
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="password">Nova senha</Label>
+                  <Label htmlFor="password">{t('invite.newPasswordLabel')}</Label>
                   <Input
                     id="password"
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Mínimo 8 caracteres"
+                    placeholder={t('invite.newPasswordPlaceholder')}
                     autoComplete="new-password"
                     required
                     minLength={8}
@@ -220,13 +223,13 @@ function AceitarConviteInner() {
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="confirm">Confirmar senha</Label>
+                  <Label htmlFor="confirm">{t('invite.confirmPasswordLabel')}</Label>
                   <Input
                     id="confirm"
                     type="password"
                     value={confirm}
                     onChange={(e) => setConfirm(e.target.value)}
-                    placeholder="Digite a senha de novo"
+                    placeholder={t('invite.confirmPasswordPlaceholder')}
                     autoComplete="new-password"
                     required
                     minLength={8}
@@ -245,7 +248,7 @@ function AceitarConviteInner() {
                   {phase === 'submitting' && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
-                  {phase === 'submitting' ? 'Salvando…' : 'Ativar conta'}
+                  {phase === 'submitting' ? t('invite.submitting') : t('invite.submit')}
                 </Button>
               </form>
             </>
@@ -256,16 +259,19 @@ function AceitarConviteInner() {
   );
 }
 
-function translateAuthError(message: string): string {
+function translateAuthError(
+  message: string,
+  t: ReturnType<typeof useTranslations>,
+): string {
   const lower = message.toLowerCase();
   if (lower.includes('invalid') && lower.includes('token')) {
-    return 'O link de convite expirou ou já foi usado. Peça um novo convite.';
+    return t('invite.errors.invalidToken');
   }
   if (lower.includes('password') && lower.includes('weak')) {
-    return 'Senha fraca. Use ao menos 8 caracteres com letras e números.';
+    return t('errors.weakPassword');
   }
   if (lower.includes('rate limit')) {
-    return 'Muitas tentativas. Aguarde alguns minutos e tente de novo.';
+    return t('errors.rateLimit');
   }
   return message;
 }

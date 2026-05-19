@@ -26,5 +26,83 @@
     "dark": "Tema escuro",
     "switchToLight": "Mudar para tema claro",
     "switchToDark": "Mudar para tema escuro"
+  },
+  "auth": {
+    "login": {
+      "tagline": "CRM de Inteligência Comercial Ativa",
+      "emailLabel": "Email",
+      "emailPlaceholder": "seu@email.com",
+      "passwordLabel": "Senha",
+      "forgotPassword": "Esqueci a senha",
+      "submit": "Entrar",
+      "submitting": "Entrando...",
+      "restrictedNotice": "Acesso restrito a agentes da organização"
+    },
+    "invite": {
+      "subtitle": "Aceitar convite",
+      "verifying": "Validando convite…",
+      "goToLogin": "Ir pro login",
+      "done": "Tudo certo! Entrando…",
+      "orgBanner": "Você foi convidado para <strong>{org}</strong>. Defina sua senha pra ativar o acesso.",
+      "nameLabel": "Seu nome",
+      "namePlaceholder": "Como você quer ser chamado",
+      "newPasswordLabel": "Nova senha",
+      "newPasswordPlaceholder": "Mínimo 8 caracteres",
+      "confirmPasswordLabel": "Confirmar senha",
+      "confirmPasswordPlaceholder": "Digite a senha de novo",
+      "submit": "Ativar conta",
+      "submitting": "Salvando…",
+      "errors": {
+        "validationFailed": "Não foi possível validar seu convite. O link pode ter expirado — peça outro convite.",
+        "passwordTooShort": "A senha precisa ter pelo menos 8 caracteres.",
+        "passwordMismatch": "As senhas não conferem.",
+        "invalidToken": "O link de convite expirou ou já foi usado. Peça um novo convite."
+      }
+    },
+    "errors": {
+      "unknown": "Erro desconhecido",
+      "unexpected": "Erro inesperado",
+      "invalidCredentials": "Email ou senha incorretos.",
+      "emailNotConfirmed": "Email ainda não confirmado. Verifique sua caixa de entrada.",
+      "rateLimit": "Muitas tentativas. Aguarde alguns minutos e tente de novo.",
+      "weakPassword": "Senha fraca. Use ao menos 8 caracteres com letras e números."
+    }
+  },
+  "nav": {
+    "aria": {
+      "mainNav": "Navegação principal",
+      "expandSidebar": "Expandir sidebar",
+      "collapseSidebar": "Colapsar sidebar",
+      "closeMenu": "Fechar menu",
+      "openMenu": "Abrir menu"
+    },
+    "sections": {
+      "atendimento": "Atendimento",
+      "crm": "CRM",
+      "marketing": "Marketing",
+      "analise": "Análise",
+      "conta": "Conta"
+    },
+    "items": {
+      "centralDeAcao": "Central de Ação",
+      "copiloto": "Copiloto IA",
+      "conversas": "Conversas",
+      "sac": "SAC",
+      "tarefas": "Tarefas",
+      "agenda": "Agenda",
+      "calendario": "Calendário",
+      "funis": "Funis",
+      "contatos": "Contatos",
+      "formularios": "Formulários",
+      "calendarioConteudo": "Calendário de Conteúdo",
+      "social": "Social AI",
+      "paginas": "Páginas",
+      "automacoes": "Automações",
+      "relatorios": "Relatórios",
+      "conhecimento": "Conhecimento",
+      "equipe": "Equipe",
+      "agencia": "Agência",
+      "configuracoes": "Configurações"
+    }
   }
 }

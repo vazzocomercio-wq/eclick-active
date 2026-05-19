@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { Menu } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { useUnreadCount } from '@/hooks/use-unread-count';
 
 interface MobileTopBarProps {
@@ -16,6 +17,7 @@ interface MobileTopBarProps {
  * Em desktop (lg+) fica oculta — sidebar lateral é a navegação principal.
  */
 export function MobileTopBar({ onMenuClick }: MobileTopBarProps) {
+  const t = useTranslations('nav');
   const unreadCount = useUnreadCount();
 
   return (
@@ -23,7 +25,7 @@ export function MobileTopBar({ onMenuClick }: MobileTopBarProps) {
       <button
         type="button"
         onClick={onMenuClick}
-        aria-label="Abrir menu"
+        aria-label={t('aria.openMenu')}
         className="relative flex h-10 w-10 items-center justify-center rounded-md text-foreground hover:bg-card"
       >
         <Menu className="h-5 w-5" />

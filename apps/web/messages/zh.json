@@ -26,5 +26,83 @@
     "dark": "深色主题",
     "switchToLight": "切换到浅色主题",
     "switchToDark": "切换到深色主题"
+  },
+  "auth": {
+    "login": {
+      "tagline": "主动销售智能 CRM",
+      "emailLabel": "邮箱",
+      "emailPlaceholder": "you@email.com",
+      "passwordLabel": "密码",
+      "forgotPassword": "忘记密码",
+      "submit": "登录",
+      "submitting": "正在登录...",
+      "restrictedNotice": "仅限组织成员访问"
+    },
+    "invite": {
+      "subtitle": "接受邀请",
+      "verifying": "正在验证邀请…",
+      "goToLogin": "前往登录",
+      "done": "全部完成！正在登录…",
+      "orgBanner": "您已被邀请加入 <strong>{org}</strong>。请设置密码以激活访问权限。",
+      "nameLabel": "您的姓名",
+      "namePlaceholder": "您希望被如何称呼",
+      "newPasswordLabel": "新密码",
+      "newPasswordPlaceholder": "至少 8 个字符",
+      "confirmPasswordLabel": "确认密码",
+      "confirmPasswordPlaceholder": "再次输入密码",
+      "submit": "激活账户",
+      "submitting": "正在保存…",
+      "errors": {
+        "validationFailed": "无法验证您的邀请。链接可能已过期——请重新申请邀请。",
+        "passwordTooShort": "密码至少需要 8 个字符。",
+        "passwordMismatch": "两次输入的密码不一致。",
+        "invalidToken": "邀请链接已过期或已被使用。请重新申请邀请。"
+      }
+    },
+    "errors": {
+      "unknown": "未知错误",
+      "unexpected": "意外错误",
+      "invalidCredentials": "邮箱或密码错误。",
+      "emailNotConfirmed": "邮箱尚未确认。请检查您的收件箱。",
+      "rateLimit": "尝试次数过多。请稍候几分钟后重试。",
+      "weakPassword": "密码强度不足。请使用至少 8 个含字母和数字的字符。"
+    }
+  },
+  "nav": {
+    "aria": {
+      "mainNav": "主导航",
+      "expandSidebar": "展开侧边栏",
+      "collapseSidebar": "收起侧边栏",
+      "closeMenu": "关闭菜单",
+      "openMenu": "打开菜单"
+    },
+    "sections": {
+      "atendimento": "客服",
+      "crm": "客户管理",
+      "marketing": "营销",
+      "analise": "分析",
+      "conta": "账户"
+    },
+    "items": {
+      "centralDeAcao": "行动中心",
+      "copiloto": "AI 助手",
+      "conversas": "会话",
+      "sac": "工单",
+      "tarefas": "任务",
+      "agenda": "日程",
+      "calendario": "日历",
+      "funis": "销售漏斗",
+      "contatos": "联系人",
+      "formularios": "表单",
+      "calendarioConteudo": "内容日历",
+      "social": "社交 AI",
+      "paginas": "页面",
+      "automacoes": "自动化",
+      "relatorios": "报表",
+      "conhecimento": "知识库",
+      "equipe": "团队",
+      "agencia": "代理机构",
+      "configuracoes": "设置"
+    }
   }
 }

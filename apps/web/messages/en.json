@@ -26,5 +26,83 @@
     "dark": "Dark theme",
     "switchToLight": "Switch to light theme",
     "switchToDark": "Switch to dark theme"
+  },
+  "auth": {
+    "login": {
+      "tagline": "Active Sales Intelligence CRM",
+      "emailLabel": "Email",
+      "emailPlaceholder": "you@email.com",
+      "passwordLabel": "Password",
+      "forgotPassword": "Forgot password",
+      "submit": "Sign in",
+      "submitting": "Signing in...",
+      "restrictedNotice": "Access restricted to organization agents"
+    },
+    "invite": {
+      "subtitle": "Accept invite",
+      "verifying": "Validating invite…",
+      "goToLogin": "Go to login",
+      "done": "All set! Signing you in…",
+      "orgBanner": "You've been invited to <strong>{org}</strong>. Set your password to activate access.",
+      "nameLabel": "Your name",
+      "namePlaceholder": "How you'd like to be addressed",
+      "newPasswordLabel": "New password",
+      "newPasswordPlaceholder": "At least 8 characters",
+      "confirmPasswordLabel": "Confirm password",
+      "confirmPasswordPlaceholder": "Type the password again",
+      "submit": "Activate account",
+      "submitting": "Saving…",
+      "errors": {
+        "validationFailed": "We couldn't validate your invite. The link may have expired — request another invite.",
+        "passwordTooShort": "The password must be at least 8 characters.",
+        "passwordMismatch": "The passwords don't match.",
+        "invalidToken": "The invite link has expired or was already used. Request a new invite."
+      }
+    },
+    "errors": {
+      "unknown": "Unknown error",
+      "unexpected": "Unexpected error",
+      "invalidCredentials": "Incorrect email or password.",
+      "emailNotConfirmed": "Email not confirmed yet. Check your inbox.",
+      "rateLimit": "Too many attempts. Wait a few minutes and try again.",
+      "weakPassword": "Weak password. Use at least 8 characters with letters and numbers."
+    }
+  },
+  "nav": {
+    "aria": {
+      "mainNav": "Main navigation",
+      "expandSidebar": "Expand sidebar",
+      "collapseSidebar": "Collapse sidebar",
+      "closeMenu": "Close menu",
+      "openMenu": "Open menu"
+    },
+    "sections": {
+      "atendimento": "Support",
+      "crm": "CRM",
+      "marketing": "Marketing",
+      "analise": "Analytics",
+      "conta": "Account"
+    },
+    "items": {
+      "centralDeAcao": "Action Center",
+      "copiloto": "AI Copilot",
+      "conversas": "Conversations",
+      "sac": "Helpdesk",
+      "tarefas": "Tasks",
+      "agenda": "Schedule",
+      "calendario": "Calendar",
+      "funis": "Funnels",
+      "contatos": "Contacts",
+      "formularios": "Forms",
+      "calendarioConteudo": "Content Calendar",
+      "social": "Social AI",
+      "paginas": "Pages",
+      "automacoes": "Automations",
+      "relatorios": "Reports",
+      "conhecimento": "Knowledge",
+      "equipe": "Team",
+      "agencia": "Agency",
+      "configuracoes": "Settings"
+    }
   }
 }

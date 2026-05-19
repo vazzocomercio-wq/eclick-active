@@ -4,6 +4,7 @@ import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +23,7 @@ export default function LoginPage() {
 function LoginPageInner() {
   const router = useRouter();
   const params = useSearchParams();
+  const t = useTranslations('auth');
   const next = params.get('next') ?? '/central-de-acao';
 
   const [email, setEmail] = useState('');
@@ -42,7 +44,7 @@ function LoginPageInner() {
       });
 
       if (authError) {
-        setError(translateAuthError(authError.message));
+        setError(translateAuthError(authError.message, t));
         setSubmitting(false);
         return;
       }
@@ -51,7 +53,7 @@ function LoginPageInner() {
       router.replace(next);
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro desconhecido');
+      setError(err instanceof Error ? err.message : t('errors.unknown'));
       setSubmitting(false);
     }
   }
@@ -71,20 +73,20 @@ function LoginPageInner() {
               className="h-16 w-auto"
             />
             <p className="text-sm text-muted-foreground">
-              CRM de Inteligência Comercial Ativa
+              {t('login.tagline')}
             </p>
           </div>
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">{t('login.emailLabel')}</Label>
               <Input
                 id="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="seu@email.com"
+                placeholder={t('login.emailPlaceholder')}
                 autoComplete="email"
                 autoFocus
                 required
@@ -94,13 +96,13 @@ function LoginPageInner() {
 
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between">
-                <Label htmlFor="password">Senha</Label>
+                <Label htmlFor="password">{t('login.passwordLabel')}</Label>
                 <Link
                   href="/forgot-password"
                   className="text-xs text-muted-foreground hover:text-foreground"
                   tabIndex={-1}
                 >
-                  Esqueci a senha
+                  {t('login.forgotPassword')}
                 </Link>
               </div>
               <Input
@@ -124,12 +126,12 @@ function LoginPageInner() {
 
             <Button type="submit" className="w-full" disabled={submitting}>
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {submitting ? 'Entrando...' : 'Entrar'}
+              {submitting ? t('login.submitting') : t('login.submit')}
             </Button>
           </form>
 
           <p className="text-center text-xs text-muted-foreground">
-            Acesso restrito a agentes da organização
+            {t('login.restrictedNotice')}
           </p>
         </CardContent>
       </Card>
@@ -137,17 +139,20 @@ function LoginPageInner() {
   );
 }
 
-/** Traduz mensagens comuns do Supabase Auth pra português. */
-function translateAuthError(message: string): string {
+/** Traduz mensagens comuns do Supabase Auth pro idioma do usuário. */
+function translateAuthError(
+  message: string,
+  t: ReturnType<typeof useTranslations>,
+): string {
   const lower = message.toLowerCase();
   if (lower.includes('invalid login credentials')) {
-    return 'Email ou senha incorretos.';
+    return t('errors.invalidCredentials');
   }
   if (lower.includes('email not confirmed')) {
-    return 'Email ainda não confirmado. Verifique sua caixa de entrada.';
+    return t('errors.emailNotConfirmed');
   }
   if (lower.includes('rate limit')) {
-    return 'Muitas tentativas. Aguarde alguns minutos e tente de novo.';
+    return t('errors.rateLimit');
   }
   return message;
 }
