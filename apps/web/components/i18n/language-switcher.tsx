@@ -6,7 +6,6 @@
  * server components. Suporta modo `collapsed` (só ícone).
  */
 import { useState, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
 import { useLocale } from 'next-intl';
 import { Languages, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -19,7 +18,6 @@ interface LanguageSwitcherProps {
 
 export function LanguageSwitcher({ collapsed = false }: LanguageSwitcherProps) {
   const current = useLocale() as Locale;
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
@@ -28,7 +26,9 @@ export function LanguageSwitcher({ collapsed = false }: LanguageSwitcherProps) {
     if (loc === current) return;
     startTransition(async () => {
       await setLocale(loc);
-      router.refresh();
+      // Reload completo: troca de idioma é rara e o reload garante que
+      // TODOS os componentes recarreguem o catálogo do novo idioma.
+      window.location.reload();
     });
   }
 
