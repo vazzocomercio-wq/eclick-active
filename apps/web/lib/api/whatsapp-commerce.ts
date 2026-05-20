@@ -162,3 +162,40 @@ export const whatsappOrdersApi = {
     );
   },
 };
+
+// ──────────────────────────────────────────────────────────
+// Catalog — usado no picker "Mandar produto" da Inbox.
+// Endpoints reaproveitam o bridge cross-schema do whatsapp-commerce.
+// ──────────────────────────────────────────────────────────
+
+export interface CatalogProduct {
+  product_id: string;
+  name: string;
+  sku: string | null;
+  brand: string | null;
+  category: string | null;
+  short_description: string | null;
+  price: number;
+  stock: number;
+  photo_urls: string[] | null;
+  thumbnail_url: string | null;
+  in_stock: boolean;
+  ml_permalink: string | null;
+  landing_page_slug: string | null;
+}
+
+export const catalogApi = {
+  list(args: { q?: string; limit?: number } = {}): Promise<CatalogProduct[]> {
+    const params = new URLSearchParams();
+    if (args.q)     params.set('q', args.q);
+    if (args.limit) params.set('limit', String(args.limit));
+    const qs = params.toString();
+    return api.get<CatalogProduct[]>(`/catalog/products${qs ? `?${qs}` : ''}`);
+  },
+  featured(limit = 10): Promise<CatalogProduct[]> {
+    return api.get<CatalogProduct[]>(`/catalog/products/featured?limit=${limit}`);
+  },
+  getOne(id: string): Promise<CatalogProduct> {
+    return api.get<CatalogProduct>(`/catalog/products/${id}`);
+  },
+};

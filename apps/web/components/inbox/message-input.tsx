@@ -10,6 +10,7 @@ import {
   Loader2,
   Lock,
   MessageSquare,
+  Package,
   Paperclip,
   PhoneCall,
   Send,
@@ -48,6 +49,9 @@ interface MessageInputProps {
    * padding reduzido, hint da combinação de teclas escondido.
    */
   compact?: boolean;
+  /** Quando passado, exibe botão "Mandar produto" — chat-panel monta
+   *  o handler que abre o ProductPickerDialog. */
+  onOpenProductPicker?: () => void;
 }
 
 export function MessageInput({
@@ -56,6 +60,7 @@ export function MessageInput({
   prefill,
   onPrefillConsumed,
   compact = false,
+  onOpenProductPicker,
 }: MessageInputProps) {
   const [value, setValue] = useState('');
   const [isInternalNote, setIsInternalNote] = useState(false);
@@ -200,6 +205,14 @@ export function MessageInput({
             <Button variant="ghost" size="icon" aria-label="Anexar" disabled>
               <Paperclip className="h-4 w-4 text-muted-foreground" />
             </Button>
+            {onOpenProductPicker && (
+              <Button variant="ghost" size="icon" aria-label="Mandar produto"
+                onClick={onOpenProductPicker}
+                disabled={disabled || sending || isInternalNote}
+                title="Mandar produto do catálogo">
+                <Package className="h-4 w-4 text-cyan-400" />
+              </Button>
+            )}
           </>
         )}
 

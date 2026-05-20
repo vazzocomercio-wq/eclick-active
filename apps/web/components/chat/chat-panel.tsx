@@ -12,6 +12,9 @@ import { TransferBriefingBanner } from '@/components/inbox/transfer-briefing-ban
 import { MessageList } from '@/components/inbox/message-list';
 import { MessageInput } from '@/components/inbox/message-input';
 import { AISuggestionBar } from '@/components/inbox/ai-suggestion-bar';
+import { ProductPickerDialog } from '@/components/inbox/product-picker-dialog';
+import { messagesApi } from '@/lib/api/messages';
+import type { CatalogProduct } from '@/lib/api/whatsapp-commerce';
 import { ChatActions, type ChatActionEvent } from './chat-actions';
 import { InlineAISummary } from './inline-ai-summary';
 import { AIInsightsCard } from './ai-insights-card';
@@ -111,6 +114,7 @@ export function ChatPanel({
   const [detailLoading, setDetailLoading] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState<AISuggestion | null>(null);
   const [prefill, setPrefill] = useState<string>('');
+  const [productPickerOpen, setProductPickerOpen] = useState(false);
   /** Resumo gerado AGORA via "Resumir" — toma precedência sobre `detail.ai_summary`. */
   const [freshSummary, setFreshSummary] = useState<string | null>(null);
   /** Permite o usuário dispensar o card de resumo até o próximo "Resumir" ou troca de conversa. */
@@ -233,6 +237,27 @@ export function ChatPanel({
 
   async function handleSend(text: string, isInternalNote: boolean) {
     await chat.send(text, isInternalNote);
+  }
+
+  /** Envia produto do catalogo na conversa atual (image + caption).
+   *  Disparado pelo ProductPickerDialog apos o usuario escolher e
+   *  confirmar. Em caso de erro o dialog mostra a mensagem antes de
+   *  fechar. */
+  async function handleSendProduct(p: CatalogProduct, extra: string) {
+    if (!conversationId) return;
+    const link = p.landing_page_slug
+      ? `https://eclick.app.br/loja/produto/${p.landing_page_slug}`
+      : p.ml_permalink;
+    await messagesApi.sendProduct(conversationId, {
+      productId: p.product_id,
+      name:      p.name,
+      price:     p.price,
+      imageUrl:  p.thumbnail_url ?? p.photo_urls?.[0] ?? null,
+      sku:       p.sku,
+      link,
+      extra:     extra || undefined,
+    });
+    // A nova mensagem aparece via realtime (socket) — sem refresh manual.
   }
 
   async function handleResolve() {
@@ -366,6 +391,13 @@ export function ChatPanel({
         prefill={prefill}
         onPrefillConsumed={() => setPrefill('')}
         compact={compact}
+        onOpenProductPicker={() => setProductPickerOpen(true)}
+      />
+
+      <ProductPickerDialog
+        open={productPickerOpen}
+        onClose={() => setProductPickerOpen(false)}
+        onSelect={handleSendProduct}
       />
     </div>
   );
