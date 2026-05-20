@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   BookOpen,
   ExternalLink,
@@ -29,7 +30,7 @@ import { ApiError } from '@/lib/api/client';
 import {
   CategoryBadge,
   KNOWLEDGE_CATEGORIES,
-  categoryLabel,
+  useCategoryLabel,
 } from '@/components/conhecimento/category-badge';
 import { NewDocumentDialog } from '@/components/conhecimento/new-document-dialog';
 import { ImportUrlDialog } from '@/components/conhecimento/import-url-dialog';
@@ -49,6 +50,7 @@ import { cn } from '@/lib/utils';
 type Tab = 'docs' | 'products' | 'live';
 
 export default function ConhecimentoPage() {
+  const t = useTranslations('conhecimento.page');
   const [tab, setTab] = useState<Tab>('docs');
 
   return (
@@ -57,22 +59,20 @@ export default function ConhecimentoPage() {
         <div className="flex flex-col">
           <div className="flex items-center gap-2">
             <BookOpen className="h-4 w-4 text-primary" />
-            <h1 className="text-lg font-semibold">Base de Conhecimento</h1>
+            <h1 className="text-lg font-semibold">{t('title')}</h1>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Documentos e produtos que a IA consulta para responder leads e gerar sugestões.
-          </p>
+          <p className="text-xs text-muted-foreground">{t('subtitle')}</p>
         </div>
 
         <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-1">
           <TabButton active={tab === 'docs'} onClick={() => setTab('docs')} icon={FileText}>
-            Documentos
+            {t('tabs.documents')}
           </TabButton>
           <TabButton active={tab === 'live'} onClick={() => setTab('live')} icon={Globe}>
-            Fontes Live
+            {t('tabs.live')}
           </TabButton>
           <TabButton active={tab === 'products'} onClick={() => setTab('products')} icon={Package}>
-            Catálogo
+            {t('tabs.catalog')}
           </TabButton>
         </div>
       </header>
@@ -123,6 +123,8 @@ function TabButton({
 // ──────────────────────────────────────────────────────────
 
 function DocumentsTab() {
+  const t = useTranslations('conhecimento.docs');
+  const categoryLabel = useCategoryLabel();
   const [docs, setDocs] = useState<KnowledgeDocumentListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -149,12 +151,12 @@ function DocumentsTab() {
           ? `${err.status}: ${err.message}`
           : err instanceof Error
             ? err.message
-            : 'Erro ao carregar documentos',
+            : t('loadError'),
       );
     } finally {
       setLoading(false);
     }
-  }, [categoryFilter, search]);
+  }, [categoryFilter, search, t]);
 
   useEffect(() => {
     setLoading(true);
@@ -186,7 +188,7 @@ function DocumentsTab() {
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar por título ou conteúdo..."
+          placeholder={t('searchPlaceholder')}
           className="h-9 max-w-xs"
         />
 
@@ -198,7 +200,7 @@ function DocumentsTab() {
             'focus:outline-none focus:ring-2 focus:ring-ring',
           )}
         >
-          <option value="all">Todas as categorias</option>
+          <option value="all">{t('allCategories')}</option>
           {KNOWLEDGE_CATEGORIES.map((c) => (
             <option key={c} value={c}>
               {categoryLabel(c)}
@@ -214,35 +216,35 @@ function DocumentsTab() {
             'focus:outline-none focus:ring-2 focus:ring-ring',
           )}
         >
-          <option value="all">Todas as fontes</option>
-          <option value="manual">Manual</option>
-          <option value="url">URL</option>
-          <option value="file">Arquivo</option>
-          <option value="integration">Integração</option>
-          <option value="auto">IA</option>
+          <option value="all">{t('allSources')}</option>
+          <option value="manual">{t('sources.manual')}</option>
+          <option value="url">{t('sources.url')}</option>
+          <option value="file">{t('sources.file')}</option>
+          <option value="integration">{t('sources.integration')}</option>
+          <option value="auto">{t('sources.auto')}</option>
         </select>
 
         <Button variant="outline" size="sm" onClick={() => void reload()} disabled={loading}>
           <RefreshCw className={`mr-2 h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-          Atualizar
+          {t('refresh')}
         </Button>
 
         <div className="ml-auto flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => setUploadOpen(true)}>
             <FileUp className="mr-2 h-3.5 w-3.5" />
-            Upload Arquivo
+            {t('uploadFile')}
           </Button>
           <Button variant="outline" size="sm" onClick={() => setImportBatchOpen(true)}>
             <LinkIcon className="mr-2 h-3.5 w-3.5" />
-            Múltiplas URLs
+            {t('multipleUrls')}
           </Button>
           <Button variant="outline" size="sm" onClick={() => setImportUrlOpen(true)}>
             <LinkIcon className="mr-2 h-3.5 w-3.5" />
-            Importar de URL
+            {t('importFromUrl')}
           </Button>
           <Button size="sm" onClick={() => setNewOpen(true)}>
             <Plus className="mr-2 h-3.5 w-3.5" />
-            Novo documento
+            {t('newDocument')}
           </Button>
         </div>
       </div>
@@ -313,6 +315,7 @@ function DocRow({
   onToggleActive: () => void;
   onRefreshed: () => void;
 }) {
+  const t = useTranslations('conhecimento.docs');
   const [refreshing, setRefreshing] = useState(false);
   const isUrlDoc = doc.source_type === 'url' && doc.source_url;
   const isFileDoc = doc.source_type === 'file';
@@ -331,14 +334,14 @@ function DocRow({
     try {
       const r = await knowledgeApi.refreshUrlDocument(doc.id);
       if (r.updated) {
-        toast.success('Documento atualizado', { description: 'Conteúdo da URL mudou — embedding regenerado.' });
+        toast.success(t('updatedTitle'), { description: t('updatedDesc') });
       } else {
-        toast.info('Sem mudanças', { description: 'O conteúdo da URL é o mesmo.' });
+        toast.info(t('noChangesTitle'), { description: t('noChangesDesc') });
       }
       onRefreshed();
     } catch (err) {
-      const msg = err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Erro';
-      toast.error('Falha ao atualizar', { description: msg });
+      const msg = err instanceof ApiError ? err.message : err instanceof Error ? err.message : t('error');
+      toast.error(t('refreshFailed'), { description: msg });
     } finally {
       setRefreshing(false);
     }
@@ -391,23 +394,23 @@ function DocRow({
           <span className="truncate text-[11px] text-muted-foreground">
             {originalFilename}
             {fileSize !== null && ` · ${(fileSize / 1024).toFixed(0)} KB`}
-            {pagesCount !== null && ` · ${pagesCount} páginas`}
+            {pagesCount !== null && ` · ${t('pages', { n: pagesCount })}`}
           </span>
         )}
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-          <span>{doc.tokens?.toLocaleString('pt-BR') ?? '~'} tokens</span>
+          <span>{doc.tokens?.toLocaleString('pt-BR') ?? '~'} {t('tokensWord')}</span>
           <span>·</span>
-          <span>Atualizado {formatRelativeTime(doc.updated_at)}</span>
+          <span>{t('updatedAt', { when: formatRelativeTime(doc.updated_at) })}</span>
           {isUrlDoc && doc.last_synced_at && (
             <>
               <span>·</span>
-              <span>Sync {formatRelativeTime(doc.last_synced_at)}</span>
+              <span>{t('syncAt', { when: formatRelativeTime(doc.last_synced_at) })}</span>
             </>
           )}
           {isChunkPart && (
             <>
               <span>·</span>
-              <span>Parte {chunkIndex}/{chunkTotal}</span>
+              <span>{t('part', { i: chunkIndex, n: chunkTotal })}</span>
             </>
           )}
         </div>
@@ -420,7 +423,7 @@ function DocRow({
           onClick={handleRefresh}
           disabled={refreshing}
           className="shrink-0"
-          title="Re-fetch URL e atualizar conteúdo"
+          title={t('refetchUrl')}
         >
           <RefreshCw className={cn('h-3.5 w-3.5', refreshing && 'animate-spin')} />
         </Button>
@@ -431,7 +434,7 @@ function DocRow({
         onClick={(e) => e.stopPropagation()}
       >
         <span className="text-[11px] text-muted-foreground">
-          {doc.is_active ? 'Ativo' : 'Inativo'}
+          {doc.is_active ? t('active') : t('inactive')}
         </span>
         <input
           type="checkbox"
@@ -445,20 +448,19 @@ function DocRow({
 }
 
 function DocsEmpty({ onCreate }: { onCreate: () => void }) {
+  const t = useTranslations('conhecimento.docs');
   return (
     <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-card/50 p-12 text-center">
       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
         <FileText className="h-6 w-6" />
       </div>
       <div className="flex flex-col gap-1">
-        <p className="text-sm font-medium">Sua base de conhecimento está vazia</p>
-        <p className="text-xs text-muted-foreground">
-          Crie documentos com FAQ, scripts, políticas — a IA usa esse conteúdo para responder leads.
-        </p>
+        <p className="text-sm font-medium">{t('emptyTitle')}</p>
+        <p className="text-xs text-muted-foreground">{t('emptySubtitle')}</p>
       </div>
       <Button size="sm" onClick={onCreate}>
         <Plus className="mr-2 h-3.5 w-3.5" />
-        Criar primeiro documento
+        {t('createFirst')}
       </Button>
     </div>
   );
@@ -479,6 +481,7 @@ function DocsSkeleton() {
 // ──────────────────────────────────────────────────────────
 
 function LiveSourcesTab() {
+  const t = useTranslations('conhecimento.live');
   const [sources, setSources] = useState<KnowledgeLiveSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -497,12 +500,12 @@ function LiveSourcesTab() {
           ? `${err.status}: ${err.message}`
           : err instanceof Error
             ? err.message
-            : 'Erro ao carregar fontes',
+            : t('loadError'),
       );
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     setLoading(true);
@@ -527,16 +530,18 @@ function LiveSourcesTab() {
     try {
       const r = await knowledgeApi.testLiveSource(s.id);
       if (r.ok) {
-        toast.success(`"${s.name}" respondendo`, {
-          description: `${r.char_count?.toLocaleString('pt-BR') ?? '?'} chars extraídos.`,
+        toast.success(t('respondingTitle', { name: s.name }), {
+          description: t('charsExtracted', {
+            n: r.char_count?.toLocaleString('pt-BR') ?? '?',
+          }),
         });
         void reload();
       } else {
-        toast.error(`"${s.name}" com problema`, { description: r.error });
+        toast.error(t('problemTitle', { name: s.name }), { description: r.error });
       }
     } catch (err) {
-      const msg = err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Erro';
-      toast.error('Falha ao testar', { description: msg });
+      const msg = err instanceof ApiError ? err.message : err instanceof Error ? err.message : t('error');
+      toast.error(t('testFailed'), { description: msg });
     } finally {
       setTestingId(null);
     }
@@ -547,11 +552,11 @@ function LiveSourcesTab() {
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="outline" size="sm" onClick={() => void reload()} disabled={loading}>
           <RefreshCw className={`mr-2 h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-          Atualizar
+          {t('refresh')}
         </Button>
         <Button size="sm" className="ml-auto" onClick={() => setCreating(true)}>
           <Plus className="mr-2 h-3.5 w-3.5" />
-          Nova fonte live
+          {t('newLiveSource')}
         </Button>
       </div>
 
@@ -562,9 +567,9 @@ function LiveSourcesTab() {
       )}
 
       <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
-        <strong className="text-foreground">Fontes live</strong> são URLs que a IA consulta em tempo real quando precisa de
-        informação atualizada (estoque, preços do dia, status). Diferente da importação, o conteúdo não é salvo —
-        cada consulta busca dados frescos. Cache em memória reduz hits repetidos.
+        {t.rich('description', {
+          strong: (chunks) => <strong className="text-foreground">{chunks}</strong>,
+        })}
       </div>
 
       {loading && sources.length === 0 ? (
@@ -615,6 +620,7 @@ function LiveSourceRow({
   onToggleActive: () => void;
   onTest: () => void;
 }) {
+  const t = useTranslations('conhecimento.live');
   return (
     <div
       onClick={onSelect}
@@ -634,7 +640,7 @@ function LiveSourceRow({
           <Globe className="h-3.5 w-3.5 text-primary" />
           <span className="truncate text-sm font-medium">{source.name}</span>
           <span className="inline-flex items-center rounded bg-muted px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
-            {source.source_type === 'webpage' ? 'Web' : source.source_type === 'api_endpoint' ? 'API' : 'RSS'}
+            {source.source_type === 'webpage' ? t('typeWeb') : source.source_type === 'api_endpoint' ? t('typeApi') : t('typeRss')}
           </span>
         </div>
         <a
@@ -651,12 +657,12 @@ function LiveSourceRow({
           <span className="line-clamp-1 text-[11px] text-muted-foreground">{source.description}</span>
         )}
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-          <span>Cache {source.cache_ttl_minutes}min</span>
+          <span>{t('cacheLabel', { min: source.cache_ttl_minutes })}</span>
           <span>·</span>
           <span>
             {source.last_fetched_at
-              ? `Última consulta ${formatRelativeTime(source.last_fetched_at)}`
-              : 'Nunca consultado'}
+              ? t('lastQuery', { when: formatRelativeTime(source.last_fetched_at) })
+              : t('neverQueried')}
           </span>
         </div>
       </div>
@@ -670,13 +676,13 @@ function LiveSourceRow({
         }}
         disabled={testing}
         className="shrink-0"
-        title="Testar conexão e extrair conteúdo agora"
+        title={t('testConnection')}
       >
         <PlayCircle className={cn('h-3.5 w-3.5', testing && 'animate-pulse')} />
       </Button>
 
       <label className="flex shrink-0 items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-        <span className="text-[11px] text-muted-foreground">{source.is_active ? 'Ativa' : 'Inativa'}</span>
+        <span className="text-[11px] text-muted-foreground">{source.is_active ? t('active') : t('inactive')}</span>
         <input
           type="checkbox"
           checked={source.is_active}
@@ -689,20 +695,19 @@ function LiveSourceRow({
 }
 
 function LiveSourcesEmpty({ onCreate }: { onCreate: () => void }) {
+  const t = useTranslations('conhecimento.live');
   return (
     <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-card/50 p-12 text-center">
       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
         <Globe className="h-6 w-6" />
       </div>
       <div className="flex flex-col gap-1">
-        <p className="text-sm font-medium">Nenhuma fonte live cadastrada</p>
-        <p className="text-xs text-muted-foreground">
-          Cadastre URLs que a IA consulta em tempo real pra dados atualizados (estoque, preços do dia, etc.).
-        </p>
+        <p className="text-sm font-medium">{t('emptyTitle')}</p>
+        <p className="text-xs text-muted-foreground">{t('emptySubtitle')}</p>
       </div>
       <Button size="sm" onClick={onCreate}>
         <Plus className="mr-2 h-3.5 w-3.5" />
-        Criar primeira fonte
+        {t('createFirst')}
       </Button>
     </div>
   );
@@ -713,6 +718,7 @@ function LiveSourcesEmpty({ onCreate }: { onCreate: () => void }) {
 // ──────────────────────────────────────────────────────────
 
 function ProductsTab() {
+  const t = useTranslations('conhecimento.products');
   const [products, setProducts] = useState<ProductCatalogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -733,12 +739,12 @@ function ProductsTab() {
           ? `${err.status}: ${err.message}`
           : err instanceof Error
             ? err.message
-            : 'Erro ao carregar produtos',
+            : t('loadError'),
       );
     } finally {
       setLoading(false);
     }
-  }, [search]);
+  }, [search, t]);
 
   useEffect(() => {
     setLoading(true);
@@ -751,18 +757,18 @@ function ProductsTab() {
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar por nome ou SKU..."
+          placeholder={t('searchPlaceholder')}
           className="h-9 max-w-xs"
         />
 
         <Button variant="outline" size="sm" onClick={() => void reload()} disabled={loading}>
           <RefreshCw className={`mr-2 h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-          Atualizar
+          {t('refresh')}
         </Button>
 
         <Button size="sm" className="ml-auto" onClick={() => setCreating(true)}>
           <Plus className="mr-2 h-3.5 w-3.5" />
-          Novo produto
+          {t('newProduct')}
         </Button>
       </div>
 
@@ -812,6 +818,7 @@ function ProductCard({
   product: ProductCatalogItem;
   onSelect: () => void;
 }) {
+  const t = useTranslations('conhecimento.products');
   return (
     <div
       onClick={onSelect}
@@ -841,7 +848,7 @@ function ProductCard({
         )}
         {!product.is_active && (
           <span className="absolute right-2 top-2 rounded-md bg-background/80 px-2 py-0.5 text-[10px] font-medium backdrop-blur-sm">
-            Inativo
+            {t('inactive')}
           </span>
         )}
       </div>
@@ -850,7 +857,7 @@ function ProductCard({
         <span className="truncate text-sm font-semibold">{product.name}</span>
         <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
           <span className="truncate">
-            {product.sku ? `SKU: ${product.sku}` : 'Sem SKU'}
+            {product.sku ? t('skuPrefix', { sku: product.sku }) : t('noSku')}
             {product.category && ` · ${product.category}`}
           </span>
           {product.price !== null && (
@@ -869,20 +876,19 @@ function ProductCard({
 }
 
 function ProductsEmpty({ onCreate }: { onCreate: () => void }) {
+  const t = useTranslations('conhecimento.products');
   return (
     <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-card/50 p-12 text-center">
       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
         <Package className="h-6 w-6" />
       </div>
       <div className="flex flex-col gap-1">
-        <p className="text-sm font-medium">Nenhum produto cadastrado</p>
-        <p className="text-xs text-muted-foreground">
-          Cadastre seu catálogo para a IA poder responder dúvidas sobre preços e atributos.
-        </p>
+        <p className="text-sm font-medium">{t('emptyTitle')}</p>
+        <p className="text-xs text-muted-foreground">{t('emptySubtitle')}</p>
       </div>
       <Button size="sm" onClick={onCreate}>
         <Plus className="mr-2 h-3.5 w-3.5" />
-        Criar primeiro produto
+        {t('createFirst')}
       </Button>
     </div>
   );

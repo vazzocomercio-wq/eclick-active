@@ -10,6 +10,7 @@ import {
   Users,
   Workflow,
 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import {
   reportsApi,
@@ -37,15 +38,16 @@ import { cn } from '@/lib/utils';
 
 type Tab = 'sales' | 'agents' | 'channels' | 'funnel' | 'ai';
 
-const TABS: Array<{ id: Tab; label: string; icon: typeof BarChart3 }> = [
-  { id: 'sales', label: 'Vendas', icon: TrendingUp },
-  { id: 'agents', label: 'Equipe', icon: Users },
-  { id: 'channels', label: 'Canais', icon: Cable },
-  { id: 'funnel', label: 'Funil', icon: Workflow },
-  { id: 'ai', label: 'IA', icon: Bot },
+const TABS: Array<{ id: Tab; icon: typeof BarChart3 }> = [
+  { id: 'sales', icon: TrendingUp },
+  { id: 'agents', icon: Users },
+  { id: 'channels', icon: Cable },
+  { id: 'funnel', icon: Workflow },
+  { id: 'ai', icon: Bot },
 ];
 
 export default function RelatoriosPage() {
+  const t = useTranslations('relatorios');
   const [tab, setTab] = useState<Tab>('sales');
   const [period, setPeriod] = useState<Period>(defaultPeriod);
 
@@ -109,7 +111,7 @@ export default function RelatoriosPage() {
             ? `${err.status}: ${err.message}`
             : err instanceof Error
               ? err.message
-              : 'Erro ao carregar relatório',
+              : t('loadError'),
         );
       } finally {
         setSalesLoading(false);
@@ -118,7 +120,7 @@ export default function RelatoriosPage() {
         setFunnelLoading(false);
       }
     },
-    [tab, period, selectedPipelineId],
+    [tab, period, selectedPipelineId, t],
   );
 
   useEffect(() => {
@@ -161,7 +163,7 @@ export default function RelatoriosPage() {
           ? `${err.status}: ${err.message}`
           : err instanceof Error
             ? err.message
-            : 'Erro ao interpretar',
+            : t('interpretError'),
       );
     } finally {
       setInsightsLoading(false);
@@ -174,10 +176,10 @@ export default function RelatoriosPage() {
         <div className="flex flex-col">
           <div className="flex items-center gap-2">
             <BarChart3 className="h-4 w-4 text-primary" />
-            <h1 className="text-lg font-semibold">Relatórios</h1>
+            <h1 className="text-lg font-semibold">{t('title')}</h1>
           </div>
           <p className="text-xs text-muted-foreground">
-            Métricas de vendas, equipe, canais e funil — interpretadas pela IA.
+            {t('subtitle')}
           </p>
         </div>
 
@@ -191,21 +193,21 @@ export default function RelatoriosPage() {
             disabled={insightsLoading || currentReportData === null}
           >
             <Sparkles className="mr-2 h-3.5 w-3.5" />
-            Interpretar com IA
+            {t('interpretWithAi')}
           </Button>
         </div>
       </header>
 
       {/* Tabs */}
       <nav className="flex shrink-0 gap-1 overflow-x-auto border-b border-border px-6 py-2">
-        {TABS.map((t) => {
-          const Icon = t.icon;
-          const active = tab === t.id;
+        {TABS.map((tabDef) => {
+          const Icon = tabDef.icon;
+          const active = tab === tabDef.id;
           return (
             <button
-              key={t.id}
+              key={tabDef.id}
               type="button"
-              onClick={() => setTab(t.id)}
+              onClick={() => setTab(tabDef.id)}
               className={cn(
                 'flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
                 active
@@ -214,7 +216,7 @@ export default function RelatoriosPage() {
               )}
             >
               <Icon className="h-3.5 w-3.5" />
-              {t.label}
+              {t(`tabs.${tabDef.id}`)}
             </button>
           );
         })}

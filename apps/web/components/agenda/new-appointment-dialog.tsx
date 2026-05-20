@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { CalendarClock, Loader2, MapPin, Phone, Users, Video } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import type {
   AppointmentLocationType,
@@ -55,6 +56,7 @@ export function NewAppointmentDialog({
   defaultConversationId,
   onCreated,
 }: NewAppointmentDialogProps) {
+  const t = useTranslations('agenda');
   const [types, setTypes] = useState<AppointmentType[]>([]);
   const [typeId, setTypeId] = useState<string>('');
   const [title, setTitle] = useState('');
@@ -121,11 +123,11 @@ export function NewAppointmentDialog({
 
   async function handleSave() {
     if (!title.trim()) {
-      toast.error('Título é obrigatório');
+      toast.error(t('newDialog.errors.titleRequired'));
       return;
     }
     if (!selectedSlot) {
-      toast.error('Selecione um horário disponível');
+      toast.error(t('newDialog.errors.slotRequired'));
       return;
     }
     setSaving(true);
@@ -144,7 +146,7 @@ export function NewAppointmentDialog({
           ? { custom_fields: customFields }
           : {}),
       });
-      toast.success('Agendamento criado', {
+      toast.success(t('newDialog.createdToast'), {
         description: new Date(selectedSlot.start_time).toLocaleString('pt-BR', {
           dateStyle: 'short',
           timeStyle: 'short',
@@ -153,8 +155,8 @@ export function NewAppointmentDialog({
       onCreated();
       onOpenChange(false);
     } catch (err) {
-      toast.error('Falha ao agendar', {
-        description: err instanceof ApiError ? err.message : 'Erro desconhecido',
+      toast.error(t('newDialog.errors.createFailed'), {
+        description: err instanceof ApiError ? err.message : t('newDialog.errors.unknown'),
       });
     } finally {
       setSaving(false);
@@ -170,18 +172,17 @@ export function NewAppointmentDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CalendarClock className="h-4 w-4 text-cyan-500" />
-            Novo agendamento
+            {t('newDialog.title')}
           </DialogTitle>
           <DialogDescription>
-            A IA mostra apenas horários disponíveis considerando agenda dos agentes e
-            tarefas conflitantes.
+            {t('newDialog.description')}
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
           <div className="grid gap-3 md:grid-cols-2">
             <div className="flex flex-col gap-1.5">
-              <Label>Tipo</Label>
+              <Label>{t('newDialog.typeLabel')}</Label>
               <select
                 value={typeId}
                 onChange={(e) => setTypeId(e.target.value)}
@@ -190,10 +191,10 @@ export function NewAppointmentDialog({
                   'focus:outline-none focus:ring-2 focus:ring-ring',
                 )}
               >
-                {types.length === 0 && <option value="">— sem tipos cadastrados —</option>}
-                {types.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} ({t.duration_minutes}min)
+                {types.length === 0 && <option value="">{t('newDialog.noTypes')}</option>}
+                {types.map((tp) => (
+                  <option key={tp.id} value={tp.id}>
+                    {tp.name} ({t('newDialog.typeDurationFormat', { minutes: tp.duration_minutes })})
                   </option>
                 ))}
               </select>
@@ -206,7 +207,7 @@ export function NewAppointmentDialog({
               )}
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>Data</Label>
+              <Label>{t('newDialog.dateLabel')}</Label>
               <Input
                 type="date"
                 value={date}
@@ -217,24 +218,24 @@ export function NewAppointmentDialog({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label>Título *</Label>
+            <Label>{t('newDialog.titleLabel')}</Label>
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Ex: Reunião — apresentação Vazzo"
+              placeholder={t('newDialog.titlePlaceholder')}
               maxLength={200}
             />
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label>Horário disponível *</Label>
+            <Label>{t('newDialog.slotLabel')}</Label>
             {loadingSlots ? (
               <div className="flex items-center justify-center py-4 text-xs text-muted-foreground">
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Buscando slots…
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> {t('newDialog.loadingSlots')}
               </div>
             ) : slots.length === 0 ? (
               <div className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-4 text-center text-xs text-muted-foreground">
-                Nenhum slot disponível nessa data. Tente outra data ou ajuste o horário comercial.
+                {t('newDialog.noSlots')}
               </div>
             ) : (
               <div className="grid max-h-48 grid-cols-3 gap-1.5 overflow-y-auto rounded-md border border-border bg-card p-2 sm:grid-cols-4">
@@ -258,7 +259,7 @@ export function NewAppointmentDialog({
                     >
                       <span className="text-sm font-semibold tabular-nums">{time}</span>
                       <span className="truncate text-[10px] text-muted-foreground">
-                        {s.agent_name ?? 'Agente'}
+                        {s.agent_name ?? t('newDialog.agentFallback')}
                       </span>
                     </button>
                   );
@@ -277,11 +278,11 @@ export function NewAppointmentDialog({
             )}
 
           <div className="flex flex-col gap-1.5">
-            <Label>Notas</Label>
+            <Label>{t('newDialog.notesLabel')}</Label>
             <Textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Observações sobre o agendamento (opcional)"
+              placeholder={t('newDialog.notesPlaceholder')}
               rows={2}
             />
           </div>
@@ -289,11 +290,11 @@ export function NewAppointmentDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-            Cancelar
+            {t('newDialog.cancel')}
           </Button>
           <Button onClick={handleSave} disabled={saving || !selectedSlot || !title.trim()}>
             {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Agendar
+            {t('newDialog.submit')}
           </Button>
         </DialogFooter>
       </DialogContent>

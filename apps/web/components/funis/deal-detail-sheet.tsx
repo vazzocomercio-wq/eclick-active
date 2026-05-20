@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { History, MessageSquare, Sparkles, Trash2, User } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -75,6 +76,7 @@ export function DealDetailSheet({
   onOpenChange,
   onChanged,
 }: DealDetailSheetProps) {
+  const t = useTranslations('funis.deal.detailSheet');
   const { detail, activities, loading, reload } = useDealDetail(dealId);
   const [tab, setTab] = useState<TabKey>('main');
   const [saving, setSaving] = useState(false);
@@ -115,7 +117,7 @@ export function DealDetailSheet({
     if (!detail) return;
     const lostStage = pipeline?.stages.find((s) => s.is_lost);
     if (!lostStage) {
-      toast.error('Pipeline sem stage de "perdido" configurado');
+      toast.error(t('lostStageMissing'));
       return;
     }
     setSaving(true);
@@ -123,15 +125,15 @@ export function DealDetailSheet({
       await dealsApi.move(detail.id, { stage_id: lostStage.id, lost_reason: reason });
       setShowLostDialog(false);
       await handleChanged();
-      toast.success('Deal marcado como perdido');
+      toast.success(t('lostMarked'));
     } catch (err) {
-      toast.error('Falha ao marcar perdido', {
+      toast.error(t('lostFailed'), {
         description:
           err instanceof ApiError
             ? `${err.status}: ${err.message}`
             : err instanceof Error
               ? err.message
-              : 'Erro desconhecido',
+              : t('unknownError'),
       });
     } finally {
       setSaving(false);
@@ -142,22 +144,22 @@ export function DealDetailSheet({
     if (!detail) return;
     const wonStage = pipeline?.stages.find((s) => s.is_won);
     if (!wonStage) {
-      toast.error('Pipeline sem stage de "ganho" configurado');
+      toast.error(t('wonStageMissing'));
       return;
     }
     setSaving(true);
     try {
       await dealsApi.move(detail.id, { stage_id: wonStage.id });
       await handleChanged();
-      toast.success('Deal marcado como ganho!');
+      toast.success(t('wonMarked'));
     } catch (err) {
-      toast.error('Falha ao marcar ganho', {
+      toast.error(t('wonFailed'), {
         description:
           err instanceof ApiError
             ? `${err.status}: ${err.message}`
             : err instanceof Error
               ? err.message
-              : 'Erro desconhecido',
+              : t('unknownError'),
       });
     } finally {
       setSaving(false);
@@ -167,27 +169,27 @@ export function DealDetailSheet({
   async function handleDelete() {
     if (!detail) return;
     const ok = await confirm({
-      title: 'Excluir este deal?',
-      description: 'A ação não pode ser desfeita.',
+      title: t('deleteTitle'),
+      description: t('deleteDescription'),
       variant: 'destructive',
-      confirmLabel: 'Excluir',
+      confirmLabel: t('deleteConfirm'),
       icon: Trash2,
     });
     if (!ok) return;
     setDeleting(true);
     try {
       await dealsApi.remove(detail.id);
-      toast.success('Deal excluído');
+      toast.success(t('deleted'));
       onOpenChange(false);
       onChanged();
     } catch (err) {
-      toast.error('Falha ao excluir', {
+      toast.error(t('deleteFailed'), {
         description:
           err instanceof ApiError
             ? `${err.status}: ${err.message}`
             : err instanceof Error
               ? err.message
-              : 'Erro desconhecido',
+              : t('unknownError'),
       });
     } finally {
       setDeleting(false);
@@ -206,17 +208,16 @@ export function DealDetailSheet({
     const cf = detail.custom_fields ?? {};
     const deeplink = typeof cf.deeplink === 'string' ? cf.deeplink : null;
     if (!deeplink) {
-      toast.error('Este card não tem link do IA Criativo configurado');
+      toast.error(t('criativoNoLink'));
       return;
     }
     const inProgressStageId =
       typeof cf.in_progress_stage_id === 'string' ? cf.in_progress_stage_id : null;
 
     const ok = await confirm({
-      title: 'Abrir no IA Criativo?',
-      description:
-        'Você será levado ao IA Criativo no SaaS pra completar o cadastro do produto. O card será movido para "Em Andamento".',
-      confirmLabel: 'Abrir IA Criativo',
+      title: t('criativoConfirmTitle'),
+      description: t('criativoConfirmDescription'),
+      confirmLabel: t('criativoConfirmLabel'),
       icon: Sparkles,
     });
     if (!ok) return;
@@ -264,7 +265,7 @@ export function DealDetailSheet({
           {/* SheetTitle escondido (acessibilidade) — o header customizado
               tem o título visualmente. */}
           <SheetTitle className="sr-only">
-            {detail?.title ?? 'Detalhes do negócio'}
+            {detail?.title ?? t('fallbackTitle')}
           </SheetTitle>
 
           {loading || !detail ? (
@@ -293,9 +294,9 @@ export function DealDetailSheet({
                     <div className="flex items-start gap-2.5">
                       <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium">Próximo passo</p>
+                        <p className="text-sm font-medium">{t('nextStepTitle')}</p>
                         <p className="mt-0.5 text-xs text-muted-foreground">
-                          Continue o fluxo deste anúncio no SaaS.
+                          {t('nextStepDescription')}
                         </p>
                       </div>
                     </div>
@@ -319,9 +320,9 @@ export function DealDetailSheet({
                   <div className="flex items-start gap-2.5">
                     <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium">Missão de cadastro</p>
+                      <p className="text-sm font-medium">{t('missionTitle')}</p>
                       <p className="mt-0.5 text-xs text-muted-foreground">
-                        Complete os dados do produto direto no IA Criativo do SaaS.
+                        {t('missionDescription')}
                       </p>
                     </div>
                   </div>
@@ -330,7 +331,7 @@ export function DealDetailSheet({
                     size="sm"
                     className="mt-2.5 w-full"
                   >
-                    Abrir IA Criativo →
+                    {t('missionCta')}
                   </Button>
                 </div>
               )}
@@ -343,19 +344,19 @@ export function DealDetailSheet({
                 <TabsList className="px-2">
                   <TabsTrigger value="main">
                     <User className="h-3.5 w-3.5" />
-                    Principal
+                    {t('tabs.main')}
                   </TabsTrigger>
                   <TabsTrigger value="chat">
                     <MessageSquare className="h-3.5 w-3.5" />
-                    Conversa
+                    {t('tabs.chat')}
                   </TabsTrigger>
                   <TabsTrigger value="insights">
                     <Sparkles className="h-3.5 w-3.5" />
-                    IA Insights
+                    {t('tabs.insights')}
                   </TabsTrigger>
                   <TabsTrigger value="history">
                     <History className="h-3.5 w-3.5" />
-                    Histórico
+                    {t('tabs.history')}
                   </TabsTrigger>
                 </TabsList>
 

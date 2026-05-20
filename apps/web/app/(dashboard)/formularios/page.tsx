@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -26,13 +27,6 @@ import { useConfirm } from '@/components/ui/confirm-provider';
 import { formatRelativeTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
-const STATUS_LABELS: Record<Form['status'], string> = {
-  draft: 'Rascunho',
-  active: 'Ativo',
-  paused: 'Pausado',
-  archived: 'Arquivado',
-};
-
 const STATUS_STYLES: Record<Form['status'], string> = {
   draft: 'bg-muted text-muted-foreground',
   active: 'bg-green-500/15 text-green-500',
@@ -41,6 +35,7 @@ const STATUS_STYLES: Record<Form['status'], string> = {
 };
 
 export default function FormulariosPage() {
+  const t = useTranslations('formularios.list');
   const router = useRouter();
   const [forms, setForms] = useState<Form[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,11 +56,12 @@ export default function FormulariosPage() {
           ? `${err.status}: ${err.message}`
           : err instanceof Error
             ? err.message
-            : 'Erro ao carregar formulários',
+            : t('errors.load'),
       );
     } finally {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -77,12 +73,12 @@ export default function FormulariosPage() {
     setError(null);
     try {
       const form = await formsApi.create({
-        name: 'Formulário sem título',
+        name: t('untitled'),
         fields: [],
       });
       router.push(`/formularios/${form.id}/editar`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao criar formulário');
+      setError(err instanceof Error ? err.message : t('errors.createBlank'));
       setCreating(false);
     }
   }
@@ -95,7 +91,7 @@ export default function FormulariosPage() {
           : await formsApi.publish(form.id);
       setForms((curr) => curr.map((f) => (f.id === form.id ? updated : f)));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao atualizar status');
+      setError(err instanceof Error ? err.message : t('errors.toggleStatus'));
     }
   }
 
@@ -104,17 +100,16 @@ export default function FormulariosPage() {
       const copy = await formsApi.duplicate(form.id);
       setForms((curr) => [copy, ...curr]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao duplicar');
+      setError(err instanceof Error ? err.message : t('errors.duplicate'));
     }
   }
 
   async function remove(form: Form) {
     const ok = await confirm({
-      title: `Excluir "${form.name}"?`,
-      description:
-        'Submissões já recebidas não serão apagadas dos contatos.',
+      title: t('deleteDialog.title', { name: form.name }),
+      description: t('deleteDialog.description'),
       variant: 'destructive',
-      confirmLabel: 'Excluir',
+      confirmLabel: t('deleteDialog.confirm'),
       icon: Trash2,
     });
     if (!ok) return;
@@ -122,7 +117,7 @@ export default function FormulariosPage() {
       await formsApi.remove(form.id);
       setForms((curr) => curr.filter((f) => f.id !== form.id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao excluir');
+      setError(err instanceof Error ? err.message : t('errors.remove'));
     }
   }
 
@@ -132,17 +127,18 @@ export default function FormulariosPage() {
         <div className="flex flex-col">
           <div className="flex items-center gap-2">
             <FileText className="h-4 w-4 text-primary" />
-            <h1 className="text-lg font-semibold">Formulários</h1>
+            <h1 className="text-lg font-semibold">{t('title')}</h1>
             {!loading && (
               <span className="text-xs text-muted-foreground">
-                · {forms.length}{' '}
-                {forms.length === 1 ? 'formulário' : 'formulários'}
+                ·{' '}
+                {forms.length === 1
+                  ? t('countOne', { count: forms.length })
+                  : t('countMany', { count: forms.length })}
               </span>
             )}
           </div>
           <p className="text-xs text-muted-foreground">
-            Capture leads com formulários publicáveis. Cada submissão vira um
-            contato + deal automático.
+            {t('subtitle')}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -152,7 +148,7 @@ export default function FormulariosPage() {
             onClick={() => setTemplatesOpen(true)}
           >
             <Sparkles className="h-3.5 w-3.5" />
-            Templates
+            {t('templates')}
           </Button>
           <Button size="sm" onClick={createBlank} disabled={creating}>
             {creating ? (
@@ -160,7 +156,7 @@ export default function FormulariosPage() {
             ) : (
               <Plus className="h-3.5 w-3.5" />
             )}
-            Novo formulário
+            {t('newForm')}
           </Button>
         </div>
       </header>
@@ -180,10 +176,10 @@ export default function FormulariosPage() {
           <div className="rounded-lg border border-dashed border-border p-12 text-center">
             <FileText className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
             <h3 className="text-base font-semibold">
-              Você ainda não tem formulários
+              {t('emptyTitle')}
             </h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              Comece com um template pronto ou crie do zero.
+              {t('emptyDescription')}
             </p>
             <div className="mt-4 flex justify-center gap-2">
               <Button
@@ -192,11 +188,11 @@ export default function FormulariosPage() {
                 onClick={() => setTemplatesOpen(true)}
               >
                 <Sparkles className="h-3.5 w-3.5" />
-                Ver templates
+                {t('viewTemplates')}
               </Button>
               <Button size="sm" onClick={createBlank}>
                 <Plus className="h-3.5 w-3.5" />
-                Criar do zero
+                {t('createBlank')}
               </Button>
             </div>
           </div>
@@ -220,7 +216,7 @@ export default function FormulariosPage() {
                       STATUS_STYLES[f.status],
                     )}
                   >
-                    {STATUS_LABELS[f.status]}
+                    {t(`status.${f.status}`)}
                   </span>
                 </div>
                 {f.description && (
@@ -233,7 +229,7 @@ export default function FormulariosPage() {
                     <strong className="text-foreground">
                       {f.submissions_count}
                     </strong>{' '}
-                    submissões
+                    {t('submissions')}
                   </span>
                   <span>·</span>
                   <span title={f.updated_at}>
@@ -249,7 +245,7 @@ export default function FormulariosPage() {
                   >
                     <Link href={`/formularios/${f.id}/editar`}>
                       <Pencil className="h-3 w-3" />
-                      Editar
+                      {t('edit')}
                     </Link>
                   </Button>
                   <Button
@@ -261,12 +257,12 @@ export default function FormulariosPage() {
                     {f.status === 'active' ? (
                       <>
                         <Pause className="h-3 w-3" />
-                        Pausar
+                        {t('pause')}
                       </>
                     ) : (
                       <>
                         <Play className="h-3 w-3" />
-                        Publicar
+                        {t('publish')}
                       </>
                     )}
                   </Button>
@@ -278,19 +274,19 @@ export default function FormulariosPage() {
                     disabled={f.status !== 'active'}
                     title={
                       f.status !== 'active'
-                        ? 'Publique o formulário primeiro'
-                        : 'Compartilhar'
+                        ? t('publishFirstHint')
+                        : t('shareTitle')
                     }
                   >
                     <Share2 className="h-3 w-3" />
-                    Compartilhar
+                    {t('share')}
                   </Button>
                   <Button
                     variant="ghost"
                     size="sm"
                     className="h-7 px-2 text-xs"
                     onClick={() => duplicate(f)}
-                    title="Duplicar"
+                    title={t('duplicate')}
                   >
                     <Copy className="h-3 w-3" />
                   </Button>
@@ -299,7 +295,7 @@ export default function FormulariosPage() {
                     size="sm"
                     className="h-7 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
                     onClick={() => remove(f)}
-                    title="Excluir"
+                    title={t('deleteTitle')}
                   >
                     <Trash2 className="h-3 w-3" />
                   </Button>
@@ -309,7 +305,7 @@ export default function FormulariosPage() {
                       target="_blank"
                       rel="noopener noreferrer"
                       className="ml-auto inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                      title="Abrir página pública"
+                      title={t('openPublic')}
                     >
                       <ExternalLink className="h-3 w-3" />
                     </a>

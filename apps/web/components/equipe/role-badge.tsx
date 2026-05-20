@@ -1,13 +1,16 @@
+'use client';
+
+import { useTranslations } from 'next-intl';
 import type { OrgMemberRole } from '@eclick-active/shared';
 import { Crown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const ROLE_STYLES: Record<OrgMemberRole, { bg: string; text: string; label: string }> = {
-  owner: { bg: 'bg-cyan-500/15', text: 'text-cyan-400', label: 'Owner' },
-  admin: { bg: 'bg-purple-500/15', text: 'text-purple-400', label: 'Admin' },
-  manager: { bg: 'bg-blue-500/15', text: 'text-blue-400', label: 'Manager' },
-  agent: { bg: 'bg-emerald-500/15', text: 'text-emerald-400', label: 'Agente' },
-  viewer: { bg: 'bg-slate-500/15', text: 'text-slate-400', label: 'Viewer' },
+const ROLE_STYLES: Record<OrgMemberRole, { bg: string; text: string }> = {
+  owner: { bg: 'bg-cyan-500/15', text: 'text-cyan-400' },
+  admin: { bg: 'bg-purple-500/15', text: 'text-purple-400' },
+  manager: { bg: 'bg-blue-500/15', text: 'text-blue-400' },
+  agent: { bg: 'bg-emerald-500/15', text: 'text-emerald-400' },
+  viewer: { bg: 'bg-slate-500/15', text: 'text-slate-400' },
 };
 
 export const ROLE_VALUES: OrgMemberRole[] = [
@@ -25,6 +28,7 @@ export function RoleBadge({
   role: OrgMemberRole;
   className?: string;
 }) {
+  const t = useTranslations('equipe.role');
   const s = ROLE_STYLES[role];
   return (
     <span
@@ -36,13 +40,28 @@ export function RoleBadge({
       )}
     >
       {role === 'owner' && <Crown className="h-3 w-3" />}
-      {s.label}
+      {t(role)}
     </span>
   );
 }
 
+/** Hook-only — chame de dentro de um client component. */
+export function useRoleLabel(): (r: OrgMemberRole) => string {
+  const t = useTranslations('equipe.role');
+  return (r: OrgMemberRole) => t(r);
+}
+
+/** @deprecated Use `useRoleLabel()` em client components — esta versão lê
+ * do dicionário PT como fallback estático. */
 export function roleLabel(r: OrgMemberRole): string {
-  return ROLE_STYLES[r].label;
+  const STATIC_PT: Record<OrgMemberRole, string> = {
+    owner: 'Owner',
+    admin: 'Admin',
+    manager: 'Manager',
+    agent: 'Agente',
+    viewer: 'Viewer',
+  };
+  return STATIC_PT[r];
 }
 
 export function StatusBadge({
@@ -50,10 +69,11 @@ export function StatusBadge({
 }: {
   status: 'active' | 'invited' | 'suspended';
 }) {
-  const styles: Record<typeof status, { bg: string; text: string; label: string }> = {
-    active: { bg: 'bg-emerald-500/15', text: 'text-emerald-400', label: 'Ativo' },
-    invited: { bg: 'bg-yellow-500/15', text: 'text-yellow-400', label: 'Convidado' },
-    suspended: { bg: 'bg-slate-500/15', text: 'text-slate-400', label: 'Suspenso' },
+  const t = useTranslations('equipe.status');
+  const styles: Record<typeof status, { bg: string; text: string }> = {
+    active: { bg: 'bg-emerald-500/15', text: 'text-emerald-400' },
+    invited: { bg: 'bg-yellow-500/15', text: 'text-yellow-400' },
+    suspended: { bg: 'bg-slate-500/15', text: 'text-slate-400' },
   };
   const s = styles[status];
   return (
@@ -64,7 +84,7 @@ export function StatusBadge({
         s.text,
       )}
     >
-      {s.label}
+      {t(status)}
     </span>
   );
 }

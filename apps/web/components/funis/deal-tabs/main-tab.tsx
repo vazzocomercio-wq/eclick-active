@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Building2, CalendarPlus, Mail, Phone } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Deal } from '@eclick-active/shared';
@@ -64,6 +65,7 @@ export function DealMainTab({
   onAskClient,
   onChanged,
 }: DealMainTabProps) {
+  const t = useTranslations('funis.deal.mainTab');
   const [appointmentOpen, setAppointmentOpen] = useState(false);
 
   return (
@@ -75,10 +77,10 @@ export function DealMainTab({
           size="sm"
           onClick={() => setAppointmentOpen(true)}
           disabled={!deal.contact_id}
-          title={deal.contact_id ? 'Criar agendamento pra esse contato' : 'Deal sem contato — agendamento exige contato'}
+          title={deal.contact_id ? t('newAppointmentTitle') : t('newAppointmentDisabledTitle')}
         >
           <CalendarPlus className="mr-1.5 h-3.5 w-3.5" />
-          Novo agendamento
+          {t('newAppointment')}
         </Button>
       </div>
 
@@ -88,7 +90,7 @@ export function DealMainTab({
       ) : (
         <Card>
           <CardContent className="py-3 text-xs text-muted-foreground">
-            Deal sem contato vinculado.
+            {t('noContact')}
           </CardContent>
         </Card>
       )}
@@ -124,7 +126,7 @@ export function DealMainTab({
           defaultDealId={deal.id}
           onCreated={() => {
             setAppointmentOpen(false);
-            toast.success('Agendamento criado');
+            toast.success(t('appointmentCreated'));
             void onChanged();
           }}
         />
@@ -144,13 +146,14 @@ function ContactCard({
   contact: NonNullable<DealMainTabProps['deal']['contact']>;
   companyName: string | null;
 }) {
+  const t = useTranslations('funis.deal.mainTab');
   const phoneHref = contact.phone ? `tel:${contact.phone.replace(/\D/g, '')}` : null;
   const emailHref = contact.email ? `mailto:${contact.email}` : null;
 
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-xs">Contato</CardTitle>
+        <CardTitle className="text-xs">{t('contactTitle')}</CardTitle>
       </CardHeader>
       <CardContent className="flex items-start gap-3 pt-0">
         <InitialsAvatar
@@ -161,7 +164,7 @@ function ContactCard({
         <div className="flex flex-1 flex-col gap-1.5 min-w-0">
           <div className="flex items-center gap-2">
             <span className="truncate text-sm font-medium">
-              {contact.name ?? 'Sem nome'}
+              {contact.name ?? t('noName')}
             </span>
             {contact.temperature && <TemperatureBadge temperature={contact.temperature} />}
           </div>
@@ -206,6 +209,7 @@ function DealDataCard({
   deal: DealMainTabProps['deal'];
   onChanged: () => void | Promise<void>;
 }) {
+  const t = useTranslations('funis.deal.mainTab');
   const { members } = useTeamMembers();
   const [closeDate, setCloseDate] = useState(deal.expected_close_date ?? '');
   const [tags, setTags] = useState<string[]>(deal.tags ?? []);
@@ -224,8 +228,8 @@ function DealDataCard({
       await onChanged();
       toast.success(label);
     } catch (err) {
-      toast.error('Falha ao salvar', {
-        description: extractMessage(err),
+      toast.error(t('saveFailed'), {
+        description: extractMessage(err, t('unknownError')),
       });
     } finally {
       setSavingField(null);
@@ -235,10 +239,10 @@ function DealDataCard({
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-xs">Dados do deal</CardTitle>
+        <CardTitle className="text-xs">{t('dealDataTitle')}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3 pt-0">
-        <Field label="Data esperada de fechamento">
+        <Field label={t('expectedCloseLabel')}>
           <Input
             type="date"
             value={closeDate}
@@ -249,19 +253,19 @@ function DealDataCard({
               void commitField(
                 { expected_close_date: next },
                 'expected_close_date',
-                'Data salva',
+                t('savedClose'),
               );
             }}
             disabled={savingField === 'expected_close_date'}
           />
         </Field>
 
-        <Field label="Atribuído a">
+        <Field label={t('assignedLabel')}>
           <select
             value={deal.assigned_to ?? ''}
             onChange={(e) => {
               const next = e.target.value || null;
-              void commitField({ assigned_to: next }, 'assigned_to', 'Atribuição salva');
+              void commitField({ assigned_to: next }, 'assigned_to', t('savedAssigned'));
             }}
             disabled={savingField === 'assigned_to'}
             className={cn(
@@ -269,7 +273,7 @@ function DealDataCard({
               'focus:outline-none focus:ring-2 focus:ring-ring',
             )}
           >
-            <option value="">— Sem atribuição —</option>
+            <option value="">{t('noAssignment')}</option>
             {members.map((m) => (
               <option key={m.id} value={m.user_id}>
                 {m.display_name ?? m.email ?? m.user_id}
@@ -278,7 +282,7 @@ function DealDataCard({
           </select>
         </Field>
 
-        <Field label="Tags do card" hint="Falam sobre qualificações e necessidades. IA sugere automaticamente — você pode editar.">
+        <Field label={t('tagsLabel')} hint={t('tagsHint')}>
           <TagPicker
             entityType="deal"
             value={tags}
@@ -287,13 +291,13 @@ function DealDataCard({
               const current = deal.tags ?? [];
               if (
                 next.length === current.length &&
-                next.every((t, i) => t === current[i])
+                next.every((tag, i) => tag === current[i])
               ) {
                 return;
               }
-              void commitField({ tags: next }, 'tags', 'Tags salvas');
+              void commitField({ tags: next }, 'tags', t('savedTags'));
             }}
-            placeholder="Adicionar tag…"
+            placeholder={t('tagsPlaceholder')}
           />
         </Field>
       </CardContent>
@@ -325,9 +329,9 @@ function Field({
   );
 }
 
-function extractMessage(err: unknown): string {
+function extractMessage(err: unknown, fallback: string): string {
   if (err instanceof ApiError) return `${err.status}: ${err.message}`;
   if (err instanceof Error) return err.message;
-  return 'Erro desconhecido';
+  return fallback;
 }
 

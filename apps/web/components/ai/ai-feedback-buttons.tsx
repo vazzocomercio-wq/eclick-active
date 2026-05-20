@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Loader2, ThumbsDown, ThumbsUp, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { aiApi, type AIFeedback } from '@/lib/api/ai';
@@ -40,6 +41,7 @@ export function AIFeedbackButtons({
   align = 'end',
   className,
 }: AIFeedbackButtonsProps) {
+  const t = useTranslations('ai.feedback');
   const [submitted, setSubmitted] = useState<AIFeedback | null>(null);
   const [pending, setPending] = useState<AIFeedback | null>(null);
   const [showComment, setShowComment] = useState(false);
@@ -65,13 +67,13 @@ export function AIFeedbackButtons({
         setShowComment(true);
       }
     } catch (err) {
-      toast.error('Falha ao enviar feedback', {
+      toast.error(t('sendFailed'), {
         description:
           err instanceof ApiError
             ? `${err.status}: ${err.message}`
             : err instanceof Error
               ? err.message
-              : 'Erro desconhecido',
+              : t('unknownError'),
       });
     } finally {
       setPending(null);
@@ -89,15 +91,15 @@ export function AIFeedbackButtons({
       });
       setComment('');
       setShowComment(false);
-      toast.success('Obrigado pelo feedback!');
+      toast.success(t('thanks'));
     } catch (err) {
-      toast.error('Falha ao salvar comentário', {
+      toast.error(t('saveCommentFailed'), {
         description:
           err instanceof ApiError
             ? `${err.status}: ${err.message}`
             : err instanceof Error
               ? err.message
-              : 'Erro desconhecido',
+              : t('unknownError'),
       });
     } finally {
       setSavingComment(false);
@@ -119,7 +121,7 @@ export function AIFeedbackButtons({
           type="button"
           onClick={() => void send('positive')}
           disabled={pending !== null}
-          aria-label="Resposta útil"
+          aria-label={t('helpful')}
           aria-pressed={submitted === 'positive'}
           className={cn(
             'inline-flex shrink-0 items-center justify-center rounded-md transition-colors',
@@ -145,7 +147,7 @@ export function AIFeedbackButtons({
           type="button"
           onClick={() => void send('negative')}
           disabled={pending !== null}
-          aria-label="Resposta ruim"
+          aria-label={t('notHelpful')}
           aria-pressed={submitted === 'negative'}
           className={cn(
             'inline-flex shrink-0 items-center justify-center rounded-md transition-colors',
@@ -171,14 +173,14 @@ export function AIFeedbackButtons({
       {showComment && submitted === 'negative' && (
         <div className="flex flex-col gap-1.5 rounded-md border border-border bg-card p-2">
           <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-            <span>O que poderia ser melhor?</span>
+            <span>{t('whatCouldBeBetter')}</span>
             <button
               type="button"
               onClick={() => {
                 setShowComment(false);
                 setComment('');
               }}
-              aria-label="Fechar"
+              aria-label={t('close')}
               className="rounded-sm p-0.5 hover:bg-muted hover:text-foreground"
             >
               <X className="h-3 w-3" />
@@ -187,7 +189,7 @@ export function AIFeedbackButtons({
           <Textarea
             value={comment}
             onChange={(e) => setComment(e.target.value)}
-            placeholder="Resposta imprecisa, contexto errado, formato ruim..."
+            placeholder={t('commentPlaceholder')}
             rows={2}
             className="min-h-[48px] resize-none text-xs"
           />
@@ -199,7 +201,7 @@ export function AIFeedbackButtons({
               className="h-6 px-2 text-[11px]"
             >
               {savingComment && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
-              Enviar
+              {t('send')}
             </Button>
           </div>
         </div>

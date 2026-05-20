@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Clock, AlertTriangle } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 
 interface SlaCountdownProps {
@@ -19,6 +20,7 @@ interface SlaCountdownProps {
  * Cores: verde (>1h), amarelo (<1h), vermelho (<30min ou breached).
  */
 export function SlaCountdown({ deadline, breached, className, compact }: SlaCountdownProps) {
+  const t = useTranslations('sac.sla');
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -30,7 +32,7 @@ export function SlaCountdown({ deadline, breached, className, compact }: SlaCoun
     return (
       <span className={cn('inline-flex items-center gap-1 text-[11px] text-muted-foreground', className)}>
         <Clock className="h-3 w-3" />
-        Sem SLA
+        {t('none')}
       </span>
     );
   }
@@ -44,7 +46,7 @@ export function SlaCountdown({ deadline, breached, className, compact }: SlaCoun
 
   if (breached || remainingMs < 0) {
     const overMs = Math.abs(remainingMs);
-    label = `Vencido há ${formatDuration(overMs)}`;
+    label = t('breachedAgo', { duration: formatDuration(overMs) });
     color = 'text-red-600 dark:text-red-400';
     Icon = AlertTriangle;
   } else if (remainingMs < 30 * 60_000) {

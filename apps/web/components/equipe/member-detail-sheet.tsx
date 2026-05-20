@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   Briefcase,
   CalendarClock,
@@ -32,7 +33,7 @@ import {
 import { ApiError } from '@/lib/api/client';
 import { formatRelativeTime, getInitials } from '@/lib/format';
 import { cn } from '@/lib/utils';
-import { ROLE_VALUES, RoleBadge, StatusBadge, roleLabel } from './role-badge';
+import { ROLE_VALUES, RoleBadge, StatusBadge, useRoleLabel } from './role-badge';
 
 interface MemberDetailSheetProps {
   open: boolean;
@@ -53,6 +54,8 @@ export function MemberDetailSheet({
   currentUserId,
   onChanged,
 }: MemberDetailSheetProps) {
+  const t = useTranslations('equipe.detail');
+  const roleLabel = useRoleLabel();
   const [stats, setStats] = useState<MemberStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [role, setRole] = useState<OrgMemberRole>('agent');
@@ -141,7 +144,7 @@ export function MemberDetailSheet({
           ? `${err.status}: ${err.message}`
           : err instanceof Error
             ? err.message
-            : 'Erro ao salvar',
+            : t('saveError'),
       );
     } finally {
       setSaving(false);
@@ -176,14 +179,14 @@ export function MemberDetailSheet({
           ? err.message
           : err instanceof Error
             ? err.message
-            : 'Erro ao remover',
+            : t('removeError'),
       );
     } finally {
       setRemoving(false);
     }
   }
 
-  const displayName = member.display_name ?? member.email ?? 'Sem nome';
+  const displayName = member.display_name ?? member.email ?? t('noName');
   const oldSpecSorted = (member.specialties ?? []).slice().sort();
   const newSpecSorted = specialties.slice().sort();
   const newDurationParsed = duration.trim() ? Number(duration) : null;
@@ -197,10 +200,12 @@ export function MemberDetailSheet({
     <Sheet open={open} onOpenChange={(o) => !saving && !removing && onOpenChange(o)}>
       <SheetContent className="flex w-full flex-col gap-0 sm:max-w-md" side="right">
         <SheetHeader className="border-b border-border pb-4">
-          <SheetTitle>Detalhes do membro</SheetTitle>
+          <SheetTitle>{t('title')}</SheetTitle>
           <SheetDescription>
             {member.created_at
-              ? `Membro desde ${new Date(member.created_at).toLocaleDateString('pt-BR')}`
+              ? t('memberSince', {
+                  date: new Date(member.created_at).toLocaleDateString('pt-BR'),
+                })
               : ''}
           </SheetDescription>
         </SheetHeader>
@@ -225,12 +230,12 @@ export function MemberDetailSheet({
                 <span className="truncate text-sm font-semibold">{displayName}</span>
                 {isSelf && (
                   <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                    Você
+                    {t('you')}
                   </span>
                 )}
               </div>
               <span className="truncate text-[11px] text-muted-foreground">
-                {member.email ?? '(sem email)'}
+                {member.email ?? t('noEmail')}
               </span>
               <div className="mt-1 flex items-center gap-1.5">
                 <RoleBadge role={member.role} />
@@ -242,7 +247,7 @@ export function MemberDetailSheet({
           {/* Stats */}
           <section className="mb-4 flex flex-col gap-2">
             <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Atividade atual
+              {t('currentActivity')}
             </h3>
             {statsLoading ? (
               <div className="flex flex-col gap-1.5">
@@ -255,13 +260,13 @@ export function MemberDetailSheet({
                 <StatCard
                   icon={MessageCircle}
                   value={stats.active_conversations}
-                  label="Conversas"
+                  label={t('stats.conversations')}
                 />
-                <StatCard icon={Briefcase} value={stats.open_deals} label="Deals" />
+                <StatCard icon={Briefcase} value={stats.open_deals} label={t('stats.deals')} />
                 <StatCard
                   icon={CheckSquare}
                   value={stats.pending_tasks}
-                  label="Tarefas"
+                  label={t('stats.tasks')}
                 />
               </div>
             ) : null}
@@ -269,8 +274,8 @@ export function MemberDetailSheet({
             <div className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
               <Clock className="h-3 w-3" />
               {member.last_seen_at
-                ? `Último acesso ${formatRelativeTime(member.last_seen_at)}`
-                : 'Nunca acessou'}
+                ? t('lastSeen', { when: formatRelativeTime(member.last_seen_at) })
+                : t('neverSeen')}
             </div>
           </section>
 
@@ -278,7 +283,7 @@ export function MemberDetailSheet({
           {canEdit ? (
             <section className="flex flex-col gap-2">
               <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Papel na organização
+                {t('orgRole')}
               </h3>
               <select
                 value={role}
@@ -295,16 +300,14 @@ export function MemberDetailSheet({
                     disabled={r === 'admin' && !canPromoteToAdmin}
                   >
                     {roleLabel(r)}
-                    {r === 'admin' && !canPromoteToAdmin ? ' (apenas owner)' : ''}
+                    {r === 'admin' && !canPromoteToAdmin ? ` ${t('ownerOnly')}` : ''}
                   </option>
                 ))}
               </select>
             </section>
           ) : (
             <p className="text-xs text-muted-foreground">
-              {isOwner
-                ? 'O owner não pode ser editado.'
-                : 'Você não tem permissão pra editar esse membro.'}
+              {isOwner ? t('ownerCantEdit') : t('noPermissionToEdit')}
             </p>
           )}
 
@@ -314,14 +317,14 @@ export function MemberDetailSheet({
               <div className="flex items-center gap-2">
                 <CalendarClock className="h-3.5 w-3.5 text-primary" />
                 <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Agendamento
+                  {t('scheduling')}
                 </h3>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1">
                   <Label htmlFor="duration" className="text-[11px]">
-                    Duração padrão (min)
+                    {t('defaultDuration')}
                   </Label>
                   <Input
                     id="duration"
@@ -330,16 +333,14 @@ export function MemberDetailSheet({
                     max={480}
                     value={duration}
                     onChange={(e) => setDuration(e.target.value)}
-                    placeholder="Ex: 30, 60"
+                    placeholder={t('durationPlaceholder')}
                     className="h-9"
                   />
-                  <span className="text-[10px] text-muted-foreground">
-                    Tempo de cada atendimento. Sistema calcula slots livres.
-                  </span>
+                  <span className="text-[10px] text-muted-foreground">{t('durationHint')}</span>
                 </div>
                 <div className="flex flex-col gap-1">
                   <Label htmlFor="buffer" className="text-[11px]">
-                    Intervalo (min)
+                    {t('buffer')}
                   </Label>
                   <Input
                     id="buffer"
@@ -351,14 +352,12 @@ export function MemberDetailSheet({
                     placeholder="0"
                     className="h-9"
                   />
-                  <span className="text-[10px] text-muted-foreground">
-                    Pausa entre atendimentos.
-                  </span>
+                  <span className="text-[10px] text-muted-foreground">{t('bufferHint')}</span>
                 </div>
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label className="text-[11px]">Especialidades / Serviços</Label>
+                <Label className="text-[11px]">{t('specialties')}</Label>
                 <div className="flex gap-1.5">
                   <Input
                     value={specialtyInput}
@@ -369,7 +368,7 @@ export function MemberDetailSheet({
                         addSpecialty();
                       }
                     }}
-                    placeholder="Ex: nutricionista, corte, motor, vendas…"
+                    placeholder={t('specialtiesPlaceholder')}
                     className="h-9 flex-1"
                   />
                   <Button
@@ -395,7 +394,7 @@ export function MemberDetailSheet({
                           type="button"
                           onClick={() => removeSpecialty(s)}
                           className="rounded-full p-0.5 hover:bg-cyan-500/20"
-                          aria-label={`Remover ${s}`}
+                          aria-label={t('removeAria', { item: s })}
                         >
                           <X className="h-2.5 w-2.5" />
                         </button>
@@ -404,12 +403,10 @@ export function MemberDetailSheet({
                   </div>
                 ) : (
                   <span className="text-[10px] italic text-muted-foreground">
-                    Sem especialidades. IA não vai matchar agendamentos com este profissional até definir pelo menos uma.
+                    {t('noSpecialties')}
                   </span>
                 )}
-                <span className="text-[10px] text-muted-foreground">
-                  Texto livre por nicho. Ex: clínica = ["nutricionista"], salão = ["corte", "manicure"], oficina = ["motor", "elétrica"]. IA Concierge usa pra rotear pedido de agendamento.
-                </span>
+                <span className="text-[10px] text-muted-foreground">{t('specialtiesHint')}</span>
               </div>
             </section>
           )}
@@ -420,7 +417,7 @@ export function MemberDetailSheet({
           {canRemove ? (
             confirmRemove ? (
               <div className="flex items-center gap-2 text-xs">
-                <span className="text-destructive">Remover este membro?</span>
+                <span className="text-destructive">{t('removeConfirm')}</span>
                 <Button
                   size="sm"
                   variant="destructive"
@@ -428,10 +425,10 @@ export function MemberDetailSheet({
                   disabled={removing}
                 >
                   {removing && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
-                  Sim
+                  {t('yes')}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => setConfirmRemove(false)}>
-                  Não
+                  {t('no')}
                 </Button>
               </div>
             ) : (
@@ -442,7 +439,7 @@ export function MemberDetailSheet({
                 onClick={() => setConfirmRemove(true)}
               >
                 <Trash2 className="mr-1 h-3.5 w-3.5" />
-                Remover
+                {t('remove')}
               </Button>
             )
           ) : (
@@ -451,12 +448,12 @@ export function MemberDetailSheet({
 
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-              Fechar
+              {t('close')}
             </Button>
             {canEdit && (
               <Button onClick={handleSave} disabled={!dirty || saving}>
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Salvar
+                {t('save')}
               </Button>
             )}
           </div>

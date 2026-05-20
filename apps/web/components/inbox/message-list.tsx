@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import type { Message } from '@eclick-active/shared';
 import { useConversationAttachments } from '@/hooks/use-conversation-attachments';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -25,6 +26,7 @@ export function MessageList({
   onLoadMore,
   conversationId,
 }: MessageListProps) {
+  const t = useTranslations('inbox.messageList');
   // Detecta msgs inbound de mídia que ainda podem não ter attachment
   // associado (worker leva ~1-3s pra processar). useConversationAttachments
   // faz auto-poll enquanto a lista contiver IDs sem attachment matching.
@@ -122,7 +124,7 @@ export function MessageList({
   if (messages.length === 0) {
     return (
       <div className="flex flex-1 items-center justify-center p-8 text-center text-sm text-muted-foreground">
-        Nenhuma mensagem ainda. Envie a primeira pra começar a conversa.
+        {t('emptyState')}
       </div>
     );
   }
@@ -135,7 +137,7 @@ export function MessageList({
           {loadingMore ? (
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
           ) : (
-            <span className="text-xs text-muted-foreground">Carregue rolando ↑</span>
+            <span className="text-xs text-muted-foreground">{t('loadMoreHint')}</span>
           )}
         </div>
       )}

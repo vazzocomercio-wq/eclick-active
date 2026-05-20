@@ -16,6 +16,7 @@ import {
   Video,
   XCircle,
 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import type {
   AppointmentDetail,
@@ -59,13 +60,13 @@ const STATUS_COLOR: Record<AppointmentStatus, string> = {
   rescheduled: 'bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30',
 };
 
-const STATUS_LABEL: Record<AppointmentStatus, string> = {
-  scheduled: 'Agendado',
-  confirmed: 'Confirmado',
-  cancelled: 'Cancelado',
-  completed: 'Concluído',
-  no_show: 'No-show',
-  rescheduled: 'Reagendado',
+const STATUS_KEYS: Record<AppointmentStatus, string> = {
+  scheduled: 'scheduled',
+  confirmed: 'confirmed',
+  cancelled: 'cancelled',
+  completed: 'completed',
+  no_show: 'no_show',
+  rescheduled: 'rescheduled',
 };
 
 export function AppointmentDetailSheet({
@@ -74,6 +75,7 @@ export function AppointmentDetailSheet({
   appointment,
   onChanged,
 }: AppointmentDetailSheetProps) {
+  const t = useTranslations('agenda');
   const [busy, setBusy] = useState<string | null>(null);
   const prompt = usePrompt();
 
@@ -83,12 +85,12 @@ export function AppointmentDetailSheet({
     setBusy(label);
     try {
       await fn();
-      toast.success('OK');
+      toast.success(t('detail.ok'));
       onChanged();
       onOpenChange(false);
     } catch (err) {
-      toast.error('Falha', {
-        description: err instanceof ApiError ? err.message : 'Erro',
+      toast.error(t('detail.failure'), {
+        description: err instanceof ApiError ? err.message : t('genericError'),
       });
     } finally {
       setBusy(null);
@@ -127,7 +129,7 @@ export function AppointmentDetailSheet({
                 STATUS_COLOR[appointment.status],
               )}
             >
-              {STATUS_LABEL[appointment.status]}
+              {t(`status.${STATUS_KEYS[appointment.status]}`)}
             </span>
             {appointment.type && (
               <span
@@ -144,7 +146,7 @@ export function AppointmentDetailSheet({
             {appointment.created_by_ai && (
               <span className="inline-flex items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
                 <Bot className="h-3 w-3" />
-                IA
+                {t('aiBadge')}
               </span>
             )}
           </div>
@@ -155,7 +157,7 @@ export function AppointmentDetailSheet({
               {start.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} —{' '}
               {end.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
             </div>
-            <span className="text-muted-foreground">{durationMin} minutos</span>
+            <span className="text-muted-foreground">{t('detail.minutes', { n: durationMin })}</span>
           </div>
 
           {/* Localização */}
@@ -163,7 +165,7 @@ export function AppointmentDetailSheet({
             <div className="flex items-start gap-2 rounded-md border border-border bg-card p-3 text-xs">
               <LocationIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               <div className="flex flex-col">
-                <span className="font-medium capitalize">{appointment.location_type ?? 'flexível'}</span>
+                <span className="font-medium capitalize">{appointment.location_type ?? t('detail.flexibleLocation')}</span>
                 {appointment.location_details && (
                   <span className="text-muted-foreground">{appointment.location_details}</span>
                 )}
@@ -181,7 +183,7 @@ export function AppointmentDetailSheet({
               />
               <div className="flex flex-1 flex-col min-w-0">
                 <span className="truncate text-sm font-medium">
-                  {appointment.contact.name ?? 'Contato sem nome'}
+                  {appointment.contact.name ?? t('detail.contactWithoutName')}
                 </span>
                 {appointment.contact.phone && (
                   <span className="truncate text-[11px] text-muted-foreground">
@@ -202,10 +204,10 @@ export function AppointmentDetailSheet({
               />
               <div className="flex flex-col">
                 <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                  Responsável
+                  {t('detail.responsible')}
                 </span>
                 <span className="text-sm font-medium">
-                  {appointment.agent.display_name ?? 'Sem nome'}
+                  {appointment.agent.display_name ?? t('detail.withoutName')}
                 </span>
               </div>
             </div>
@@ -215,7 +217,7 @@ export function AppointmentDetailSheet({
           {appointment.deal && (
             <div className="rounded-md border border-border bg-card p-3 text-xs">
               <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                Deal vinculado
+                {t('detail.linkedDeal')}
               </span>
               <p className="mt-0.5 font-medium">{appointment.deal.title}</p>
               {appointment.deal.value !== null && (
@@ -232,7 +234,7 @@ export function AppointmentDetailSheet({
           {/* Notas */}
           {appointment.notes && (
             <div className="rounded-md border border-border bg-card p-3 text-xs">
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Notas</span>
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{t('detail.notes')}</span>
               <p className="mt-0.5 whitespace-pre-wrap leading-snug">{appointment.notes}</p>
             </div>
           )}
@@ -244,7 +246,7 @@ export function AppointmentDetailSheet({
               className="inline-flex items-center gap-1.5 self-start rounded-md border border-border bg-card px-3 py-1.5 text-xs hover:bg-muted"
             >
               <MessageSquare className="h-3 w-3" />
-              Abrir conversa
+              {t('detail.openConversation')}
               <ExternalLink className="h-3 w-3 opacity-60" />
             </a>
           )}
@@ -263,18 +265,18 @@ export function AppointmentDetailSheet({
                 ) : (
                   <CheckCircle2 className="mr-1 h-3 w-3" />
                 )}
-                Completar
+                {t('detail.complete')}
               </Button>
               <Button
                 size="sm"
                 variant="outline"
                 onClick={async () => {
                   const reason = await prompt({
-                    title: 'Cancelar agendamento',
-                    description: 'Motivo do cancelamento (opcional).',
-                    placeholder: 'Ex: cliente desmarcou',
-                    confirmLabel: 'Cancelar agendamento',
-                    cancelLabel: 'Voltar',
+                    title: t('detail.cancelTitle'),
+                    description: t('detail.cancelDescription'),
+                    placeholder: t('detail.cancelPlaceholder'),
+                    confirmLabel: t('detail.cancelConfirm'),
+                    cancelLabel: t('detail.cancelBack'),
                     allowEmpty: true,
                     multiline: true,
                   });
@@ -290,24 +292,23 @@ export function AppointmentDetailSheet({
                 ) : (
                   <XCircle className="mr-1 h-3 w-3" />
                 )}
-                Cancelar
+                {t('detail.cancelAction')}
               </Button>
               <Button
                 size="sm"
                 variant="outline"
                 onClick={async () => {
                   const ans = await prompt({
-                    title: 'Reagendar',
-                    description:
-                      'Informe a nova data/hora (ISO 8601, ex: 2026-05-12T15:00:00-03:00).',
-                    placeholder: '2026-05-12T15:00:00-03:00',
-                    confirmLabel: 'Reagendar',
+                    title: t('detail.rescheduleTitle'),
+                    description: t('detail.rescheduleDescription'),
+                    placeholder: t('detail.reschedulePlaceholder'),
+                    confirmLabel: t('detail.rescheduleConfirm'),
                     type: 'datetime-local',
                     validate: (v) => {
                       if (!v) return null;
                       // datetime-local browser-formatado vem como "YYYY-MM-DDTHH:mm"
                       const d = new Date(v);
-                      if (isNaN(d.getTime())) return 'Data inválida';
+                      if (isNaN(d.getTime())) return t('detail.invalidDate');
                       return null;
                     },
                   });
@@ -325,7 +326,7 @@ export function AppointmentDetailSheet({
                 ) : (
                   <RotateCcw className="mr-1 h-3 w-3" />
                 )}
-                Reagendar
+                {t('detail.rescheduleAction')}
               </Button>
               <Button
                 size="sm"
@@ -339,14 +340,14 @@ export function AppointmentDetailSheet({
                 ) : (
                   <Trash2 className="mr-1 h-3 w-3" />
                 )}
-                No-show
+                {t('detail.noShowAction')}
               </Button>
             </div>
           )}
 
           {appointment.cancelled_reason && (
             <div className="rounded-md border border-red-500/30 bg-red-500/5 p-3 text-xs">
-              <span className="text-[10px] uppercase tracking-wider text-red-600">Motivo</span>
+              <span className="text-[10px] uppercase tracking-wider text-red-600">{t('detail.reasonLabel')}</span>
               <p className="mt-0.5">{appointment.cancelled_reason}</p>
             </div>
           )}

@@ -147,50 +147,49 @@ export function fromDateKey(key: string): Date {
 // Formatação
 // ──────────────────────────────────────────────────────────
 
-const MONTH_LABELS = [
-  'Janeiro',
-  'Fevereiro',
-  'Março',
-  'Abril',
-  'Maio',
-  'Junho',
-  'Julho',
-  'Agosto',
-  'Setembro',
-  'Outubro',
-  'Novembro',
-  'Dezembro',
+const MONTH_KEYS = [
+  '1',
+  '2',
+  '3',
+  '4',
+  '5',
+  '6',
+  '7',
+  '8',
+  '9',
+  '10',
+  '11',
+  '12',
 ] as const;
 
-const WEEKDAY_SHORT = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'] as const;
+const WEEKDAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
 
-function monthName(idx: number): string {
-  return MONTH_LABELS[idx] ?? '';
+type Translator = (key: string) => string;
+
+export function monthYearLabel(d: Date, t: Translator): string {
+  const monthKey = MONTH_KEYS[d.getMonth()] ?? '1';
+  return `${t(`month.names.${monthKey}`)} ${d.getFullYear()}`;
 }
 
-function weekdayName(idx: number): string {
-  return WEEKDAY_SHORT[idx] ?? '';
-}
-
-export function monthYearLabel(d: Date): string {
-  return `${monthName(d.getMonth())} ${d.getFullYear()}`;
-}
-
-export function weekRangeLabel(d: Date): string {
+export function weekRangeLabel(d: Date, t: Translator): string {
   const start = startOfWeek(d);
   const end = addDays(start, 6);
+  const startKey = MONTH_KEYS[start.getMonth()] ?? '1';
+  const endKey = MONTH_KEYS[end.getMonth()] ?? '1';
   if (start.getMonth() === end.getMonth()) {
-    return `${start.getDate()} – ${end.getDate()} de ${monthName(start.getMonth()).slice(0, 3)}. ${end.getFullYear()}`;
+    return `${start.getDate()} – ${end.getDate()} ${t(`month.shortNames.${endKey}`)} ${end.getFullYear()}`;
   }
-  return `${start.getDate()} ${monthName(start.getMonth()).slice(0, 3)} – ${end.getDate()} ${monthName(end.getMonth()).slice(0, 3)}. ${end.getFullYear()}`;
+  return `${start.getDate()} ${t(`month.shortNames.${startKey}`)} – ${end.getDate()} ${t(`month.shortNames.${endKey}`)} ${end.getFullYear()}`;
 }
 
-export function dayLabel(d: Date): string {
+export function dayLabel(d: Date, t: Translator): string {
   const wd = d.getDay() === 0 ? 6 : d.getDay() - 1;
-  return `${weekdayName(wd)}, ${d.getDate()} ${monthName(d.getMonth()).slice(0, 3).toLowerCase()}.`;
+  const wdKey = WEEKDAY_KEYS[wd] ?? 'mon';
+  const monthKey = MONTH_KEYS[d.getMonth()] ?? '1';
+  return `${t(`weekdayShort.${wdKey}`)}, ${d.getDate()} ${t(`month.shortNames.${monthKey}`)}`;
 }
 
-export const WEEKDAY_HEADERS = WEEKDAY_SHORT;
+export const WEEKDAY_HEADER_KEYS = WEEKDAY_KEYS;
 
 /** Formata HH:mm da data ISO. Retorna null se a data não tem componente de hora útil. */
 export function timeLabel(iso: string): string {

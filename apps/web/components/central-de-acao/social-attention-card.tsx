@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import {
   Megaphone,
   Sparkles,
@@ -16,6 +17,7 @@ import { cn } from '@/lib/utils';
  * próximos 7 dias, rascunhos. Click leva pra /social/biblioteca.
  */
 export function SocialAttentionCard() {
+  const t = useTranslations('centralAcao.social');
   const { counts, loading } = useSocialDashboard(60_000);
 
   const pending = counts?.pending_approval ?? 0;
@@ -41,35 +43,33 @@ export function SocialAttentionCard() {
               pending > 0 ? 'text-amber-500' : 'text-primary',
             )}
           />
-          <h2 className="text-sm font-semibold">Social AI — Atenção</h2>
+          <h2 className="text-sm font-semibold">{t('title')}</h2>
         </div>
         <ChevronRight className="h-4 w-4 text-muted-foreground" />
       </header>
 
       {loading && !counts ? (
-        <p className="text-xs text-muted-foreground">Carregando…</p>
+        <p className="text-xs text-muted-foreground">{t('loading')}</p>
       ) : !hasAlert && drafts === 0 ? (
-        <p className="text-xs text-muted-foreground">
-          Nenhum conteúdo aguardando ação 🎯
-        </p>
+        <p className="text-xs text-muted-foreground">{t('empty')}</p>
       ) : (
         <div className="grid grid-cols-3 gap-2">
           <Metric
             icon={Sparkles}
-            label="Aguardam aprovação"
+            label={t('pendingApproval')}
             value={pending}
             color={pending > 0 ? 'amber' : 'muted'}
             pulse={pending > 0}
           />
           <Metric
             icon={Calendar}
-            label="Agendados (7d)"
+            label={t('scheduled7d')}
             value={scheduled}
             color={scheduled > 0 ? 'blue' : 'muted'}
           />
           <Metric
             icon={Megaphone}
-            label="Rascunhos"
+            label={t('drafts')}
             value={drafts}
             color="muted"
           />

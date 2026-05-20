@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import {
   AlertCircle,
   AlertTriangle,
@@ -20,6 +21,7 @@ interface AttentionListProps {
 }
 
 export function AttentionList({ items, loading }: AttentionListProps) {
+  const t = useTranslations('centralAcao.attention');
   if (loading) {
     return (
       <div className="flex flex-col gap-2">
@@ -36,10 +38,8 @@ export function AttentionList({ items, loading }: AttentionListProps) {
         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-accent/10 text-accent">
           <CheckCircle2 className="h-6 w-6" />
         </div>
-        <p className="text-sm font-medium">Tudo em dia! 🎯</p>
-        <p className="text-xs text-muted-foreground">
-          Nenhum item urgente no momento. Bom trabalho.
-        </p>
+        <p className="text-sm font-medium">{t('emptyTitle')}</p>
+        <p className="text-xs text-muted-foreground">{t('emptyDescription')}</p>
       </div>
     );
   }
@@ -60,6 +60,7 @@ export function AttentionList({ items, loading }: AttentionListProps) {
 }
 
 function AttentionRow({ item }: { item: AttentionItem }) {
+  const t = useTranslations('centralAcao.attention');
   const { icon: Icon, color } = ATTENTION_VISUAL[item.kind];
   const sevStyle = SEVERITY_STYLE[item.severity];
 
@@ -85,7 +86,7 @@ function AttentionRow({ item }: { item: AttentionItem }) {
               sevStyle.text,
             )}
           >
-            {sevStyle.label}
+            {t(`severity.${item.severity}` as 'severity.urgent' | 'severity.high' | 'severity.medium')}
           </span>
         </div>
         <span className="truncate text-xs text-muted-foreground">
@@ -119,9 +120,9 @@ const ATTENTION_VISUAL: Record<AttentionItem['kind'], { icon: typeof AlertCircle
 
 const SEVERITY_STYLE: Record<
   AttentionItem['severity'],
-  { bg: string; text: string; label: string }
+  { bg: string; text: string }
 > = {
-  urgent: { bg: 'bg-red-500/15', text: 'text-red-400', label: 'Urgente' },
-  high: { bg: 'bg-orange-500/15', text: 'text-orange-400', label: 'Alta' },
-  medium: { bg: 'bg-yellow-500/15', text: 'text-yellow-400', label: 'Média' },
+  urgent: { bg: 'bg-red-500/15', text: 'text-red-400' },
+  high: { bg: 'bg-orange-500/15', text: 'text-orange-400' },
+  medium: { bg: 'bg-yellow-500/15', text: 'text-yellow-400' },
 };

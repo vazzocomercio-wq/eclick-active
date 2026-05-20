@@ -11,6 +11,7 @@ import {
 } from '@dnd-kit/core';
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import type { TaskType } from '@eclick-active/shared';
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import {
   type CalendarDay,
@@ -43,6 +44,7 @@ import {
 const ACTIVE_SCHEMA = 'active';
 
 export function CalendarPage() {
+  const t = useTranslations('calendario');
   const [view, setView] = useState<CalendarViewMode>('week');
   const [current, setCurrent] = useState<Date>(() => new Date());
   const [onlyMine, setOnlyMine] = useState(true);
@@ -128,13 +130,13 @@ export function CalendarPage() {
             ? `${err.status}: ${err.message}`
             : err instanceof Error
               ? err.message
-              : 'Erro ao carregar calendário';
+              : t('loadError');
         setError(msg);
       } finally {
         setLoading(false);
       }
     },
-    [params],
+    [params, t],
   );
 
   useEffect(() => {
@@ -296,7 +298,7 @@ export function CalendarPage() {
 
       try {
         await tasksApi.update(taskId, { due_date: newDate.toISOString() });
-        toast.success('Tarefa reagendada');
+        toast.success(t('rescheduledToast'));
       } catch (err) {
         // Reverte
         setDays(previousDays);
@@ -305,11 +307,11 @@ export function CalendarPage() {
             ? err.message
             : err instanceof Error
               ? err.message
-              : 'Erro ao reagendar';
+              : t('rescheduleError');
         toast.error(msg);
       }
     },
-    [days],
+    [days, t],
   );
 
   // ──────────────────────────────────────────────

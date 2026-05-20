@@ -2,10 +2,11 @@
 
 import { useMemo } from 'react';
 import { useDroppable } from '@dnd-kit/core';
+import { useTranslations } from 'next-intl';
 import type { CalendarTask } from '@/lib/api/tasks';
 import { cn } from '@/lib/utils';
 import {
-  WEEKDAY_HEADERS,
+  WEEKDAY_HEADER_KEYS,
   addDays,
   isSameDay,
   isSameMonth,
@@ -29,6 +30,7 @@ export function MonthView({
   onSelectTask,
   onCreateOnDate,
 }: MonthViewProps) {
+  const t = useTranslations('calendario');
   const days = useMemo(() => {
     const { from, to } = monthGridRange(current);
     const list: Date[] = [];
@@ -47,9 +49,9 @@ export function MonthView({
     <div className="flex h-full flex-col">
       {/* Header dos dias da semana */}
       <div className="grid grid-cols-7 border-b border-border bg-muted/30 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-        {WEEKDAY_HEADERS.map((label) => (
-          <div key={label} className="px-2 py-1.5 text-center">
-            {label}
+        {WEEKDAY_HEADER_KEYS.map((key) => (
+          <div key={key} className="px-2 py-1.5 text-center">
+            {t(`weekdayShort.${key}`)}
           </div>
         ))}
       </div>
@@ -113,6 +115,7 @@ function DayCell({
   onSelectTask,
   onCreateOnDate,
 }: DayCellProps) {
+  const t = useTranslations('calendario');
   const { setNodeRef, isOver } = useDroppable({
     id: `day:${dateKey}`,
     data: { type: 'day', dateKey },
@@ -133,7 +136,7 @@ function DayCell({
         isOver && 'bg-primary/10 ring-1 ring-inset ring-primary',
         isToday && 'border-t-2 border-primary',
       )}
-      aria-label={`Criar tarefa em ${dateKey}`}
+      aria-label={t('monthView.createOn', { date: dateKey })}
     >
       <div className="flex items-center justify-between">
         <span
@@ -162,7 +165,7 @@ function DayCell({
         ))}
         {overflow > 0 && (
           <span className="px-1 text-[10px] text-muted-foreground">
-            +{overflow} mais
+            {t('monthView.more', { n: overflow })}
           </span>
         )}
       </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   Copy,
   ExternalLink,
@@ -88,6 +89,7 @@ export function CustomFieldRenderer({
 // ──────────────────────────────────────────────────────────
 
 function FieldLabel({ field }: { field: CustomFieldDefinition }) {
+  const t = useTranslations('customFields.label');
   return (
     <Label className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
       <span>
@@ -95,14 +97,14 @@ function FieldLabel({ field }: { field: CustomFieldDefinition }) {
         {field.is_required && <span className="ml-0.5 text-destructive">*</span>}
       </span>
       {field.ai_auto_fill && (
-        <span title="IA pode preencher automaticamente">
+        <span title={t('aiCanFill')}>
           <Sparkles className="h-3 w-3 text-primary/60" />
         </span>
       )}
       {field.is_api_only && (
         <span
           className="inline-flex items-center rounded-sm bg-muted px-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground"
-          title="Somente leitura — atualizado via API"
+          title={t('apiReadOnly')}
         >
           API
         </span>
@@ -124,6 +126,7 @@ function FieldInput({
   value: unknown;
   onChange: (v: unknown) => void;
 }) {
+  const t = useTranslations('customFields.input');
   const disabled = field.is_api_only;
 
   switch (field.field_type) {
@@ -197,7 +200,7 @@ function FieldInput({
         <SelectField
           value={asString(value)}
           options={field.options}
-          placeholder={field.placeholder ?? '— Selecione —'}
+          placeholder={field.placeholder ?? t('selectPlaceholder')}
           disabled={disabled}
           onChange={onChange}
         />
@@ -237,7 +240,7 @@ function FieldInput({
       return (
         <UrlField
           value={asString(value)}
-          placeholder={field.placeholder ?? 'https://exemplo.com'}
+          placeholder={field.placeholder ?? t('urlPlaceholder')}
           disabled={disabled}
           onChange={onChange}
         />
@@ -247,7 +250,7 @@ function FieldInput({
       return (
         <AddressShortField
           value={asString(value)}
-          placeholder={field.placeholder ?? 'Rua, número, bairro, cidade'}
+          placeholder={field.placeholder ?? t('addressShortPlaceholder')}
           disabled={disabled}
           onChange={onChange}
         />
@@ -267,7 +270,7 @@ function FieldInput({
       void _exhaustive;
       return (
         <p className="text-xs italic text-destructive">
-          Tipo de campo desconhecido: {String(field.field_type)}
+          {t('unknownType', { type: String(field.field_type) })}
         </p>
       );
     }
@@ -465,15 +468,16 @@ function UrlField({
   disabled: boolean;
   onChange: (v: string) => void;
 }) {
+  const t = useTranslations('customFields.url');
   const valid = isValidUrl(value);
 
   async function handleCopy() {
     if (!value) return;
     try {
       await navigator.clipboard.writeText(value);
-      toast.success('URL copiada');
+      toast.success(t('copied'));
     } catch {
-      toast.error('Falha ao copiar');
+      toast.error(t('copyFailed'));
     }
   }
 
@@ -494,8 +498,8 @@ function UrlField({
         size="sm"
         disabled={!valid}
         onClick={() => valid && window.open(value, '_blank', 'noopener,noreferrer')}
-        title="Visitar"
-        aria-label="Visitar URL"
+        title={t('visit')}
+        aria-label={t('visitAria')}
       >
         <ExternalLink className="h-3.5 w-3.5" />
       </Button>
@@ -505,8 +509,8 @@ function UrlField({
         size="sm"
         disabled={!value}
         onClick={() => void handleCopy()}
-        title="Copiar"
-        aria-label="Copiar URL"
+        title={t('copy')}
+        aria-label={t('copyAria')}
       >
         <Copy className="h-3.5 w-3.5" />
       </Button>
@@ -525,6 +529,7 @@ function AddressShortField({
   disabled: boolean;
   onChange: (v: string) => void;
 }) {
+  const t = useTranslations('customFields.address');
   function openMaps() {
     if (!value) return;
     const q = encodeURIComponent(value);
@@ -550,8 +555,8 @@ function AddressShortField({
         size="sm"
         disabled={!value.trim()}
         onClick={openMaps}
-        title="Ver no mapa"
-        aria-label="Ver no Google Maps"
+        title={t('viewOnMap')}
+        aria-label={t('viewOnGoogleMaps')}
       >
         <MapPin className="h-3.5 w-3.5" />
       </Button>
@@ -581,6 +586,7 @@ function AddressFullField({
   disabled: boolean;
   onChange: (v: AddressFullValue) => void;
 }) {
+  const t = useTranslations('customFields.address');
   const [cepLoading, setCepLoading] = useState(false);
   const [cepDraft, setCepDraft] = useState(value.zip ?? '');
 
@@ -600,12 +606,12 @@ function AddressFullField({
     try {
       const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
       if (!r.ok) {
-        toast.error('CEP não encontrado');
+        toast.error(t('cepNotFound'));
         return;
       }
       const data = (await r.json()) as ViaCepResponse;
       if (data.erro) {
-        toast.error('CEP inválido');
+        toast.error(t('cepInvalid'));
         return;
       }
       onChange({
@@ -615,11 +621,11 @@ function AddressFullField({
         line2: data.bairro ?? value.line2,
         city: data.localidade ?? value.city,
         state: data.uf ?? value.state,
-        country: value.country ?? 'Brasil',
+        country: value.country ?? t('countryDefault'),
       });
-      toast.success('Endereço auto-preenchido');
+      toast.success(t('addressAutoFilled'));
     } catch {
-      toast.error('Falha ao consultar CEP');
+      toast.error(t('cepLookupFailed'));
     } finally {
       setCepLoading(false);
     }
@@ -645,7 +651,7 @@ function AddressFullField({
   return (
     <div className="flex flex-col gap-2 rounded-md border border-border bg-background/50 p-2">
       <div className="grid grid-cols-2 gap-2">
-        <SubField label="CEP">
+        <SubField label={t('cep')}>
           <div className="flex items-stretch gap-1.5">
             <Input
               value={cepDraft}
@@ -664,39 +670,39 @@ function AddressFullField({
             {cepLoading && <Loader2 className="h-4 w-4 shrink-0 animate-spin self-center text-muted-foreground" />}
           </div>
         </SubField>
-        <SubField label="País">
+        <SubField label={t('country')}>
           <Input
             value={value.country ?? ''}
             onChange={(e) => patch({ country: e.target.value })}
-            placeholder="Brasil"
+            placeholder={t('countryDefault')}
             disabled={disabled}
             className="h-9 text-xs"
           />
         </SubField>
       </div>
 
-      <SubField label="Logradouro / Rua">
+      <SubField label={t('street')}>
         <Input
           value={value.line1 ?? ''}
           onChange={(e) => patch({ line1: e.target.value })}
-          placeholder="Rua das Flores, 123"
+          placeholder={t('streetPlaceholder')}
           disabled={disabled}
           className="h-9 text-xs"
         />
       </SubField>
 
-      <SubField label="Complemento / Bairro">
+      <SubField label={t('line2')}>
         <Input
           value={value.line2 ?? ''}
           onChange={(e) => patch({ line2: e.target.value })}
-          placeholder="Apto 101, Centro"
+          placeholder={t('line2Placeholder')}
           disabled={disabled}
           className="h-9 text-xs"
         />
       </SubField>
 
       <div className="grid grid-cols-2 gap-2">
-        <SubField label="Cidade">
+        <SubField label={t('city')}>
           <Input
             value={value.city ?? ''}
             onChange={(e) => patch({ city: e.target.value })}
@@ -704,7 +710,7 @@ function AddressFullField({
             className="h-9 text-xs"
           />
         </SubField>
-        <SubField label="Estado">
+        <SubField label={t('state')}>
           <Input
             value={value.state ?? ''}
             onChange={(e) => patch({ state: e.target.value })}
@@ -724,7 +730,7 @@ function AddressFullField({
         className="self-start"
       >
         <MapPin className="mr-1.5 h-3.5 w-3.5" />
-        Ver no mapa
+        {t('viewOnMap')}
       </Button>
     </div>
   );

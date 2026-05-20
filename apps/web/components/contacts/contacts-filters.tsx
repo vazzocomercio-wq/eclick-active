@@ -1,10 +1,11 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { Search, X } from 'lucide-react';
 import type { ContactTemperature } from '@eclick-active/shared';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { TEMPERATURE_STYLES } from './temperature-badge';
+import { useTemperatureStyles } from './temperature-badge';
 import { cn } from '@/lib/utils';
 
 interface ContactsFiltersProps {
@@ -22,6 +23,8 @@ export function ContactsFilters({
   temperature,
   onTemperatureChange,
 }: ContactsFiltersProps) {
+  const tFilters = useTranslations('contacts.filters');
+  const styles = useTemperatureStyles();
   return (
     <div className="flex flex-col gap-3 border-b border-border px-8 py-4 sm:flex-row sm:items-center">
       <div className="relative flex-1 max-w-md">
@@ -29,14 +32,14 @@ export function ContactsFilters({
         <Input
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Buscar por nome, telefone ou email..."
+          placeholder={tFilters('searchPlaceholder')}
           className="pl-9 pr-9"
         />
         {search && (
           <button
             type="button"
             onClick={() => onSearchChange('')}
-            aria-label="Limpar busca"
+            aria-label={tFilters('clearSearch')}
             className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             <X className="h-3.5 w-3.5" />
@@ -50,11 +53,11 @@ export function ContactsFilters({
           size="sm"
           onClick={() => onTemperatureChange(null)}
         >
-          Todos
+          {tFilters('all')}
         </Button>
         {TEMPERATURES.map((t) => {
           const active = temperature === t;
-          const style = TEMPERATURE_STYLES[t];
+          const style = styles[t];
           return (
             <button
               key={t}

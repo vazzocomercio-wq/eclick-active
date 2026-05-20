@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { getSocket } from '@/lib/realtime/socket-client';
 
@@ -27,6 +28,7 @@ interface AdSignalNewPayload {
  * socket re-conectar antes do server perceber.
  */
 export function AdSignalToastListener() {
+  const t = useTranslations('intelligence.adSignalToast');
   const seenRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -48,15 +50,23 @@ export function AdSignalToastListener() {
           );
         }
 
-        const message = payload.display_message ?? formatFallback(payload);
-        const description = payload.severity === 'critical' ? '🚨 Crítico' : '⚠️ Aviso';
+        const message =
+          payload.display_message ??
+          (payload.campaign_name
+            ? t('fallbackWithCampaign', {
+                signalType: payload.signal_type,
+                campaign: payload.campaign_name,
+              })
+            : t('fallback', { signalType: payload.signal_type }));
+        const description =
+          payload.severity === 'critical' ? t('critical') : t('warning');
         const fn = payload.severity === 'critical' ? toast.error : toast.warning;
 
         fn(message, {
           description,
           duration: payload.severity === 'critical' ? Infinity : 30_000,
           action: {
-            label: 'Ver',
+            label: t('view'),
             onClick: () => {
               // Sonner não tem router built-in — usamos location pra não importar Next router
               // no componente que monta no layout (evita refresh-on-navigation issue)
@@ -82,7 +92,3 @@ export function AdSignalToastListener() {
   return null;
 }
 
-function formatFallback(p: AdSignalNewPayload): string {
-  const where = p.campaign_name ? `em "${p.campaign_name}"` : '';
-  return `Novo sinal: ${p.signal_type} ${where}`.trim();
-}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   Briefcase,
   GraduationCap,
@@ -60,6 +61,7 @@ type Mode = 'choose' | 'blank' | 'template';
  * Estado interno é mode: 'choose' (tela inicial) → 'blank' ou 'template'.
  */
 export function NewPipelineDialog({ open, onOpenChange, onCreated }: NewPipelineDialogProps) {
+  const t = useTranslations('funis.deal.newPipeline');
   const [mode, setMode] = useState<Mode>('choose');
   const [name, setName] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -83,7 +85,7 @@ export function NewPipelineDialog({ open, onOpenChange, onCreated }: NewPipeline
       .listTemplates()
       .then(setTemplates)
       .catch((err) => {
-        toast.error('Falha ao carregar templates', { description: extractMessage(err) });
+        toast.error(t('loadTemplatesFailed'), { description: extractMessage(err, t('unknownError')) });
       })
       .finally(() => setLoadingTemplates(false));
   }, [mode, templates.length, loadingTemplates]);
@@ -94,11 +96,11 @@ export function NewPipelineDialog({ open, onOpenChange, onCreated }: NewPipeline
     setSubmitting(true);
     try {
       const p = await pipelinesApi.create({ name: name.trim() });
-      toast.success('Pipeline criado');
+      toast.success(t('pipelineCreated'));
       onCreated(p);
       onOpenChange(false);
     } catch (err) {
-      toast.error('Falha ao criar pipeline', { description: extractMessage(err) });
+      toast.error(t('createFailed'), { description: extractMessage(err, t('unknownError')) });
     } finally {
       setSubmitting(false);
     }
@@ -112,11 +114,11 @@ export function NewPipelineDialog({ open, onOpenChange, onCreated }: NewPipeline
         selectedTemplate,
         name.trim() || undefined,
       );
-      toast.success(`Pipeline criado a partir do template "${p.name}"`);
+      toast.success(t('pipelineCreatedFromTemplate', { name: p.name }));
       onCreated(p);
       onOpenChange(false);
     } catch (err) {
-      toast.error('Falha ao criar pipeline', { description: extractMessage(err) });
+      toast.error(t('createFailed'), { description: extractMessage(err, t('unknownError')) });
     } finally {
       setSubmitting(false);
     }
@@ -127,16 +129,14 @@ export function NewPipelineDialog({ open, onOpenChange, onCreated }: NewPipeline
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>
-            {mode === 'choose' && 'Novo pipeline'}
-            {mode === 'blank' && 'Pipeline em branco'}
-            {mode === 'template' && 'Escolher template'}
+            {mode === 'choose' && t('titles.choose')}
+            {mode === 'blank' && t('titles.blank')}
+            {mode === 'template' && t('titles.template')}
           </DialogTitle>
           <DialogDescription>
-            {mode === 'choose' &&
-              'Comece em branco ou use um template pré-configurado pra seu segmento.'}
-            {mode === 'blank' && 'Você adicionará as etapas em seguida.'}
-            {mode === 'template' &&
-              'Templates trazem as etapas mais comuns do segmento. Você pode editar tudo depois.'}
+            {mode === 'choose' && t('descriptions.choose')}
+            {mode === 'blank' && t('descriptions.blank')}
+            {mode === 'template' && t('descriptions.template')}
           </DialogDescription>
         </DialogHeader>
 
@@ -151,9 +151,9 @@ export function NewPipelineDialog({ open, onOpenChange, onCreated }: NewPipeline
               )}
             >
               <Layers className="h-5 w-5 text-primary" />
-              <span className="text-sm font-semibold">Em branco</span>
+              <span className="text-sm font-semibold">{t('cards.blankTitle')}</span>
               <span className="text-xs text-muted-foreground">
-                Crie um pipeline do zero e configure as etapas manualmente.
+                {t('cards.blankDescription')}
               </span>
             </button>
             <button
@@ -165,9 +165,9 @@ export function NewPipelineDialog({ open, onOpenChange, onCreated }: NewPipeline
               )}
             >
               <Stethoscope className="h-5 w-5 text-primary" />
-              <span className="text-sm font-semibold">Usar template</span>
+              <span className="text-sm font-semibold">{t('cards.templateTitle')}</span>
               <span className="text-xs text-muted-foreground">
-                E-commerce, clínica, imobiliária, B2B, energia solar, educação.
+                {t('cards.templateDescription')}
               </span>
             </button>
           </div>
@@ -176,11 +176,11 @@ export function NewPipelineDialog({ open, onOpenChange, onCreated }: NewPipeline
         {mode === 'blank' && (
           <form onSubmit={handleCreateBlank} className="flex flex-col gap-3">
             <div className="flex flex-col gap-1">
-              <Label className="text-xs">Nome do pipeline</Label>
+              <Label className="text-xs">{t('nameLabel')}</Label>
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Ex: Vendas B2B"
+                placeholder={t('namePlaceholderBlank')}
                 required
                 autoFocus
               />
@@ -192,11 +192,11 @@ export function NewPipelineDialog({ open, onOpenChange, onCreated }: NewPipeline
                 onClick={() => setMode('choose')}
                 disabled={submitting}
               >
-                Voltar
+                {t('back')}
               </Button>
               <Button type="submit" disabled={!name.trim() || submitting}>
                 {submitting && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-                Criar pipeline
+                {t('createBlank')}
               </Button>
             </DialogFooter>
           </form>
@@ -210,16 +210,16 @@ export function NewPipelineDialog({ open, onOpenChange, onCreated }: NewPipeline
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {templates.map((t) => {
-                  const Icon = TEMPLATE_ICONS[t.icon] ?? Layers;
-                  const active = selectedTemplate === t.key;
+                {templates.map((tpl) => {
+                  const Icon = TEMPLATE_ICONS[tpl.icon] ?? Layers;
+                  const active = selectedTemplate === tpl.key;
                   return (
                     <button
-                      key={t.key}
+                      key={tpl.key}
                       type="button"
                       onClick={() => {
-                        setSelectedTemplate(t.key);
-                        if (!name.trim()) setName(t.default_name);
+                        setSelectedTemplate(tpl.key);
+                        if (!name.trim()) setName(tpl.default_name);
                       }}
                       className={cn(
                         'flex flex-col gap-2 rounded-lg border bg-card p-3 text-left transition-colors',
@@ -230,13 +230,13 @@ export function NewPipelineDialog({ open, onOpenChange, onCreated }: NewPipeline
                     >
                       <div className="flex items-center gap-2">
                         <Icon className="h-4 w-4 text-primary" />
-                        <span className="text-sm font-semibold">{t.default_name}</span>
+                        <span className="text-sm font-semibold">{tpl.default_name}</span>
                       </div>
                       <p className="line-clamp-2 text-[11px] text-muted-foreground">
-                        {t.description}
+                        {tpl.description}
                       </p>
                       <div className="flex flex-wrap items-center gap-1">
-                        {t.stages.map((s, idx) => (
+                        {tpl.stages.map((s, idx) => (
                           <span
                             key={idx}
                             title={`${s.name} · ${s.probability}%`}
@@ -245,7 +245,7 @@ export function NewPipelineDialog({ open, onOpenChange, onCreated }: NewPipeline
                           />
                         ))}
                         <span className="ml-1 text-[10px] text-muted-foreground">
-                          {t.stages.length} etapas
+                          {t('stagesCount', { count: tpl.stages.length })}
                         </span>
                       </div>
                     </button>
@@ -256,11 +256,11 @@ export function NewPipelineDialog({ open, onOpenChange, onCreated }: NewPipeline
 
             {selectedTemplate && (
               <div className="flex flex-col gap-1 border-t border-border pt-3">
-                <Label className="text-xs">Nome do pipeline</Label>
+                <Label className="text-xs">{t('nameLabel')}</Label>
                 <Input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Use o default ou customize"
+                  placeholder={t('namePlaceholderTemplate')}
                 />
               </div>
             )}
@@ -272,7 +272,7 @@ export function NewPipelineDialog({ open, onOpenChange, onCreated }: NewPipeline
                 onClick={() => setMode('choose')}
                 disabled={submitting}
               >
-                Voltar
+                {t('back')}
               </Button>
               <Button
                 type="button"
@@ -280,7 +280,7 @@ export function NewPipelineDialog({ open, onOpenChange, onCreated }: NewPipeline
                 disabled={!selectedTemplate || submitting}
               >
                 {submitting && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-                Criar
+                {t('createTemplate')}
               </Button>
             </DialogFooter>
           </div>
@@ -290,8 +290,8 @@ export function NewPipelineDialog({ open, onOpenChange, onCreated }: NewPipeline
   );
 }
 
-function extractMessage(err: unknown): string {
+function extractMessage(err: unknown, fallback: string): string {
   if (err instanceof ApiError) return `${err.status}: ${err.message}`;
   if (err instanceof Error) return err.message;
-  return 'Erro desconhecido';
+  return fallback;
 }

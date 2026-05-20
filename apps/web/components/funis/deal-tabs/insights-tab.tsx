@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   Loader2,
   Plus,
@@ -10,7 +11,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import type { Deal, DealRisk } from '@eclick-active/shared';
+import type { Deal } from '@eclick-active/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { aiApi, type DealScoreFactors } from '@/lib/api/ai';
@@ -53,6 +54,7 @@ interface InsightsTabProps {
  * mostra empty state com CTA "Calcular agora".
  */
 export function DealInsightsTab({ detail, onChanged, currentUserId }: InsightsTabProps) {
+  const t = useTranslations('funis.deal.insightsTab');
   const [scoring, setScoring] = useState(false);
   const [creatingTask, setCreatingTask] = useState(false);
 
@@ -71,10 +73,10 @@ export function DealInsightsTab({ detail, onChanged, currentUserId }: InsightsTa
     setScoring(true);
     try {
       await aiApi.scoreDeal(detail!.id);
-      toast.success('Score recalculado');
+      toast.success(t('scoreRecalculated'));
       await onChanged?.();
     } catch (err) {
-      toast.error('Falha ao calcular score', { description: extractMessage(err) });
+      toast.error(t('scoreFailed'), { description: extractMessage(err, t('unknownError')) });
     } finally {
       setScoring(false);
     }
@@ -91,15 +93,15 @@ export function DealInsightsTab({ detail, onChanged, currentUserId }: InsightsTa
         ...(detail!.contact_id ? { contact_id: detail!.contact_id } : {}),
         task_type: 'follow_up',
         priority: detail!.ai_risk === 'critical' || detail!.ai_risk === 'high' ? 'high' : 'normal',
-        description: 'Sugerida pela IA a partir do score do deal',
+        description: t('iaSuggested'),
       };
       await tasksApi.create(input);
-      toast.success('Tarefa criada', {
+      toast.success(t('taskCreated'), {
         description: detail!.ai_next_action.slice(0, 80),
       });
       await onChanged?.();
     } catch (err) {
-      toast.error('Falha ao criar tarefa', { description: extractMessage(err) });
+      toast.error(t('taskFailed'), { description: extractMessage(err, t('unknownError')) });
     } finally {
       setCreatingTask(false);
     }
@@ -113,10 +115,9 @@ export function DealInsightsTab({ detail, onChanged, currentUserId }: InsightsTa
             <Sparkles className="h-6 w-6" />
           </div>
           <div className="flex flex-col gap-1">
-            <p className="text-sm font-medium">Scoring não calculado</p>
+            <p className="text-sm font-medium">{t('unscoredTitle')}</p>
             <p className="max-w-xs text-xs text-muted-foreground">
-              A IA ainda não analisou esse deal. Calcule agora pra ver score, risco
-              e ação sugerida.
+              {t('unscoredDescription')}
             </p>
           </div>
           <Button onClick={handleRescore} disabled={scoring}>
@@ -125,7 +126,7 @@ export function DealInsightsTab({ detail, onChanged, currentUserId }: InsightsTa
             ) : (
               <Sparkles className="mr-2 h-3.5 w-3.5" />
             )}
-            Calcular agora
+            {t('calculateNow')}
           </Button>
         </CardContent>
       </Card>
@@ -139,7 +140,7 @@ export function DealInsightsTab({ detail, onChanged, currentUserId }: InsightsTa
         <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
           <CardTitle className="inline-flex items-center gap-1.5 text-xs">
             <Sparkles className="h-3.5 w-3.5 text-primary" />
-            Insights IA
+            {t('header')}
           </CardTitle>
           <Button
             size="sm"
@@ -149,7 +150,7 @@ export function DealInsightsTab({ detail, onChanged, currentUserId }: InsightsTa
             className="h-7"
           >
             <RefreshCw className={cn('mr-1 h-3 w-3', scoring && 'animate-spin')} />
-            Recalcular score
+            {t('recalculate')}
           </Button>
         </CardHeader>
         <CardContent className="flex flex-col gap-4 pt-0">
@@ -159,18 +160,18 @@ export function DealInsightsTab({ detail, onChanged, currentUserId }: InsightsTa
             <div className="flex flex-1 flex-col gap-1.5">
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Risco
+                  {t('riskLabel')}
                 </span>
                 <RiskPill risk={detail.ai_risk} />
               </div>
               {detail.ai_risk && (
-                <p className="text-xs text-muted-foreground">{riskExplanation(detail.ai_risk)}</p>
+                <p className="text-xs text-muted-foreground">{t(`riskExplanations.${detail.ai_risk}`)}</p>
               )}
             </div>
 
             <div className="flex flex-col items-end gap-0.5">
               <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                Prob. fechamento
+                {t('closeProbabilityLabel')}
               </span>
               <span className={cn(
                 'text-3xl font-semibold tabular-nums leading-none',
@@ -195,13 +196,13 @@ export function DealInsightsTab({ detail, onChanged, currentUserId }: InsightsTa
       {factors && (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs">Decomposição (0–25 cada)</CardTitle>
+            <CardTitle className="text-xs">{t('decompositionTitle')}</CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-3 pt-0">
-            <FactorBar label="Engajamento" value={factors.engagement} />
-            <FactorBar label="Recência" value={factors.recency} />
-            <FactorBar label="Fit" value={factors.fit} />
-            <FactorBar label="Intenção" value={factors.intent} />
+            <FactorBar label={t('factors.engagement')} value={factors.engagement} />
+            <FactorBar label={t('factors.recency')} value={factors.recency} />
+            <FactorBar label={t('factors.fit')} value={factors.fit} />
+            <FactorBar label={t('factors.intent')} value={factors.intent} />
           </CardContent>
           {factors.details && factors.details.length > 0 && (
             <CardContent className="border-t border-border pt-3">
@@ -227,7 +228,7 @@ export function DealInsightsTab({ detail, onChanged, currentUserId }: InsightsTa
             </span>
             <div className="flex flex-1 flex-col gap-1.5">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-accent">
-                Próxima ação sugerida
+                {t('nextActionKicker')}
               </span>
               <p className="text-sm leading-snug">{detail.ai_next_action}</p>
             </div>
@@ -242,7 +243,7 @@ export function DealInsightsTab({ detail, onChanged, currentUserId }: InsightsTa
               ) : (
                 <Plus className="mr-1.5 h-3.5 w-3.5" />
               )}
-              Criar tarefa
+              {t('createTask')}
             </Button>
           </CardContent>
         </Card>
@@ -262,6 +263,7 @@ function ScoreHistory({
   history: ScoreHistoryEntry[];
   currentScore: number;
 }) {
+  const t = useTranslations('funis.deal.insightsTab');
   // Pega o penúltimo (último é o atual). Se o array estiver fora de ordem,
   // ainda funciona — pegamos o mais recente que NÃO seja o currentScore.
   const sorted = [...history].sort(
@@ -285,7 +287,7 @@ function ScoreHistory({
         )}
       />
       <span className="text-muted-foreground">
-        Score {isUp ? 'subiu' : 'caiu'} de{' '}
+        {t('scoreDeltaPrefix', { direction: isUp ? t('scoreUp') : t('scoreDown') })}{' '}
         <span className="font-medium text-foreground tabular-nums">{previous.score}</span>{' '}
         →{' '}
         <span className="font-medium text-foreground tabular-nums">{currentScore}</span>
@@ -307,19 +309,8 @@ function ScoreHistory({
 // Helpers
 // ──────────────────────────────────────────────────────────
 
-const RISK_EXPLANATIONS: Record<DealRisk, string> = {
-  low: 'Sinais positivos consistentes. Mantenha o ritmo de follow-up.',
-  medium: 'Atenção redobrada. Pode estagnar sem ação proativa.',
-  high: 'Risco real de perda. Próximos 7 dias são críticos.',
-  critical: 'Conversão improvável sem mudança de estratégia.',
-};
-
-function riskExplanation(risk: DealRisk): string {
-  return RISK_EXPLANATIONS[risk];
-}
-
-function extractMessage(err: unknown): string {
+function extractMessage(err: unknown, fallback: string): string {
   if (err instanceof ApiError) return `${err.status}: ${err.message}`;
   if (err instanceof Error) return err.message;
-  return 'Erro desconhecido';
+  return fallback;
 }

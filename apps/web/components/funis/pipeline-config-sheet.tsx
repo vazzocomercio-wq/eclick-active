@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   DndContext,
   KeyboardSensor,
@@ -70,6 +71,7 @@ export function PipelineConfigSheet({
   pipeline,
   onChange,
 }: PipelineConfigSheetProps) {
+  const t = useTranslations('funis.pipelineSheet');
   const [stages, setStages] = useState<PipelineStageWithCount[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [savingReorder, setSavingReorder] = useState(false);
@@ -119,7 +121,7 @@ export function PipelineConfigSheet({
           ? err.message
           : err instanceof Error
             ? err.message
-            : 'Erro ao reordenar',
+            : t('errors.reorder'),
       );
     } finally {
       setSavingReorder(false);
@@ -144,7 +146,7 @@ export function PipelineConfigSheet({
           ? err.message
           : err instanceof Error
             ? err.message
-            : 'Erro ao atualizar stage',
+            : t('errors.update'),
       );
     }
   }
@@ -174,7 +176,7 @@ export function PipelineConfigSheet({
           ? err.message
           : err instanceof Error
             ? err.message
-            : 'Erro ao deletar stage',
+            : t('errors.delete'),
       );
     }
   }
@@ -184,7 +186,7 @@ export function PipelineConfigSheet({
     setError(null);
     try {
       const created = await pipelinesApi.createStage(pipeline.id, {
-        name: 'Nova etapa',
+        name: t('newStageDefaultName'),
         color: '#00E5FF',
         probability: 0,
       });
@@ -211,7 +213,7 @@ export function PipelineConfigSheet({
             ? err.message
             : err instanceof Error
               ? err.message
-              : 'Erro ao posicionar a nova etapa',
+              : t('errors.position'),
         );
       }
       onChange();
@@ -221,7 +223,7 @@ export function PipelineConfigSheet({
           ? err.message
           : err instanceof Error
             ? err.message
-            : 'Erro ao criar stage',
+            : t('errors.create'),
       );
     }
   }
@@ -230,10 +232,10 @@ export function PipelineConfigSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="flex w-full flex-col gap-0 sm:max-w-xl" side="right">
         <SheetHeader className="border-b border-border pb-4">
-          <SheetTitle>Configurar pipeline</SheetTitle>
+          <SheetTitle>{t('title')}</SheetTitle>
           <SheetDescription>
-            {pipeline?.name ?? 'Selecione um pipeline'} · arraste para reordenar
-            {savingReorder && ' · salvando...'}
+            {pipeline?.name ?? t('selectFallback')} · {t('subtitleSuffix')}
+            {savingReorder && ` · ${t('savingSuffix')}`}
           </SheetDescription>
         </SheetHeader>
 
@@ -271,7 +273,7 @@ export function PipelineConfigSheet({
 
           <Button variant="outline" size="sm" className="mt-4 w-full" onClick={handleStageCreate}>
             <Plus className="mr-2 h-3.5 w-3.5" />
-            Nova etapa
+            {t('addStage')}
           </Button>
         </div>
       </SheetContent>
@@ -304,19 +306,21 @@ export function PipelineConfigSheet({
               targetStageId,
             );
             toast.success(
-              `Stage excluído — ${result.moved} deal(s) movido(s)`,
+              result.moved === 1
+                ? t('moveDialog.successOne', { count: result.moved })
+                : t('moveDialog.successMany', { count: result.moved }),
             );
             setStages((curr) => curr.filter((s) => s.id !== moveAndDelete.stage.id));
             setMoveAndDelete(null);
             onChange();
           } catch (err) {
-            toast.error('Falha ao mover e deletar', {
+            toast.error(t('moveDialog.failed'), {
               description:
                 err instanceof ApiError
                   ? `${err.status}: ${err.message}`
                   : err instanceof Error
                     ? err.message
-                    : 'Erro desconhecido',
+                    : t('moveDialog.unknownError'),
             });
           }
         }}
@@ -342,6 +346,7 @@ function MoveAndDeleteDialog({
   onClose: () => void;
   onConfirm: (targetStageId: string) => Promise<void>;
 }) {
+  const t = useTranslations('funis.pipelineSheet.moveDialog');
   const [target, setTarget] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -357,17 +362,16 @@ function MoveAndDeleteDialog({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Mover deals e excluir &ldquo;{sourceStage.name}&rdquo;?</DialogTitle>
+          <DialogTitle>{t('title', { name: sourceStage.name })}</DialogTitle>
           <DialogDescription>
-            Esta etapa tem <strong>{sourceStage.deal_count}</strong>{' '}
-            {sourceStage.deal_count === 1 ? 'negócio' : 'negócios'} ativo
-            {sourceStage.deal_count === 1 ? '' : 's'}. Escolha pra onde mover antes
-            de excluir.
+            {sourceStage.deal_count === 1
+              ? t('descriptionOne', { count: sourceStage.deal_count })
+              : t('descriptionMany', { count: sourceStage.deal_count })}
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-2">
-          <Label className="text-xs">Mover deals para</Label>
+          <Label className="text-xs">{t('targetLabel')}</Label>
           <select
             value={target}
             onChange={(e) => setTarget(e.target.value)}
@@ -377,7 +381,7 @@ function MoveAndDeleteDialog({
             {otherStages.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
-                {s.is_won ? ' (Ganho)' : s.is_lost ? ' (Perdido)' : ''}
+                {s.is_won ? ` ${t('wonSuffix')}` : s.is_lost ? ` ${t('lostSuffix')}` : ''}
               </option>
             ))}
           </select>
@@ -385,7 +389,7 @@ function MoveAndDeleteDialog({
 
         <DialogFooter>
           <Button variant="ghost" onClick={onClose} disabled={submitting}>
-            Cancelar
+            {t('cancel')}
           </Button>
           <Button
             variant="destructive"
@@ -400,7 +404,7 @@ function MoveAndDeleteDialog({
             }}
           >
             {submitting && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-            Mover e excluir
+            {t('confirm')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -426,6 +430,7 @@ function SortableStageRow({
   onDelete,
   onOpenAutomations,
 }: SortableStageRowProps) {
+  const t = useTranslations('funis.pipelineSheet.row');
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: stage.id,
   });
@@ -503,7 +508,7 @@ function SortableStageRow({
           {...attributes}
           {...listeners}
           className="cursor-grab text-muted-foreground hover:text-foreground active:cursor-grabbing"
-          aria-label="Arrastar para reordenar"
+          aria-label={t('dragLabel')}
         >
           <GripVertical className="h-4 w-4" />
         </button>
@@ -516,9 +521,9 @@ function SortableStageRow({
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="truncate text-sm font-medium">{stage.name}</span>
           <span className="truncate text-[11px] text-muted-foreground">
-            {stage.probability}% · {stage.sla_hours ? `${stage.sla_hours}h SLA` : 'sem SLA'}
-            {stage.deal_count > 0 && ` · ${stage.deal_count} deal${stage.deal_count === 1 ? '' : 's'}`}
-            {isProtected && ' · protegido'}
+            {stage.probability}% · {stage.sla_hours ? t('slaSuffix', { hours: stage.sla_hours }) : t('noSla')}
+            {stage.deal_count > 0 && ` · ${stage.deal_count === 1 ? t('dealsOne', { count: stage.deal_count }) : t('dealsMany', { count: stage.deal_count })}`}
+            {isProtected && ` · ${t('protected')}`}
           </span>
         </div>
 
@@ -526,11 +531,11 @@ function SortableStageRow({
           variant="ghost"
           size="sm"
           onClick={onOpenAutomations}
-          title="Automações deste stage"
+          title={t('automationsTitle')}
           className="h-7 px-2 text-xs text-primary hover:bg-primary/10"
         >
           <Zap className="mr-1 h-3 w-3" />
-          Automações
+          {t('automations')}
         </Button>
         {!isProtected && (
           <Button
@@ -539,18 +544,18 @@ function SortableStageRow({
             className="h-7 px-2 text-xs"
             onClick={() => setEditing((v) => !v)}
           >
-            {editing ? 'Fechar' : 'Editar'}
+            {editing ? t('close') : t('edit')}
           </Button>
         )}
       </div>
 
       {editing && (
         <div className="grid grid-cols-2 gap-3 border-t border-border bg-muted/20 p-3">
-          <SmallField label="Nome" className="col-span-2">
+          <SmallField label={t('name')} className="col-span-2">
             <Input value={name} onChange={(e) => setName(e.target.value)} />
           </SmallField>
 
-          <SmallField label="Cor">
+          <SmallField label={t('color')}>
             <div className="flex items-center gap-2">
               <input
                 type="color"
@@ -567,7 +572,7 @@ function SortableStageRow({
             </div>
           </SmallField>
 
-          <SmallField label="Probabilidade (%)">
+          <SmallField label={t('probability')}>
             <Input
               type="number"
               min={0}
@@ -577,13 +582,13 @@ function SortableStageRow({
             />
           </SmallField>
 
-          <SmallField label="SLA (horas)" className="col-span-2">
+          <SmallField label={t('slaHours')} className="col-span-2">
             <Input
               type="number"
               min={1}
               value={slaHours}
               onChange={(e) => setSlaHours(e.target.value)}
-              placeholder="vazio = sem SLA"
+              placeholder={t('slaPlaceholder')}
             />
           </SmallField>
 
@@ -591,22 +596,21 @@ function SortableStageRow({
           <div className="col-span-2 flex flex-col gap-2 rounded-md border border-dashed border-primary/30 bg-primary/5 p-3">
             <div className="flex items-center gap-1.5 text-[11px]">
               <Sparkles className="h-3 w-3 text-primary" />
-              <span className="font-semibold">Dados obrigatórios neste stage</span>
+              <span className="font-semibold">{t('requiredTitle')}</span>
             </div>
             <p className="text-[10px] text-muted-foreground">
-              A IA pedirá esses dados ao cliente quando faltarem. Ao receber a resposta, ela extrai
-              e atualiza automaticamente.
+              {t('requiredHint')}
             </p>
 
             <RequiredFieldsToggleList
-              label="Do contato"
-              options={CONTACT_FIELD_OPTIONS}
+              label={t('requiredContact')}
+              kind="contact"
               values={requiredContact}
               onChange={setRequiredContact}
             />
             <RequiredFieldsToggleList
-              label="Do negócio"
-              options={DEAL_FIELD_OPTIONS}
+              label={t('requiredDeal')}
+              kind="deal"
               values={requiredDeal}
               onChange={setRequiredDeal}
             />
@@ -615,7 +619,7 @@ function SortableStageRow({
           <div className="col-span-2 flex items-center justify-between gap-2 pt-1">
             {confirmDelete ? (
               <div className="flex items-center gap-1 text-[11px]">
-                <span className="text-destructive">Confirmar?</span>
+                <span className="text-destructive">{t('confirmDelete')}</span>
                 <Button
                   type="button"
                   size="sm"
@@ -624,7 +628,7 @@ function SortableStageRow({
                   onClick={handleDelete}
                   disabled={saving}
                 >
-                  Sim
+                  {t('yes')}
                 </Button>
                 <Button
                   type="button"
@@ -633,7 +637,7 @@ function SortableStageRow({
                   className="h-6 px-2"
                   onClick={() => setConfirmDelete(false)}
                 >
-                  Não
+                  {t('no')}
                 </Button>
               </div>
             ) : (
@@ -646,7 +650,7 @@ function SortableStageRow({
                 disabled={saving}
               >
                 <Trash2 className="mr-1 h-3.5 w-3.5" />
-                Deletar
+                {t('delete')}
               </Button>
             )}
 
@@ -671,7 +675,7 @@ function SortableStageRow({
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
                   <>
-                    <Check className="mr-1 h-3.5 w-3.5" /> Salvar
+                    <Check className="mr-1 h-3.5 w-3.5" /> {t('save')}
                   </>
                 )}
               </Button>
@@ -687,29 +691,31 @@ function SortableStageRow({
 // Required fields config (Bloco G)
 // ──────────────────────────────────────────────────────────
 
-const CONTACT_FIELD_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: 'name', label: 'Nome' },
-  { value: 'email', label: 'Email' },
-  { value: 'phone', label: 'Telefone' },
-  { value: 'company_name', label: 'Empresa' },
-];
-
-const DEAL_FIELD_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: 'value', label: 'Valor' },
-  { value: 'expected_close_date', label: 'Previsão fechamento' },
-];
+const CONTACT_FIELD_VALUES = ['name', 'email', 'phone', 'company_name'] as const;
+const DEAL_FIELD_VALUES = ['value', 'expected_close_date'] as const;
+type ContactFieldValue = typeof CONTACT_FIELD_VALUES[number];
+type DealFieldValue = typeof DEAL_FIELD_VALUES[number];
 
 function RequiredFieldsToggleList({
   label,
-  options,
+  kind,
   values,
   onChange,
 }: {
   label: string;
-  options: Array<{ value: string; label: string }>;
+  kind: 'contact' | 'deal';
   values: string[];
   onChange: (v: string[]) => void;
 }) {
+  const tContact = useTranslations('funis.pipelineSheet.contactFields');
+  const tDeal = useTranslations('funis.pipelineSheet.dealFields');
+  const options: ReadonlyArray<string> =
+    kind === 'contact' ? CONTACT_FIELD_VALUES : DEAL_FIELD_VALUES;
+  function labelFor(v: string): string {
+    return kind === 'contact'
+      ? tContact(v as ContactFieldValue)
+      : tDeal(v as DealFieldValue);
+  }
   function toggle(v: string) {
     if (values.includes(v)) {
       onChange(values.filter((x) => x !== v));
@@ -722,13 +728,13 @@ function RequiredFieldsToggleList({
     <div className="flex flex-col gap-1">
       <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</span>
       <div className="flex flex-wrap gap-1.5">
-        {options.map((opt) => {
-          const active = values.includes(opt.value);
+        {options.map((value) => {
+          const active = values.includes(value);
           return (
             <button
-              key={opt.value}
+              key={value}
               type="button"
-              onClick={() => toggle(opt.value)}
+              onClick={() => toggle(value)}
               className={cn(
                 'rounded-full border px-2.5 py-1 text-[11px] transition-colors',
                 active
@@ -736,7 +742,7 @@ function RequiredFieldsToggleList({
                   : 'border-border bg-card text-muted-foreground hover:border-primary/30',
               )}
             >
-              {opt.label}
+              {labelFor(value)}
             </button>
           );
         })}

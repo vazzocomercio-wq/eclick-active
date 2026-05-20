@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Loader2, Target, TrendingDown, TrendingUp } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { AIScoreCircle } from '@/components/funis/ai-score-circle';
@@ -22,6 +23,7 @@ interface ContactDealsTabProps {
  * (gerenciado pelo container pai pra não criar diamond imports).
  */
 export function ContactDealsTab({ contactId, onOpenDeal }: ContactDealsTabProps) {
+  const t = useTranslations('contacts.dealsTab');
   const [deals, setDeals] = useState<ContactDealItem[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +42,7 @@ export function ContactDealsTab({ contactId, onOpenDeal }: ContactDealsTabProps)
             ? `${err.status}: ${err.message}`
             : err instanceof Error
               ? err.message
-              : 'Erro ao buscar negócios',
+              : t('fetchError'),
         );
       })
       .finally(() => setLoading(false));
@@ -70,9 +72,9 @@ export function ContactDealsTab({ contactId, onOpenDeal }: ContactDealsTabProps)
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
             <Target className="h-6 w-6" />
           </div>
-          <p className="text-sm font-medium">Sem negócios vinculados</p>
+          <p className="text-sm font-medium">{t('emptyTitle')}</p>
           <p className="max-w-xs text-xs text-muted-foreground">
-            Crie um deal vinculado a esse contato pelo board ou pelo Copiloto.
+            {t('emptyDescription')}
           </p>
         </CardContent>
       </Card>
@@ -82,7 +84,7 @@ export function ContactDealsTab({ contactId, onOpenDeal }: ContactDealsTabProps)
   return (
     <div className="flex flex-col gap-2 p-4">
       <p className="text-[11px] text-muted-foreground">
-        {deals.length} {deals.length === 1 ? 'negócio' : 'negócios'} vinculados
+        {deals.length === 1 ? t('linkedOne', { count: deals.length }) : t('linkedMany', { count: deals.length })}
       </p>
       {deals.map((d) => (
         <DealCard key={d.id} deal={d} onClick={() => onOpenDeal?.(d.id)} />
@@ -98,6 +100,7 @@ function DealCard({
   deal: ContactDealItem;
   onClick: () => void;
 }) {
+  const t = useTranslations('contacts.dealsTab');
   const isWon = !!deal.won_at;
   const isLost = !!deal.lost_at;
   const isOpen = !isWon && !isLost;
@@ -109,7 +112,7 @@ function DealCard({
           currency: deal.currency || 'BRL',
           maximumFractionDigits: 0,
         })
-      : 'Sem valor';
+      : t('noValue');
 
   return (
     <button
@@ -125,13 +128,13 @@ function DealCard({
         {isWon && (
           <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-500">
             <TrendingUp className="h-2.5 w-2.5" />
-            Ganho
+            {t('won')}
           </span>
         )}
         {isLost && (
           <span className="inline-flex items-center gap-1 rounded-md bg-red-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-red-500">
             <TrendingDown className="h-2.5 w-2.5" />
-            Perdido
+            {t('lost')}
           </span>
         )}
       </div>
@@ -154,7 +157,7 @@ function DealCard({
         {isOpen && (
           <>
             <span className="ml-auto inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-              Score
+              {t('score')}
               <AIScoreCircle score={deal.ai_score} size={20} />
             </span>
             {deal.ai_risk && <RiskPill risk={deal.ai_risk} />}

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import {
   ArrowRightLeft,
   CheckCircle2,
@@ -22,6 +23,7 @@ interface ActivityTimelineProps {
 }
 
 export function ActivityTimeline({ items, loading }: ActivityTimelineProps) {
+  const t = useTranslations('centralAcao.activity');
   if (loading) {
     return (
       <div className="flex flex-col gap-2">
@@ -36,7 +38,7 @@ export function ActivityTimeline({ items, loading }: ActivityTimelineProps) {
     return (
       <div className="flex flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border p-6 text-center">
         <Zap className="h-5 w-5 text-muted-foreground" />
-        <p className="text-xs text-muted-foreground">Sem atividade recente</p>
+        <p className="text-xs text-muted-foreground">{t('empty')}</p>
       </div>
     );
   }

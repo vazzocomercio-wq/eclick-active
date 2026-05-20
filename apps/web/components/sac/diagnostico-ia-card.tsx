@@ -8,6 +8,7 @@ import {
   MessageSquare,
   GraduationCap,
 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 
 /**
@@ -35,13 +36,14 @@ interface DiagnosticoIaCardProps {
 }
 
 export function DiagnosticoIaCard({ analysis, period, onClose }: DiagnosticoIaCardProps) {
+  const t = useTranslations('sac.diagnostico');
   const parsed = parseAnalysis(analysis);
 
   if (parsed?.error) {
     return (
       <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
         <p className="text-sm text-amber-700 dark:text-amber-400">
-          Falha ao gerar diagnóstico: {parsed.error}
+          {t('fail', { message: parsed.error })}
         </p>
       </div>
     );
@@ -64,7 +66,7 @@ export function DiagnosticoIaCard({ analysis, period, onClose }: DiagnosticoIaCa
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
           <h3 className="text-sm font-semibold text-cyan-700 dark:text-cyan-300">
-            Diagnóstico IA — {periodLabel(period)}
+            {t('title', { period: periodLabel(period, t) })}
           </h3>
         </div>
         {onClose && (
@@ -73,7 +75,7 @@ export function DiagnosticoIaCard({ analysis, period, onClose }: DiagnosticoIaCa
             onClick={onClose}
             className="text-[11px] text-muted-foreground hover:text-foreground"
           >
-            Fechar
+            {t('close')}
           </button>
         )}
       </div>
@@ -89,7 +91,7 @@ export function DiagnosticoIaCard({ analysis, period, onClose }: DiagnosticoIaCa
         {/* Main issues */}
         {parsed.main_issues && parsed.main_issues.length > 0 && (
           <Section
-            title="Problemas principais"
+            title={t('mainIssues')}
             icon={AlertTriangle}
             color="red"
           >
@@ -106,7 +108,7 @@ export function DiagnosticoIaCard({ analysis, period, onClose }: DiagnosticoIaCa
         {/* Recommendations */}
         {parsed.recommendations && parsed.recommendations.length > 0 && (
           <Section
-            title="Recomendações"
+            title={t('recommendations')}
             icon={Lightbulb}
             color="emerald"
           >
@@ -123,7 +125,7 @@ export function DiagnosticoIaCard({ analysis, period, onClose }: DiagnosticoIaCa
         {/* Products with problems */}
         {parsed.products_with_problems && parsed.products_with_problems.length > 0 && (
           <Section
-            title="Produtos problemáticos"
+            title={t('problemProducts')}
             icon={Package}
             color="orange"
           >
@@ -143,7 +145,7 @@ export function DiagnosticoIaCard({ analysis, period, onClose }: DiagnosticoIaCa
         {/* Channels with problems */}
         {parsed.channels_with_problems && parsed.channels_with_problems.length > 0 && (
           <Section
-            title="Canais com mais problemas"
+            title={t('problemChannels')}
             icon={MessageSquare}
             color="violet"
           >
@@ -163,7 +165,7 @@ export function DiagnosticoIaCard({ analysis, period, onClose }: DiagnosticoIaCa
         {/* Agents needing training */}
         {parsed.agents_needing_training && parsed.agents_needing_training.length > 0 && (
           <Section
-            title="Atendentes que precisam de treinamento"
+            title={t('agentsTraining')}
             icon={GraduationCap}
             color="amber"
           >
@@ -240,10 +242,10 @@ function Bullet({
   );
 }
 
-function periodLabel(period: string): string {
-  if (period === 'today') return 'hoje';
-  if (period === 'week') return 'últimos 7 dias';
-  if (period === 'month') return 'últimos 30 dias';
+function periodLabel(period: string, t: (key: string) => string): string {
+  if (period === 'today') return t('period.today');
+  if (period === 'week') return t('period.week');
+  if (period === 'month') return t('period.month');
   return period;
 }
 

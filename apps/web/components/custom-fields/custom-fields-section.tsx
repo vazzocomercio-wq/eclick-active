@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import type {
@@ -52,6 +53,7 @@ export function CustomFieldsSection({
   entityId,
   className,
 }: CustomFieldsSectionProps) {
+  const t = useTranslations('customFields.section');
   const [definitions, setDefinitions] = useState<CustomFieldDefinition[] | null>(null);
   const [groups, setGroups] = useState<CustomFieldGroup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,12 +92,12 @@ export function CustomFieldsSection({
             ? `${err.status}: ${err.message}`
             : err instanceof Error
               ? err.message
-              : 'Erro ao carregar campos',
+              : t('loadError'),
         );
       })
       .finally(() => setLoading(false));
     return () => ctrl.abort();
-  }, [entityType]);
+  }, [entityType, t]);
 
   // Cleanup de timer
   useEffect(() => {
@@ -121,13 +123,13 @@ export function CustomFieldsSection({
       await onSave({ ...localValues });
       dirtyRef.current = false;
     } catch (err) {
-      toast.error('Falha ao salvar campos personalizados', {
+      toast.error(t('saveError'), {
         description:
           err instanceof ApiError
             ? `${err.status}: ${err.message}`
             : err instanceof Error
               ? err.message
-              : 'Erro desconhecido',
+              : t('unknownError'),
       });
     } finally {
       setSaving(false);
@@ -161,10 +163,10 @@ export function CustomFieldsSection({
     const noGroup = groupedDefs.get(NO_GROUP_KEY);
     if (noGroup && noGroup.length > 0) {
       // Se já temos grupos, "Principal" vira título; caso contrário sem título
-      out.push({ id: NO_GROUP_KEY, name: 'Principal', fields: noGroup });
+      out.push({ id: NO_GROUP_KEY, name: t('mainSection'), fields: noGroup });
     }
     return out;
-  }, [groupedDefs, groups]);
+  }, [groupedDefs, groups, t]);
 
   if (loading) {
     return (

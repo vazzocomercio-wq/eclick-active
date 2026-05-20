@@ -10,13 +10,19 @@ import { getRequestConfig } from 'next-intl/server';
 import { cookies } from 'next/headers';
 import { defaultLocale, isLocale, LOCALE_COOKIE, type Locale } from './locales';
 
-type Dict = { [k: string]: string | Dict };
+// Mensagens podem ser string, sub-objeto ou array (usado p/ listas
+// como sugestões do copiloto). next-intl entrega tudo como está.
+type MsgVal = string | string[] | { [k: string]: MsgVal };
+type Dict = { [k: string]: MsgVal };
 
 function deepMerge(base: Dict, override: Dict): Dict {
   const out: Dict = { ...base };
   for (const [k, v] of Object.entries(override)) {
     const b = out[k];
-    if (v && typeof v === 'object' && b && typeof b === 'object') {
+    // Arrays: substitui inteiro (não tenta merge índice a índice).
+    if (Array.isArray(v) || Array.isArray(b)) {
+      out[k] = v;
+    } else if (v && typeof v === 'object' && b && typeof b === 'object') {
       out[k] = deepMerge(b as Dict, v as Dict);
     } else {
       out[k] = v;
@@ -26,9 +32,9 @@ function deepMerge(base: Dict, override: Dict): Dict {
 }
 
 const loaders: Record<Locale, () => Promise<{ default: Dict }>> = {
-  pt: () => import('../messages/pt.json'),
-  en: () => import('../messages/en.json'),
-  zh: () => import('../messages/zh.json'),
+  pt: () => import('../messages/pt.json') as Promise<{ default: Dict }>,
+  en: () => import('../messages/en.json') as Promise<{ default: Dict }>,
+  zh: () => import('../messages/zh.json') as Promise<{ default: Dict }>,
 };
 
 async function loadMessages(locale: Locale): Promise<Dict> {

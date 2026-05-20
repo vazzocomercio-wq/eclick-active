@@ -1,6 +1,7 @@
 'use client';
 
 import { AlertTriangle, Filter } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import type { FunnelReport } from '@/lib/api/reports';
 import { cn } from '@/lib/utils';
 
@@ -19,6 +20,7 @@ export function FunnelTab({
   selectedPipelineId,
   onSelectPipeline,
 }: FunnelTabProps) {
+  const t = useTranslations('relatorios');
   if (loading || !data) {
     return (
       <div className="flex flex-col gap-3">
@@ -40,7 +42,7 @@ export function FunnelTab({
         {pipelines.length > 1 && (
           <label className="flex items-center gap-1.5 rounded-md border border-input bg-card px-2.5 py-1 text-xs">
             <Filter className="h-3 w-3 text-muted-foreground" />
-            <span className="text-muted-foreground">Pipeline:</span>
+            <span className="text-muted-foreground">{t('funnel.pipelineLabel')}</span>
             <select
               value={selectedPipelineId ?? ''}
               onChange={(e) => onSelectPipeline(e.target.value)}
@@ -58,7 +60,7 @@ export function FunnelTab({
         {bottleneckId && (
           <div className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-1.5 text-xs">
             <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
-            <span className="font-medium">Gargalo identificado:</span>
+            <span className="font-medium">{t('funnel.bottleneckLabel')}</span>
             <span className="text-destructive">
               {data.stages.find((s) => s.id === bottleneckId)?.name}
             </span>
@@ -71,7 +73,7 @@ export function FunnelTab({
         <h2 className="text-sm font-semibold">{data.pipeline.name}</h2>
 
         {normalStages.length === 0 ? (
-          <p className="text-xs text-muted-foreground">Sem stages ativos no pipeline.</p>
+          <p className="text-xs text-muted-foreground">{t('funnel.noStages')}</p>
         ) : (
           <div className="flex flex-col items-center gap-1.5 py-3">
             {normalStages.map((s, idx) => {
@@ -102,7 +104,7 @@ export function FunnelTab({
                     <div className="flex flex-col items-center text-center">
                       <span className="text-xs font-semibold">{s.name}</span>
                       <span className="text-[10px] text-muted-foreground">
-                        {s.deals_count} deal{s.deals_count === 1 ? '' : 's'} ·{' '}
+                        {t('funnel.dealsCount', { n: s.deals_count })} ·{' '}
                         {formatBRL(s.total_value)}
                       </span>
                     </div>
@@ -113,7 +115,7 @@ export function FunnelTab({
                     <div className="my-1 flex items-center gap-2 text-[10px]">
                       {s.drop_off_rate !== null && s.drop_off_rate > 0 && (
                         <span className="rounded-md bg-red-500/10 px-1.5 py-0.5 text-red-400">
-                          -{s.drop_off_rate}% drop
+                          {t('funnel.dropPrefix', { n: s.drop_off_rate })}
                         </span>
                       )}
                     </div>
@@ -127,18 +129,18 @@ export function FunnelTab({
 
       {/* Tabela de detalhes */}
       <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-5">
-        <h2 className="text-sm font-semibold">Detalhes por etapa</h2>
+        <h2 className="text-sm font-semibold">{t('funnel.detailsTitle')}</h2>
 
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-border text-[10px] uppercase tracking-wider text-muted-foreground">
-                <th className="pb-2 text-left font-medium">Etapa</th>
-                <th className="pb-2 text-right font-medium">Deals</th>
-                <th className="pb-2 text-right font-medium">Valor</th>
-                <th className="pb-2 text-right font-medium">Tempo médio</th>
-                <th className="pb-2 text-right font-medium">Conversão</th>
-                <th className="pb-2 text-right font-medium">Drop-off</th>
+                <th className="pb-2 text-left font-medium">{t('funnel.table.stage')}</th>
+                <th className="pb-2 text-right font-medium">{t('funnel.table.deals')}</th>
+                <th className="pb-2 text-right font-medium">{t('funnel.table.value')}</th>
+                <th className="pb-2 text-right font-medium">{t('funnel.table.avgTime')}</th>
+                <th className="pb-2 text-right font-medium">{t('funnel.table.conversion')}</th>
+                <th className="pb-2 text-right font-medium">{t('funnel.table.dropOff')}</th>
               </tr>
             </thead>
             <tbody>
@@ -161,12 +163,12 @@ export function FunnelTab({
                         <span className="font-medium">{s.name}</span>
                         {s.is_won && (
                           <span className="rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-400">
-                            Ganho
+                            {t('funnel.wonBadge')}
                           </span>
                         )}
                         {s.is_lost && (
                           <span className="rounded-md bg-red-500/10 px-1.5 py-0.5 text-[10px] text-red-400">
-                            Perdido
+                            {t('funnel.lostBadge')}
                           </span>
                         )}
                         {isBottleneck && (

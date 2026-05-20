@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Star } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import type { InboxItem } from '@eclick-active/shared';
 import { toast } from 'sonner';
 import { AvatarWithChannel } from '@/components/contacts/avatar-with-channel';
@@ -28,6 +29,7 @@ export function ConversationItem({
   preview,
   onStarChanged,
 }: ConversationItemProps) {
+  const t = useTranslations('inbox.item');
   const hasUnread = (item.unread_count ?? 0) > 0;
   const [starred, setStarred] = useState(item.is_starred ?? false);
   const [pulsing, setPulsing] = useState(false);
@@ -48,8 +50,8 @@ export function ConversationItem({
       // Revert on failure
       setStarred(!next);
       onStarChanged?.(item.id, !next);
-      toast.error('Falha ao favoritar', {
-        description: err instanceof ApiError ? err.message : 'Tente novamente',
+      toast.error(t('starFailed'), {
+        description: err instanceof ApiError ? err.message : t('starFailedRetry'),
       });
     }
   }
@@ -72,7 +74,7 @@ export function ConversationItem({
       <button
         type="button"
         onClick={handleToggleStar}
-        aria-label={starred ? 'Remover favorito' : 'Marcar como favorito'}
+        aria-label={starred ? t('starRemove') : t('starAdd')}
         aria-pressed={starred}
         className={cn(
           'absolute right-2 top-2 z-10 inline-flex items-center justify-center rounded-md p-1 transition-all',
@@ -109,7 +111,7 @@ export function ConversationItem({
               hasUnread ? 'font-semibold text-foreground' : 'font-medium text-foreground/90',
             )}
           >
-            {item.contact_name ?? <span className="italic text-muted-foreground">sem nome</span>}
+            {item.contact_name ?? <span className="italic text-muted-foreground">{t('noName')}</span>}
           </span>
           <span className="shrink-0 text-[11px] text-muted-foreground">
             {formatRelativeTime(item.last_message_at)}
@@ -123,7 +125,7 @@ export function ConversationItem({
               hasUnread ? 'text-foreground/80' : 'text-muted-foreground',
             )}
           >
-            {preview ?? formatLastMessage(item) ?? item.ai_summary ?? 'Sem mensagens'}
+            {preview ?? formatLastMessage(item, t) ?? item.ai_summary ?? t('noMessages')}
           </span>
           {hasUnread && (
             <span className="inline-flex h-4 min-w-[16px] shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
@@ -147,9 +149,12 @@ export function ConversationItem({
  * e mostra "[mídia]" quando plain_text é null mas direction está setado
  * (mensagens de imagem/audio/video/documento).
  */
-function formatLastMessage(item: InboxItem): string | null {
+function formatLastMessage(
+  item: InboxItem,
+  t: (key: string) => string,
+): string | null {
   if (!item.last_message_direction) return null;
-  const text = item.last_message_text?.trim() ?? '[mídia]';
-  const prefix = item.last_message_direction === 'outbound' ? 'Você: ' : '';
+  const text = item.last_message_text?.trim() ?? t('mediaFallback');
+  const prefix = item.last_message_direction === 'outbound' ? t('youPrefix') : '';
   return prefix + text;
 }

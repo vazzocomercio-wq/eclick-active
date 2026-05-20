@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Loader2, Plus, Trash2, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -46,6 +47,7 @@ export function StageAutomationsSheet({
   stageName,
   onChanged,
 }: StageAutomationsSheetProps) {
+  const t = useTranslations('funis.automations');
   const [items, setItems] = useState<Automation[]>([]);
   const [loading, setLoading] = useState(false);
   const confirm = useConfirm();
@@ -59,7 +61,7 @@ export function StageAutomationsSheet({
       const list = await automationsApi.list({ stageId });
       setItems(list);
     } catch (err) {
-      toast.error('Falha ao carregar automações', { description: extractMessage(err) });
+      toast.error(t('loadFailed'), { description: extractMessage(err, t('unknownError')) });
     } finally {
       setLoading(false);
     }
@@ -79,26 +81,26 @@ export function StageAutomationsSheet({
       void reload();
       void onChanged?.();
     } catch (err) {
-      toast.error('Falha ao alterar', { description: extractMessage(err) });
+      toast.error(t('toggleFailed'), { description: extractMessage(err, t('unknownError')) });
     }
   }
 
   async function handleDelete(a: Automation) {
     const ok = await confirm({
-      title: `Excluir automação "${a.name}"?`,
-      description: 'Essa automação não vai mais executar pra esse stage.',
+      title: t('confirmDeleteTitle', { name: a.name }),
+      description: t('confirmDeleteDescription'),
       variant: 'destructive',
-      confirmLabel: 'Excluir',
+      confirmLabel: t('confirmDeleteLabel'),
       icon: Trash2,
     });
     if (!ok) return;
     try {
       await automationsApi.remove(a.id);
-      toast.success('Automação excluída');
+      toast.success(t('deleted'));
       void reload();
       void onChanged?.();
     } catch (err) {
-      toast.error('Falha ao excluir', { description: extractMessage(err) });
+      toast.error(t('deleteFailed'), { description: extractMessage(err, t('unknownError')) });
     }
   }
 
@@ -108,11 +110,13 @@ export function StageAutomationsSheet({
         <SheetHeader className="border-b border-border p-4">
           <SheetTitle className="flex items-center gap-2">
             <Zap className="h-4 w-4 text-primary" />
-            Automações do stage
+            {t('title')}
           </SheetTitle>
           <SheetDescription>
-            {stageName ? <strong>{stageName}</strong> : '—'} ·{' '}
-            {items.length} {items.length === 1 ? 'automação' : 'automações'}
+            {stageName ? <strong>{stageName}</strong> : t('subtitleStageFallback')} ·{' '}
+            {items.length === 1
+              ? t('subtitleOne', { count: items.length })
+              : t('subtitleMany', { count: items.length })}
           </SheetDescription>
         </SheetHeader>
 
@@ -125,8 +129,7 @@ export function StageAutomationsSheet({
             <>
               {items.length === 0 && !showCreate && (
                 <p className="py-6 text-center text-xs italic text-muted-foreground">
-                  Nenhuma automação neste stage. Crie a primeira pra reagir a eventos
-                  como entrada/saída de deals neste stage.
+                  {t('empty')}
                 </p>
               )}
 
@@ -163,7 +166,7 @@ export function StageAutomationsSheet({
                   onClick={() => setShowCreate(true)}
                 >
                   <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  Nova automação neste stage
+                  {t('newButton')}
                 </Button>
               )}
             </>
@@ -187,6 +190,7 @@ function AutomationRow({
   onToggle: () => void;
   onDelete: () => void;
 }) {
+  const t = useTranslations('funis.automations');
   return (
     <li
       className={cn(
@@ -197,15 +201,24 @@ function AutomationRow({
       <div className="flex flex-1 flex-col gap-0.5 min-w-0">
         <span className="truncate text-sm font-medium">{automation.name}</span>
         <span className="text-[10px] text-muted-foreground">
-          Trigger: {automation.trigger_type} · {automation.actions.length} ação(ões) ·{' '}
-          {automation.execution_count} execuções
+          {automation.actions.length === 1
+            ? t('rowMetaOneAction', {
+                trigger: automation.trigger_type,
+                actionCount: automation.actions.length,
+                execs: automation.execution_count,
+              })
+            : t('rowMetaMany', {
+                trigger: automation.trigger_type,
+                actionCount: automation.actions.length,
+                execs: automation.execution_count,
+              })}
         </span>
       </div>
       <div className="flex shrink-0 items-center gap-1">
         <button
           type="button"
           onClick={onToggle}
-          aria-label={automation.is_active ? 'Desativar' : 'Ativar'}
+          aria-label={automation.is_active ? t('rowDeactivate') : t('rowActivate')}
           className={cn(
             'inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors',
             automation.is_active ? 'bg-primary' : 'bg-muted',
@@ -221,7 +234,7 @@ function AutomationRow({
         <button
           type="button"
           onClick={onDelete}
-          aria-label="Excluir"
+          aria-label={t('rowDelete')}
           className="rounded-md p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
         >
           <Trash2 className="h-3.5 w-3.5" />
@@ -248,8 +261,9 @@ function CreateForm({
   onSaved: () => void | Promise<void>;
   onCancel: () => void;
 }) {
+  const t = useTranslations('funis.automations.form');
   const [name, setName] = useState('');
-  const [message, setMessage] = useState('Olá {{contato.nome}}, ');
+  const [message, setMessage] = useState(t('defaultMessage', { greetingContact: '{{contato.nome}}' }));
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -268,10 +282,10 @@ function CreateForm({
         is_active: true,
         stage_id: stageId,
       });
-      toast.success('Automação criada');
+      toast.success(t('created'));
       await onSaved();
     } catch (err) {
-      toast.error('Falha ao criar', { description: extractMessage(err) });
+      toast.error(t('createFailed'), { description: extractMessage(err, 'Error') });
     } finally {
       onSubmitting(false);
     }
@@ -283,15 +297,15 @@ function CreateForm({
       className="mt-3 flex flex-col gap-3 rounded-md border border-primary/30 bg-primary/5 p-3"
     >
       <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">
-        Nova automação · trigger: deal entrou neste stage
+        {t('kicker')}
       </span>
 
       <div className="flex flex-col gap-1">
-        <Label className="text-xs">Nome</Label>
+        <Label className="text-xs">{t('nameLabel')}</Label>
         <Input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Ex: Saudação ao receber novo lead"
+          placeholder={t('namePlaceholder')}
           required
           autoFocus
         />
@@ -299,9 +313,9 @@ function CreateForm({
 
       <div className="flex flex-col gap-1">
         <Label className="text-xs">
-          Mensagem a enviar
+          {t('messageLabel')}
           <span className="ml-1 font-normal text-muted-foreground">
-            — usa placeholders {'{{contato.nome}}'}, {'{{deal.titulo}}'}, etc.
+            {t('messageHint', { placeholderContact: '{{contato.nome}}', placeholderDeal: '{{deal.titulo}}' })}
           </span>
         </Label>
         <textarea
@@ -315,19 +329,19 @@ function CreateForm({
 
       <div className="flex justify-end gap-1.5">
         <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={creating}>
-          Cancelar
+          {t('cancel')}
         </Button>
         <Button type="submit" size="sm" disabled={creating || !name.trim() || !message.trim()}>
           {creating && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-          Criar
+          {t('create')}
         </Button>
       </div>
     </form>
   );
 }
 
-function extractMessage(err: unknown): string {
+function extractMessage(err: unknown, fallback: string): string {
   if (err instanceof ApiError) return `${err.status}: ${err.message}`;
   if (err instanceof Error) return err.message;
-  return 'Erro desconhecido';
+  return fallback;
 }

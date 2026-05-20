@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Plus, RefreshCw, UserCog } from 'lucide-react';
 import type { OrgMemberRole } from '@eclick-active/shared';
 import { Button } from '@/components/ui/button';
@@ -15,6 +16,7 @@ import { RoleBadge, StatusBadge } from '@/components/equipe/role-badge';
 import { cn } from '@/lib/utils';
 
 export default function EquipePage() {
+  const t = useTranslations('equipe.page');
   const [members, setMembers] = useState<MemberView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,12 +44,12 @@ export default function EquipePage() {
           ? `${err.status}: ${err.message}`
           : err instanceof Error
             ? err.message
-            : 'Erro ao carregar equipe',
+            : t('loadError'),
       );
     } finally {
       setLoading(false);
     }
-  }, [currentUserId]);
+  }, [currentUserId, t]);
 
   useEffect(() => {
     let supabase: ReturnType<typeof createClient>;
@@ -71,26 +73,24 @@ export default function EquipePage() {
         <div className="flex flex-col">
           <div className="flex items-center gap-2">
             <UserCog className="h-4 w-4 text-primary" />
-            <h1 className="text-lg font-semibold">Equipe</h1>
+            <h1 className="text-lg font-semibold">{t('title')}</h1>
             {!loading && (
               <span className="text-xs text-muted-foreground">
-                · {members.length} {members.length === 1 ? 'membro' : 'membros'}
+                · {t('memberCount', { count: members.length })}
               </span>
             )}
           </div>
-          <p className="text-xs text-muted-foreground">
-            Gerencie membros, papéis e permissões da organização.
-          </p>
+          <p className="text-xs text-muted-foreground">{t('subtitle')}</p>
         </div>
 
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => void reload()} disabled={loading}>
             <RefreshCw className={`mr-2 h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-            Atualizar
+            {t('refresh')}
           </Button>
           <Button size="sm" onClick={() => setInviteOpen(true)}>
             <Plus className="mr-2 h-3.5 w-3.5" />
-            Convidar membro
+            {t('inviteMember')}
           </Button>
         </div>
       </header>
@@ -150,7 +150,8 @@ function MemberRow({
   isSelf: boolean;
   onSelect: () => void;
 }) {
-  const displayName = member.display_name ?? member.email ?? 'Sem nome';
+  const t = useTranslations('equipe.page');
+  const displayName = member.display_name ?? member.email ?? t('noName');
 
   return (
     <button
@@ -172,7 +173,7 @@ function MemberRow({
           <span className="truncate text-sm font-medium">{displayName}</span>
           {isSelf && (
             <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-              Você
+              {t('you')}
             </span>
           )}
         </div>
@@ -188,8 +189,8 @@ function MemberRow({
         </div>
         <span className="text-[10px] text-muted-foreground">
           {member.last_seen_at
-            ? `Visto ${formatRelativeTime(member.last_seen_at)}`
-            : 'Nunca acessou'}
+            ? t('seen', { when: formatRelativeTime(member.last_seen_at) })
+            : t('neverSeen')}
         </span>
       </div>
     </button>
@@ -207,20 +208,19 @@ function SkeletonList() {
 }
 
 function EmptyState({ onInvite }: { onInvite: () => void }) {
+  const t = useTranslations('equipe.page');
   return (
     <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-card/50 p-12 text-center">
       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
         <UserCog className="h-6 w-6" />
       </div>
       <div className="flex flex-col gap-1">
-        <p className="text-sm font-medium">Time vazio</p>
-        <p className="text-xs text-muted-foreground">
-          Convide colegas para colaborar na operação.
-        </p>
+        <p className="text-sm font-medium">{t('emptyTitle')}</p>
+        <p className="text-xs text-muted-foreground">{t('emptySubtitle')}</p>
       </div>
       <Button size="sm" onClick={onInvite}>
         <Plus className="mr-2 h-3.5 w-3.5" />
-        Convidar primeiro membro
+        {t('inviteFirst')}
       </Button>
     </div>
   );

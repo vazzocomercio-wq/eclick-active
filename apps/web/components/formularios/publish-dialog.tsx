@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { QRCodeSVG } from 'qrcode.react';
 import { Check, Copy, Download, ExternalLink, Share2 } from 'lucide-react';
 import {
@@ -21,6 +22,7 @@ interface Props {
 }
 
 export function PublishDialog({ form, open, onOpenChange }: Props) {
+  const t = useTranslations('formularios.publishDialog');
   const url = useMemo(() => {
     if (typeof window === 'undefined') return `/f/${form.slug}`;
     return `${window.location.origin}/f/${form.slug}`;
@@ -65,10 +67,10 @@ export function PublishDialog({ form, open, onOpenChange }: Props) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Share2 className="h-4 w-4 text-primary" />
-            Compartilhar formulário
+            {t('title')}
           </DialogTitle>
           <DialogDescription>
-            Escolha como divulgar &ldquo;{form.name}&rdquo;.
+            {t('description', { name: form.name })}
           </DialogDescription>
         </DialogHeader>
 
@@ -78,9 +80,9 @@ export function PublishDialog({ form, open, onOpenChange }: Props) {
           className="w-full"
         >
           <TabsList>
-            <TabsTrigger value="link">Link</TabsTrigger>
-            <TabsTrigger value="embed">Embed</TabsTrigger>
-            <TabsTrigger value="qr">QR Code</TabsTrigger>
+            <TabsTrigger value="link">{t('tabs.link')}</TabsTrigger>
+            <TabsTrigger value="embed">{t('tabs.embed')}</TabsTrigger>
+            <TabsTrigger value="qr">{t('tabs.qr')}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="link" className="mt-4 space-y-3">
@@ -100,12 +102,12 @@ export function PublishDialog({ form, open, onOpenChange }: Props) {
                 {copiedTab === 'link' ? (
                   <>
                     <Check className="h-3.5 w-3.5" />
-                    Copiado
+                    {t('copied')}
                   </>
                 ) : (
                   <>
                     <Copy className="h-3.5 w-3.5" />
-                    Copiar
+                    {t('copy')}
                   </>
                 )}
               </Button>
@@ -116,8 +118,7 @@ export function PublishDialog({ form, open, onOpenChange }: Props) {
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Cole esse link no WhatsApp, Instagram bio, anúncios, etc. Cada
-              clique vira um lead automático.
+              {t('linkHint')}
             </p>
           </TabsContent>
 
@@ -130,7 +131,7 @@ export function PublishDialog({ form, open, onOpenChange }: Props) {
             />
             <div className="flex items-center justify-between">
               <p className="text-xs text-muted-foreground">
-                Cole esse código no seu site (HTML, WordPress, Wix, etc).
+                {t('embedHint')}
               </p>
               <Button
                 variant="outline"
@@ -140,12 +141,12 @@ export function PublishDialog({ form, open, onOpenChange }: Props) {
                 {copiedTab === 'embed' ? (
                   <>
                     <Check className="h-3.5 w-3.5" />
-                    Copiado
+                    {t('copied')}
                   </>
                 ) : (
                   <>
                     <Copy className="h-3.5 w-3.5" />
-                    Copiar
+                    {t('copy')}
                   </>
                 )}
               </Button>
@@ -165,11 +166,10 @@ export function PublishDialog({ form, open, onOpenChange }: Props) {
               </div>
               <Button variant="outline" size="sm" onClick={downloadQr}>
                 <Download className="h-3.5 w-3.5" />
-                Baixar SVG
+                {t('downloadSvg')}
               </Button>
               <p className="text-center text-xs text-muted-foreground">
-                Imprima em flyers, cartões de visita ou totens. Quem escanear
-                cai direto na página do formulário.
+                {t('qrHint')}
               </p>
             </div>
           </TabsContent>

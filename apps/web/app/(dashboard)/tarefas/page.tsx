@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { CheckSquare, ListTodo, Plus, RefreshCw } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import type { TaskPriority, TaskType } from '@eclick-active/shared';
 import { Button } from '@/components/ui/button';
 import { useTasks } from '@/hooks/use-tasks';
@@ -11,6 +12,7 @@ import { TaskFilters, type StatusFilter } from '@/components/tarefas/task-filter
 import { TaskRowItem } from '@/components/tarefas/task-row';
 
 export default function TarefasPage() {
+  const t = useTranslations('tarefas.page');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | null>(null);
   const [typeFilter, setTypeFilter] = useState<TaskType | null>(null);
@@ -43,26 +45,26 @@ export default function TarefasPage() {
         <div className="flex flex-col">
           <div className="flex items-center gap-2">
             <ListTodo className="h-4 w-4 text-primary" />
-            <h1 className="text-lg font-semibold">Tarefas</h1>
+            <h1 className="text-lg font-semibold">{t('title')}</h1>
             {!loading && (
               <span className="text-xs text-muted-foreground">
-                · {total} {total === 1 ? 'tarefa' : 'tarefas'}
+                {t('count', { count: total })}
               </span>
             )}
           </div>
           <p className="text-xs text-muted-foreground">
-            Suas atividades e follow-ups, criados por você ou sugeridos pela IA.
+            {t('subtitle')}
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
             <RefreshCw className={`mr-2 h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-            Atualizar
+            {t('refresh')}
           </Button>
           <Button size="sm" onClick={() => setNewDialogOpen(true)}>
             <Plus className="mr-2 h-3.5 w-3.5" />
-            Nova tarefa
+            {t('newTask')}
           </Button>
         </div>
       </header>
@@ -130,20 +132,21 @@ function SkeletonList() {
 }
 
 function EmptyState({ onCreate }: { onCreate: () => void }) {
+  const t = useTranslations('tarefas.page');
   return (
     <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-card/50 p-12 text-center">
       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
         <CheckSquare className="h-6 w-6" />
       </div>
       <div className="flex flex-col gap-1">
-        <p className="text-sm font-medium">Nenhuma tarefa por aqui</p>
+        <p className="text-sm font-medium">{t('emptyTitle')}</p>
         <p className="text-xs text-muted-foreground">
-          Crie tarefas para acompanhar follow-ups, ligações e propostas.
+          {t('emptySubtitle')}
         </p>
       </div>
       <Button size="sm" onClick={onCreate}>
         <Plus className="mr-2 h-3.5 w-3.5" />
-        Criar primeira tarefa
+        {t('createFirst')}
       </Button>
     </div>
   );

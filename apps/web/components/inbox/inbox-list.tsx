@@ -1,6 +1,7 @@
 'use client';
 
 import { Inbox, MessageSquarePlus } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import type { InboxItem } from '@eclick-active/shared';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -33,13 +34,14 @@ export function InboxList({
   onSearchChange,
   onStartNew,
 }: InboxListProps) {
+  const t = useTranslations('inbox.list');
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-start justify-between gap-2 border-b border-border px-4 py-3">
         <div className="flex-1 min-w-0">
-          <h2 className="text-sm font-semibold tracking-tight">Conversas</h2>
+          <h2 className="text-sm font-semibold tracking-tight">{t('title')}</h2>
           <p className="text-xs text-muted-foreground">
-            {loading ? 'Carregando...' : `${items.length} conversas`}
+            {loading ? t('loading') : t('count', { count: items.length })}
           </p>
         </div>
         <Button
@@ -47,10 +49,10 @@ export function InboxList({
           size="sm"
           onClick={onStartNew}
           className="h-8 shrink-0 gap-1.5"
-          title="Iniciar nova conversa"
+          title={t('newButtonTitle')}
         >
           <MessageSquarePlus className="h-3.5 w-3.5" />
-          <span className="text-xs">Nova</span>
+          <span className="text-xs">{t('newButton')}</span>
         </Button>
       </div>
 
@@ -98,12 +100,13 @@ function SkeletonList() {
 }
 
 function EmptyInbox() {
+  const t = useTranslations('inbox.list');
   return (
     <div className="flex flex-col items-center justify-center gap-2 py-16 px-4 text-center">
       <Inbox className="h-8 w-8 text-muted-foreground" />
-      <p className="text-sm font-medium">Nenhuma conversa ainda</p>
+      <p className="text-sm font-medium">{t('emptyTitle')}</p>
       <p className="text-xs text-muted-foreground">
-        Quando uma mensagem chegar via canal, ela aparece aqui.
+        {t('emptySubtitle')}
       </p>
     </div>
   );

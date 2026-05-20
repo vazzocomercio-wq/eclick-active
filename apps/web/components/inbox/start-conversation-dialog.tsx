@@ -16,6 +16,7 @@ import {
   Stethoscope,
   XCircle,
 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import type { Contact } from '@eclick-active/shared';
 import {
@@ -42,47 +43,6 @@ import {
 } from '@/lib/api/conversations';
 import { ApiError } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
-
-/** Templates de mensagens iniciais — fluem acima do textarea quando vazio.
- *  Click cola no textarea pro user editar antes de enviar. */
-const FIRST_MESSAGE_SUGGESTIONS: PromptSuggestion[] = [
-  {
-    text: 'Olá! Aqui é da [Sua empresa]. Em que posso te ajudar?',
-    label: 'Saudação inicial',
-    icon: Hand,
-    accent: '#00E5FF',
-  },
-  {
-    text: 'Olá! Vi que você se interessou. Quer agendar uma conversa?',
-    label: 'Follow-up de interesse',
-    icon: Sparkles,
-    accent: '#a78bfa',
-  },
-  {
-    text: 'Oi! Tem disponibilidade esta semana pra um agendamento?',
-    label: 'Propor agendamento',
-    icon: Calendar,
-    accent: '#34d399',
-  },
-  {
-    text: 'Olá! Sou [seu nome] da [empresa]. Posso te apresentar nossas opções?',
-    label: 'Apresentação',
-    icon: MessageSquare,
-    accent: '#67e8f9',
-  },
-  {
-    text: 'Oi! Você está precisando de alguma consulta ou orientação?',
-    label: 'Consulta',
-    icon: Stethoscope,
-    accent: '#f472b6',
-  },
-  {
-    text: 'Olá! Posso te ligar agora pra entender melhor sua necessidade?',
-    label: 'Pedir ligação',
-    icon: PhoneCall,
-    accent: '#fcd34d',
-  },
-];
 
 interface StartConversationDialogProps {
   open: boolean;
@@ -119,6 +79,20 @@ export function StartConversationDialog({
   onStarted,
   initialContactId,
 }: StartConversationDialogProps) {
+  const t = useTranslations('inbox.startConversation');
+
+  const FIRST_MESSAGE_SUGGESTIONS = useMemo<PromptSuggestion[]>(
+    () => [
+      { text: t('firstMessageSuggestions.greetingText'), label: t('firstMessageSuggestions.greetingLabel'), icon: Hand, accent: '#00E5FF' },
+      { text: t('firstMessageSuggestions.followUpText'), label: t('firstMessageSuggestions.followUpLabel'), icon: Sparkles, accent: '#a78bfa' },
+      { text: t('firstMessageSuggestions.scheduleText'), label: t('firstMessageSuggestions.scheduleLabel'), icon: Calendar, accent: '#34d399' },
+      { text: t('firstMessageSuggestions.presentText'), label: t('firstMessageSuggestions.presentLabel'), icon: MessageSquare, accent: '#67e8f9' },
+      { text: t('firstMessageSuggestions.consultText'), label: t('firstMessageSuggestions.consultLabel'), icon: Stethoscope, accent: '#f472b6' },
+      { text: t('firstMessageSuggestions.callText'), label: t('firstMessageSuggestions.callLabel'), icon: PhoneCall, accent: '#fcd34d' },
+    ],
+    [t],
+  );
+
   const [searchQ, setSearchQ] = useState('');
   const [searchResults, setSearchResults] = useState<Contact[]>([]);
   const [searching, setSearching] = useState(false);
@@ -161,7 +135,7 @@ export function StartConversationDialog({
       })
       .catch(() => {
         if (!cancelled) {
-          toast.error('Falha ao carregar contato');
+          toast.error(t('loadContactFailed'));
         }
       });
     return () => {
@@ -258,24 +232,26 @@ export function StartConversationDialog({
         message: message.trim(),
       });
       if (res.reused) {
-        toast.info('Conversa existente — abrindo', {
+        toast.info(t('conversationReused'), {
           description: selectedContact.name ?? selectedContact.phone ?? '',
         });
       } else {
         toast.success(
-          `Conversa iniciada com ${selectedContact.name ?? selectedContact.phone ?? 'contato'}`,
+          t('conversationCreated', {
+            name: selectedContact.name ?? selectedContact.phone ?? t('fallbackName'),
+          }),
         );
       }
       // Se a mensagem falhou no envio, alerta mas não bloqueia
       if (res.message.status === 'failed') {
-        toast.warning('Mensagem falhou no envio', {
-          description: res.message.error_message ?? 'Verifique o canal e tente reenviar pelo chat.',
+        toast.warning(t('messageFailed'), {
+          description: res.message.error_message ?? t('messageFailedDefault'),
         });
       }
       onStarted(res);
       onOpenChange(false);
     } catch (err) {
-      toast.error('Falha ao iniciar conversa', {
+      toast.error(t('startFailed'), {
         description: err instanceof ApiError ? err.message : undefined,
       });
     } finally {
@@ -291,10 +267,10 @@ export function StartConversationDialog({
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500/30 to-blue-500/30 text-cyan-300">
               <MessageSquarePlus className="h-4 w-4" />
             </span>
-            Nova conversa
+            {t('title')}
           </DialogTitle>
           <DialogDescription>
-            Pesquise um contato, escolha o canal e escreva a primeira mensagem.
+            {t('description')}
           </DialogDescription>
         </DialogHeader>
 
@@ -303,7 +279,7 @@ export function StartConversationDialog({
           {!selectedContact ? (
             <div className="flex flex-col gap-2">
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                Contato
+                {t('contactLabel')}
               </Label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -311,7 +287,7 @@ export function StartConversationDialog({
                   ref={inputRef}
                   value={searchQ}
                   onChange={(e) => setSearchQ(e.target.value)}
-                  placeholder="Busque por nome, telefone ou e-mail"
+                  placeholder={t('contactSearchPlaceholder')}
                   className="pl-9"
                   autoComplete="off"
                 />
@@ -324,12 +300,12 @@ export function StartConversationDialog({
                 )}
                 {!searching && searchResults.length === 0 && searchQ.trim().length >= 2 && (
                   <div className="px-3 py-6 text-center text-xs text-muted-foreground">
-                    Nenhum contato encontrado
+                    {t('noContactFound')}
                   </div>
                 )}
                 {!searching && searchResults.length === 0 && searchQ.trim().length < 2 && (
                   <div className="px-3 py-6 text-center text-xs text-muted-foreground">
-                    Digite pelo menos 2 caracteres
+                    {t('typeMinChars')}
                   </div>
                 )}
                 {searchResults.map((c) => (
@@ -342,7 +318,7 @@ export function StartConversationDialog({
                     <Avatar contact={c} />
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate">
-                        {c.name ?? 'Sem nome'}
+                        {c.name ?? t('noName')}
                       </div>
                       <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                         {c.phone && (
@@ -373,21 +349,20 @@ export function StartConversationDialog({
           {selectedContact && (
             <div className="flex flex-col gap-2">
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                Canal
+                {t('channelLabel')}
               </Label>
               {channelsLoading ? (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Loader2 className="h-3 w-3 animate-spin" />
-                  Carregando canais…
+                  {t('loadingChannels')}
                 </div>
               ) : compatible.length === 0 ? (
                 <div className="rounded-md border border-dashed border-border px-3 py-3 text-xs text-muted-foreground">
-                  Nenhum canal ativo. Conecte um canal em Configurações.
+                  {t('noActiveChannel')}
                 </div>
               ) : compatible.every((c) => c.reason !== 'ok') ? (
                 <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-                  Este contato não tem identificador para nenhum canal ativo.
-                  Adicione telefone ou e-mail antes de iniciar conversa.
+                  {t('noIdentifier')}
                 </div>
               ) : (
                 <div className="grid gap-1.5">
@@ -412,7 +387,7 @@ export function StartConversationDialog({
                         <span className="flex-1 font-medium">{channel.name}</span>
                         {!ok && (
                           <span className="text-[10px] text-muted-foreground">
-                            {reasonLabel(reason)}
+                            {t(`reasons.${reason}`)}
                           </span>
                         )}
                       </button>
@@ -430,7 +405,7 @@ export function StartConversationDialog({
                 htmlFor="start-msg"
                 className="text-xs uppercase tracking-wider text-muted-foreground"
               >
-                Primeira mensagem
+                {t('messageLabel')}
               </Label>
               {!message ? (
                 <AnimatedPromptSuggestions
@@ -444,7 +419,7 @@ export function StartConversationDialog({
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     rows={4}
-                    placeholder="Escreva a mensagem que vai abrir essa conversa…"
+                    placeholder={t('messagePlaceholder')}
                     className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-y"
                     maxLength={4096}
                   />
@@ -461,8 +436,8 @@ export function StartConversationDialog({
                 />
               )}
               <div className="flex justify-between text-[11px] text-muted-foreground">
-                <span>{message.length} / 4096</span>
-                <span>Enter manda nova linha · Ctrl+Enter envia</span>
+                <span>{t('messageCounter', { length: message.length, max: 4096 })}</span>
+                <span>{t('shortcutHint')}</span>
               </div>
             </div>
           )}
@@ -475,7 +450,7 @@ export function StartConversationDialog({
               onClick={() => onOpenChange(false)}
               disabled={submitting}
             >
-              Cancelar
+              {t('cancel')}
             </Button>
             <Button
               type="submit"
@@ -491,7 +466,7 @@ export function StartConversationDialog({
               ) : (
                 <Send className="mr-2 h-4 w-4" />
               )}
-              Iniciar conversa
+              {t('start')}
             </Button>
           </div>
         </form>
@@ -503,21 +478,6 @@ export function StartConversationDialog({
 // ──────────────────────────────────────────────────────────
 // Helpers
 // ──────────────────────────────────────────────────────────
-
-function reasonLabel(r: CompatibleChannel['reason']): string {
-  switch (r) {
-    case 'no_phone':
-      return 'sem telefone';
-    case 'no_email':
-      return 'sem e-mail';
-    case 'no_ig':
-      return 'sem perfil IG';
-    case 'unverified_whatsapp':
-      return 'número não é WhatsApp';
-    default:
-      return '';
-  }
-}
 
 function Avatar({ contact }: { contact: Contact }) {
   const url = contact.avatar_url ?? contact.whatsapp_profile_pic_url ?? null;
@@ -548,13 +508,14 @@ function Avatar({ contact }: { contact: Contact }) {
 }
 
 function WhatsAppDot({ verified }: { verified: boolean | null }) {
+  const t = useTranslations('inbox.startConversation');
   if (verified === true) {
-    return <CheckCircle2 className="h-3 w-3 text-emerald-400" aria-label="WhatsApp verificado" />;
+    return <CheckCircle2 className="h-3 w-3 text-emerald-400" aria-label={t('whatsappVerified')} />;
   }
   if (verified === false) {
-    return <XCircle className="h-3 w-3 text-rose-400" aria-label="Não é WhatsApp" />;
+    return <XCircle className="h-3 w-3 text-rose-400" aria-label={t('notWhatsapp')} />;
   }
-  return <HelpCircle className="h-3 w-3 text-muted-foreground" aria-label="Não verificado" />;
+  return <HelpCircle className="h-3 w-3 text-muted-foreground" aria-label={t('notVerified')} />;
 }
 
 function SelectedContactCard({
@@ -566,11 +527,12 @@ function SelectedContactCard({
   onClear: () => void;
   onContactUpdate: (next: Contact) => void;
 }) {
+  const t = useTranslations('inbox.startConversation');
   return (
     <div className="flex items-start gap-3 rounded-md border border-border bg-background/40 p-3">
       <Avatar contact={contact} />
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-semibold">{contact.name ?? 'Sem nome'}</div>
+        <div className="text-sm font-semibold">{contact.name ?? t('noName')}</div>
         {contact.phone && (
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
             <span>{contact.phone}</span>
@@ -606,7 +568,7 @@ function SelectedContactCard({
         )}
       </div>
       <Button type="button" variant="ghost" size="sm" onClick={onClear}>
-        Trocar
+        {t('swap')}
       </Button>
     </div>
   );

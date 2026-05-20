@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   AlertTriangle,
   Lightbulb,
@@ -43,6 +44,7 @@ export function FunnelAnalysisDialog({
   onOpenChange,
   pipelineId,
 }: FunnelAnalysisDialogProps) {
+  const t = useTranslations('funis.deal.analysis');
   const [state, setState] = useState<State>({ kind: 'idle' });
 
   // Ao abrir, tenta carregar o cache primeiro
@@ -64,9 +66,10 @@ export function FunnelAnalysisDialog({
       .catch((err) => {
         setState({
           kind: 'error',
-          message: err instanceof ApiError ? err.message : 'Erro ao buscar análise',
+          message: err instanceof ApiError ? err.message : t('errors.fetch'),
         });
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, pipelineId]);
 
   async function runAnalysis() {
@@ -78,7 +81,7 @@ export function FunnelAnalysisDialog({
     } catch (err) {
       setState({
         kind: 'error',
-        message: err instanceof ApiError ? err.message : 'Erro ao gerar análise',
+        message: err instanceof ApiError ? err.message : t('errors.generate'),
       });
     }
   }
@@ -89,11 +92,10 @@ export function FunnelAnalysisDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-primary" />
-            Análise de Funil
+            {t('title')}
           </DialogTitle>
           <DialogDescription>
-            Insights gerados pela IA com base no estado atual do pipeline e fechamentos
-            dos últimos 30 dias.
+            {t('description')}
           </DialogDescription>
         </DialogHeader>
 
@@ -104,8 +106,8 @@ export function FunnelAnalysisDialog({
             <EmptyView
               onAnalyze={runAnalysis}
               busy={false}
-              cta="Gerar primeira análise"
-              note="Nenhuma análise foi gerada ainda."
+              cta={t('emptyCta')}
+              note={t('emptyNote')}
             />
           )}
 
@@ -116,7 +118,7 @@ export function FunnelAnalysisDialog({
               <AlertTriangle className="h-8 w-8 text-destructive" />
               <p className="text-sm text-destructive">{state.message}</p>
               <Button onClick={runAnalysis} variant="outline">
-                Tentar novamente
+                {t('retry')}
               </Button>
             </div>
           )}
@@ -148,31 +150,32 @@ function ResultView({
   onRefresh: () => void;
   refreshing: boolean;
 }) {
+  const t = useTranslations('funis.deal.analysis');
   return (
     <div className="flex flex-col gap-4">
       {generatedAt && (
         <div className="flex items-center justify-between rounded-md border border-border bg-card/50 px-3 py-2 text-xs text-muted-foreground">
-          <span>Gerada {formatRelativeTime(generatedAt)}</span>
+          <span>{t('generatedAt', { time: formatRelativeTime(generatedAt) })}</span>
           <Button variant="ghost" size="sm" onClick={onRefresh} disabled={refreshing}>
             <RefreshCw className={cn('mr-1.5 h-3.5 w-3.5', refreshing && 'animate-spin')} />
-            Atualizar análise
+            {t('refresh')}
           </Button>
         </div>
       )}
 
       {/* Big numbers */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <BigNumber label="Total no funil" value={formatBRL(analysis.total_pipeline_value)} />
-        <BigNumber label="Ponderado" value={formatBRL(analysis.weighted_value)} accent />
+        <BigNumber label={t('totalLabel')} value={formatBRL(analysis.total_pipeline_value)} />
+        <BigNumber label={t('weightedLabel')} value={formatBRL(analysis.weighted_value)} accent />
         <BigNumber
-          label="Conversão"
+          label={t('conversionLabel')}
           value={`${(analysis.conversion_rate * 100).toFixed(1)}%`}
         />
         <BigNumber
-          label="Ciclo médio"
+          label={t('cycleLabel')}
           value={
             analysis.avg_cycle_days > 0
-              ? `${analysis.avg_cycle_days.toFixed(1)} dias`
+              ? t('cycleSuffix', { days: analysis.avg_cycle_days.toFixed(1) })
               : '—'
           }
         />
@@ -183,7 +186,7 @@ function ResultView({
         <div className="rounded-lg border border-red-500/40 bg-red-500/5 p-4">
           <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-red-500">
             <AlertTriangle className="h-4 w-4" />
-            Gargalo identificado: {analysis.bottleneck_stage}
+            {t('bottleneck', { stage: analysis.bottleneck_stage })}
           </div>
           {analysis.bottleneck_reason && (
             <p className="text-sm text-foreground/80">{analysis.bottleneck_reason}</p>
@@ -193,7 +196,7 @@ function ResultView({
 
       {/* Insights */}
       {analysis.insights.length > 0 && (
-        <Section icon={Lightbulb} iconColor="text-yellow-500" title="Insights">
+        <Section icon={Lightbulb} iconColor="text-yellow-500" title={t('insightsTitle')}>
           {analysis.insights.map((line, i) => (
             <li key={i} className="flex items-start gap-2 text-sm">
               <span className="mt-1.5 inline-block h-1 w-1 shrink-0 rounded-full bg-yellow-500" />
@@ -205,7 +208,7 @@ function ResultView({
 
       {/* Recommendations */}
       {analysis.recommendations.length > 0 && (
-        <Section icon={Target} iconColor="text-primary" title="Recomendações">
+        <Section icon={Target} iconColor="text-primary" title={t('recommendationsTitle')}>
           {analysis.recommendations.map((line, i) => (
             <li key={i} className="flex items-start gap-2 text-sm">
               <span className="mt-1.5 inline-block h-1 w-1 shrink-0 rounded-full bg-primary" />
@@ -302,16 +305,16 @@ function EmptyView({
 }
 
 function AnalyzingView() {
+  const t = useTranslations('funis.deal.analysis');
   return (
     <div className="flex flex-col items-center gap-3 py-12 text-center">
       <div className="relative">
         <Sparkles className="h-8 w-8 text-primary" />
         <Loader2 className="absolute inset-0 h-8 w-8 animate-spin text-primary/30" />
       </div>
-      <p className="text-sm font-medium">Analisando funil...</p>
+      <p className="text-sm font-medium">{t('analyzing')}</p>
       <p className="max-w-xs text-xs text-muted-foreground">
-        A IA está examinando os deals, fechamentos recentes e identificando gargalos.
-        Pode levar 5-15 segundos.
+        {t('analyzingHint')}
       </p>
     </div>
   );

@@ -32,6 +32,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { useTranslations } from 'next-intl';
 import { usePathname } from 'next/navigation';
 import {
   AlertCircle,
@@ -89,6 +90,7 @@ const STORAGE_ENABLED = 'eclick.copilot.enabled';
 // ──────────────────────────────────────────────────────────
 
 export default function FloatingCopilot() {
+  const t = useTranslations('copilot.floating');
   const pathname = usePathname() ?? '/';
   const [enabled, setEnabled] = useState(true);
   const [open, setOpen] = useState(false);
@@ -215,7 +217,7 @@ export default function FloatingCopilot() {
         const msg =
           err instanceof Error
             ? err.message
-            : 'Falha ao falar com o Copiloto';
+            : t('errorTalking');
         setTurns((prev) =>
           prev.map((t) =>
             t.id === pendingTurn.id
@@ -282,18 +284,19 @@ export default function FloatingCopilot() {
   }, []);
 
   // ── chips contextuais ──
+  const baseSuggestions = useBaseSuggestions();
   const suggestions = useMemo<PromptSuggestion[]>(() => {
     const routeChips: PromptSuggestion[] = (routeCtx?.entries ?? [])
       .slice(0, 6)
       .map((e) => ({
-        text: `Me explica "${e.title}"`,
+        text: t('explain', { title: e.title }),
         label: e.title.length > 22 ? e.title.slice(0, 20) + '…' : e.title,
         icon: Map,
         accent: '#00E5FF',
       }));
 
-    return [...routeChips, ...BASE_SUGGESTIONS];
-  }, [routeCtx]);
+    return [...routeChips, ...baseSuggestions];
+  }, [routeCtx, t, baseSuggestions]);
 
   if (!enabled) {
     return null;
@@ -307,7 +310,7 @@ export default function FloatingCopilot() {
           type="button"
           onClick={() => setOpen(true)}
           className="group fixed bottom-5 right-5 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg shadow-cyan-500/30 transition-all hover:scale-105 hover:shadow-cyan-500/50"
-          aria-label="Abrir Copiloto IA (Cmd/Ctrl+K)"
+          aria-label={t('openAria')}
         >
           {/* Pulse dot */}
           <span className="absolute -right-0.5 -top-0.5 flex h-3 w-3">
@@ -332,7 +335,7 @@ export default function FloatingCopilot() {
                   <Brain className="h-4 w-4 text-white" />
                 </span>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-sm font-semibold">Copiloto IA</span>
+                  <span className="text-sm font-semibold">{t('title')}</span>
                   <span className="rounded-md border border-cyan-500/30 bg-cyan-500/10 px-1.5 py-0 text-[9px] uppercase tracking-wider text-cyan-300">
                     v1
                   </span>
@@ -343,7 +346,7 @@ export default function FloatingCopilot() {
                   <button
                     type="button"
                     onClick={clearChat}
-                    title="Limpar conversa"
+                    title={t('clearChat')}
                     className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -352,7 +355,7 @@ export default function FloatingCopilot() {
                 <button
                   type="button"
                   onClick={() => setEnabledPersist(false)}
-                  title="Desativar Copiloto"
+                  title={t('disable')}
                   className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
                 >
                   <Power className="h-4 w-4" />
@@ -360,7 +363,7 @@ export default function FloatingCopilot() {
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
-                  title="Fechar (Esc)"
+                  title={t('close')}
                   className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
                 >
                   <X className="h-4 w-4" />
@@ -409,7 +412,7 @@ export default function FloatingCopilot() {
                     }
                   }}
                   rows={1}
-                  placeholder="Pergunte sobre essa tela…"
+                  placeholder={t('inputPlaceholder')}
                   className="flex-1 resize-none rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30"
                   disabled={busy}
                 />
@@ -418,7 +421,7 @@ export default function FloatingCopilot() {
                   onClick={() => void ask(input)}
                   disabled={busy || !input.trim()}
                   className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-cyan-500 text-white transition-colors hover:bg-cyan-400 disabled:opacity-40"
-                  aria-label="Enviar"
+                  aria-label={t('send')}
                 >
                   {busy ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -429,7 +432,12 @@ export default function FloatingCopilot() {
               </div>
               <div className="mt-1.5 flex items-center justify-between text-[10px] text-muted-foreground">
                 <span>
-                  Em <code className="rounded bg-accent/40 px-1">{pathname}</code>
+                  {t.rich('atPath', {
+                    pathname,
+                    code: (chunks) => (
+                      <code className="rounded bg-accent/40 px-1">{chunks}</code>
+                    ),
+                  })}
                 </span>
                 <span>
                   <kbd className="rounded border border-border bg-accent/40 px-1">
@@ -453,62 +461,35 @@ export default function FloatingCopilot() {
 // Empty state (carrossel + fallback noMatch)
 // ──────────────────────────────────────────────────────────
 
-const BASE_SUGGESTIONS: PromptSuggestion[] = [
-  {
-    text: 'O que eu faço nesta tela?',
-    label: 'O que faço aqui?',
-    icon: HelpCircle,
-    accent: '#00E5FF',
-  },
-  {
-    text: 'Como configurar WhatsApp aqui?',
-    label: 'Setup WhatsApp',
-    icon: MessageCircle,
-    accent: '#22c55e',
-  },
-  {
-    text: 'Quais erros comuns nesta tela?',
-    label: 'Erros comuns',
-    icon: AlertCircle,
-    accent: '#ef4444',
-  },
-  {
-    text: 'Boas práticas de automação',
-    label: 'Boas práticas',
-    icon: Lightbulb,
-    accent: '#f59e0b',
-  },
-  {
-    text: 'Me dá um passo a passo',
-    label: 'Passo a passo',
-    icon: BookOpen,
-    accent: '#a855f7',
-  },
-  {
-    text: 'Atalhos úteis',
-    label: 'Atalhos',
-    icon: Zap,
-    accent: '#00E5FF',
-  },
-  {
-    text: 'Como começar rápido?',
-    label: 'Início rápido',
-    icon: Rocket,
-    accent: '#22c55e',
-  },
-  {
-    text: 'Configs importantes',
-    label: 'Configurações',
-    icon: Wrench,
-    accent: '#f59e0b',
-  },
-  {
-    text: 'Resume o que dá pra fazer aqui',
-    label: 'Resumo da tela',
-    icon: Sparkles,
-    accent: '#00E5FF',
-  },
+const BASE_SUGGESTION_VISUALS: Array<{
+  key: string;
+  icon: PromptSuggestion['icon'];
+  accent: string;
+}> = [
+  { key: 'whatIDoHere', icon: HelpCircle, accent: '#00E5FF' },
+  { key: 'whatsappSetup', icon: MessageCircle, accent: '#22c55e' },
+  { key: 'commonErrors', icon: AlertCircle, accent: '#ef4444' },
+  { key: 'bestPractices', icon: Lightbulb, accent: '#f59e0b' },
+  { key: 'stepByStep', icon: BookOpen, accent: '#a855f7' },
+  { key: 'shortcuts', icon: Zap, accent: '#00E5FF' },
+  { key: 'quickStart', icon: Rocket, accent: '#22c55e' },
+  { key: 'importantConfigs', icon: Wrench, accent: '#f59e0b' },
+  { key: 'screenSummary', icon: Sparkles, accent: '#00E5FF' },
 ];
+
+function useBaseSuggestions(): PromptSuggestion[] {
+  const t = useTranslations('copilot.baseSuggestions');
+  return useMemo(
+    () =>
+      BASE_SUGGESTION_VISUALS.map((v) => ({
+        text: t(`${v.key}.text` as `${string}.text`),
+        label: t(`${v.key}.label` as `${string}.label`),
+        icon: v.icon,
+        accent: v.accent,
+      })),
+    [t],
+  );
+}
 
 function EmptyState({
   routeCtx,
@@ -525,13 +506,14 @@ function EmptyState({
   showAllKb: boolean;
   allKb: Record<string, KbEntry[]> | null;
 }) {
+  const t = useTranslations('copilot.floating');
   const hasMatch = (routeCtx?.entries.length ?? 0) > 0;
 
   if (showAllKb && allKb) {
     return (
       <div className="space-y-3">
         <p className="text-[11px] text-muted-foreground">
-          Todos os tópicos da KB ({Object.values(allKb).flat().length}):
+          {t('allKbTopics', { count: Object.values(allKb).flat().length })}
         </p>
         {Object.entries(allKb).map(([category, entries]) => (
           <div key={category}>
@@ -543,7 +525,7 @@ function EmptyState({
                 <li key={e.title}>
                   <button
                     type="button"
-                    onClick={() => onAsk(`Me explica "${e.title}"`)}
+                    onClick={() => onAsk(t('explain', { title: e.title }))}
                     className="group flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
                   >
                     <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground group-hover:text-cyan-400" />
@@ -561,11 +543,11 @@ function EmptyState({
   return (
     <div className="space-y-3">
       <div className="text-center">
-        <h3 className="text-sm font-semibold">Olá! Como posso ajudar?</h3>
+        <h3 className="text-sm font-semibold">{t('greeting')}</h3>
         <p className="mt-0.5 text-[11px] text-muted-foreground">
           {hasMatch
-            ? `${routeCtx!.entries.length} tópico(s) sobre essa tela.`
-            : 'Sem tópicos específicos pra esta tela.'}
+            ? t('topicsForScreen', { count: routeCtx!.entries.length })
+            : t('noTopicsForScreen')}
         </p>
       </div>
 
@@ -578,21 +560,19 @@ function EmptyState({
       >
         <div className="flex items-center justify-center gap-1.5 pt-1 text-[10px] text-zinc-500">
           <ArrowDown className="h-2.5 w-2.5 text-cyan-400/60" />
-          <span>ou pergunte qualquer coisa abaixo</span>
+          <span>{t('orAskBelow')}</span>
         </div>
       </AnimatedPromptSuggestions>
 
       {!hasMatch && (
         <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5">
-          <p className="mb-1.5 text-xs text-amber-200">
-            Esta tela ainda não tem entries dedicadas na minha KB.
-          </p>
+          <p className="mb-1.5 text-xs text-amber-200">{t('noEntriesYet')}</p>
           <button
             type="button"
             onClick={onShowAll}
             className="flex items-center gap-1 text-[11px] font-medium text-amber-300 hover:text-amber-100"
           >
-            Ver todos os tópicos disponíveis
+            {t('seeAllTopics')}
             <ChevronRight className="h-3 w-3" />
           </button>
         </div>
@@ -612,6 +592,7 @@ function ChatTurnView({
   turn: UiTurn;
   onFeedback: (turn: UiTurn, rating: 'up' | 'down') => void;
 }) {
+  const t = useTranslations('copilot.floating');
   const [copied, setCopied] = useState(false);
 
   const onCopy = useCallback(async () => {
@@ -649,7 +630,7 @@ function ChatTurnView({
             type="button"
             onClick={onCopy}
             className="flex items-center gap-1 rounded px-1 py-0.5 hover:bg-accent hover:text-foreground"
-            title="Copiar"
+            title={t('copy')}
           >
             {copied ? (
               <Check className="h-3 w-3 text-emerald-400" />
@@ -664,7 +645,7 @@ function ChatTurnView({
               'flex items-center gap-1 rounded px-1 py-0.5 hover:bg-accent hover:text-foreground',
               turn.rating === 'up' && 'text-emerald-400',
             )}
-            title="Útil"
+            title={t('helpful')}
           >
             <ThumbsUp className="h-3 w-3" />
           </button>
@@ -675,7 +656,7 @@ function ChatTurnView({
               'flex items-center gap-1 rounded px-1 py-0.5 hover:bg-accent hover:text-foreground',
               turn.rating === 'down' && 'text-rose-400',
             )}
-            title="Não útil"
+            title={t('notHelpful')}
           >
             <ThumbsDown className="h-3 w-3" />
           </button>

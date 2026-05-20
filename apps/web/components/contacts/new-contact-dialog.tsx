@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Loader2 } from 'lucide-react';
 import {
   Dialog,
@@ -44,6 +45,7 @@ const EMPTY_FORM: FormState = {
 };
 
 export function NewContactDialog({ open, onOpenChange, onCreated }: NewContactDialogProps) {
+  const t = useTranslations('contacts.newDialog');
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -59,13 +61,13 @@ export function NewContactDialog({ open, onOpenChange, onCreated }: NewContactDi
     const next: typeof errors = {};
     const hasIdentifier = Boolean(form.name || form.phone || form.email);
     if (!hasIdentifier) {
-      next.name = 'Informe ao menos nome, telefone ou email';
+      next.name = t('errors.needIdentifier');
     }
     if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-      next.email = 'Email inválido';
+      next.email = t('errors.invalidEmail');
     }
     if (form.phone && form.phone.replace(/\D/g, '').length < 8) {
-      next.phone = 'Telefone muito curto';
+      next.phone = t('errors.shortPhone');
     }
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -103,7 +105,7 @@ export function NewContactDialog({ open, onOpenChange, onCreated }: NewContactDi
       if (err instanceof ApiError) {
         setServerError(`${err.status}: ${err.message}`);
       } else {
-        setServerError(err instanceof Error ? err.message : 'Erro desconhecido');
+        setServerError(err instanceof Error ? err.message : t('errors.unknown'));
       }
     } finally {
       setSubmitting(false);
@@ -123,63 +125,63 @@ export function NewContactDialog({ open, onOpenChange, onCreated }: NewContactDi
       <DialogContent>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <DialogHeader>
-            <DialogTitle>Novo contato</DialogTitle>
+            <DialogTitle>{t('title')}</DialogTitle>
             <DialogDescription>
-              Pelo menos um identificador (nome, telefone ou email) é obrigatório.
+              {t('description')}
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="Nome" error={errors.name}>
+            <Field label={t('fields.name')} error={errors.name}>
               <Input
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="João Silva"
+                placeholder={t('fields.namePlaceholder')}
                 autoFocus
               />
             </Field>
-            <Field label="Telefone" error={errors.phone}>
+            <Field label={t('fields.phone')} error={errors.phone}>
               <Input
                 value={form.phone}
                 onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                placeholder="+55 71 99999-9999"
+                placeholder={t('fields.phonePlaceholder')}
                 inputMode="tel"
               />
               <div className="mt-1">
                 <VerifyWhatsAppButton mode="phone" phone={form.phone} hideWhenEmpty />
               </div>
             </Field>
-            <Field label="Email" error={errors.email} className="sm:col-span-2">
+            <Field label={t('fields.email')} error={errors.email} className="sm:col-span-2">
               <Input
                 type="email"
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
-                placeholder="joao@empresa.com"
+                placeholder={t('fields.emailPlaceholder')}
               />
             </Field>
-            <Field label="Empresa" className="sm:col-span-2">
+            <Field label={t('fields.company')} className="sm:col-span-2">
               <Input
                 value={form.company}
                 onChange={(e) => setForm({ ...form, company: e.target.value })}
-                placeholder="Acme Inc."
+                placeholder={t('fields.companyPlaceholder')}
               />
             </Field>
             <Field
-              label="Tags"
-              hint="Separe por vírgula. Ex: vip, lead-quente"
+              label={t('fields.tags')}
+              hint={t('fields.tagsHint')}
               className="sm:col-span-2"
             >
               <Input
                 value={form.tags}
                 onChange={(e) => setForm({ ...form, tags: e.target.value })}
-                placeholder="vip, lead-quente"
+                placeholder={t('fields.tagsPlaceholder')}
               />
             </Field>
-            <Field label="Notas" className="sm:col-span-2">
+            <Field label={t('fields.notes')} className="sm:col-span-2">
               <Textarea
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                placeholder="Notas internas sobre o contato..."
+                placeholder={t('fields.notesPlaceholder')}
                 rows={3}
               />
             </Field>
@@ -198,11 +200,11 @@ export function NewContactDialog({ open, onOpenChange, onCreated }: NewContactDi
               onClick={() => onOpenChange(false)}
               disabled={submitting}
             >
-              Cancelar
+              {t('cancel')}
             </Button>
             <Button type="submit" disabled={submitting}>
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {submitting ? 'Criando...' : 'Criar contato'}
+              {submitting ? t('submitting') : t('submit')}
             </Button>
           </DialogFooter>
         </form>

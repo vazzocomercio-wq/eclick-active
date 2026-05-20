@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Mail, Phone } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Contact, ContactSource } from '@eclick-active/shared';
@@ -21,13 +22,13 @@ interface ContactMainTabProps {
   onChanged: () => void | Promise<void>;
 }
 
-const SOURCES: { value: ContactSource; label: string }[] = [
-  { value: 'whatsapp', label: 'WhatsApp' },
-  { value: 'instagram', label: 'Instagram' },
-  { value: 'website', label: 'Website' },
-  { value: 'import', label: 'Importado' },
-  { value: 'manual', label: 'Manual' },
-  { value: 'referral', label: 'Indicação' },
+const SOURCE_VALUES: ContactSource[] = [
+  'whatsapp',
+  'instagram',
+  'website',
+  'import',
+  'manual',
+  'referral',
 ];
 
 /**
@@ -65,6 +66,7 @@ function ContactInfoCard({
   contact: Contact;
   onChanged: () => void | Promise<void>;
 }) {
+  const t = useTranslations('contacts.mainTab');
   const [phone, setPhone] = useState(contact.phone ?? '');
   const [email, setEmail] = useState(contact.email ?? '');
   const [source, setSource] = useState<ContactSource | ''>(contact.source ?? '');
@@ -88,7 +90,7 @@ function ContactInfoCard({
       await onChanged();
       toast.success(label);
     } catch (err) {
-      toast.error('Falha ao salvar', { description: extractMessage(err) });
+      toast.error(t('saveFailed'), { description: extractMessage(err, t('unknownError')) });
     } finally {
       setSavingField(null);
     }
@@ -97,20 +99,20 @@ function ContactInfoCard({
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-xs">Informações</CardTitle>
+        <CardTitle className="text-xs">{t('infoTitle')}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3 pt-0">
-        <Field label="Telefone" icon={Phone}>
+        <Field label={t('phoneLabel')} icon={Phone}>
           <Input
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             onBlur={() => {
               const next = phone.trim() || null;
               if (next === contact.phone) return;
-              void commit({ phone: next ?? undefined }, 'phone', 'Telefone salvo');
+              void commit({ phone: next ?? undefined }, 'phone', t('savedPhone'));
             }}
             disabled={savingField === 'phone'}
-            placeholder="+55 11 99999-9999"
+            placeholder={t('phonePlaceholder')}
             inputMode="tel"
           />
           {contact.phone && (
@@ -130,17 +132,17 @@ function ContactInfoCard({
           )}
         </Field>
 
-        <Field label="Email" icon={Mail}>
+        <Field label={t('emailLabel')} icon={Mail}>
           <Input
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             onBlur={() => {
               const next = email.trim() || null;
               if (next === contact.email) return;
-              void commit({ email: next ?? undefined }, 'email', 'Email salvo');
+              void commit({ email: next ?? undefined }, 'email', t('savedEmail'));
             }}
             disabled={savingField === 'email'}
-            placeholder="contato@exemplo.com"
+            placeholder={t('emailPlaceholder')}
             inputMode="email"
             type="email"
           />
@@ -154,13 +156,13 @@ function ContactInfoCard({
           )}
         </Field>
 
-        <Field label="Origem (source)">
+        <Field label={t('sourceLabel')}>
           <select
             value={source}
             onChange={(e) => {
               const next = (e.target.value || null) as ContactSource | null;
               setSource(next ?? '');
-              void commit({ source: next ?? undefined }, 'source', 'Origem salva');
+              void commit({ source: next ?? undefined }, 'source', t('savedSource'));
             }}
             disabled={savingField === 'source'}
             className={cn(
@@ -168,16 +170,16 @@ function ContactInfoCard({
               'focus:outline-none focus:ring-2 focus:ring-ring',
             )}
           >
-            <option value="">— Sem origem —</option>
-            {SOURCES.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
+            <option value="">{t('sourceEmpty')}</option>
+            {SOURCE_VALUES.map((s) => (
+              <option key={s} value={s}>
+                {t(`sources.${s}`)}
               </option>
             ))}
           </select>
         </Field>
 
-        <Field label="Tags do contato" hint="Falam sobre o perfil. Use o catálogo configurado em Configurações > Tags ou crie inline.">
+        <Field label={t('tagsLabel')} hint={t('tagsHint')}>
           <TagPicker
             entityType="contact"
             value={tags}
@@ -186,13 +188,13 @@ function ContactInfoCard({
               const current = contact.tags ?? [];
               if (
                 next.length === current.length &&
-                next.every((t, i) => t === current[i])
+                next.every((tag, i) => tag === current[i])
               ) {
                 return;
               }
-              void commit({ tags: next }, 'tags', 'Tags salvas');
+              void commit({ tags: next }, 'tags', t('savedTags'));
             }}
-            placeholder="Adicionar tag…"
+            placeholder={t('tagsPlaceholder')}
           />
         </Field>
       </CardContent>
@@ -227,8 +229,8 @@ function Field({
   );
 }
 
-function extractMessage(err: unknown): string {
+function extractMessage(err: unknown, fallback: string): string {
   if (err instanceof ApiError) return `${err.status}: ${err.message}`;
   if (err instanceof Error) return err.message;
-  return 'Erro desconhecido';
+  return fallback;
 }

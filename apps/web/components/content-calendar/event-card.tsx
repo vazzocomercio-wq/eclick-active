@@ -11,6 +11,7 @@ import {
   Target,
   type LucideIcon,
 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import {
   CHANNEL_COLOR,
   type ContentCalendarEvent,
@@ -53,6 +54,7 @@ export function EventCard({
   draggable = false,
   className,
 }: EventCardProps) {
+  const t = useTranslations('contentCalendar');
   const color = event.color ?? CHANNEL_COLOR[event.channel];
   const Icon = CHANNEL_ICON[event.channel];
 
@@ -127,7 +129,7 @@ export function EventCard({
       {hasProductLink && !compact && (
         <span
           className="shrink-0 inline-flex items-center gap-0.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0 text-[9px] text-amber-300"
-          title={productSnap?.name ?? 'Produto vinculado'}
+          title={productSnap?.name ?? t('card.linkedProduct')}
         >
           {productSnap?.thumbnail_url ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -140,14 +142,14 @@ export function EventCard({
             <Sparkles className="h-2.5 w-2.5" />
           )}
           <span className="max-w-[70px] truncate">
-            {productSnap?.name ?? 'Produto'}
+            {productSnap?.name ?? t('card.productFallback')}
           </span>
         </span>
       )}
 
       {isPastUnpublished && !compact && (
         <span className="shrink-0 rounded-full border border-rose-500/40 bg-rose-500/10 px-1.5 py-0 text-[9px] text-rose-300">
-          atrasado
+          {t('card.lateBadge')}
         </span>
       )}
     </div>

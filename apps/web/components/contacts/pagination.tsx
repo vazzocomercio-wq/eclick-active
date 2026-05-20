@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -11,6 +12,7 @@ interface PaginationProps {
 }
 
 export function Pagination({ page, limit, total, onPageChange }: PaginationProps) {
+  const t = useTranslations('contacts.pagination');
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const from = total === 0 ? 0 : (page - 1) * limit + 1;
   const to = Math.min(page * limit, total);
@@ -18,7 +20,7 @@ export function Pagination({ page, limit, total, onPageChange }: PaginationProps
   return (
     <div className="flex items-center justify-between border-t border-border px-8 py-3 text-sm text-muted-foreground">
       <span>
-        {total === 0 ? 'Nenhum resultado' : `Mostrando ${from}–${to} de ${total}`}
+        {total === 0 ? t('noResults') : t('showing', { from, to, total })}
       </span>
       <div className="flex items-center gap-2">
         <Button
@@ -26,7 +28,7 @@ export function Pagination({ page, limit, total, onPageChange }: PaginationProps
           size="sm"
           disabled={page <= 1}
           onClick={() => onPageChange(page - 1)}
-          aria-label="Página anterior"
+          aria-label={t('previous')}
         >
           <ChevronLeft className="h-4 w-4" />
         </Button>
@@ -38,7 +40,7 @@ export function Pagination({ page, limit, total, onPageChange }: PaginationProps
           size="sm"
           disabled={page >= totalPages}
           onClick={() => onPageChange(page + 1)}
-          aria-label="Próxima página"
+          aria-label={t('next')}
         >
           <ChevronRight className="h-4 w-4" />
         </Button>

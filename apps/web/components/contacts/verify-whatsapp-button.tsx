@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Loader2, RotateCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { contactsApi } from '@/lib/api/contacts';
@@ -58,6 +59,7 @@ type Props = ContactModeProps | PhoneModeProps;
  * apenas em loading ou quando phone tem <10 dígitos no modo `phone`.
  */
 export function VerifyWhatsAppButton(props: Props) {
+  const t = useTranslations('contacts.verifyButton');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<VerifyResult | null>(props.initialResult ?? null);
 
@@ -76,19 +78,18 @@ export function VerifyWhatsAppButton(props: Props) {
           ? await contactsApi.verifyWhatsapp(props.contactId)
           : await contactsApi.verifyWhatsappByPhone(props.phone);
       if (!res.ok || !res.result) {
-        toast.warning('Verificação indisponível', {
-          description:
-            'Conecte um canal WhatsApp (Z-API ou Gratuito) em Configurações pra verificar números.',
+        toast.warning(t('unavailableTitle'), {
+          description: t('unavailableDescription'),
         });
         return;
       }
       setResult(res.result);
       props.onResult?.(res.result);
       toast.success(
-        res.result.exists ? 'Número verificado como WhatsApp' : 'Número não é WhatsApp',
+        res.result.exists ? t('verifiedSuccess') : t('notWhatsappSuccess'),
       );
     } catch (err) {
-      toast.error('Falha ao verificar', {
+      toast.error(t('failed'), {
         description: err instanceof ApiError ? err.message : undefined,
       });
     } finally {
@@ -101,23 +102,23 @@ export function VerifyWhatsAppButton(props: Props) {
   let icon: React.ReactNode;
 
   if (loading) {
-    label = 'Verificando…';
+    label = t('verifying');
     stateClass = 'border-border bg-background/60 text-muted-foreground';
     icon = <Loader2 className="h-3.5 w-3.5 animate-spin" />;
   } else if (result?.exists) {
     label = result.profile_name
-      ? `${result.profile_name} · WhatsApp`
-      : 'É WhatsApp';
+      ? `${result.profile_name} · ${t('profileSuffix')}`
+      : t('isWhatsapp');
     stateClass =
       'border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20';
     icon = <WhatsAppGlyph className="h-3.5 w-3.5" />;
   } else if (result && !result.exists) {
-    label = 'Não é WhatsApp';
+    label = t('notWhatsapp');
     stateClass =
       'border-rose-500/40 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20';
     icon = <WhatsAppGlyphCrossed className="h-3.5 w-3.5" />;
   } else {
-    label = props.idleLabel ?? 'Verificar WhatsApp';
+    label = props.idleLabel ?? t('defaultIdle');
     stateClass =
       'border-cyan-500/30 bg-cyan-500/5 text-cyan-300 hover:border-cyan-400 hover:bg-cyan-500/15';
     icon = <WhatsAppGlyph className="h-3.5 w-3.5" />;
@@ -137,10 +138,10 @@ export function VerifyWhatsAppButton(props: Props) {
       aria-label={label}
       title={
         !hasInput
-          ? 'Informe um telefone válido pra verificar'
+          ? t('titleNoInput')
           : result
-            ? 'Clique pra verificar de novo'
-            : 'Verificar se o número tem WhatsApp ativo'
+            ? t('titleRecheck')
+            : t('titleCheck')
       }
     >
       {icon}

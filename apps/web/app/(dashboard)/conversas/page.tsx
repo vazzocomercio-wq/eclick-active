@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, Bot, User } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import type { Contact, ConversationDetail } from '@eclick-active/shared';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -19,6 +20,7 @@ import { cn } from '@/lib/utils';
 type SidePanel = 'contact' | 'copilot';
 
 export default function ConversasPage() {
+  const t = useTranslations('inbox.page');
   const inbox = useInbox();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(true);
@@ -60,16 +62,16 @@ export default function ConversasPage() {
       setContactSheet(contact);
       setContactSheetOpen(true);
     } catch (err) {
-      toast.error('Falha ao abrir perfil do contato', {
+      toast.error(t('loadContactProfileFailed'), {
         description:
           err instanceof ApiError
             ? `${err.status}: ${err.message}`
             : err instanceof Error
               ? err.message
-              : 'Erro desconhecido',
+              : t('errorUnknown'),
       });
     }
-  }, []);
+  }, [t]);
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -79,8 +81,10 @@ export default function ConversasPage() {
             <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
             <span>
               {inbox.error.status === 401
-                ? 'Sessão expirada — faça login pra carregar conversas.'
-                : `Erro ${inbox.error.status || 'rede'}: ${inbox.error.message}`}
+                ? t('errorAuth')
+                : inbox.error.status
+                  ? t('errorGeneric', { status: inbox.error.status, message: inbox.error.message })
+                  : t('errorNetwork', { message: inbox.error.message })}
             </span>
           </div>
         )}
@@ -172,7 +176,7 @@ export default function ConversasPage() {
                 )}
               >
                 <User className="h-3.5 w-3.5" />
-                Contato
+                {t('panelTabContact')}
               </button>
               <button
                 type="button"
@@ -185,7 +189,7 @@ export default function ConversasPage() {
                 )}
               >
                 <Bot className="h-3.5 w-3.5" />
-                Copiloto
+                {t('panelTabCopilot')}
               </button>
             </div>
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import type { FormField, FormBranding } from '@eclick-active/shared';
 import { cn } from '@/lib/utils';
 
@@ -14,6 +15,7 @@ interface Props {
  * Preview-only render do form. Não submete nada.
  */
 export function FormPreview({ fields, branding, formName, description }: Props) {
+  const t = useTranslations('formularios.formPreview');
   const sorted = [...fields].sort((a, b) => a.position - b.position);
   const primary = branding.primary_color ?? '#00E5FF';
 
@@ -54,12 +56,12 @@ export function FormPreview({ fields, branding, formName, description }: Props) 
         className="mt-5 w-full rounded-md px-4 py-2.5 text-sm font-semibold text-background"
         style={{ backgroundColor: primary }}
       >
-        Enviar
+        {t('submit')}
       </button>
 
       {branding.show_powered_by && (
         <p className="mt-4 text-center text-[10px] text-muted-foreground">
-          Powered by e-Click Active
+          {t('poweredBy')}
         </p>
       )}
       {branding.footer_text && (
@@ -130,6 +132,11 @@ function FieldPreview({
 }
 
 function renderInput(field: FormField) {
+  return <RenderInput field={field} />;
+}
+
+function RenderInput({ field }: { field: FormField }) {
+  const t = useTranslations('formularios.formPreview');
   const cls =
     'h-9 w-full rounded-md border border-border bg-background px-2.5 text-sm';
 
@@ -146,7 +153,7 @@ function renderInput(field: FormField) {
     case 'select':
       return (
         <select className={cls} disabled>
-          <option>Selecione...</option>
+          <option>{t('selectPlaceholder')}</option>
           {field.options?.map((o) => (
             <option key={o.value}>{o.label}</option>
           ))}
@@ -186,12 +193,12 @@ function renderInput(field: FormField) {
       return (
         <div className="space-y-1.5">
           <input
-            placeholder="CEP"
+            placeholder={t('cepPlaceholder')}
             className={cls}
             disabled
           />
           <input
-            placeholder="Endereço (preenchido automaticamente)"
+            placeholder={t('addressPlaceholder')}
             className={cls}
             disabled
           />

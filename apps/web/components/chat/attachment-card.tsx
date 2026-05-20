@@ -15,6 +15,7 @@ import {
   Sparkles,
   Video as VideoIcon,
 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import type { ConversationAttachment } from '@/lib/api/attachments';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
@@ -31,6 +32,7 @@ interface AttachmentCardProps {
  * abaixo. Clicável pra abrir lightbox/dialog quando aplicável.
  */
 export function AttachmentCard({ attachment, compact = false }: AttachmentCardProps) {
+  const t = useTranslations('chat.attachment');
   // Transcript fica em ai_extracted.transcript quando media_type=audio.
   const extracted = attachment.ai_extracted as
     | { type?: string; transcript?: string }
@@ -55,7 +57,7 @@ export function AttachmentCard({ attachment, compact = false }: AttachmentCardPr
       {!attachment.ai_summary && attachment.url && (
         <span className="inline-flex items-center gap-1 text-[10px] italic text-muted-foreground">
           <Loader2 className="h-2.5 w-2.5 animate-spin" />
-          IA está analisando…
+          {t('analyzing')}
         </span>
       )}
     </div>
@@ -63,6 +65,7 @@ export function AttachmentCard({ attachment, compact = false }: AttachmentCardPr
 }
 
 function TranscriptToggle({ transcript }: { transcript: string }) {
+  const t = useTranslations('chat.attachment');
   const [open, setOpen] = useState(false);
   return (
     <div className="rounded-md border border-border/60 bg-muted/30">
@@ -77,7 +80,7 @@ function TranscriptToggle({ transcript }: { transcript: string }) {
           <ChevronRight className="h-3 w-3 shrink-0" />
         )}
         <Quote className="h-3 w-3 shrink-0" />
-        <span className="font-medium uppercase tracking-wider">Transcrição</span>
+        <span className="font-medium uppercase tracking-wider">{t('transcript')}</span>
       </button>
       {open && (
         <div className="border-t border-border/60 px-2 py-1.5 text-[11px] leading-relaxed text-foreground/80">
@@ -95,6 +98,7 @@ function MediaBlock({
   attachment: ConversationAttachment;
   compact: boolean;
 }) {
+  const t = useTranslations('chat.attachment');
   const { url, media_type, mime_type, file_name, file_size_bytes, status, error } = attachment;
 
   if (!url) {
@@ -107,9 +111,9 @@ function MediaBlock({
         <div className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
           <ImageOff className="h-4 w-4 shrink-0" />
           <div className="flex flex-col gap-0.5">
-            <span className="font-medium">Falha ao baixar mídia</span>
+            <span className="font-medium">{t('downloadFailed')}</span>
             <span className="text-[10px] opacity-80">
-              Peça ao contato pra reenviar{error ? ` (${error.slice(0, 80)})` : ''}
+              {t('downloadFailedHint')}{error ? ` (${error.slice(0, 80)})` : ''}
             </span>
           </div>
         </div>
@@ -120,7 +124,7 @@ function MediaBlock({
       return (
         <div className="flex items-center gap-2 rounded-md border border-cyan-500/30 bg-cyan-500/5 px-3 py-2 text-xs text-cyan-700 dark:text-cyan-400">
           <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
-          <span>Baixando mídia…</span>
+          <span>{t('downloading')}</span>
         </div>
       );
     }
@@ -128,7 +132,7 @@ function MediaBlock({
     return (
       <div className="flex items-center gap-2 rounded-md border border-dashed border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
         <ImageOff className="h-4 w-4" />
-        <span>Mídia indisponível</span>
+        <span>{t('unavailable')}</span>
       </div>
     );
   }
@@ -158,6 +162,7 @@ function MediaBlock({
 }
 
 function ImageBlock({ url, maxWidth }: { url: string; maxWidth: number }) {
+  const t = useTranslations('chat.attachment');
   const [open, setOpen] = useState(false);
   const [errored, setErrored] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -166,7 +171,7 @@ function ImageBlock({ url, maxWidth }: { url: string; maxWidth: number }) {
     return (
       <div className="flex items-center gap-2 rounded-md border border-dashed border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
         <ImageOff className="h-4 w-4" />
-        <span>Erro ao carregar imagem</span>
+        <span>{t('imageLoadError')}</span>
       </div>
     );
   }
@@ -249,6 +254,7 @@ function DocumentBlock({
   fileSize: number | null;
   compact: boolean;
 }) {
+  const t = useTranslations('chat.attachment');
   const ext = fileName?.split('.').pop()?.toLowerCase() ?? '';
   const { Icon, color } = pickFileIcon(ext, mimeType);
   const width = compact ? 240 : 300;
@@ -264,9 +270,9 @@ function DocumentBlock({
         <Icon className="h-4 w-4 text-white" />
       </span>
       <div className="flex flex-1 flex-col min-w-0">
-        <span className="truncate text-sm font-medium">{fileName ?? 'documento'}</span>
+        <span className="truncate text-sm font-medium">{fileName ?? t('documentFallback')}</span>
         <span className="text-[10px] text-muted-foreground">
-          {fileSize ? formatSize(fileSize) : ext.toUpperCase() || 'Arquivo'}
+          {fileSize ? formatSize(fileSize) : ext.toUpperCase() || t('fileFallback')}
         </span>
       </div>
       <a
@@ -275,7 +281,7 @@ function DocumentBlock({
         rel="noopener noreferrer"
         download={fileName ?? undefined}
         className="shrink-0 rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        aria-label="Baixar documento"
+        aria-label={t('downloadAria')}
       >
         <Download className="h-3.5 w-3.5" />
       </a>

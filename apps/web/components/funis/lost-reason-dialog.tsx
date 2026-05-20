@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { AlertCircle } from 'lucide-react';
 import {
   Dialog,
@@ -20,6 +21,7 @@ interface LostReasonDialogProps {
 }
 
 export function LostReasonDialog({ open, onConfirm, onCancel }: LostReasonDialogProps) {
+  const t = useTranslations('funis.deal.lostDialog');
   const [reason, setReason] = useState('');
 
   useEffect(() => {
@@ -40,18 +42,17 @@ export function LostReasonDialog({ open, onConfirm, onCancel }: LostReasonDialog
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertCircle className="h-4 w-4 text-red-500" />
-              Marcar como perdido
+              {t('title')}
             </DialogTitle>
             <DialogDescription>
-              Por que esse negócio foi perdido? O motivo entra na timeline e ajuda a IA a
-              aprender padrões de perda.
+              {t('description')}
             </DialogDescription>
           </DialogHeader>
 
           <Textarea
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder="Ex: cliente fechou com concorrente por preço; orçamento não aprovado..."
+            placeholder={t('placeholder')}
             rows={4}
             autoFocus
             required
@@ -59,10 +60,10 @@ export function LostReasonDialog({ open, onConfirm, onCancel }: LostReasonDialog
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onCancel}>
-              Cancelar
+              {t('cancel')}
             </Button>
             <Button type="submit" disabled={reason.trim().length === 0}>
-              Confirmar perda
+              {t('confirm')}
             </Button>
           </DialogFooter>
         </form>

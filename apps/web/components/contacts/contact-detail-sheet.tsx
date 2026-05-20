@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { History, MessageSquare, Sparkles, Target, Trash2, User } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Contact } from '@eclick-active/shared';
@@ -49,6 +50,7 @@ export function ContactDetailSheet({
   onChanged,
   onOpenDeal,
 }: ContactDetailSheetProps) {
+  const t = useTranslations('contacts.detailSheet');
   // Mantém uma cópia local do contato pra refletir edits inline imediatamente
   // sem esperar que o pai re-faça a query. Sincroniza com o prop quando muda.
   const [contact, setContact] = useState<Contact | null>(initialContact);
@@ -79,27 +81,27 @@ export function ContactDetailSheet({
   async function handleDelete() {
     if (!contact) return;
     const ok = await confirm({
-      title: 'Excluir este contato?',
-      description: 'A ação não pode ser desfeita.',
+      title: t('deleteTitle'),
+      description: t('deleteDescription'),
       variant: 'destructive',
-      confirmLabel: 'Excluir',
+      confirmLabel: t('deleteConfirm'),
       icon: Trash2,
     });
     if (!ok) return;
     setDeleting(true);
     try {
       await contactsApi.remove(contact.id);
-      toast.success('Contato excluído');
+      toast.success(t('deleted'));
       onOpenChange(false);
       onChanged?.();
     } catch (err) {
-      toast.error('Falha ao excluir', {
+      toast.error(t('deleteFailed'), {
         description:
           err instanceof ApiError
             ? `${err.status}: ${err.message}`
             : err instanceof Error
               ? err.message
-              : 'Erro desconhecido',
+              : t('unknownError'),
       });
     } finally {
       setDeleting(false);
@@ -113,7 +115,7 @@ export function ContactDetailSheet({
         className="flex w-full max-w-[520px] flex-col gap-0 p-0 sm:max-w-[520px]"
       >
         <SheetTitle className="sr-only">
-          {contact?.name ?? 'Detalhes do contato'}
+          {contact?.name ?? t('fallbackTitle')}
         </SheetTitle>
 
         {!contact ? (
@@ -131,23 +133,23 @@ export function ContactDetailSheet({
               <TabsList className="px-2">
                 <TabsTrigger value="main">
                   <User className="h-3.5 w-3.5" />
-                  Principal
+                  {t('tabs.main')}
                 </TabsTrigger>
                 <TabsTrigger value="chat">
                   <MessageSquare className="h-3.5 w-3.5" />
-                  Conversas
+                  {t('tabs.chat')}
                 </TabsTrigger>
                 <TabsTrigger value="deals">
                   <Target className="h-3.5 w-3.5" />
-                  Negócios
+                  {t('tabs.deals')}
                 </TabsTrigger>
                 <TabsTrigger value="ai">
                   <Sparkles className="h-3.5 w-3.5" />
-                  IA
+                  {t('tabs.ai')}
                 </TabsTrigger>
                 <TabsTrigger value="history">
                   <History className="h-3.5 w-3.5" />
-                  Histórico
+                  {t('tabs.history')}
                 </TabsTrigger>
               </TabsList>
 

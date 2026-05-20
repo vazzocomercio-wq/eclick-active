@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   AlertTriangle,
   BarChart3,
@@ -89,6 +90,7 @@ export function CopilotPanel({
   showDescription,
   className,
 }: CopilotPanelProps) {
+  const t = useTranslations('copilot.panel');
   const headerVisible = showHeader ?? !compact;
   const descriptionVisible = showDescription ?? !compact;
 
@@ -125,7 +127,13 @@ export function CopilotPanel({
   }
 
   const isEmpty = !loadingHistory && messages.length === 0;
-  const suggestions = QUICK_SUGGESTIONS[contextType];
+  const suggestionsRaw = useTranslations('copilot.suggestions');
+  const suggestions = useMemo(() => {
+    const raw = suggestionsRaw.raw(contextType) as unknown;
+    return Array.isArray(raw) ? (raw as string[]) : [];
+  }, [suggestionsRaw, contextType]);
+  const placeholderT = useTranslations('copilot.placeholder');
+  const placeholder = placeholderT(contextType);
 
   return (
     <div className={cn('flex h-full flex-col overflow-hidden', className)}>
@@ -142,7 +150,7 @@ export function CopilotPanel({
               <h1
                 className={cn('font-semibold truncate', compact ? 'text-sm' : 'text-lg')}
               >
-                Copiloto IA
+                {t('title')}
               </h1>
               <span
                 className={cn(
@@ -150,13 +158,11 @@ export function CopilotPanel({
                 )}
               >
                 <Sparkles className="h-3 w-3" />
-                AI
+                {t('aiBadge')}
               </span>
             </div>
             {descriptionVisible && (
-              <p className="text-xs text-muted-foreground">
-                Seu assistente comercial inteligente. Pergunte qualquer coisa sobre seu CRM.
-              </p>
+              <p className="text-xs text-muted-foreground">{t('description')}</p>
             )}
           </div>
 
@@ -168,7 +174,7 @@ export function CopilotPanel({
               className={compact ? 'h-7 px-2' : ''}
             >
               <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-              Limpar
+              {t('clear')}
             </Button>
           )}
         </header>
@@ -232,7 +238,7 @@ export function CopilotPanel({
                 onChange={setInput}
                 onSubmit={handleSubmit}
                 disabled={thinking}
-                placeholder={PLACEHOLDER[contextType]}
+                placeholder={placeholder}
               />
             </AnimatedPromptSuggestions>
           ) : (
@@ -241,13 +247,13 @@ export function CopilotPanel({
               onChange={setInput}
               onSubmit={handleSubmit}
               disabled={thinking}
-              placeholder={PLACEHOLDER[contextType]}
+              placeholder={placeholder}
             />
           )}
 
           {!compact && (
             <p className="text-center text-[11px] text-muted-foreground">
-              Enter para enviar · Shift+Enter para nova linha
+              {t('enterHint')}
             </p>
           )}
         </div>
@@ -257,70 +263,9 @@ export function CopilotPanel({
 }
 
 // ──────────────────────────────────────────────────────────
-// Contextual quick suggestions
+// Contextual quick suggestions — texts now come from i18n
+// (copilot.suggestions.{general|deal|contact|conversation}).
 // ──────────────────────────────────────────────────────────
-
-const QUICK_SUGGESTIONS: Record<CopilotContextType, string[]> = {
-  general: [
-    'Quais leads priorizar hoje?',
-    'Resumo do meu funil',
-    'Tarefas pendentes',
-    'Por que perdi vendas esta semana?',
-    'Crie follow-up para leads sem resposta',
-    'Quais clientes não respondem há mais de 5 dias?',
-    'Performance da equipe esta semana',
-    'Análise de objeções recorrentes',
-    'Sugestões para aumentar conversão',
-    'Leads quentes sem atendimento',
-    'Próximas tarefas críticas',
-    'Onde estou perdendo deals?',
-    // ── SAC ──
-    'Quais tickets críticos eu tenho agora?',
-    'Resumo do SAC hoje',
-    'Performance do SAC esta semana',
-    'Tickets com SLA vencido',
-    'Pedidos atrasados sem ticket',
-    'Quais produtos têm mais reclamações?',
-    // ── Social AI ──
-    'Cria um post sobre lançamento',
-    'Faz carrossel de prova social',
-    'Conteúdos pendentes de aprovação',
-    'Resumo do Social AI hoje',
-  ],
-  deal: [
-    'Próxima ação?',
-    'Risco de perda?',
-    'Gerar proposta',
-    'Criar follow-up',
-    'Análise da negociação',
-    'Sugestões de fechamento',
-    'Histórico de interações',
-    'Comparar com deals similares',
-    'Pontos de atenção',
-  ],
-  contact: [
-    'Resumo do cliente',
-    'Histórico de objeções',
-    'Melhor abordagem',
-    'Perfil de comportamento',
-    'Probabilidade de compra',
-    'Tópicos de interesse',
-    'Próximos passos sugeridos',
-    'Análise de engajamento',
-    'Deals anteriores',
-  ],
-  conversation: [
-    'Resumir conversa',
-    'Sugerir resposta',
-    'O que o cliente quer?',
-    'Identificar urgência',
-    'Próxima pergunta a fazer',
-    'Sentiment do cliente',
-    'Pontos não respondidos',
-    'Resumir documentos enviados',
-    'Sugestão de roteamento',
-  ],
-};
 
 /** Mapping de palavra-chave da sugestão → ícone + cor de accent.
  *  Cycling determinístico: usa primeiro match da palavra-chave. */
@@ -364,18 +309,8 @@ function withIcons(
   });
 }
 
-const PLACEHOLDER: Record<CopilotContextType, string> = {
-  general: 'Pergunte sobre seus leads, deals, performance...',
-  deal: 'Pergunte sobre esse deal...',
-  contact: 'Pergunte sobre esse contato...',
-  conversation: 'Pergunte sobre essa conversa...',
-};
-
-const CONTEXT_BADGE_LABEL: Record<Exclude<CopilotContextType, 'general'>, string> = {
-  deal: 'Deal',
-  contact: 'Contato',
-  conversation: 'Conversa',
-};
+// Placeholders e labels de badge — vêm de i18n
+// (copilot.placeholder.{kind}, copilot.contextBadge.{kind}).
 
 // ──────────────────────────────────────────────────────────
 // Sub-components
@@ -390,6 +325,7 @@ function ContextBadge({
   label?: string;
   compact: boolean;
 }) {
+  const t = useTranslations('copilot.contextBadge');
   return (
     <div
       className={cn(
@@ -398,9 +334,7 @@ function ContextBadge({
       )}
     >
       <Sparkles className="h-3 w-3 shrink-0" />
-      <span className="font-semibold uppercase tracking-wider">
-        {CONTEXT_BADGE_LABEL[type]}
-      </span>
+      <span className="font-semibold uppercase tracking-wider">{t(type)}</span>
       {label && (
         <>
           <span className="text-muted-foreground">·</span>
@@ -418,6 +352,7 @@ function EmptyState({
   contextType: CopilotContextType;
   compact: boolean;
 }) {
+  const t = useTranslations('copilot.empty');
   return (
     <div
       className={cn(
@@ -435,23 +370,15 @@ function EmptyState({
       </div>
       <div className="flex flex-col gap-1">
         <h2 className={cn('font-semibold', compact ? 'text-sm' : 'text-base')}>
-          Como posso ajudar?
+          {t('title')}
         </h2>
         <p className={cn('max-w-md text-muted-foreground', compact ? 'text-[11px]' : 'text-xs')}>
-          {EMPTY_STATE_HINT[contextType]}
+          {t(`hint.${contextType}` as 'hint.general' | 'hint.deal' | 'hint.contact' | 'hint.conversation')}
         </p>
       </div>
     </div>
   );
 }
-
-const EMPTY_STATE_HINT: Record<CopilotContextType, string> = {
-  general:
-    'Pergunte sobre leads, deals, performance, conversas ou peça para criar tarefas e oportunidades direto pelo chat.',
-  deal: 'Pergunte sobre esse deal — risco, próximo passo, geração de proposta ou follow-up.',
-  contact: 'Pergunte sobre esse contato — resumo, objeções históricas, melhor abordagem.',
-  conversation: 'Pergunte sobre essa conversa — resumo, sugestão de resposta, intenção do cliente.',
-};
 
 function QuickSuggestions({
   suggestions,

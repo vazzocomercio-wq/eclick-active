@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { GripVertical, Trash2 } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -14,26 +15,36 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-const FIELD_TYPE_LABELS: Record<FormFieldType, string> = {
-  text: 'Texto curto',
-  textarea: 'Texto longo',
-  email: 'Email',
-  phone: 'Telefone/WhatsApp',
-  number: 'Número',
-  currency: 'Valor (R$)',
-  date: 'Data',
-  select: 'Seleção (dropdown)',
-  multi_select: 'Seleção múltipla',
-  radio: 'Radio (escolha única)',
-  checkbox: 'Checkbox',
-  url: 'URL',
-  cpf_cnpj: 'CPF/CNPJ',
-  address: 'Endereço (com CEP)',
-  file_upload: 'Upload de arquivo',
-  heading: 'Título (visual)',
-  divider: 'Divisor (visual)',
-  paragraph: 'Parágrafo (visual)',
-};
+const FIELD_TYPES: FormFieldType[] = [
+  'text',
+  'textarea',
+  'email',
+  'phone',
+  'number',
+  'currency',
+  'date',
+  'select',
+  'multi_select',
+  'radio',
+  'checkbox',
+  'url',
+  'cpf_cnpj',
+  'address',
+  'file_upload',
+  'heading',
+  'divider',
+  'paragraph',
+];
+
+const MAPPING_KEYS: FormFieldMapping[] = [
+  'name',
+  'email',
+  'phone',
+  'company',
+  'value',
+  'notes',
+  'custom',
+];
 
 const HAS_OPTIONS: FormFieldType[] = [
   'select',
@@ -44,16 +55,6 @@ const HAS_OPTIONS: FormFieldType[] = [
 
 const VISUAL_ONLY: FormFieldType[] = ['heading', 'divider', 'paragraph'];
 
-const MAPPING_LABELS: Record<FormFieldMapping, string> = {
-  name: 'Nome do contato',
-  email: 'Email',
-  phone: 'Telefone',
-  company: 'Empresa',
-  value: 'Valor do deal',
-  notes: 'Observações',
-  custom: 'Custom (não mapear)',
-};
-
 interface Props {
   field: FormField;
   onChange: (field: FormField) => void;
@@ -61,6 +62,7 @@ interface Props {
 }
 
 export function FieldEditor({ field, onChange, onRemove }: Props) {
+  const t = useTranslations('formularios.fieldEditor');
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: field.id });
 
@@ -87,7 +89,7 @@ export function FieldEditor({ field, onChange, onRemove }: Props) {
         {...attributes}
         {...listeners}
         className="flex h-6 cursor-grab items-center text-muted-foreground hover:text-foreground active:cursor-grabbing"
-        aria-label="Arrastar"
+        aria-label={t('dragLabel')}
       >
         <GripVertical className="h-4 w-4" />
       </button>
@@ -102,15 +104,15 @@ export function FieldEditor({ field, onChange, onRemove }: Props) {
                 type: e.target.value as FormFieldType,
                 // Reset opções se o novo type não usar
                 options: HAS_OPTIONS.includes(e.target.value as FormFieldType)
-                  ? field.options ?? [{ value: 'opcao_1', label: 'Opção 1' }]
+                  ? field.options ?? [{ value: 'opcao_1', label: t('newOptionDefault', { n: 1 }) }]
                   : undefined,
               })
             }
             className="rounded-md border border-border bg-background px-2 py-1 text-xs"
           >
-            {Object.entries(FIELD_TYPE_LABELS).map(([k, v]) => (
+            {FIELD_TYPES.map((k) => (
               <option key={k} value={k}>
-                {v}
+                {t(`types.${k}`)}
               </option>
             ))}
           </select>
@@ -122,8 +124,8 @@ export function FieldEditor({ field, onChange, onRemove }: Props) {
             }
             className="rounded-md border border-border bg-background px-2 py-1 text-xs"
           >
-            <option value="full">Largura total</option>
-            <option value="half">Meia largura</option>
+            <option value="full">{t('widthFull')}</option>
+            <option value="half">{t('widthHalf')}</option>
           </select>
 
           {!isVisual && (
@@ -136,7 +138,7 @@ export function FieldEditor({ field, onChange, onRemove }: Props) {
                 }
                 className="h-3 w-3"
               />
-              Obrigatório
+              {t('required')}
             </label>
           )}
 
@@ -146,7 +148,7 @@ export function FieldEditor({ field, onChange, onRemove }: Props) {
             size="sm"
             className="ml-auto h-6 w-6 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
             onClick={onRemove}
-            title="Remover campo"
+            title={t('remove')}
           >
             <Trash2 className="h-3 w-3" />
           </Button>
@@ -156,12 +158,12 @@ export function FieldEditor({ field, onChange, onRemove }: Props) {
           <div>
             <Label className="text-[10px] uppercase text-muted-foreground">
               {field.type === 'heading'
-                ? 'Título'
+                ? t('headingLabel')
                 : field.type === 'paragraph'
-                  ? 'Texto do parágrafo'
+                  ? t('paragraphLabel')
                   : field.type === 'divider'
-                    ? 'Rótulo (opcional)'
-                    : 'Label'}
+                    ? t('dividerLabel')
+                    : t('labelLabel')}
             </Label>
             <Input
               value={field.label}
@@ -172,7 +174,7 @@ export function FieldEditor({ field, onChange, onRemove }: Props) {
           {!isVisual && (
             <div>
               <Label className="text-[10px] uppercase text-muted-foreground">
-                Placeholder
+                {t('placeholder')}
               </Label>
               <Input
                 value={field.placeholder ?? ''}
@@ -188,7 +190,7 @@ export function FieldEditor({ field, onChange, onRemove }: Props) {
         {(field.type === 'heading' || field.type === 'paragraph') && (
           <div>
             <Label className="text-[10px] uppercase text-muted-foreground">
-              Conteúdo (descrição)
+              {t('contentLabel')}
             </Label>
             <textarea
               value={field.content ?? ''}
@@ -202,7 +204,7 @@ export function FieldEditor({ field, onChange, onRemove }: Props) {
         {!isVisual && (
           <div>
             <Label className="text-[10px] uppercase text-muted-foreground">
-              Mapear pra contato/deal
+              {t('mappingLabel')}
             </Label>
             <select
               value={field.mapping ?? 'custom'}
@@ -217,9 +219,9 @@ export function FieldEditor({ field, onChange, onRemove }: Props) {
               }
               className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
             >
-              {Object.entries(MAPPING_LABELS).map(([k, v]) => (
+              {MAPPING_KEYS.map((k) => (
                 <option key={k} value={k}>
-                  {v}
+                  {t(`mapping.${k}`)}
                 </option>
               ))}
             </select>
@@ -244,10 +246,11 @@ function OptionsEditor({
   options: FormFieldOption[];
   onChange: (opts: FormFieldOption[]) => void;
 }) {
+  const t = useTranslations('formularios.fieldEditor');
   return (
     <div className="space-y-1.5">
       <Label className="text-[10px] uppercase text-muted-foreground">
-        Opções
+        {t('optionsLabel')}
       </Label>
       {options.map((opt, idx) => (
         <div key={idx} className="flex items-center gap-1">
@@ -262,7 +265,7 @@ function OptionsEditor({
               };
               onChange(next);
             }}
-            placeholder="Rótulo"
+            placeholder={t('optionLabel')}
             className="h-7 flex-1"
           />
           <Button
@@ -284,11 +287,11 @@ function OptionsEditor({
         onClick={() =>
           onChange([
             ...options,
-            { value: `opcao_${options.length + 1}`, label: `Opção ${options.length + 1}` },
+            { value: `opcao_${options.length + 1}`, label: t('newOptionDefault', { n: options.length + 1 }) },
           ])
         }
       >
-        + Adicionar opção
+        {t('addOption')}
       </Button>
     </div>
   );

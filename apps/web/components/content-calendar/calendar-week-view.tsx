@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import type { ContentCalendarEvent } from '@/lib/api/content-calendar';
 import { cn } from '@/lib/utils';
 import { EventCard } from './event-card';
@@ -32,7 +33,7 @@ const HOURS = [
   '22:00',
 ];
 
-const WEEKDAYS_PT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
 
 /**
  * Vista semanal: 7 colunas × bands de horas. Eventos posicionados pelo
@@ -45,6 +46,7 @@ export function CalendarWeekView({
   onReschedule,
   className,
 }: CalendarWeekViewProps) {
+  const t = useTranslations('contentCalendar');
   const [cursor, setCursor] = useState(() => new Date());
   const [dragOverCell, setDragOverCell] = useState<string | null>(null);
 
@@ -91,15 +93,19 @@ export function CalendarWeekView({
       {/* Header */}
       <div className="flex items-center justify-between">
         <h3 className="text-base font-semibold">
-          Semana de {weekDays[0]?.getDate()}/{(weekDays[0]?.getMonth() ?? 0) + 1} a{' '}
-          {weekDays[6]?.getDate()}/{(weekDays[6]?.getMonth() ?? 0) + 1}
+          {t('weekRange', {
+            fromDay: weekDays[0]?.getDate() ?? 0,
+            fromMonth: (weekDays[0]?.getMonth() ?? 0) + 1,
+            toDay: weekDays[6]?.getDate() ?? 0,
+            toMonth: (weekDays[6]?.getMonth() ?? 0) + 1,
+          })}
         </h3>
         <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={() => setCursor((d) => shiftDays(d, -7))}
             className="flex h-9 w-9 items-center justify-center rounded-md border border-border hover:bg-accent"
-            aria-label="Semana anterior"
+            aria-label={t('prevWeek')}
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
@@ -108,13 +114,13 @@ export function CalendarWeekView({
             onClick={() => setCursor(new Date())}
             className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-accent"
           >
-            Hoje
+            {t('today')}
           </button>
           <button
             type="button"
             onClick={() => setCursor((d) => shiftDays(d, 7))}
             className="flex h-9 w-9 items-center justify-center rounded-md border border-border hover:bg-accent"
-            aria-label="Próxima semana"
+            aria-label={t('nextWeek')}
           >
             <ChevronRight className="h-4 w-4" />
           </button>
@@ -139,7 +145,7 @@ export function CalendarWeekView({
                       : 'border-border text-muted-foreground',
                   )}
                 >
-                  <div className="text-[10px] uppercase">{WEEKDAYS_PT[d.getDay()]}</div>
+                  <div className="text-[10px] uppercase">{t(`weekdayShort.${WEEKDAY_KEYS[d.getDay()]}`)}</div>
                   <div className="text-base">{d.getDate()}</div>
                 </div>
               );
@@ -148,7 +154,7 @@ export function CalendarWeekView({
 
           {/* Linha "sem hora" */}
           <Row
-            label="—"
+            label={t('weekNoTimeLabel')}
             band="no-time"
             weekDays={weekDays}
             grid={grid}
@@ -185,10 +191,10 @@ export function CalendarWeekView({
 
       {/* Hint mobile */}
       <p className="text-[11px] text-muted-foreground md:hidden">
-        Role horizontalmente pra ver toda a semana.
+        {t('weekHint')}
       </p>
       <p className="sr-only">
-        {weekDays[0] && formatLongDate(weekDays[0])}
+        {weekDays[0] && formatLongDate(weekDays[0], (k, v) => t(k, v))}
       </p>
     </div>
   );

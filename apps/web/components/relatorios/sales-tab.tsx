@@ -18,6 +18,7 @@ import {
   Percent,
   TrendingUp,
 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import type { SalesReport } from '@/lib/api/reports';
 import { cn } from '@/lib/utils';
 
@@ -27,11 +28,12 @@ interface SalesTabProps {
 }
 
 export function SalesTab({ data, loading }: SalesTabProps) {
+  const t = useTranslations('relatorios');
   if (loading || !data) {
     return <SkeletonGrid />;
   }
 
-  const t = data.totals;
+  const tot = data.totals;
 
   return (
     <div className="flex flex-col gap-4">
@@ -40,37 +42,37 @@ export function SalesTab({ data, loading }: SalesTabProps) {
         <MetricCard
           icon={DollarSign}
           color="bg-accent/10 text-accent"
-          label="Receita total"
-          value={formatBRL(t.revenue)}
-          hint={t.avg_cycle_days !== null ? `Ciclo médio: ${t.avg_cycle_days}d` : ''}
+          label={t('sales.revenueTotal')}
+          value={formatBRL(tot.revenue)}
+          hint={tot.avg_cycle_days !== null ? t('sales.avgCycle', { days: tot.avg_cycle_days }) : ''}
         />
         <MetricCard
           icon={CheckCircle}
           color="bg-emerald-500/10 text-emerald-400"
-          label="Deals ganhos"
-          value={String(t.deals_won)}
-          hint={`${t.deals_open} abertos`}
+          label={t('sales.dealsWon')}
+          value={String(tot.deals_won)}
+          hint={t('sales.dealsOpen', { n: tot.deals_open })}
         />
         <MetricCard
           icon={TrendingUp}
           color="bg-primary/10 text-primary"
-          label="Ticket médio"
-          value={formatBRL(t.avg_ticket)}
+          label={t('sales.avgTicket')}
+          value={formatBRL(tot.avg_ticket)}
         />
         <MetricCard
           icon={Percent}
           color="bg-yellow-500/10 text-yellow-400"
-          label="Taxa de conversão"
-          value={`${t.conversion_rate}%`}
-          hint={`${t.deals_won} de ${t.deals_won + t.deals_lost} fechados`}
+          label={t('sales.conversionRate')}
+          value={`${tot.conversion_rate}%`}
+          hint={t('sales.closedDealsHint', { won: tot.deals_won, total: tot.deals_won + tot.deals_lost })}
         />
       </div>
 
       {/* Charts */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <ChartCard title="Ganhos vs Perdidos por semana">
+        <ChartCard title={t('sales.wonVsLost')}>
           {data.weekly_series.length === 0 ? (
-            <EmptyChart message="Sem deals fechados no período" />
+            <EmptyChart message={t('sales.emptyWonLost')} />
           ) : (
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={data.weekly_series}>
@@ -86,22 +88,22 @@ export function SalesTab({ data, loading }: SalesTabProps) {
                   dataKey="won"
                   fill="hsl(var(--accent))"
                   radius={[4, 4, 0, 0]}
-                  name="Ganhos"
+                  name={t('sales.wonLegend')}
                 />
                 <Bar
                   dataKey="lost"
                   fill="hsl(var(--destructive))"
                   radius={[4, 4, 0, 0]}
-                  name="Perdidos"
+                  name={t('sales.lostLegend')}
                 />
               </BarChart>
             </ResponsiveContainer>
           )}
         </ChartCard>
 
-        <ChartCard title="Receita acumulada">
+        <ChartCard title={t('sales.revenueCumulative')}>
           {data.revenue_cumulative.length === 0 ? (
-            <EmptyChart message="Sem receita no período" />
+            <EmptyChart message={t('sales.emptyRevenue')} />
           ) : (
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={data.revenue_cumulative}>
@@ -122,7 +124,7 @@ export function SalesTab({ data, loading }: SalesTabProps) {
                   stroke="hsl(var(--primary))"
                   strokeWidth={2}
                   dot={false}
-                  name="Receita"
+                  name={t('sales.revenueLegend')}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -134,11 +136,11 @@ export function SalesTab({ data, loading }: SalesTabProps) {
       <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-5">
         <div className="flex items-center gap-2">
           <AlertCircle className="h-4 w-4 text-destructive" />
-          <h2 className="text-sm font-semibold">Top motivos de perda</h2>
+          <h2 className="text-sm font-semibold">{t('sales.lostReasonsTitle')}</h2>
         </div>
         {data.lost_reasons.length === 0 ? (
           <p className="text-xs text-muted-foreground">
-            Nenhuma perda registrada no período. Mantenha assim 🎯
+            {t('sales.noLosses')}
           </p>
         ) : (
           <ul className="flex flex-col gap-1.5">

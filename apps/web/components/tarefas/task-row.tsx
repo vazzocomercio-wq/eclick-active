@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { Calendar, Loader2, Trash2 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import type { Task } from '@eclick-active/shared';
 import type { TaskRow } from '@/lib/api/tasks';
 import { tasksApi } from '@/lib/api/tasks';
@@ -24,6 +25,7 @@ interface TaskRowProps {
 }
 
 export function TaskRowItem({ task, onLocalPatch, onLocalRemove }: TaskRowProps) {
+  const t = useTranslations('tarefas.row');
   const [busy, setBusy] = useState<'complete' | 'delete' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
@@ -49,7 +51,7 @@ export function TaskRowItem({ task, onLocalPatch, onLocalRemove }: TaskRowProps)
           ? err.message
           : err instanceof Error
             ? err.message
-            : 'Erro ao concluir tarefa',
+            : t('errors.complete'),
       );
       // Reverte
       onLocalPatch(task.id, { status: task.status, completed_at: task.completed_at });
@@ -74,7 +76,7 @@ export function TaskRowItem({ task, onLocalPatch, onLocalRemove }: TaskRowProps)
           ? err.message
           : err instanceof Error
             ? err.message
-            : 'Erro ao deletar tarefa',
+            : t('errors.delete'),
       );
     } finally {
       setBusy(null);
@@ -95,7 +97,7 @@ export function TaskRowItem({ task, onLocalPatch, onLocalRemove }: TaskRowProps)
         type="button"
         onClick={handleComplete}
         disabled={busy !== null || isCompleted}
-        aria-label={isCompleted ? 'Tarefa concluída' : 'Marcar como concluída'}
+        aria-label={isCompleted ? t('completedAria') : t('completeAria')}
         className={cn(
           'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition-colors',
           isCompleted
@@ -171,7 +173,7 @@ export function TaskRowItem({ task, onLocalPatch, onLocalRemove }: TaskRowProps)
               )}
             >
               <Calendar className="h-3 w-3" />
-              {formatDueDate(task.due_date)}
+              {formatDueDate(task.due_date, t)}
             </span>
           )}
 
@@ -192,7 +194,7 @@ export function TaskRowItem({ task, onLocalPatch, onLocalRemove }: TaskRowProps)
         type="button"
         onClick={handleDelete}
         disabled={busy !== null}
-        aria-label="Excluir tarefa"
+        aria-label={t('deleteAria')}
         className="opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
       >
         {busy === 'delete' ? (
@@ -232,9 +234,12 @@ function computeDueState(
   return 'future';
 }
 
-function formatDueDate(iso: string): string {
+function formatDueDate(
+  iso: string,
+  t: (key: string, vars?: Record<string, string>) => string,
+): string {
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
+  if (Number.isNaN(d.getTime())) return t('dueLabel.noDate');
 
   const now = new Date();
   const startOfToday = new Date(now);
@@ -244,7 +249,7 @@ function formatDueDate(iso: string): string {
 
   // Hoje → "Hoje 15:30"
   if (d >= startOfToday && d <= endOfToday) {
-    return `Hoje ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+    return t('dueLabel.today', { time: d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) });
   }
 
   // Overdue → "Há 2 dias"

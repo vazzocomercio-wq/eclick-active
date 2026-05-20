@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { Headphones, ExternalLink } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { useTicketByConversation } from '@/hooks/use-sac';
 import {
   PriorityBadge,
@@ -20,6 +21,7 @@ interface TicketSacSectionProps {
  * existe ticket aberto vinculado à conversa. Auto-atualiza via socket.
  */
 export function TicketSacSection({ conversationId }: TicketSacSectionProps) {
+  const t = useTranslations('sac.ticketSection');
   const { ticket, loading } = useTicketByConversation(conversationId);
 
   if (loading || !ticket) return null;
@@ -29,7 +31,7 @@ export function TicketSacSection({ conversationId }: TicketSacSectionProps) {
       <div className="mb-2 flex items-center justify-between">
         <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-cyan-700 dark:text-cyan-300">
           <Headphones className="h-3 w-3" />
-          Ticket SAC
+          {t('title')}
         </div>
         <Link
           href={`/sac/${ticket.id}`}
@@ -62,7 +64,7 @@ export function TicketSacSection({ conversationId }: TicketSacSectionProps) {
       {(ticket.order_marketplace || ticket.order_marketplace_id) && (
         <div className="mt-2 rounded-md border border-border/60 bg-background/40 p-1.5 text-[10px]">
           <div className="font-medium text-foreground/70">
-            {ticket.order_marketplace ?? 'Pedido'}
+            {ticket.order_marketplace ?? t('orderFallback')}
             {ticket.order_marketplace_id ? ` #${ticket.order_marketplace_id}` : ''}
           </div>
           {ticket.order_status && (

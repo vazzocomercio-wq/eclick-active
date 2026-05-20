@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { MessageSquareQuote, ThumbsDown, ThumbsUp, TrendingUp } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { aiApi, type FeedbackStats } from '@/lib/api/ai';
 import { ApiError } from '@/lib/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,6 +20,7 @@ interface AIFeedbackTabProps {
  * prompts/modelos e priorizar melhorias.
  */
 export function AIFeedbackTab({ periodDays = 30 }: AIFeedbackTabProps) {
+  const t = useTranslations('relatorios');
   const [stats, setStats] = useState<FeedbackStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,12 +39,12 @@ export function AIFeedbackTab({ periodDays = 30 }: AIFeedbackTabProps) {
             ? `${err.status}: ${err.message}`
             : err instanceof Error
               ? err.message
-              : 'Erro ao carregar feedbacks',
+              : t('feedbackError'),
         );
       })
       .finally(() => setLoading(false));
     return () => ctrl.abort();
-  }, [periodDays]);
+  }, [periodDays, t]);
 
   if (loading) {
     return (
@@ -74,14 +76,14 @@ export function AIFeedbackTab({ periodDays = 30 }: AIFeedbackTabProps) {
         <KpiCard
           icon={ThumbsUp}
           tone="success"
-          label="Feedbacks positivos"
+          label={t('ai.kpi.positive')}
           value={stats.total_positive}
           total={total}
         />
         <KpiCard
           icon={ThumbsDown}
           tone="danger"
-          label="Feedbacks negativos"
+          label={t('ai.kpi.negative')}
           value={stats.total_negative}
           total={total}
         />
@@ -89,7 +91,7 @@ export function AIFeedbackTab({ periodDays = 30 }: AIFeedbackTabProps) {
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-1.5 text-xs">
               <TrendingUp className="h-3.5 w-3.5 text-primary" />
-              Taxa de aprovação
+              {t('ai.kpi.approval')}
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
@@ -98,8 +100,8 @@ export function AIFeedbackTab({ periodDays = 30 }: AIFeedbackTabProps) {
             </div>
             <p className="mt-1 text-[11px] text-muted-foreground">
               {hasFeedback
-                ? `${stats.total_positive} de ${total} respostas foram úteis`
-                : 'Sem feedback no período'}
+                ? t('ai.kpi.approvalHint', { positive: stats.total_positive, total })
+                : t('ai.kpi.noFeedback')}
             </p>
           </CardContent>
         </Card>
@@ -109,24 +111,24 @@ export function AIFeedbackTab({ periodDays = 30 }: AIFeedbackTabProps) {
       <div className="grid gap-3 md:grid-cols-2">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs">Distribuição</CardTitle>
+            <CardTitle className="text-xs">{t('ai.distribution')}</CardTitle>
           </CardHeader>
           <CardContent className="flex items-center justify-center pt-0">
             {hasFeedback ? (
-              <Donut positive={stats.total_positive} negative={stats.total_negative} />
+              <Donut positive={stats.total_positive} negative={stats.total_negative} positiveLabel={t('ai.donutPositiveLabel')} />
             ) : (
-              <p className="py-8 text-xs text-muted-foreground">Sem dados</p>
+              <p className="py-8 text-xs text-muted-foreground">{t('ai.noData')}</p>
             )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs">Aprovação por semana</CardTitle>
+            <CardTitle className="text-xs">{t('ai.weeklyApproval')}</CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
             {stats.weekly.length === 0 ? (
-              <p className="py-8 text-center text-xs text-muted-foreground">Sem dados</p>
+              <p className="py-8 text-center text-xs text-muted-foreground">{t('ai.noData')}</p>
             ) : (
               <WeeklyChart weekly={stats.weekly} />
             )}
@@ -139,13 +141,13 @@ export function AIFeedbackTab({ periodDays = 30 }: AIFeedbackTabProps) {
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-1.5 text-xs">
             <MessageSquareQuote className="h-3.5 w-3.5 text-red-500" />
-            Comentários negativos recentes
+            {t('ai.recentNegative')}
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
           {stats.recent_negative_comments.length === 0 ? (
             <p className="text-xs text-muted-foreground italic">
-              Nenhum comentário negativo registrado no período.
+              {t('ai.noNegative')}
             </p>
           ) : (
             <ul className="flex flex-col gap-2">
@@ -184,6 +186,7 @@ function KpiCard({
   value: number;
   total: number;
 }) {
+  const t = useTranslations('relatorios');
   const pct = total > 0 ? Math.round((value / total) * 100) : 0;
   const color = tone === 'success' ? 'text-emerald-500' : 'text-red-500';
   return (
@@ -197,7 +200,7 @@ function KpiCard({
       <CardContent className="pt-0">
         <div className="text-3xl font-semibold tabular-nums">{value}</div>
         <p className="mt-1 text-[11px] text-muted-foreground">
-          {total > 0 ? `${pct}% do total` : 'Sem feedback'}
+          {total > 0 ? t('ai.kpi.pctOfTotal', { n: pct }) : t('ai.kpi.noFeedbackShort')}
         </p>
       </CardContent>
     </Card>
@@ -208,7 +211,7 @@ function KpiCard({
  * Donut SVG simples — sem dependência externa. Aceita 2 valores e
  * desenha 2 arcos (positivo verde, negativo vermelho).
  */
-function Donut({ positive, negative }: { positive: number; negative: number }) {
+function Donut({ positive, negative, positiveLabel }: { positive: number; negative: number; positiveLabel: string }) {
   const total = positive + negative;
   if (total === 0) return null;
   const positivePct = positive / total;
@@ -257,7 +260,7 @@ function Donut({ positive, negative }: { positive: number; negative: number }) {
         textAnchor="middle"
         className="fill-muted-foreground text-[10px]"
       >
-        positivos
+        {positiveLabel}
       </text>
     </svg>
   );

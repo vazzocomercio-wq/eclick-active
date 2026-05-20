@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Loader2, Search, X } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Contact } from '@eclick-active/shared';
@@ -42,6 +43,7 @@ export function QuickAddDeal({
   onCancel,
   className,
 }: QuickAddDealProps) {
+  const t = useTranslations('funis.deal.quickAdd');
   const [title, setTitle] = useState('');
   const [valueStr, setValueStr] = useState('');
   const [contactQuery, setContactQuery] = useState('');
@@ -86,16 +88,16 @@ export function QuickAddDeal({
         ...(tags.length > 0 ? { tags } : {}),
       });
 
-      toast.success('Negócio criado');
+      toast.success(t('created'));
       await onCreated();
     } catch (err) {
-      toast.error('Falha ao criar negócio', {
+      toast.error(t('createFailed'), {
         description:
           err instanceof ApiError
             ? `${err.status}: ${err.message}`
             : err instanceof Error
               ? err.message
-              : 'Erro desconhecido',
+              : t('unknownError'),
       });
     } finally {
       setSubmitting(false);
@@ -112,11 +114,11 @@ export function QuickAddDeal({
       )}
     >
       <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-        <span>Novo negócio</span>
+        <span>{t('title')}</span>
         <button
           type="button"
           onClick={onCancel}
-          aria-label="Cancelar"
+          aria-label={t('cancel')}
           className="rounded-md p-0.5 hover:bg-muted hover:text-foreground"
         >
           <X className="h-3 w-3" />
@@ -127,7 +129,7 @@ export function QuickAddDeal({
         ref={titleRef}
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        placeholder="Nome do negócio"
+        placeholder={t('titlePlaceholder')}
         disabled={submitting}
         required
         className="h-8 text-xs"
@@ -136,7 +138,7 @@ export function QuickAddDeal({
       <Input
         value={valueStr}
         onChange={(e) => setValueStr(e.target.value)}
-        placeholder="R$ 0,00"
+        placeholder={t('valuePlaceholder')}
         disabled={submitting}
         inputMode="decimal"
         className="h-8 text-xs"
@@ -161,7 +163,7 @@ export function QuickAddDeal({
         entityType="deal"
         value={tags}
         onChange={setTags}
-        placeholder="Tags do card (opcional)"
+        placeholder={t('tagsPlaceholder')}
       />
 
       <div className="flex items-center justify-end gap-1.5 pt-1">
@@ -173,7 +175,7 @@ export function QuickAddDeal({
           disabled={submitting}
           className="h-7 px-2 text-[11px]"
         >
-          Cancelar
+          {t('cancel')}
         </Button>
         <Button
           type="submit"
@@ -182,7 +184,7 @@ export function QuickAddDeal({
           className="h-7 px-3 text-[11px]"
         >
           {submitting && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
-          Criar (Enter)
+          {t('submit')}
         </Button>
       </div>
     </form>
@@ -208,6 +210,7 @@ function ContactPicker({
   onClear: () => void;
   disabled: boolean;
 }) {
+  const t = useTranslations('funis.deal.quickAdd');
   const [results, setResults] = useState<Contact[]>([]);
   const [searching, setSearching] = useState(false);
   const [open, setOpen] = useState(false);
@@ -238,12 +241,12 @@ function ContactPicker({
     return (
       <div className="flex items-center justify-between rounded-md border border-input bg-muted/30 px-2 py-1 text-xs">
         <span className="truncate">
-          {picked.name ?? picked.phone ?? 'Contato selecionado'}
+          {picked.name ?? picked.phone ?? t('selectedFallback')}
         </span>
         <button
           type="button"
           onClick={onClear}
-          aria-label="Trocar contato"
+          aria-label={t('changeContact')}
           disabled={disabled}
           className="rounded-md p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
         >
@@ -265,7 +268,7 @@ function ContactPicker({
           }}
           onFocus={() => setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
-          placeholder="Telefone ou nome do contato"
+          placeholder={t('contactPlaceholder')}
           disabled={disabled}
           className="h-8 pl-7 text-xs"
         />
@@ -273,10 +276,10 @@ function ContactPicker({
       {open && debounced.trim().length >= 2 && (
         <div className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-md border border-border bg-popover text-xs shadow-lg">
           {searching ? (
-            <div className="px-2 py-1.5 text-[11px] text-muted-foreground">Buscando...</div>
+            <div className="px-2 py-1.5 text-[11px] text-muted-foreground">{t('searching')}</div>
           ) : results.length === 0 ? (
             <div className="px-2 py-1.5 text-[11px] text-muted-foreground">
-              Nenhum contato — será criado novo ao salvar
+              {t('noContactWillCreate')}
             </div>
           ) : (
             results.map((c) => (
@@ -287,7 +290,7 @@ function ContactPicker({
                 className="flex w-full flex-col items-start gap-0 px-2 py-1.5 text-left hover:bg-muted"
               >
                 <span className="truncate font-medium">
-                  {c.name ?? <span className="italic text-muted-foreground">sem nome</span>}
+                  {c.name ?? <span className="italic text-muted-foreground">{t('noName')}</span>}
                 </span>
                 <span className="truncate text-[10px] text-muted-foreground">
                   {c.phone ?? c.email ?? '—'}

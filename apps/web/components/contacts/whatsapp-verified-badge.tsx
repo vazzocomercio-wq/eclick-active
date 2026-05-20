@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { contactsApi, type Contact } from '@/lib/api/contacts';
@@ -52,6 +53,7 @@ export function WhatsAppVerifiedBadge({
   hideUnknown,
   className,
 }: WhatsAppVerifiedBadgeProps) {
+  const t = useTranslations('contacts.verifyBadge');
   const [loading, setLoading] = useState(false);
   const px = SIZE_PX[size];
 
@@ -66,14 +68,14 @@ export function WhatsAppVerifiedBadge({
     try {
       const res = await contactsApi.verifyWhatsapp(contactId);
       if (!res.ok || !res.result) {
-        toast.warning('Verificação indisponível', {
-          description: 'Conecte um canal WhatsApp (Z-API ou Gratuito) pra verificar números.',
+        toast.warning(t('unavailableTitle'), {
+          description: t('unavailableDescription'),
         });
         return;
       }
       const next = res.result;
       toast.success(
-        next.exists ? 'Número verificado como WhatsApp' : 'Número não é WhatsApp',
+        next.exists ? t('verifiedSuccess') : t('notWhatsappSuccess'),
       );
       onVerified?.({
         whatsapp_verified: next.exists,
@@ -82,7 +84,7 @@ export function WhatsAppVerifiedBadge({
         whatsapp_profile_pic_url: next.profile_pic_url ?? null,
       });
     } catch (err) {
-      toast.error('Falha ao verificar', {
+      toast.error(t('failed'), {
         description: err instanceof ApiError ? err.message : undefined,
       });
     } finally {
@@ -94,16 +96,16 @@ export function WhatsAppVerifiedBadge({
   let icon: React.ReactElement;
 
   if (loading) {
-    tooltip = 'Verificando...';
+    tooltip = t('verifying');
     icon = <Loader2 width={px} height={px} className="animate-spin text-muted-foreground" />;
   } else if (verified === true) {
-    tooltip = 'WhatsApp verificado';
+    tooltip = t('verified');
     icon = <WhatsAppGlyph size={px} className="text-emerald-500" />;
   } else if (verified === false) {
-    tooltip = 'Número não é WhatsApp';
+    tooltip = t('notWhatsapp');
     icon = <WhatsAppGlyphCrossed size={px} className="text-rose-400" />;
   } else {
-    tooltip = contactId ? 'Não verificado · clique pra checar agora' : 'Não verificado';
+    tooltip = contactId ? t('unverifiedInteractive') : t('unverified');
     icon = <WhatsAppGlyph size={px} className="text-muted-foreground/60" />;
   }
 

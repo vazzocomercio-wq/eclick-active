@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import type { Contact } from '@eclick-active/shared';
 import {
   Table,
@@ -36,6 +37,7 @@ export function ContactsTable({
   onToggleOne,
   onToggleAll,
 }: ContactsTableProps) {
+  const t = useTranslations('contacts.table');
   const allChecked = contacts.length > 0 && contacts.every((c) => selectedIds.has(c.id));
   const someChecked = !allChecked && contacts.some((c) => selectedIds.has(c.id));
 
@@ -46,7 +48,7 @@ export function ContactsTable({
           <TableHead className="w-[40px]">
             <input
               type="checkbox"
-              aria-label="Selecionar todos"
+              aria-label={t('selectAll')}
               checked={allChecked}
               ref={(el) => {
                 if (el) el.indeterminate = someChecked;
@@ -56,21 +58,21 @@ export function ContactsTable({
               disabled={loading || contacts.length === 0}
             />
           </TableHead>
-          <TableHead className="w-[60px]">Contato</TableHead>
-          <TableHead>Nome</TableHead>
-          <TableHead>Telefone</TableHead>
-          <TableHead>Email</TableHead>
-          <TableHead className="w-[120px]">Temperatura</TableHead>
-          <TableHead className="w-[140px]">Score</TableHead>
-          <TableHead>Tags</TableHead>
-          <TableHead className="w-[120px] text-right">Última atividade</TableHead>
+          <TableHead className="w-[60px]">{t('columns.contact')}</TableHead>
+          <TableHead>{t('columns.name')}</TableHead>
+          <TableHead>{t('columns.phone')}</TableHead>
+          <TableHead>{t('columns.email')}</TableHead>
+          <TableHead className="w-[120px]">{t('columns.temperature')}</TableHead>
+          <TableHead className="w-[140px]">{t('columns.score')}</TableHead>
+          <TableHead>{t('columns.tags')}</TableHead>
+          <TableHead className="w-[120px] text-right">{t('columns.lastActivity')}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {loading
           ? renderSkeletonRows()
           : contacts.length === 0
-            ? renderEmpty()
+            ? renderEmpty(t('empty'))
             : contacts.map((c) => {
                 const checked = selectedIds.has(c.id);
                 return (
@@ -85,7 +87,7 @@ export function ContactsTable({
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
-                        aria-label={`Selecionar ${c.name ?? 'contato'}`}
+                        aria-label={t('selectContact', { name: c.name ?? t('selectContactFallback') })}
                         checked={checked}
                         onChange={() => onToggleOne(c.id)}
                         className="h-4 w-4 cursor-pointer accent-primary"
@@ -95,7 +97,7 @@ export function ContactsTable({
                       <InitialsAvatar name={c.name} src={c.avatar_url} />
                     </TableCell>
                     <TableCell className="font-medium text-foreground">
-                      {c.name ?? <span className="text-muted-foreground">sem nome</span>}
+                      {c.name ?? <span className="text-muted-foreground">{t('noName')}</span>}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {c.phone ? (
@@ -166,11 +168,11 @@ function renderSkeletonRows() {
   ));
 }
 
-function renderEmpty() {
+function renderEmpty(message: string) {
   return (
     <TableRow>
       <TableCell colSpan={9} className="py-16 text-center text-sm text-muted-foreground">
-        Nenhum contato encontrado.
+        {message}
       </TableCell>
     </TableRow>
   );

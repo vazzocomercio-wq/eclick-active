@@ -13,6 +13,7 @@ import {
   Play,
   User as UserIcon,
 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import type { Message } from '@eclick-active/shared';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
@@ -43,6 +44,7 @@ interface MessageMediaProps {
  * Loading: skeleton 4:3. Fallback: card de erro com ícone ImageOff/etc.
  */
 export function MessageMedia({ message, compact = false }: MessageMediaProps) {
+  const t = useTranslations('chat.media');
   const c = (message.content as Record<string, unknown> | null) ?? {};
   const meta = (message.metadata as Record<string, unknown> | null) ?? {};
   const explicitType = (meta.type as string | undefined) ?? message.content_type;
@@ -95,7 +97,7 @@ export function MessageMedia({ message, compact = false }: MessageMediaProps) {
     case 'system':
       return (
         <p className="text-xs italic text-muted-foreground">
-          {(c.event as string) ?? 'evento do sistema'}
+          {(c.event as string) ?? t('systemEvent')}
         </p>
       );
     default:
@@ -120,12 +122,13 @@ function ImageMedia({
   caption?: string;
   compact: boolean;
 }) {
+  const t = useTranslations('chat.media');
   const [lightbox, setLightbox] = useState(false);
   const [errored, setErrored] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const maxWidth = compact ? 280 : 400;
 
-  if (!url || errored) return <FallbackCard icon={ImageOff} label="Imagem indisponível" />;
+  if (!url || errored) return <FallbackCard icon={ImageOff} label={t('imageUnavailable')} />;
 
   return (
     <>
@@ -176,7 +179,8 @@ function ImageMedia({
 }
 
 function StickerMedia({ url }: { url?: string }) {
-  if (!url) return <FallbackCard icon={ImageOff} label="Sticker indisponível" />;
+  const t = useTranslations('chat.media');
+  if (!url) return <FallbackCard icon={ImageOff} label={t('stickerUnavailable')} />;
   return (
     /* eslint-disable-next-line @next/next/no-img-element */
     <img
@@ -201,6 +205,7 @@ function AudioMedia({
   duration?: number;
   compact: boolean;
 }) {
+  const t = useTranslations('chat.media');
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [current, setCurrent] = useState(0);
@@ -236,7 +241,7 @@ function AudioMedia({
 
   if (!url) {
     return (
-      <span className="text-sm italic text-muted-foreground">áudio sem URL</span>
+      <span className="text-sm italic text-muted-foreground">{t('audioNoUrl')}</span>
     );
   }
 
@@ -254,7 +259,7 @@ function AudioMedia({
         type="button"
         onClick={toggle}
         className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-cyan-500 text-white shadow-sm transition-transform hover:scale-105"
-        aria-label={playing ? 'Pausar' : 'Tocar'}
+        aria-label={playing ? t('audioPause') : t('audioPlay')}
       >
         {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
       </button>
@@ -298,10 +303,11 @@ function formatTime(s: number): string {
 // ──────────────────────────────────────────────────────────
 
 function VideoMedia({ url, compact }: { url?: string; compact: boolean }) {
+  const t = useTranslations('chat.media');
   const [open, setOpen] = useState(false);
   const maxWidth = compact ? 280 : 400;
 
-  if (!url) return <FallbackCard icon={ImageOff} label="Vídeo indisponível" />;
+  if (!url) return <FallbackCard icon={ImageOff} label={t('videoUnavailable')} />;
 
   return (
     <>
@@ -348,7 +354,8 @@ function DocumentMedia({
   size?: number;
   compact: boolean;
 }) {
-  if (!url) return <FallbackCard icon={File} label="Documento indisponível" />;
+  const t = useTranslations('chat.media');
+  if (!url) return <FallbackCard icon={File} label={t('documentUnavailable')} />;
 
   const ext = filename?.split('.').pop()?.toLowerCase() ?? '';
   const { Icon, color } = pickFileIcon(ext);
@@ -365,9 +372,9 @@ function DocumentMedia({
         <Icon className="h-4 w-4 text-white" />
       </span>
       <div className="flex flex-1 flex-col min-w-0">
-        <span className="truncate text-sm font-medium">{filename ?? 'documento'}</span>
+        <span className="truncate text-sm font-medium">{filename ?? t('documentFallback')}</span>
         <span className="text-[10px] text-muted-foreground">
-          {size ? formatSize(size) : ext.toUpperCase() || 'Arquivo'}
+          {size ? formatSize(size) : ext.toUpperCase() || t('fileFallback')}
         </span>
       </div>
       <a
@@ -375,7 +382,7 @@ function DocumentMedia({
         target="_blank"
         rel="noopener noreferrer"
         className="shrink-0 rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        aria-label="Baixar documento"
+        aria-label={t('downloadAria')}
       >
         <Download className="h-3.5 w-3.5" />
       </a>
@@ -413,6 +420,7 @@ function LocationMedia({
   address?: string;
   compact: boolean;
 }) {
+  const t = useTranslations('chat.media');
   const width = compact ? 260 : 320;
   const mapsUrl =
     lat !== undefined && lng !== undefined
@@ -442,7 +450,7 @@ function LocationMedia({
             className="mt-1 inline-flex items-center gap-1 self-start rounded-md bg-cyan-500/10 px-2 py-1 text-[11px] font-medium text-cyan-600 transition-colors hover:bg-cyan-500/20 dark:text-cyan-400"
           >
             <ExternalLink className="h-3 w-3" />
-            Abrir no Maps
+            {t('openMaps')}
           </a>
         )}
       </div>
@@ -455,13 +463,14 @@ function LocationMedia({
 // ──────────────────────────────────────────────────────────
 
 function ContactMedia({ name, phone }: { name?: string; phone?: string }) {
+  const t = useTranslations('chat.media');
   return (
     <div className="flex items-center gap-2 rounded-md border border-border bg-card p-2">
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
         <UserIcon className="h-4 w-4" />
       </span>
       <div className="flex flex-1 flex-col min-w-0">
-        <span className="truncate text-sm font-medium">{name ?? 'Contato compartilhado'}</span>
+        <span className="truncate text-sm font-medium">{name ?? t('sharedContact')}</span>
         {phone && (
           <span className="truncate text-[11px] text-muted-foreground">{phone}</span>
         )}

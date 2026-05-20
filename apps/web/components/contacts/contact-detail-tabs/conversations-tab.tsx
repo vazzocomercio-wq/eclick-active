@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { ArrowLeft, Loader2, MessageCircle, MessageSquarePlus } from 'lucide-react';
 import type { ChannelType, InboxItem } from '@eclick-active/shared';
 import { Card, CardContent } from '@/components/ui/card';
@@ -25,12 +26,14 @@ interface ContactConversationsTabProps {
  *   - Empty state com hint "Nenhuma conversa registrada"
  */
 export function ContactConversationsTab({ contactId }: ContactConversationsTabProps) {
+  const t = useTranslations('contacts.conversationsTab');
   const [conversations, setConversations] = useState<InboxItem[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [startOpen, setStartOpen] = useState(false);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const fetchConversations = useCallback(
     (signal?: AbortSignal) => {
       setLoading(true);
@@ -49,7 +52,7 @@ export function ContactConversationsTab({ contactId }: ContactConversationsTabPr
               ? `${err.status}: ${err.message}`
               : err instanceof Error
                 ? err.message
-                : 'Erro ao buscar conversas',
+                : t('fetchError'),
           );
           return [] as InboxItem[];
         })
@@ -88,10 +91,9 @@ export function ContactConversationsTab({ contactId }: ContactConversationsTabPr
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
               <MessageCircle className="h-6 w-6" />
             </div>
-            <p className="text-sm font-medium">Nenhuma conversa registrada</p>
+            <p className="text-sm font-medium">{t('emptyTitle')}</p>
             <p className="max-w-xs text-xs text-muted-foreground">
-              Inicie uma conversa enviando a primeira mensagem ou aguarde o contato
-              chegar por algum canal.
+              {t('emptyDescription')}
             </p>
             <Button
               size="sm"
@@ -99,7 +101,7 @@ export function ContactConversationsTab({ contactId }: ContactConversationsTabPr
               className="mt-1 gap-1.5"
             >
               <MessageSquarePlus className="h-3.5 w-3.5" />
-              Iniciar conversa
+              {t('startConversation')}
             </Button>
           </CardContent>
         </Card>
@@ -130,7 +132,7 @@ export function ContactConversationsTab({ contactId }: ContactConversationsTabPr
               className="h-7 text-xs"
             >
               <ArrowLeft className="mr-1.5 h-3 w-3" />
-              Voltar à lista
+              {t('backToList')}
             </Button>
           </div>
         )}
@@ -150,7 +152,7 @@ export function ContactConversationsTab({ contactId }: ContactConversationsTabPr
   return (
     <div className="flex flex-col gap-2 p-4">
       <p className="text-[11px] text-muted-foreground">
-        {conversations.length} conversas com esse contato. Selecione uma pra abrir:
+        {t('multipleHint', { count: conversations.length })}
       </p>
 
       {conversations.map((c) => (
@@ -171,6 +173,7 @@ function ConversationListItem({
   item: InboxItem;
   onClick: () => void;
 }) {
+  const t = useTranslations('contacts.conversationsTab');
   const lastDate = item.last_message_at
     ? new Date(item.last_message_at).toLocaleDateString('pt-BR', {
         day: '2-digit',
@@ -205,7 +208,7 @@ function ConversationListItem({
         </span>
       </div>
       <p className="line-clamp-2 text-[11px] text-muted-foreground">
-        {item.ai_summary ?? 'Sem prévia disponível'}
+        {item.ai_summary ?? t('previewMissing')}
       </p>
     </button>
   );

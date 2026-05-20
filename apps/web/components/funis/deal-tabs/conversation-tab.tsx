@@ -1,6 +1,7 @@
 'use client';
 
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   Bot,
   Link2,
@@ -57,6 +58,7 @@ export const DealConversationTab = forwardRef<
   DealConversationTabHandle,
   DealConversationTabProps
 >(function DealConversationTab({ deal, onChanged }, ref) {
+  const t = useTranslations('funis.deal.conversationTab');
   const [pendingPrefill, setPendingPrefill] = useState<string | null>(null);
   const [copilotOpen, setCopilotOpen] = useState(false);
 
@@ -79,9 +81,9 @@ export const DealConversationTab = forwardRef<
     if (!pendingPrefill) return;
     try {
       await navigator.clipboard.writeText(pendingPrefill);
-      toast.success('Sugestão copiada — cole no input');
+      toast.success(t('copied'));
     } catch {
-      toast.info('Sugestão pronta', { description: pendingPrefill.slice(0, 80) });
+      toast.info(t('copiedFallback'), { description: pendingPrefill.slice(0, 80) });
     }
   }
 
@@ -92,7 +94,7 @@ export const DealConversationTab = forwardRef<
           <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
           <div className="flex flex-1 flex-col gap-1">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">
-              Sugestão pronta — clique pra copiar
+              {t('prefillKicker')}
             </span>
             <p className="line-clamp-2 leading-snug">{pendingPrefill}</p>
           </div>
@@ -101,12 +103,12 @@ export const DealConversationTab = forwardRef<
             onClick={handleCopyPrefill}
             className="h-6 px-2 text-[11px]"
           >
-            Copiar
+            {t('copy')}
           </Button>
           <button
             type="button"
             onClick={dismissPrefill}
-            aria-label="Fechar sugestão"
+            aria-label={t('dismissPrefill')}
             className="rounded-md p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             <X className="h-3 w-3" />
@@ -122,7 +124,7 @@ export const DealConversationTab = forwardRef<
       <button
         type="button"
         onClick={() => setCopilotOpen((v) => !v)}
-        aria-label="Abrir Copiloto"
+        aria-label={t('copilotOpen')}
         className={cn(
           'absolute bottom-4 right-4 z-20 flex h-10 w-10 items-center justify-center rounded-full shadow-lg transition-all',
           copilotOpen
@@ -138,7 +140,7 @@ export const DealConversationTab = forwardRef<
         <div
           className="absolute bottom-16 right-4 z-20 flex h-[420px] w-[300px] flex-col overflow-hidden rounded-lg border border-border bg-background shadow-2xl"
           role="dialog"
-          aria-label="Copiloto contextual"
+          aria-label={t('ariaCopilot')}
         >
           <CopilotPanel
             contextType="deal"
@@ -167,6 +169,7 @@ function ConversationContent({
   deal: DealConversationTabProps['deal'];
   onChanged: () => void | Promise<void>;
 }) {
+  const t = useTranslations('funis.deal.conversationTab');
   const [contactConversations, setContactConversations] = useState<InboxItem[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -193,7 +196,7 @@ function ConversationContent({
             ? `${err.status}: ${err.message}`
             : err instanceof Error
               ? err.message
-              : 'Erro ao buscar conversas',
+              : t('fetchError'),
         );
       })
       .finally(() => setLoading(false));
@@ -249,13 +252,13 @@ function ConversationContent({
           await dealsApi.update(deal.id, { conversation_id: conversationId });
         } catch (err) {
           // Não bloqueia: a conversa foi criada com sucesso; só não vinculou.
-          toast.error('Conversa criada mas não vinculada', {
+          toast.error(t('createdNotLinked'), {
             description:
               err instanceof ApiError
                 ? `${err.status}: ${err.message}`
                 : err instanceof Error
                   ? err.message
-                  : 'Erro desconhecido',
+                  : t('unknownError'),
           });
         }
         await onChanged();
@@ -277,6 +280,8 @@ function ContactConversationsList({
   conversations: InboxItem[];
   onLinked: () => void | Promise<void>;
 }) {
+  const t = useTranslations('funis.deal.conversationTab');
+  const channelLabel = useChannelLabel();
   const [selected, setSelected] = useState<string | null>(conversations[0]?.id ?? null);
   const [linking, setLinking] = useState(false);
 
@@ -285,16 +290,16 @@ function ContactConversationsList({
     setLinking(true);
     try {
       await dealsApi.update(dealId, { conversation_id: selected });
-      toast.success('Conversa vinculada ao deal');
+      toast.success(t('linkedSuccess'));
       await onLinked();
     } catch (err) {
-      toast.error('Falha ao vincular', {
+      toast.error(t('linkFailed'), {
         description:
           err instanceof ApiError
             ? `${err.status}: ${err.message}`
             : err instanceof Error
               ? err.message
-              : 'Erro desconhecido',
+              : t('unknownError'),
       });
     } finally {
       setLinking(false);
@@ -304,9 +309,9 @@ function ContactConversationsList({
   return (
     <div className="flex h-full flex-col gap-2">
       <p className="text-xs text-muted-foreground">
-        Esse deal não tem conversa vinculada, mas o contato tem{' '}
-        <strong className="text-foreground">{conversations.length}</strong>{' '}
-        {conversations.length === 1 ? 'conversa' : 'conversas'}. Selecione e vincule:
+        {conversations.length === 1
+          ? t('linkHintOne', { count: conversations.length })
+          : t('linkHintMany', { count: conversations.length })}
       </p>
 
       <div className="flex max-h-[60vh] flex-col gap-1 overflow-y-auto">
@@ -331,7 +336,7 @@ function ContactConversationsList({
               </span>
             </div>
             <span className="line-clamp-1 text-[11px] text-muted-foreground">
-              {c.ai_summary ?? 'Sem prévia disponível'}
+              {c.ai_summary ?? t('noPreview')}
             </span>
           </button>
         ))}
@@ -343,7 +348,7 @@ function ContactConversationsList({
         ) : (
           <Link2 className="mr-1.5 h-3.5 w-3.5" />
         )}
-        Vincular conversa
+        {t('linkConversation')}
       </Button>
     </div>
   );
@@ -360,12 +365,13 @@ function EmptyConversationState({
   deal: DealConversationTabProps['deal'];
   onCreated: (conversationId: string) => void | Promise<void>;
 }) {
+  const t = useTranslations('funis.deal.conversationTab');
   const [startOpen, setStartOpen] = useState(false);
 
   function handleClick() {
     if (!deal.contact_id) {
-      toast.error('Sem contato vinculado', {
-        description: 'Vincule um contato ao deal antes de iniciar uma conversa.',
+      toast.error(t('noContactTitle'), {
+        description: t('noContactDescription'),
       });
       return;
     }
@@ -380,16 +386,14 @@ function EmptyConversationState({
             <MessageCircle className="h-6 w-6" />
           </div>
           <div className="flex flex-col gap-1">
-            <p className="text-sm font-medium">Nenhuma conversa</p>
+            <p className="text-sm font-medium">{t('emptyTitle')}</p>
             <p className="max-w-xs text-xs text-muted-foreground">
-              {deal.contact_id
-                ? 'Esse deal e o contato ainda não têm conversa registrada.'
-                : 'Vincule um contato ao deal pra iniciar uma conversa.'}
+              {deal.contact_id ? t('emptyHasContact') : t('emptyNoContact')}
             </p>
           </div>
           <Button onClick={handleClick} disabled={!deal.contact_id} size="sm">
             <MessageCircle className="mr-1.5 h-3.5 w-3.5" />
-            Iniciar conversa
+            {t('startConversation')}
           </Button>
         </CardContent>
       </Card>
@@ -411,18 +415,13 @@ function EmptyConversationState({
 // Helpers
 // ──────────────────────────────────────────────────────────
 
-const CHANNEL_LABEL: Record<ChannelType, string> = {
-  whatsapp: 'WhatsApp',
-  whatsapp_free: 'WhatsApp QR',
-  instagram: 'Instagram',
-  messenger: 'Messenger',
-  telegram: 'Telegram',
-  email: 'Email',
-  webchat: 'WebChat',
-  tiktok: 'TikTok',
-  mercadolivre: 'Mercado Livre',
-};
-
-function channelLabel(t: ChannelType): string {
-  return CHANNEL_LABEL[t] ?? t;
+function useChannelLabel(): (channel: ChannelType) => string {
+  const t = useTranslations('funis.deal.conversationTab.channels');
+  return (channel: ChannelType) => {
+    try {
+      return t(channel);
+    } catch {
+      return channel;
+    }
+  };
 }

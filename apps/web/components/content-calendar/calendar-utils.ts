@@ -68,38 +68,46 @@ export function buildWeekDays(cursor: Date): Date[] {
   return Array.from({ length: 7 }, (_, i) => shiftDays(start, i));
 }
 
-const MONTH_NAMES_PT = [
-  'janeiro',
-  'fevereiro',
-  'março',
-  'abril',
-  'maio',
-  'junho',
-  'julho',
-  'agosto',
-  'setembro',
-  'outubro',
-  'novembro',
-  'dezembro',
-];
+const MONTH_NAME_KEYS = [
+  '1',
+  '2',
+  '3',
+  '4',
+  '5',
+  '6',
+  '7',
+  '8',
+  '9',
+  '10',
+  '11',
+  '12',
+] as const;
 
-export function formatMonthYear(d: Date): string {
-  return `${MONTH_NAMES_PT[d.getMonth()]} de ${d.getFullYear()}`;
+const WEEKDAY_NAME_KEYS = [
+  'sun',
+  'mon',
+  'tue',
+  'wed',
+  'thu',
+  'fri',
+  'sat',
+] as const;
+
+type Translator = (key: string, values?: Record<string, string | number>) => string;
+
+export function formatMonthYear(d: Date, t: Translator): string {
+  const key = MONTH_NAME_KEYS[d.getMonth()] ?? '1';
+  return t('monthYear', { month: t(`month.names.${key}`), year: d.getFullYear() });
 }
 
-const WEEKDAY_NAMES_PT = [
-  'domingo',
-  'segunda',
-  'terça',
-  'quarta',
-  'quinta',
-  'sexta',
-  'sábado',
-];
-
-export function formatLongDate(d: Date): string {
-  const wd = WEEKDAY_NAMES_PT[d.getDay()];
-  return `${wd}, ${d.getDate()} de ${MONTH_NAMES_PT[d.getMonth()]}`;
+export function formatLongDate(d: Date, t: Translator): string {
+  const wdKey = WEEKDAY_NAME_KEYS[d.getDay()] ?? 'sun';
+  const monthKey = MONTH_NAME_KEYS[d.getMonth()] ?? '1';
+  return t('longDate', {
+    weekday: t(`weekdayLong.${wdKey}`),
+    day: d.getDate(),
+    month: t(`month.names.${monthKey}`),
+  });
 }
 
 /** Soma N dias num "YYYY-MM-DD" e retorna formatado igual. */

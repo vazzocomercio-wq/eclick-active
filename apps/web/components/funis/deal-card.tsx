@@ -1,6 +1,7 @@
 'use client';
 
 import { forwardRef } from 'react';
+import { useTranslations } from 'next-intl';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Calendar, Sparkles } from 'lucide-react';
@@ -58,6 +59,7 @@ interface DealCardVisualProps extends React.HTMLAttributes<HTMLDivElement> {
 
 export const DealCardVisual = forwardRef<HTMLDivElement, DealCardVisualProps>(
   ({ deal, isDragging, isOverlay, className, ...props }, ref) => {
+    const t = useTranslations('funis.deal.card');
     const closeDate = deal.expected_close_date
       ? new Date(deal.expected_close_date).toLocaleDateString('pt-BR', {
           day: '2-digit',
@@ -101,7 +103,7 @@ export const DealCardVisual = forwardRef<HTMLDivElement, DealCardVisualProps>(
             {deal.title}
           </h4>
           <span className="shrink-0 text-sm font-bold text-primary tabular-nums">
-            {formatBRL(deal.value)}
+            {formatBRL(deal.value, t('noValue'))}
           </span>
         </div>
 
@@ -174,8 +176,8 @@ export const DealCardVisual = forwardRef<HTMLDivElement, DealCardVisualProps>(
 );
 DealCardVisual.displayName = 'DealCardVisual';
 
-function formatBRL(n: number): string {
-  if (!Number.isFinite(n) || n === 0) return 'R$ —';
+function formatBRL(n: number, emptyFallback: string): string {
+  if (!Number.isFinite(n) || n === 0) return emptyFallback;
   return n.toLocaleString('pt-BR', {
     style: 'currency',
     currency: 'BRL',

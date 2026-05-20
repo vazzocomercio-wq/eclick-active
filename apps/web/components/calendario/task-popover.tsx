@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Check, Loader2, Pencil, X } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import type { CalendarTask } from '@/lib/api/tasks';
 import { tasksApi } from '@/lib/api/tasks';
 import { ApiError } from '@/lib/api/client';
@@ -25,6 +26,7 @@ interface TaskPopoverProps {
 }
 
 export function TaskPopover({ task, anchor, onClose, onChanged }: TaskPopoverProps) {
+  const t = useTranslations('calendario');
   const ref = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState<'complete' | 'delete' | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -77,7 +79,7 @@ export function TaskPopover({ task, anchor, onClose, onChanged }: TaskPopoverPro
           ? err.message
           : err instanceof Error
             ? err.message
-            : 'Erro ao concluir tarefa',
+            : t('popover.completeError'),
       );
     } finally {
       setBusy(null);
@@ -88,7 +90,7 @@ export function TaskPopover({ task, anchor, onClose, onChanged }: TaskPopoverPro
     <div
       ref={ref}
       role="dialog"
-      aria-label={`Detalhes de ${task.title}`}
+      aria-label={t('popover.detailsOf', { title: task.title })}
       className="fixed z-50 w-80 rounded-lg border border-border bg-popover shadow-xl animate-in fade-in zoom-in-95"
       style={{ left, top }}
     >
@@ -105,13 +107,13 @@ export function TaskPopover({ task, anchor, onClose, onChanged }: TaskPopoverPro
             {task.title}
           </h3>
           <span className="text-[11px] text-muted-foreground">
-            <TaskTypeLabel type={task.task_type} /> · {timeLabel(task.due_date) || 'Dia inteiro'}
+            <TaskTypeLabel type={task.task_type} /> · {timeLabel(task.due_date) || t('popover.wholeDay')}
           </span>
         </div>
         <button
           type="button"
           onClick={onClose}
-          aria-label="Fechar"
+          aria-label={t('popover.close')}
           className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
         >
           <X className="h-3.5 w-3.5" />
@@ -132,7 +134,7 @@ export function TaskPopover({ task, anchor, onClose, onChanged }: TaskPopoverPro
                 href={`/contatos/${task.contact_id}`}
                 className="truncate text-muted-foreground hover:text-foreground"
               >
-                <span className="font-medium text-foreground">Contato:</span>{' '}
+                <span className="font-medium text-foreground">{t('popover.contact')}</span>{' '}
                 {task.contact_name}
               </Link>
             )}
@@ -141,13 +143,13 @@ export function TaskPopover({ task, anchor, onClose, onChanged }: TaskPopoverPro
                 href={`/funis?deal=${task.deal_id}`}
                 className="truncate text-muted-foreground hover:text-foreground"
               >
-                <span className="font-medium text-foreground">Negócio:</span>{' '}
+                <span className="font-medium text-foreground">{t('popover.deal')}</span>{' '}
                 {task.deal_title}
               </Link>
             )}
             {task.assigned_to_name && (
               <span className="truncate text-muted-foreground">
-                <span className="font-medium text-foreground">Responsável:</span>{' '}
+                <span className="font-medium text-foreground">{t('popover.responsible')}</span>{' '}
                 {task.assigned_to_name}
               </span>
             )}
@@ -173,12 +175,12 @@ export function TaskPopover({ task, anchor, onClose, onChanged }: TaskPopoverPro
             ) : (
               <Check className="mr-1.5 h-3.5 w-3.5" />
             )}
-            {isCompleted ? 'Concluída' : 'Concluir'}
+            {isCompleted ? t('popover.completed') : t('popover.complete')}
           </Button>
           <Button asChild size="sm" variant="outline">
             <Link href={`/tarefas?focus=${task.id}`}>
               <Pencil className="mr-1.5 h-3.5 w-3.5" />
-              Editar
+              {t('popover.edit')}
             </Link>
           </Button>
         </div>

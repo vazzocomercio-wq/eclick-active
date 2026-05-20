@@ -1,6 +1,7 @@
 'use client';
 
 import { CalendarDays, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import type { TaskType } from '@eclick-active/shared';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -11,20 +12,15 @@ import {
   weekRangeLabel,
 } from './calendar-utils';
 
-const VIEW_OPTIONS: Array<{ value: CalendarViewMode; label: string }> = [
-  { value: 'day', label: 'Dia' },
-  { value: 'week', label: 'Semana' },
-  { value: 'month', label: 'Mês' },
-];
-
-const TASK_TYPE_OPTIONS: Array<{ value: TaskType; label: string }> = [
-  { value: 'call', label: 'Ligação' },
-  { value: 'meeting', label: 'Reunião' },
-  { value: 'follow_up', label: 'Follow-up' },
-  { value: 'email', label: 'Email' },
-  { value: 'whatsapp', label: 'WhatsApp' },
-  { value: 'proposal', label: 'Proposta' },
-  { value: 'custom', label: 'Personalizado' },
+const VIEW_KEYS = ['day', 'week', 'month'] as const;
+const TASK_TYPE_VALUES: TaskType[] = [
+  'call',
+  'meeting',
+  'follow_up',
+  'email',
+  'whatsapp',
+  'proposal',
+  'custom',
 ];
 
 interface CalendarHeaderProps {
@@ -58,12 +54,13 @@ export function CalendarHeader({
   onNewTask,
   loading,
 }: CalendarHeaderProps) {
+  const t = useTranslations('calendario');
   const periodLabel =
     view === 'month'
-      ? monthYearLabel(current)
+      ? monthYearLabel(current, (k) => t(k))
       : view === 'week'
-        ? weekRangeLabel(current)
-        : dayLabel(current);
+        ? weekRangeLabel(current, (k) => t(k))
+        : dayLabel(current, (k) => t(k));
 
   return (
     <header className="flex flex-col gap-3 border-b border-border bg-background px-4 py-3 md:px-6">
@@ -71,7 +68,7 @@ export function CalendarHeader({
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">
           <CalendarDays className="h-5 w-5 text-primary" />
-          <h1 className="text-base font-semibold md:text-lg">Calendário</h1>
+          <h1 className="text-base font-semibold md:text-lg">{t('title')}</h1>
         </div>
 
         <div className="flex items-center gap-1">
@@ -79,7 +76,7 @@ export function CalendarHeader({
             variant="outline"
             size="icon"
             onClick={onPrev}
-            aria-label="Período anterior"
+            aria-label={t('prevPeriod')}
             disabled={loading}
           >
             <ChevronLeft className="h-4 w-4" />
@@ -91,7 +88,7 @@ export function CalendarHeader({
             variant="outline"
             size="icon"
             onClick={onNext}
-            aria-label="Próximo período"
+            aria-label={t('nextPeriod')}
             disabled={loading}
           >
             <ChevronRight className="h-4 w-4" />
@@ -103,33 +100,33 @@ export function CalendarHeader({
             disabled={loading}
             className="ml-1"
           >
-            Hoje
+            {t('today')}
           </Button>
         </div>
 
         <div className="ml-auto flex items-center gap-2">
           {/* View toggle — escondido em mobile (só Dia disponível) */}
           <div className="hidden items-center rounded-md border border-input bg-card p-0.5 md:inline-flex">
-            {VIEW_OPTIONS.map((opt) => (
+            {VIEW_KEYS.map((v) => (
               <button
-                key={opt.value}
+                key={v}
                 type="button"
-                onClick={() => onChangeView(opt.value)}
+                onClick={() => onChangeView(v)}
                 className={cn(
                   'rounded px-3 py-1 text-xs font-medium transition-colors',
-                  view === opt.value
+                  view === v
                     ? 'bg-primary text-primary-foreground'
                     : 'text-muted-foreground hover:text-foreground',
                 )}
               >
-                {opt.label}
+                {t(`view.${v}`)}
               </button>
             ))}
           </div>
 
           <Button size="sm" onClick={onNewTask}>
             <Plus className="mr-1.5 h-3.5 w-3.5" />
-            Nova tarefa
+            {t('newTask')}
           </Button>
         </div>
       </div>
@@ -143,7 +140,7 @@ export function CalendarHeader({
             onChange={(e) => onChangeMine(e.target.checked)}
             className="h-3.5 w-3.5 rounded border-input"
           />
-          <span className="font-medium">Só minhas</span>
+          <span className="font-medium">{t('onlyMine')}</span>
         </label>
 
         <TypeMultiSelect
@@ -154,7 +151,7 @@ export function CalendarHeader({
 
         {loading && (
           <span className="ml-auto text-xs text-muted-foreground">
-            Carregando…
+            {t('loading')}
           </span>
         )}
       </div>
@@ -171,12 +168,13 @@ function TypeMultiSelect({
   onToggle: (t: TaskType) => void;
   onClear: () => void;
 }) {
+  const t = useTranslations('calendario');
   const label =
     selected.length === 0
-      ? 'Todos os tipos'
+      ? t('type.all')
       : selected.length === 1
-        ? `${TASK_TYPE_OPTIONS.find((o) => o.value === selected[0])?.label}`
-        : `${selected.length} tipos`;
+        ? t(`type.${selected[0]}`)
+        : t('type.countFormat', { n: selected.length });
 
   return (
     <details className="relative">
@@ -186,25 +184,25 @@ function TypeMultiSelect({
           'marker:hidden [&::-webkit-details-marker]:hidden',
         )}
       >
-        <span className="text-muted-foreground">Tipo:</span>
+        <span className="text-muted-foreground">{t('type.label')}</span>
         <span className="font-medium">{label}</span>
       </summary>
       <div className="absolute z-20 mt-1 w-56 rounded-md border border-border bg-popover p-2 shadow-lg">
         <div className="flex flex-col gap-1">
-          {TASK_TYPE_OPTIONS.map((opt) => {
-            const checked = selected.includes(opt.value);
+          {TASK_TYPE_VALUES.map((v) => {
+            const checked = selected.includes(v);
             return (
               <label
-                key={opt.value}
+                key={v}
                 className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs hover:bg-muted"
               >
                 <input
                   type="checkbox"
                   checked={checked}
-                  onChange={() => onToggle(opt.value)}
+                  onChange={() => onToggle(v)}
                   className="h-3.5 w-3.5 rounded border-input"
                 />
-                <span>{opt.label}</span>
+                <span>{t(`type.${v}`)}</span>
               </label>
             );
           })}
@@ -215,7 +213,7 @@ function TypeMultiSelect({
             onClick={onClear}
             className="mt-2 w-full rounded px-2 py-1 text-left text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
           >
-            Limpar filtro
+            {t('type.clear')}
           </button>
         )}
       </div>

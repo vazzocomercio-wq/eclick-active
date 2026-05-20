@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Loader2, Trash2, X } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import {
   contentCalendarApi,
   CHANNEL_COLOR,
@@ -78,6 +79,7 @@ export function EventDrawer({
   onSaved,
   onDeleted,
 }: EventDrawerProps) {
+  const t = useTranslations('contentCalendar');
   const isEdit = !!event;
 
   const [tab, setTab] = useState<Tab>('detalhes');
@@ -160,7 +162,7 @@ export function EventDrawer({
 
   async function handleSave() {
     if (!title.trim() || !scheduledDate) {
-      setError('Título e data são obrigatórios');
+      setError(t('drawer.requiredError'));
       return;
     }
     setBusy(true);
@@ -206,7 +208,7 @@ export function EventDrawer({
       }
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao salvar');
+      setError(err instanceof Error ? err.message : t('drawer.saveError'));
     } finally {
       setBusy(false);
     }
@@ -214,14 +216,14 @@ export function EventDrawer({
 
   async function handleDelete() {
     if (!event) return;
-    if (!confirm('Excluir este evento do calendário?')) return;
+    if (!confirm(t('drawer.deleteConfirm'))) return;
     setBusy(true);
     try {
       await contentCalendarApi.remove(event.id);
       onDeleted(event.id);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao excluir');
+      setError(err instanceof Error ? err.message : t('drawer.deleteError'));
     } finally {
       setBusy(false);
     }
@@ -248,7 +250,7 @@ export function EventDrawer({
               style={{ backgroundColor: channelColor }}
             />
             <h2 className="text-sm font-semibold">
-              {isEdit ? 'Editar evento' : 'Novo evento'}
+              {isEdit ? t('drawer.editTitle') : t('drawer.newTitle')}
             </h2>
           </div>
           <button
@@ -262,26 +264,26 @@ export function EventDrawer({
 
         {/* Tabs */}
         <div className="flex gap-1 border-b border-border px-4">
-          {(['detalhes', 'vincular', 'notas'] as Tab[]).map((t) => (
+          {(['detalhes', 'vincular', 'notas'] as Tab[]).map((tabKey) => (
             <button
-              key={t}
+              key={tabKey}
               type="button"
-              onClick={() => setTab(t)}
-              disabled={t === 'vincular' && !saasConfigured}
+              onClick={() => setTab(tabKey)}
+              disabled={tabKey === 'vincular' && !saasConfigured}
               title={
-                t === 'vincular' && !saasConfigured
-                  ? 'Disponível em breve (NEXT_PUBLIC_SAAS_API_URL não configurado)'
+                tabKey === 'vincular' && !saasConfigured
+                  ? t('drawer.tabs.vincularDisabledTooltip')
                   : undefined
               }
               className={cn(
                 'border-b-2 px-3 py-2 text-xs font-medium capitalize transition-colors',
-                tab === t
+                tab === tabKey
                   ? 'border-cyan-400 text-cyan-300'
                   : 'border-transparent text-muted-foreground hover:text-foreground',
-                t === 'vincular' && !saasConfigured && 'opacity-50 cursor-not-allowed',
+                tabKey === 'vincular' && !saasConfigured && 'opacity-50 cursor-not-allowed',
               )}
             >
-              {t === 'vincular' ? 'Vincular SaaS' : t}
+              {t(`drawer.tabs.${tabKey}`)}
             </button>
           ))}
         </div>
@@ -290,19 +292,19 @@ export function EventDrawer({
         <div className="flex-1 overflow-y-auto px-4 py-3">
           {tab === 'detalhes' && (
             <div className="space-y-3">
-              <Field label="Título *">
+              <Field label={t('drawer.fields.titleLabel')}>
                 <input
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Ex: Lançamento camisa branca"
+                  placeholder={t('drawer.fields.titlePlaceholder')}
                   className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-cyan-500/50"
                   maxLength={200}
                 />
               </Field>
 
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Canal">
+                <Field label={t('drawer.fields.channelLabel')}>
                   <select
                     value={channel}
                     onChange={(e) => setChannel(e.target.value as ContentChannel)}
@@ -315,15 +317,15 @@ export function EventDrawer({
                     ))}
                   </select>
                 </Field>
-                <Field label="Tipo">
+                <Field label={t('drawer.fields.typeLabel')}>
                   <select
                     value={contentType}
                     onChange={(e) => setContentType(e.target.value as ContentType)}
                     className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                   >
-                    {CONTENT_TYPES.map((t) => (
-                      <option key={t} value={t}>
-                        {CONTENT_TYPE_LABEL[t]}
+                    {CONTENT_TYPES.map((ct) => (
+                      <option key={ct} value={ct}>
+                        {CONTENT_TYPE_LABEL[ct]}
                       </option>
                     ))}
                   </select>
@@ -331,7 +333,7 @@ export function EventDrawer({
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Data *">
+                <Field label={t('drawer.fields.dateLabel')}>
                   <input
                     type="date"
                     value={scheduledDate}
@@ -339,7 +341,7 @@ export function EventDrawer({
                     className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                   />
                 </Field>
-                <Field label="Hora">
+                <Field label={t('drawer.fields.timeLabel')}>
                   <input
                     type="time"
                     value={scheduledTime}
@@ -349,7 +351,7 @@ export function EventDrawer({
                 </Field>
               </div>
 
-              <Field label="Status">
+              <Field label={t('drawer.fields.statusLabel')}>
                 <select
                   value={status}
                   onChange={(e) => setStatus(e.target.value as ContentStatus)}
@@ -369,25 +371,23 @@ export function EventDrawer({
             <div className="space-y-3">
               {!saasConfigured ? (
                 <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
-                  Vinculação com SaaS requer{' '}
-                  <code>NEXT_PUBLIC_SAAS_API_URL</code> configurado. Disponível
-                  em breve quando S1/S4 do SaaS forem entregues.
+                  {t('drawer.saas.notConfigured')}
                 </div>
               ) : (
                 <>
-                  <Field label="Vincular produto do SaaS">
+                  <Field label={t('drawer.saas.linkProductLabel')}>
                     <input
                       type="text"
                       value={productSearch}
                       onChange={(e) => setProductSearch(e.target.value)}
-                      placeholder="Busque por nome do produto…"
+                      placeholder={t('drawer.saas.searchPlaceholder')}
                       className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                     />
                   </Field>
 
                   {productSearching && (
                     <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                      <Loader2 className="h-3 w-3 animate-spin" /> Buscando…
+                      <Loader2 className="h-3 w-3 animate-spin" /> {t('drawer.saas.searching')}
                     </p>
                   )}
 
@@ -438,7 +438,7 @@ export function EventDrawer({
                       )}
                       <div className="min-w-0 flex-1">
                         <p className="text-xs font-medium text-emerald-200">
-                          Vinculado: {productSnap.name}
+                          {t('drawer.saas.linkedPrefix', { name: productSnap.name })}
                         </p>
                         <p className="text-[10px] text-emerald-300/70">
                           {productId.slice(0, 8)}…
@@ -452,15 +452,13 @@ export function EventDrawer({
                         }}
                         className="text-[11px] text-rose-300 hover:text-rose-200"
                       >
-                        Remover
+                        {t('drawer.saas.remove')}
                       </button>
                     </div>
                   )}
 
                   <p className="text-[10px] text-muted-foreground">
-                    Vinculações com <code>social_content_id</code> e{' '}
-                    <code>ads_campaign_id</code> ficam disponíveis quando S1/S4
-                    do SaaS forem entregues.
+                    {t('drawer.saas.comingSoonNote')}
                   </p>
                 </>
               )}
@@ -468,12 +466,12 @@ export function EventDrawer({
           )}
 
           {tab === 'notas' && (
-            <Field label="Notas">
+            <Field label={t('drawer.fields.notesLabel')}>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 rows={8}
-                placeholder="Briefing, ângulo do post, hashtags pré-pesquisadas…"
+                placeholder={t('drawer.fields.notesPlaceholder')}
                 className="w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-cyan-500/50"
                 maxLength={2000}
               />
@@ -494,7 +492,7 @@ export function EventDrawer({
               disabled={busy}
               className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-rose-300 hover:bg-rose-500/10 disabled:opacity-50"
             >
-              <Trash2 className="h-3.5 w-3.5" /> Excluir
+              <Trash2 className="h-3.5 w-3.5" /> {t('drawer.delete')}
             </button>
           ) : (
             <span />
@@ -506,7 +504,7 @@ export function EventDrawer({
               disabled={busy}
               className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
             >
-              Cancelar
+              {t('drawer.cancel')}
             </button>
             <button
               type="button"
@@ -515,7 +513,7 @@ export function EventDrawer({
               className="flex items-center gap-1.5 rounded-md bg-cyan-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-cyan-400 disabled:opacity-50"
             >
               {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              {isEdit ? 'Salvar' : 'Criar'}
+              {isEdit ? t('drawer.save') : t('drawer.create')}
             </button>
           </div>
         </footer>

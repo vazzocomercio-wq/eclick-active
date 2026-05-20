@@ -104,5 +104,2747 @@
       "agencia": "Agency",
       "configuracoes": "Settings"
     }
+  },
+  "contacts": {
+    "page": {
+      "title": "Contacts",
+      "subtitle": "Lead and customer base",
+      "totalSuffix": "{total} in total",
+      "reload": "Reload",
+      "newContact": "New contact",
+      "errors": {
+        "sessionExpired": "Session expired — sign in to load contacts.",
+        "noPermission": "You don't have permission to see contacts in this organization.",
+        "loadError": "Failed to load ({status}): {message}",
+        "loadErrorNetwork": "Failed to load (network): {message}"
+      }
+    },
+    "filters": {
+      "searchPlaceholder": "Search by name, phone or email...",
+      "clearSearch": "Clear search",
+      "all": "All"
+    },
+    "temperature": {
+      "cold": "Cold",
+      "warm": "Warm",
+      "hot": "Hot",
+      "very_hot": "Very hot"
+    },
+    "table": {
+      "selectAll": "Select all",
+      "selectContact": "Select {name}",
+      "selectContactFallback": "contact",
+      "columns": {
+        "contact": "Contact",
+        "name": "Name",
+        "phone": "Phone",
+        "email": "Email",
+        "temperature": "Temperature",
+        "score": "Score",
+        "tags": "Tags",
+        "lastActivity": "Last activity"
+      },
+      "noName": "no name",
+      "empty": "No contacts found."
+    },
+    "bulkActions": {
+      "clearSelection": "Clear selection",
+      "selectedOne": "{count} contact selected",
+      "selectedMany": "{count} contacts selected",
+      "verifyWhatsapp": "Verify WhatsApp",
+      "addTag": "Add tag",
+      "addTagSoonTitle": "Coming soon",
+      "delete": "Delete",
+      "verifyEnqueuedTitle": "{count} contact(s) queued for verification",
+      "verifyEnqueuedDescription": "AI will check WhatsApp in the background. May take up to 1 min.",
+      "verifyEnqueueFailed": "Failed to queue verification",
+      "deleteConfirmTitle": "Delete {count} contact(s)?",
+      "deleteConfirmDescription": "This action is PERMANENT. Conversations, deals and messages linked to these contacts will also be removed. Cannot be undone.",
+      "deleteConfirm": "Yes, delete",
+      "cancel": "Cancel",
+      "deleteSuccess": "{count} contact(s) deleted",
+      "deleteFailed": "{count} contact(s) failed",
+      "deleteFailedDescription": "Some may have active deals linked. Check and try again."
+    },
+    "pagination": {
+      "noResults": "No results",
+      "showing": "Showing {from}–{to} of {total}",
+      "previous": "Previous page",
+      "next": "Next page"
+    },
+    "newDialog": {
+      "title": "New contact",
+      "description": "At least one identifier (name, phone or email) is required.",
+      "fields": {
+        "name": "Name",
+        "namePlaceholder": "John Smith",
+        "phone": "Phone",
+        "phonePlaceholder": "+1 555 555-5555",
+        "email": "Email",
+        "emailPlaceholder": "john@company.com",
+        "company": "Company",
+        "companyPlaceholder": "Acme Inc.",
+        "tags": "Tags",
+        "tagsHint": "Comma separated. Ex: vip, hot-lead",
+        "tagsPlaceholder": "vip, hot-lead",
+        "notes": "Notes",
+        "notesPlaceholder": "Internal notes about this contact..."
+      },
+      "errors": {
+        "needIdentifier": "Provide at least a name, phone or email",
+        "invalidEmail": "Invalid email",
+        "shortPhone": "Phone too short",
+        "unknown": "Unknown error"
+      },
+      "cancel": "Cancel",
+      "submit": "Create contact",
+      "submitting": "Creating..."
+    },
+    "detailSheet": {
+      "fallbackTitle": "Contact details",
+      "tabs": {
+        "main": "Main",
+        "chat": "Conversations",
+        "deals": "Deals",
+        "ai": "AI",
+        "history": "History"
+      },
+      "deleteTitle": "Delete this contact?",
+      "deleteDescription": "This action cannot be undone.",
+      "deleteConfirm": "Delete",
+      "deleted": "Contact deleted",
+      "deleteFailed": "Failed to delete",
+      "unknownError": "Unknown error"
+    },
+    "header": {
+      "kicker": "Contact · #{id}",
+      "namePlaceholder": "No name",
+      "scoreLabel": "Score",
+      "moreOptions": "More options",
+      "delete": "Delete contact",
+      "nameAria": "Contact name",
+      "nameClickToEdit": "Name (click to edit)",
+      "nameSaved": "Name saved",
+      "saveFailed": "Failed to save"
+    },
+    "mainTab": {
+      "infoTitle": "Information",
+      "phoneLabel": "Phone",
+      "phonePlaceholder": "+1 555 555-5555",
+      "emailLabel": "Email",
+      "emailPlaceholder": "contact@example.com",
+      "sourceLabel": "Source",
+      "sourceEmpty": "— No source —",
+      "sources": {
+        "whatsapp": "WhatsApp",
+        "instagram": "Instagram",
+        "website": "Website",
+        "import": "Imported",
+        "manual": "Manual",
+        "referral": "Referral"
+      },
+      "tagsLabel": "Contact tags",
+      "tagsHint": "Describe the profile. Use the catalog set in Settings > Tags or create inline.",
+      "tagsPlaceholder": "Add tag…",
+      "savedPhone": "Phone saved",
+      "savedEmail": "Email saved",
+      "savedSource": "Source saved",
+      "savedTags": "Tags saved",
+      "saveFailed": "Failed to save",
+      "unknownError": "Unknown error"
+    },
+    "conversationsTab": {
+      "emptyTitle": "No conversations yet",
+      "emptyDescription": "Start a conversation by sending the first message or wait for the contact to reach out on any channel.",
+      "startConversation": "Start conversation",
+      "backToList": "Back to list",
+      "multipleHint": "{count} conversations with this contact. Pick one to open:",
+      "previewMissing": "No preview available",
+      "fetchError": "Failed to fetch conversations"
+    },
+    "dealsTab": {
+      "emptyTitle": "No linked deals",
+      "emptyDescription": "Create a deal linked to this contact via the board or the Copilot.",
+      "fetchError": "Failed to fetch deals",
+      "linkedOne": "{count} linked deal",
+      "linkedMany": "{count} linked deals",
+      "won": "Won",
+      "lost": "Lost",
+      "score": "Score",
+      "noValue": "No value"
+    },
+    "aiTab": {
+      "summaryTitle": "AI summary",
+      "summaryEmpty": "No summary yet. AI generates one after a few message exchanges.",
+      "temperatureTitle": "Temperature",
+      "scoreTitle": "Score",
+      "objectionsTitle": "Detected objections",
+      "objectionsEmptyPre": "No objections tagged. Add tags like",
+      "objectionsExampleA": "objecao-preco",
+      "objectionsExampleConnector": "or",
+      "objectionsExampleB": "sem-budget",
+      "objectionsEmptyPost": "to track them here.",
+      "historyTitle": "Temperature history",
+      "historyHintPre": "Detailed history comes from the timeline on the next tab (events",
+      "historyEventA": "score_changed",
+      "historyEventConnector": "and",
+      "historyEventB": "ai_insight",
+      "historyHintPost": ").",
+      "tempExplanations": {
+        "cold": "No recent engagement. Reactivate via campaign or follow-up.",
+        "warm": "Showing interest. Keep a steady contact cadence.",
+        "hot": "High engagement. Accelerate the next action.",
+        "very_hot": "Ready to close. Prioritize this conversation today.",
+        "none": "Not classified yet."
+      }
+    },
+    "historyTab": {
+      "emptyTitle": "No events recorded",
+      "emptyDescription": "Timeline events are generated automatically when the contact interacts with the CRM (messages, deals, stage changes, etc.).",
+      "fetchError": "Failed to fetch timeline",
+      "aiBadge": "AI",
+      "titles": {
+        "message_received": "Message received",
+        "message_sent": "Message sent",
+        "deal_created": "Deal created",
+        "deal_won": "Deal won",
+        "deal_lost": "Deal lost",
+        "stage_changed": "Stage changed",
+        "task_completed": "Task completed",
+        "note_added": "Note added",
+        "tag_added": "Tag added",
+        "score_changed": "Score changed",
+        "ai_insight": "AI insight",
+        "channel_connected": "Channel connected",
+        "form_submitted": "Form submitted"
+      }
+    },
+    "verifyButton": {
+      "verifying": "Verifying…",
+      "isWhatsapp": "Is WhatsApp",
+      "profileSuffix": "WhatsApp",
+      "notWhatsapp": "Not WhatsApp",
+      "defaultIdle": "Verify WhatsApp",
+      "unavailableTitle": "Verification unavailable",
+      "unavailableDescription": "Connect a WhatsApp channel (Z-API or Free) in Settings to verify numbers.",
+      "verifiedSuccess": "Number verified as WhatsApp",
+      "notWhatsappSuccess": "Number is not WhatsApp",
+      "failed": "Failed to verify",
+      "titleNoInput": "Enter a valid phone to verify",
+      "titleRecheck": "Click to verify again",
+      "titleCheck": "Check whether this number is on WhatsApp"
+    },
+    "verifyBadge": {
+      "verifying": "Verifying...",
+      "verified": "WhatsApp verified",
+      "notWhatsapp": "Number is not WhatsApp",
+      "unverifiedInteractive": "Not verified · click to check now",
+      "unverified": "Not verified",
+      "unavailableTitle": "Verification unavailable",
+      "unavailableDescription": "Connect a WhatsApp channel (Z-API or Free) to verify numbers.",
+      "verifiedSuccess": "Number verified as WhatsApp",
+      "notWhatsappSuccess": "Number is not WhatsApp",
+      "failed": "Failed to verify"
+    }
+  },
+  "formularios": {
+    "list": {
+      "title": "Forms",
+      "subtitle": "Capture leads with publishable forms. Each submission becomes a contact + automatic deal.",
+      "countOne": "{count} form",
+      "countMany": "{count} forms",
+      "templates": "Templates",
+      "newForm": "New form",
+      "untitled": "Untitled form",
+      "emptyTitle": "You don't have any forms yet",
+      "emptyDescription": "Start with a ready template or create from scratch.",
+      "viewTemplates": "View templates",
+      "createBlank": "Create from scratch",
+      "submissions": "submissions",
+      "edit": "Edit",
+      "publish": "Publish",
+      "pause": "Pause",
+      "share": "Share",
+      "publishFirstHint": "Publish the form first",
+      "shareTitle": "Share",
+      "duplicate": "Duplicate",
+      "deleteTitle": "Delete",
+      "openPublic": "Open public page",
+      "errors": {
+        "load": "Failed to load forms",
+        "createBlank": "Failed to create form",
+        "toggleStatus": "Failed to update status",
+        "duplicate": "Failed to duplicate",
+        "remove": "Failed to delete"
+      },
+      "deleteDialog": {
+        "title": "Delete \"{name}\"?",
+        "description": "Submissions already received won't be removed from contacts.",
+        "confirm": "Delete"
+      },
+      "status": {
+        "draft": "Draft",
+        "active": "Active",
+        "paused": "Paused",
+        "archived": "Archived"
+      }
+    },
+    "editor": {
+      "back": "Back",
+      "namePlaceholder": "Form name",
+      "pause": "Pause",
+      "publish": "Publish",
+      "share": "Share",
+      "save": "Save",
+      "loadError": "Failed to load",
+      "saveError": "Failed to save",
+      "statusError": "Failed to update status",
+      "notFound": "Form not found.",
+      "previewLabel": "Preview",
+      "mobileHint": "Preview available on larger screens. Editing and saving work normally.",
+      "backLink": "Back",
+      "tabs": {
+        "fields": "Fields",
+        "settings": "Settings",
+        "branding": "Appearance"
+      },
+      "slugLabel": "Slug (public URL)",
+      "slugPrefix": "/f/",
+      "slugPlaceholder": "my-form",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Shown at the top of the public page",
+      "emptyFields": "No fields yet. Click the buttons above to add.",
+      "newFieldTypes": {
+        "text": "Short text",
+        "textarea": "Long text",
+        "email": "Email",
+        "phone": "Phone",
+        "select": "Dropdown",
+        "radio": "Radio",
+        "checkbox": "Checkbox",
+        "date": "Date",
+        "number": "Number",
+        "currency": "Value (R$)",
+        "cpf_cnpj": "CPF/CNPJ",
+        "address": "Address",
+        "url": "URL",
+        "file_upload": "Upload",
+        "heading": "Heading",
+        "paragraph": "Paragraph",
+        "divider": "Divider"
+      },
+      "defaultLabels": {
+        "text": "Text",
+        "textarea": "Message",
+        "email": "Email",
+        "phone": "WhatsApp",
+        "number": "Number",
+        "currency": "Value",
+        "date": "Date",
+        "select": "Pick an option",
+        "multi_select": "Pick (multiple)",
+        "radio": "Choose one option",
+        "checkbox": "Check what applies",
+        "url": "Site",
+        "cpf_cnpj": "CPF / CNPJ",
+        "address": "Address",
+        "file_upload": "Attachment",
+        "heading": "Section heading",
+        "divider": "",
+        "paragraph": "Explanatory text",
+        "fallback": "Field"
+      }
+    },
+    "settings": {
+      "sections": {
+        "pipeline": "Pipeline & Deal",
+        "assignment": "Assignment",
+        "welcome": "Welcome message",
+        "autoTags": "Automatic tags",
+        "afterSubmit": "After submit",
+        "notifications": "Notifications"
+      },
+      "pipelineLabel": "Pipeline",
+      "pipelineDefault": "— Org default —",
+      "stageLabel": "Initial stage",
+      "stageDefault": "— First stage —",
+      "dealTitleLabel": "Deal title (template)",
+      "dealTitlePlaceholder": "Ex: Lead {placeholderName} — {placeholderCompany}",
+      "dealTitleHintPre": "Placeholders:",
+      "dealTitlePh1": "{name}",
+      "dealTitlePh2": "{company}",
+      "dealTitleHintPost": ". Default: \"Lead via form — <name>\".",
+      "autoCreateDeal": "Create deal automatically on each submission",
+      "assignmentOptions": {
+        "round_robin": "Round-robin",
+        "specific": "Specific member",
+        "none": "No assignment"
+      },
+      "selectMember": "— Pick —",
+      "welcomeChannelEmpty": "— Do not send —",
+      "welcomePlaceholder": "Hi {placeholderName}, we received your submission! A specialist will reach out soon.",
+      "welcomeHintPre": "Use",
+      "welcomePh1": "{name}",
+      "welcomeConnector": "and",
+      "welcomePh2": "{company}",
+      "welcomeHintPost": ".",
+      "autoTagsPlaceholder": "hot-lead, form, web",
+      "successMessageLabel": "Success message",
+      "successMessagePlaceholder": "We got your data! We'll contact you soon.",
+      "redirectLabel": "Redirect to URL (optional)",
+      "redirectPlaceholder": "https://mysite.com/thanks",
+      "notificationsEmailPlaceholder": "Email to notify (optional)",
+      "notificationsWebhookPlaceholder": "Webhook URL (optional)"
+    },
+    "branding": {
+      "logoUrl": "Logo URL",
+      "logoPlaceholder": "https://...",
+      "primaryColor": "Primary color",
+      "backgroundColor": "Background color",
+      "backgroundPlaceholder": "auto",
+      "fontFamily": "Font family (CSS font-family)",
+      "fontPlaceholder": "Inter, system-ui, sans-serif",
+      "headerText": "Header text (optional)",
+      "footerText": "Footer text (optional)",
+      "showPoweredBy": "Show \"Powered by e-Click Active\""
+    },
+    "fieldEditor": {
+      "dragLabel": "Drag",
+      "widthFull": "Full width",
+      "widthHalf": "Half width",
+      "required": "Required",
+      "remove": "Remove field",
+      "labelLabel": "Label",
+      "headingLabel": "Heading",
+      "paragraphLabel": "Paragraph text",
+      "dividerLabel": "Label (optional)",
+      "placeholder": "Placeholder",
+      "contentLabel": "Content (description)",
+      "mappingLabel": "Map to contact/deal",
+      "optionsLabel": "Options",
+      "optionLabel": "Label",
+      "addOption": "+ Add option",
+      "types": {
+        "text": "Short text",
+        "textarea": "Long text",
+        "email": "Email",
+        "phone": "Phone/WhatsApp",
+        "number": "Number",
+        "currency": "Value (R$)",
+        "date": "Date",
+        "select": "Selection (dropdown)",
+        "multi_select": "Multiple selection",
+        "radio": "Radio (single choice)",
+        "checkbox": "Checkbox",
+        "url": "URL",
+        "cpf_cnpj": "CPF/CNPJ",
+        "address": "Address (with ZIP)",
+        "file_upload": "File upload",
+        "heading": "Heading (visual)",
+        "divider": "Divider (visual)",
+        "paragraph": "Paragraph (visual)"
+      },
+      "mapping": {
+        "name": "Contact name",
+        "email": "Email",
+        "phone": "Phone",
+        "company": "Company",
+        "value": "Deal value",
+        "notes": "Notes",
+        "custom": "Custom (don't map)"
+      },
+      "newOptionDefault": "Option {n}"
+    },
+    "formPreview": {
+      "submit": "Submit",
+      "selectPlaceholder": "Pick...",
+      "cepPlaceholder": "ZIP",
+      "addressPlaceholder": "Address (filled automatically)",
+      "poweredBy": "Powered by e-Click Active"
+    },
+    "publishDialog": {
+      "title": "Share form",
+      "description": "Choose how to share \"{name}\".",
+      "tabs": {
+        "link": "Link",
+        "embed": "Embed",
+        "qr": "QR Code"
+      },
+      "linkHint": "Paste this link on WhatsApp, Instagram bio, ads, etc. Each click becomes an automatic lead.",
+      "copy": "Copy",
+      "copied": "Copied",
+      "embedHint": "Paste this code on your site (HTML, WordPress, Wix, etc).",
+      "downloadSvg": "Download SVG",
+      "qrHint": "Print on flyers, business cards or kiosks. Whoever scans goes straight to the form page."
+    },
+    "templates": {
+      "title": "Form templates",
+      "description": "Start with a ready template. You can edit anything later.",
+      "fieldsCount": "{count} fields",
+      "useArrow": "Use →",
+      "errors": {
+        "load": "Failed to load templates",
+        "create": "Failed to create form"
+      }
+    }
+  },
+  "funis": {
+    "page": {
+      "errors": {
+        "sessionExpired": "Session expired — sign in to load the funnel.",
+        "generic": "Error: {message}"
+      },
+      "empty": {
+        "title": "No pipeline yet",
+        "descriptionPre": "Create a pipeline by running",
+        "descriptionFn": "setup_new_organization()",
+        "descriptionPost": "in Supabase or via API.",
+        "seeSql": "View SQL function"
+      },
+      "toasts": {
+        "wonSuffix": "marked as won!",
+        "lostSuffix": "marked as lost",
+        "moveOther": "Someone moved \"{title}\" → {stage}",
+        "fallbackTitle": "Deal",
+        "fallbackStage": "another stage",
+        "iaCreatedOtherFunnel": "AI created lead in another funnel: {title}",
+        "iaCreated": "AI created: {title}",
+        "funnelLabel": "Funnel: {name}",
+        "openFunnel": "Open funnel",
+        "newAutoLead": "New automatic lead: {title}",
+        "newDealOtherFunnel": "New deal in \"{funnel}\": {title}"
+      },
+      "alerts": {
+        "reorderFailed": "Failed to reorder — refreshing state",
+        "moveFailed": "Failed to move deal — refreshing state",
+        "moveToLostFailed": "Failed to move to Lost — refreshing"
+      }
+    },
+    "board": {
+      "header": {
+        "title": "Funnel",
+        "subtitle": "Active Commercial Intelligence · drag cards between stages",
+        "pipelineSelector": "Select pipeline",
+        "totalLabel": "Total in funnel",
+        "weightedLabel": "Weighted",
+        "dealHint": "{count} deal",
+        "dealsHint": "{count} deals",
+        "reload": "Reload",
+        "settings": "Settings",
+        "settingsTitle": "Pipeline settings",
+        "analyze": "AI analysis",
+        "newDeal": "New deal"
+      },
+      "filters": {
+        "search": "Search deal...",
+        "filters": "Filters",
+        "tagsLabel": "Tags (comma separated)",
+        "tagsPlaceholder": "b2b, enterprise",
+        "minValue": "Min value (R$)",
+        "minValuePlaceholder": "0",
+        "maxValue": "Max value (R$)",
+        "maxValuePlaceholder": "—",
+        "clear": "Clear",
+        "risk": {
+          "all": "All",
+          "low": "Low",
+          "medium": "Medium",
+          "high": "High",
+          "critical": "Critical"
+        }
+      },
+      "column": {
+        "addDeal": "Add deal",
+        "addDealQuick": "Quick add deal",
+        "collapseColumn": "Collapse column",
+        "expandColumn": "Expand column {name}",
+        "ariaColumn": "Column {name}",
+        "moreSuffix": "+ {count} more (use reports to see all)",
+        "dropHere": "Drop here",
+        "noDeals": "No deals"
+      },
+      "search": {
+        "title": "Search deal",
+        "placeholder": "Search deal by title, contact or stage...",
+        "esc": "ESC",
+        "emptyFunnel": "No deals in current funnel.",
+        "noResults": "No results for \"{query}\".",
+        "noContact": "No contact",
+        "footerHint": "↑↓ navigate · Enter select",
+        "footerCount": "{shown} of {total}"
+      }
+    },
+    "deal": {
+      "ariaScoreOf": "AI score {score} out of 100",
+      "card": {
+        "noValue": "R$ —",
+        "slaBreached": "SLA breached",
+        "timeInStage": "Time in stage"
+      },
+      "risk": {
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High",
+        "critical": "Critical"
+      },
+      "quickAdd": {
+        "title": "New deal",
+        "cancel": "Cancel",
+        "titlePlaceholder": "Deal name",
+        "valuePlaceholder": "R$ 0.00",
+        "contactPlaceholder": "Phone or contact name",
+        "searching": "Searching...",
+        "noContactWillCreate": "No contact — will create new on save",
+        "changeContact": "Change contact",
+        "noName": "no name",
+        "tagsPlaceholder": "Card tags (optional)",
+        "submit": "Create (Enter)",
+        "selectedFallback": "Selected contact",
+        "created": "Deal created",
+        "createFailed": "Failed to create deal",
+        "unknownError": "Unknown error"
+      },
+      "lostDialog": {
+        "title": "Mark as lost",
+        "description": "Why was this deal lost? The reason goes into the timeline and helps AI learn loss patterns.",
+        "placeholder": "Ex: customer closed with competitor on price; budget not approved...",
+        "cancel": "Cancel",
+        "confirm": "Confirm loss"
+      },
+      "newDialog": {
+        "title": "New deal",
+        "descriptionFallback": "Select a pipeline first",
+        "fields": {
+          "title": "Title",
+          "titlePlaceholder": "Ex: Acme sale — 50 licenses",
+          "value": "Value (R$)",
+          "valuePlaceholder": "0.00",
+          "stage": "Stage",
+          "contact": "Contact",
+          "expectedClose": "Expected close date",
+          "tags": "Tags",
+          "tagsHint": "Comma between tags",
+          "tagsPlaceholder": "hot-lead, b2b"
+        },
+        "contactPicker": {
+          "selectedFallback": "Selected contact",
+          "remove": "Remove contact",
+          "placeholder": "Search contact (name, phone, email)...",
+          "searching": "Searching...",
+          "noContact": "No contact",
+          "noName": "no name"
+        },
+        "cancel": "Cancel",
+        "submit": "Create deal",
+        "submitting": "Creating...",
+        "errors": {
+          "createFailed": "Failed to create deal"
+        }
+      },
+      "newPipeline": {
+        "titles": {
+          "choose": "New pipeline",
+          "blank": "Blank pipeline",
+          "template": "Pick a template"
+        },
+        "descriptions": {
+          "choose": "Start blank or use a preset template for your segment.",
+          "blank": "You'll add stages next.",
+          "template": "Templates bring the most common stages for the segment. You can edit anything later."
+        },
+        "cards": {
+          "blankTitle": "Blank",
+          "blankDescription": "Create a pipeline from scratch and configure stages manually.",
+          "templateTitle": "Use template",
+          "templateDescription": "E-commerce, clinic, real estate, B2B, solar, education."
+        },
+        "nameLabel": "Pipeline name",
+        "namePlaceholderBlank": "Ex: B2B Sales",
+        "namePlaceholderTemplate": "Use default or customize",
+        "back": "Back",
+        "createBlank": "Create pipeline",
+        "createTemplate": "Create",
+        "stagesCount": "{count} stages",
+        "loadTemplatesFailed": "Failed to load templates",
+        "pipelineCreated": "Pipeline created",
+        "pipelineCreatedFromTemplate": "Pipeline created from template \"{name}\"",
+        "createFailed": "Failed to create pipeline",
+        "unknownError": "Unknown error"
+      },
+      "analysis": {
+        "title": "Funnel analysis",
+        "description": "AI-generated insights based on the current pipeline state and the last 30 days of closures.",
+        "emptyNote": "No analysis generated yet.",
+        "emptyCta": "Generate first analysis",
+        "retry": "Try again",
+        "generatedAt": "Generated {time}",
+        "refresh": "Refresh analysis",
+        "totalLabel": "Total in funnel",
+        "weightedLabel": "Weighted",
+        "conversionLabel": "Conversion",
+        "cycleLabel": "Avg cycle",
+        "cycleSuffix": "{days} days",
+        "bottleneck": "Bottleneck identified: {stage}",
+        "insightsTitle": "Insights",
+        "recommendationsTitle": "Recommendations",
+        "analyzing": "Analyzing funnel...",
+        "analyzingHint": "AI is examining deals, recent closures and identifying bottlenecks. May take 5-15 seconds.",
+        "errors": {
+          "fetch": "Failed to fetch analysis",
+          "generate": "Failed to generate analysis"
+        }
+      },
+      "detailSheet": {
+        "fallbackTitle": "Deal details",
+        "lostStageMissing": "Pipeline has no \"lost\" stage configured",
+        "lostMarked": "Deal marked as lost",
+        "lostFailed": "Failed to mark as lost",
+        "wonStageMissing": "Pipeline has no \"won\" stage configured",
+        "wonMarked": "Deal marked as won!",
+        "wonFailed": "Failed to mark as won",
+        "deleteTitle": "Delete this deal?",
+        "deleteDescription": "This action cannot be undone.",
+        "deleteConfirm": "Delete",
+        "deleted": "Deal deleted",
+        "deleteFailed": "Failed to delete",
+        "unknownError": "Unknown error",
+        "criativoNoLink": "This card has no IA Criativo link configured",
+        "criativoConfirmTitle": "Open in IA Criativo?",
+        "criativoConfirmDescription": "You'll be taken to IA Criativo in the SaaS to finish the product registration. The card will be moved to \"In Progress\".",
+        "criativoConfirmLabel": "Open IA Criativo",
+        "nextStepTitle": "Next step",
+        "nextStepDescription": "Continue this ad's flow in the SaaS.",
+        "missionTitle": "Registration mission",
+        "missionDescription": "Complete the product data directly in the SaaS IA Criativo.",
+        "missionCta": "Open IA Criativo →",
+        "tabs": {
+          "main": "Main",
+          "chat": "Conversation",
+          "insights": "AI Insights",
+          "history": "History"
+        }
+      },
+      "header": {
+        "kicker": "Deal · #{number}",
+        "noTitle": "No title",
+        "ariaTitle": "Deal title",
+        "titleClickEdit": "Deal title (click to edit)",
+        "valueAria": "Value",
+        "valueClickEdit": "Value (click to edit)",
+        "noValue": "No value",
+        "stageFallback": "Stage",
+        "changeStage": "Change stage",
+        "moreOptions": "More options",
+        "deleteDeal": "Delete deal",
+        "score": "Score",
+        "risk": "Risk",
+        "temp": "Temp",
+        "won": "Won",
+        "markWon": "Mark won",
+        "lost": "Lost",
+        "markLost": "Mark lost",
+        "moved": "Deal moved",
+        "wonMarked": "Deal marked as won!",
+        "moveFailed": "Failed to move",
+        "titleSaved": "Title saved",
+        "valueSaved": "Value saved",
+        "saveFailed": "Failed to save",
+        "unknownError": "Unknown error"
+      },
+      "mainTab": {
+        "newAppointment": "New appointment",
+        "newAppointmentTitle": "Create appointment for this contact",
+        "newAppointmentDisabledTitle": "Deal has no contact — appointment requires a contact",
+        "appointmentCreated": "Appointment created",
+        "contactTitle": "Contact",
+        "noContact": "Deal has no linked contact.",
+        "noName": "No name",
+        "dealDataTitle": "Deal data",
+        "expectedCloseLabel": "Expected close date",
+        "assignedLabel": "Assigned to",
+        "noAssignment": "— No assignment —",
+        "tagsLabel": "Card tags",
+        "tagsHint": "Describe qualifications and needs. AI suggests automatically — you can edit.",
+        "tagsPlaceholder": "Add tag…",
+        "savedClose": "Date saved",
+        "savedAssigned": "Assignment saved",
+        "savedTags": "Tags saved",
+        "saveFailed": "Failed to save",
+        "unknownError": "Unknown error"
+      },
+      "conversationTab": {
+        "ariaCopilot": "Contextual copilot",
+        "copilotOpen": "Open copilot",
+        "prefillKicker": "Suggestion ready — click to copy",
+        "copy": "Copy",
+        "dismissPrefill": "Dismiss suggestion",
+        "copied": "Suggestion copied — paste into input",
+        "copiedFallback": "Suggestion ready",
+        "linkedSuccess": "Conversation linked to deal",
+        "linkFailed": "Failed to link",
+        "createdNotLinked": "Conversation created but not linked",
+        "fetchError": "Failed to fetch conversations",
+        "unknownError": "Unknown error",
+        "linkConversation": "Link conversation",
+        "linkHintOne": "This deal has no linked conversation, but the contact has {count} conversation. Pick one and link it:",
+        "linkHintMany": "This deal has no linked conversation, but the contact has {count} conversations. Pick one and link it:",
+        "noPreview": "No preview available",
+        "emptyTitle": "No conversation",
+        "emptyHasContact": "This deal and contact have no recorded conversation yet.",
+        "emptyNoContact": "Link a contact to the deal to start a conversation.",
+        "startConversation": "Start conversation",
+        "noContactTitle": "No linked contact",
+        "noContactDescription": "Link a contact to the deal before starting a conversation.",
+        "channels": {
+          "whatsapp": "WhatsApp",
+          "whatsapp_free": "WhatsApp QR",
+          "instagram": "Instagram",
+          "messenger": "Messenger",
+          "telegram": "Telegram",
+          "email": "Email",
+          "webchat": "WebChat",
+          "tiktok": "TikTok",
+          "mercadolivre": "Mercado Livre"
+        }
+      },
+      "insightsTab": {
+        "unscoredTitle": "Scoring not calculated",
+        "unscoredDescription": "AI hasn't analyzed this deal yet. Calculate now to see score, risk and suggested action.",
+        "calculateNow": "Calculate now",
+        "scoreRecalculated": "Score recalculated",
+        "scoreFailed": "Failed to calculate score",
+        "taskCreated": "Task created",
+        "taskFailed": "Failed to create task",
+        "iaSuggested": "Suggested by AI based on deal score",
+        "header": "AI insights",
+        "recalculate": "Recalculate score",
+        "riskLabel": "Risk",
+        "closeProbabilityLabel": "Close probability",
+        "decompositionTitle": "Breakdown (0–25 each)",
+        "factors": {
+          "engagement": "Engagement",
+          "recency": "Recency",
+          "fit": "Fit",
+          "intent": "Intent"
+        },
+        "nextActionKicker": "Suggested next action",
+        "createTask": "Create task",
+        "scoreUp": "went up",
+        "scoreDown": "went down",
+        "scoreDeltaPrefix": "Score {direction} from",
+        "riskExplanations": {
+          "low": "Consistent positive signals. Keep the follow-up cadence.",
+          "medium": "Extra attention. May stall without proactive action.",
+          "high": "Real loss risk. Next 7 days are critical.",
+          "critical": "Conversion unlikely without strategy change."
+        },
+        "unknownError": "Unknown error"
+      },
+      "historyTab": {
+        "addNote": "Add note",
+        "notePlaceholder": "What happened? Details of the latest interaction...",
+        "ctrlEnterHint": "Ctrl+Enter sends",
+        "saveNote": "Save note",
+        "noteAdded": "Note added",
+        "noteFailed": "Failed to add note",
+        "emptyList": "No activity recorded yet.",
+        "aiBadge": "AI",
+        "titles": {
+          "stage_changed": "Stage changed",
+          "value_changed": "Value updated",
+          "assigned": "Assignment changed",
+          "note_added": "Internal note",
+          "task_created": "Task created",
+          "email_sent": "Email sent",
+          "call_made": "Call logged",
+          "meeting_scheduled": "Meeting scheduled",
+          "proposal_sent": "Proposal sent",
+          "ai_insight": "AI insight"
+        }
+      }
+    },
+    "config": {
+      "title": "Pipeline settings",
+      "subtitle": "Manage pipelines, stages, colors, probability and SLA.",
+      "backLink": "Back to funnel",
+      "newPipeline": "New pipeline",
+      "errors": {
+        "load": "Failed to load pipelines",
+        "rename": "Failed to rename",
+        "remove": "Failed to delete pipeline"
+      },
+      "archive": {
+        "confirmTitle": "Archive \"{name}\"?",
+        "confirmDescription": "Won't show on the board, but all data is preserved. You can restore later.",
+        "confirmLabel": "Archive",
+        "success": "Pipeline archived",
+        "failed": "Failed to archive",
+        "restoreSuccess": "Pipeline restored",
+        "restoreFailed": "Failed to restore"
+      },
+      "delete": {
+        "confirmTitle": "Delete this pipeline?",
+        "confirmDescription": "This action is irreversible and removes all associated deals.",
+        "confirmLabel": "Delete"
+      },
+      "card": {
+        "archivedBadge": "Archived",
+        "stagesOne": "{count} stage",
+        "stagesMany": "{count} stages",
+        "dealsOne": "{count} deal",
+        "dealsMany": "{count} deals",
+        "defaultBadge": "default",
+        "duplicate": "Duplicate",
+        "duplicateSoon": "Coming soon",
+        "configureStages": "Configure stages",
+        "restore": "Restore",
+        "archiveTitle": "Archive pipeline",
+        "tooltipSlaSome": "SLA {hours}h",
+        "tooltipNoSla": "no SLA"
+      },
+      "empty": {
+        "title": "No pipeline configured",
+        "description": "Create your first pipeline to start organizing opportunities.",
+        "create": "Create pipeline"
+      }
+    },
+    "pipelineSheet": {
+      "title": "Configure pipeline",
+      "selectFallback": "Select a pipeline",
+      "subtitleSuffix": "drag to reorder",
+      "savingSuffix": "saving...",
+      "addStage": "New stage",
+      "newStageDefaultName": "New stage",
+      "errors": {
+        "reorder": "Failed to reorder",
+        "update": "Failed to update stage",
+        "delete": "Failed to delete stage",
+        "create": "Failed to create stage",
+        "position": "Failed to position the new stage"
+      },
+      "moveDialog": {
+        "title": "Move deals and delete \"{name}\"?",
+        "descriptionOne": "This stage has {count} active deal. Choose where to move it before deleting.",
+        "descriptionMany": "This stage has {count} active deals. Choose where to move them before deleting.",
+        "targetLabel": "Move deals to",
+        "wonSuffix": "(Won)",
+        "lostSuffix": "(Lost)",
+        "cancel": "Cancel",
+        "confirm": "Move and delete",
+        "successOne": "Stage deleted — {count} deal moved",
+        "successMany": "Stage deleted — {count} deals moved",
+        "failed": "Failed to move and delete",
+        "unknownError": "Unknown error"
+      },
+      "row": {
+        "dragLabel": "Drag to reorder",
+        "slaSuffix": "{hours}h SLA",
+        "noSla": "no SLA",
+        "dealsOne": "{count} deal",
+        "dealsMany": "{count} deals",
+        "protected": "protected",
+        "automations": "Automations",
+        "automationsTitle": "Automations for this stage",
+        "close": "Close",
+        "edit": "Edit",
+        "name": "Name",
+        "color": "Color",
+        "probability": "Probability (%)",
+        "slaHours": "SLA (hours)",
+        "slaPlaceholder": "empty = no SLA",
+        "requiredTitle": "Required data in this stage",
+        "requiredHint": "AI will ask the customer for these data points when missing. When the answer arrives, it extracts and updates automatically.",
+        "requiredContact": "Of the contact",
+        "requiredDeal": "Of the deal",
+        "confirmDelete": "Confirm?",
+        "yes": "Yes",
+        "no": "No",
+        "delete": "Delete",
+        "save": "Save"
+      },
+      "contactFields": {
+        "name": "Name",
+        "email": "Email",
+        "phone": "Phone",
+        "company_name": "Company"
+      },
+      "dealFields": {
+        "value": "Value",
+        "expected_close_date": "Expected close"
+      }
+    },
+    "automations": {
+      "title": "Stage automations",
+      "subtitleOne": "{count} automation",
+      "subtitleMany": "{count} automations",
+      "subtitleStageFallback": "—",
+      "loadFailed": "Failed to load automations",
+      "toggleFailed": "Failed to update",
+      "deleted": "Automation deleted",
+      "deleteFailed": "Failed to delete",
+      "confirmDeleteTitle": "Delete automation \"{name}\"?",
+      "confirmDeleteDescription": "This automation will no longer run for this stage.",
+      "confirmDeleteLabel": "Delete",
+      "empty": "No automations in this stage. Create the first to react to events like deals entering/leaving this stage.",
+      "newButton": "New automation in this stage",
+      "rowMetaOneAction": "Trigger: {trigger} · {actionCount} action · {execs} runs",
+      "rowMetaMany": "Trigger: {trigger} · {actionCount} actions · {execs} runs",
+      "rowDeactivate": "Deactivate",
+      "rowActivate": "Activate",
+      "rowDelete": "Delete",
+      "form": {
+        "kicker": "New automation · trigger: deal entered this stage",
+        "nameLabel": "Name",
+        "namePlaceholder": "Ex: Greeting when receiving a new lead",
+        "messageLabel": "Message to send",
+        "messageHint": "— uses placeholders {placeholderContact}, {placeholderDeal}, etc.",
+        "cancel": "Cancel",
+        "create": "Create",
+        "created": "Automation created",
+        "createFailed": "Failed to create",
+        "defaultMessage": "Hi {greetingContact}, "
+      },
+      "unknownError": "Unknown error"
+    }
+  },
+  "tags": {
+    "picker": {
+      "placeholder": "Add tag…",
+      "loading": "Loading…",
+      "createNew": "Create new tag",
+      "removeLabel": "Remove {slug}"
+    }
+  },
+  "agenda": {
+    "title": "Schedule",
+    "prevWeek": "Previous week",
+    "nextWeek": "Next week",
+    "today": "Today",
+    "refresh": "Refresh",
+    "newAppointment": "New appointment",
+    "loadError": "Failed to load schedule",
+    "genericError": "Error",
+    "aiBadge": "AI",
+    "aiAriaLabel": "Scheduled by AI",
+    "weekdaysShort": {
+      "sun": "Sun",
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri",
+      "sat": "Sat"
+    },
+    "professional": "Professional",
+    "detail": {
+      "minutes": "{n} minutes",
+      "flexibleLocation": "flexible",
+      "contactWithoutName": "Contact with no name",
+      "responsible": "Assigned to",
+      "withoutName": "Unnamed",
+      "linkedDeal": "Linked deal",
+      "notes": "Notes",
+      "openConversation": "Open conversation",
+      "cancelTitle": "Cancel appointment",
+      "cancelDescription": "Reason for cancellation (optional).",
+      "cancelPlaceholder": "E.g. client cancelled",
+      "cancelConfirm": "Cancel appointment",
+      "cancelBack": "Back",
+      "rescheduleTitle": "Reschedule",
+      "rescheduleDescription": "Enter the new date/time (ISO 8601, e.g. 2026-05-12T15:00:00-03:00).",
+      "reschedulePlaceholder": "2026-05-12T15:00:00-03:00",
+      "rescheduleConfirm": "Reschedule",
+      "invalidDate": "Invalid date",
+      "complete": "Complete",
+      "cancelAction": "Cancel",
+      "rescheduleAction": "Reschedule",
+      "noShowAction": "No-show",
+      "ok": "OK",
+      "failure": "Failure",
+      "reasonLabel": "Reason"
+    },
+    "status": {
+      "scheduled": "Scheduled",
+      "confirmed": "Confirmed",
+      "cancelled": "Cancelled",
+      "completed": "Completed",
+      "no_show": "No-show",
+      "rescheduled": "Rescheduled"
+    },
+    "customFields": {
+      "title": "Additional information",
+      "selectPlaceholder": "— select —"
+    },
+    "newDialog": {
+      "title": "New appointment",
+      "description": "AI shows only available slots considering agent schedules and conflicting tasks.",
+      "typeLabel": "Type",
+      "noTypes": "— no types registered —",
+      "typeDurationFormat": "{minutes}min",
+      "dateLabel": "Date",
+      "titleLabel": "Title *",
+      "titlePlaceholder": "E.g. Meeting — Vazzo pitch",
+      "slotLabel": "Available time *",
+      "loadingSlots": "Looking for slots…",
+      "noSlots": "No slots available on this date. Try another date or adjust business hours.",
+      "agentFallback": "Agent",
+      "notesLabel": "Notes",
+      "notesPlaceholder": "Notes about the appointment (optional)",
+      "cancel": "Cancel",
+      "submit": "Schedule",
+      "errors": {
+        "titleRequired": "Title is required",
+        "slotRequired": "Select an available time",
+        "createFailed": "Failed to schedule",
+        "unknown": "Unknown error"
+      },
+      "createdToast": "Appointment created"
+    }
+  },
+  "ai": {
+    "ai": {
+      "feedback": {
+        "helpful": "Helpful response",
+        "notHelpful": "Poor response",
+        "sendFailed": "Failed to send feedback",
+        "saveCommentFailed": "Failed to save comment",
+        "thanks": "Thanks for the feedback!",
+        "unknownError": "Unknown error",
+        "whatCouldBeBetter": "What could be better?",
+        "close": "Close",
+        "commentPlaceholder": "Inaccurate answer, wrong context, bad format...",
+        "send": "Send"
+      },
+      "fillButton": {
+        "fillWithAi": "Fill with AI",
+        "filledWithAi": "Filled with AI",
+        "generateFailed": "Failed to generate with AI",
+        "unknownError": "Unknown error"
+      },
+      "gaps": {
+        "title": "Gaps & pending",
+        "askClient": "Ask client",
+        "answerNow": "Answer now",
+        "emptyMessage": "(message with no text)",
+        "empty": "No gaps detected. Good data coverage.",
+        "fetchError": "Error fetching pending items",
+        "suggestionCopied": "Suggestion copied",
+        "suggestionReady": "Suggestion ready",
+        "suggestionForQuestion": "Good question! About that: ",
+        "suggestionForComment": "About what you mentioned: ",
+        "gap": {
+          "contactEmail": {
+            "label": "Contact email missing",
+            "message": "Can I get an email so I can send you the proposal in writing? Helps keep everything organized."
+          },
+          "contactPhone": {
+            "label": "Phone not confirmed",
+            "message": "So I can call you when everything's ready, can I confirm the best WhatsApp/mobile number?"
+          },
+          "contactCompany": {
+            "label": "No linked company",
+            "message": "Which company are you looking at this for? I want to make sure I understand the scenario correctly."
+          },
+          "contactSegment": {
+            "label": "Customer with no segment/tag",
+            "message": "So I can suggest the right path, what sector or type of operation do you work in?"
+          },
+          "dealValue": {
+            "label": "Deal value not set",
+            "message": "To give you the best recommendation, what approximate budget do you have in mind?"
+          },
+          "dealCloseDate": {
+            "label": "No expected close date",
+            "message": "Do you have a date or deadline in mind to close this? Helps me prioritize on my end."
+          }
+        }
+      }
+    }
+  },
+  "calendario": {
+    "title": "Calendar",
+    "today": "Today",
+    "prevPeriod": "Previous period",
+    "nextPeriod": "Next period",
+    "newTask": "New task",
+    "onlyMine": "Only mine",
+    "loading": "Loading…",
+    "loadError": "Failed to load calendar",
+    "rescheduleError": "Failed to reschedule",
+    "rescheduledToast": "Task rescheduled",
+    "view": {
+      "day": "Day",
+      "week": "Week",
+      "month": "Month"
+    },
+    "type": {
+      "label": "Type:",
+      "all": "All types",
+      "countFormat": "{n} types",
+      "clear": "Clear filter",
+      "call": "Call",
+      "meeting": "Meeting",
+      "follow_up": "Follow-up",
+      "email": "Email",
+      "whatsapp": "WhatsApp",
+      "proposal": "Proposal",
+      "custom": "Custom"
+    },
+    "month": {
+      "names": {
+        "1": "January",
+        "2": "February",
+        "3": "March",
+        "4": "April",
+        "5": "May",
+        "6": "June",
+        "7": "July",
+        "8": "August",
+        "9": "September",
+        "10": "October",
+        "11": "November",
+        "12": "December"
+      },
+      "shortNames": {
+        "1": "Jan",
+        "2": "Feb",
+        "3": "Mar",
+        "4": "Apr",
+        "5": "May",
+        "6": "Jun",
+        "7": "Jul",
+        "8": "Aug",
+        "9": "Sep",
+        "10": "Oct",
+        "11": "Nov",
+        "12": "Dec"
+      }
+    },
+    "weekdayShort": {
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri",
+      "sat": "Sat",
+      "sun": "Sun"
+    },
+    "monthView": {
+      "createOn": "Create task on {date}",
+      "more": "+{n} more"
+    },
+    "weekView": {
+      "createAt": "Create at {hour}:00"
+    },
+    "dayView": {
+      "createAt": "Create at {hour}:00",
+      "allDay": "All day",
+      "tasksToday": "Today's tasks",
+      "tasksCount": "{n, plural, one {# task} other {# tasks}}",
+      "emptyDay": "No task on this day.",
+      "completed": "Completed",
+      "complete": "Complete",
+      "completeError": "Failed to complete",
+      "now": "now"
+    },
+    "popover": {
+      "detailsOf": "Details of {title}",
+      "wholeDay": "All day",
+      "close": "Close",
+      "contact": "Contact:",
+      "deal": "Deal:",
+      "responsible": "Assigned to:",
+      "completed": "Completed",
+      "complete": "Complete",
+      "edit": "Edit",
+      "completeError": "Failed to complete task"
+    },
+    "pill": {
+      "ariaLabel": "{title} {time}"
+    }
+  },
+  "centralAcao": {
+    "centralAcao": {
+      "page": {
+        "title": "Action Center",
+        "subtitle": "What needs your attention now.",
+        "refresh": "Refresh",
+        "attentionTitle": "Needs your attention now",
+        "topN": "Top {n}",
+        "recentActivityTitle": "Recent activity",
+        "metrics": {
+          "unreadConversations": "Unanswered conversations",
+          "hotLeads": "Hot leads",
+          "pipelineValue": "Pipeline value",
+          "tasksToday": "Tasks for today"
+        }
+      },
+      "activity": {
+        "empty": "No recent activity"
+      },
+      "attention": {
+        "emptyTitle": "All caught up! 🎯",
+        "emptyDescription": "No urgent items right now. Good work.",
+        "severity": {
+          "urgent": "Urgent",
+          "high": "High",
+          "medium": "Medium"
+        }
+      },
+      "metric": {
+        "urgent": "urgent"
+      },
+      "hotLeads": {
+        "title": "Hottest leads",
+        "noName": "No name",
+        "noMessages": "No messages",
+        "emptyTitle": "No hot leads yet",
+        "connectWhatsapp": "Connect your WhatsApp →"
+      },
+      "sac": {
+        "title": "Support — Immediate attention",
+        "loading": "Loading…",
+        "allClear": "All under control 🎯 — no critical tickets, SLA on time.",
+        "critical": "Critical",
+        "slaDueSoon": "SLA <1h",
+        "slaBreached": "SLA breached",
+        "reputationRisk": "Rep. risk"
+      },
+      "social": {
+        "title": "Social AI — Attention",
+        "loading": "Loading…",
+        "empty": "No content awaiting action 🎯",
+        "pendingApproval": "Awaiting approval",
+        "scheduled7d": "Scheduled (7d)",
+        "drafts": "Drafts"
+      },
+      "topDeals": {
+        "title": "Closest to closing",
+        "noContact": "No contact",
+        "emptyTitle": "No deal with probability yet",
+        "createFirst": "Create your first deal →"
+      }
+    }
+  },
+  "chat": {
+    "panel": {
+      "emptyCompact": "No conversation loaded",
+      "emptyTitle": "No conversation selected",
+      "emptySubtitle": "Pick a conversation from the list to start replying.",
+      "aiTypingFallback": "AI",
+      "aiTypingSuffix": "is typing"
+    },
+    "aiInsights": {
+      "title": "AI alerts",
+      "pendings": "{count, plural, one {# pending item} other {# pending items}}",
+      "suggestions": "· {count, plural, one {# suggestion} other {# suggestions}}",
+      "unansweredSection": "Unanswered questions",
+      "missingSection": "Missing data",
+      "suggestionsSection": "Suggestions",
+      "viewMessage": "View message",
+      "askNow": "Ask now",
+      "dismiss": "Dismiss until next update",
+      "errorPrefix": "Error fetching gaps"
+    },
+    "attachment": {
+      "transcript": "Transcript",
+      "analyzing": "AI is analyzing…",
+      "downloadFailed": "Failed to download media",
+      "downloadFailedHint": "Ask the contact to resend",
+      "downloading": "Downloading media…",
+      "unavailable": "Media unavailable",
+      "imageLoadError": "Failed to load image",
+      "documentFallback": "document",
+      "downloadAria": "Download document",
+      "fileFallback": "File"
+    },
+    "actions": {
+      "summarizeTooltip": "Summarize conversation",
+      "summarize": "Summarize",
+      "resolveTooltipResolved": "Already resolved",
+      "resolveTooltip": "Resolve conversation",
+      "resolved": "Resolved",
+      "resolve": "Resolve",
+      "markReadAlready": "Already read",
+      "markReadTooltip": "Mark as read ({count})",
+      "markReadShort": "Mark read ({count})",
+      "markReadDone": "Read",
+      "createTaskTooltip": "Create linked task",
+      "createTask": "Create task",
+      "assignTooltipNone": "Assign conversation",
+      "assignTooltipAssigned": "Assigned to {name}",
+      "assignedFallback": "user",
+      "assignedTitle": "Assign to",
+      "assignedBtn": "Assigned",
+      "assign": "Assign",
+      "loadingMembers": "Loading...",
+      "noMembers": "No members found.",
+      "memberNoName": "No name",
+      "unassign": "Unassign",
+      "archiveTooltipArchive": "Archive conversation",
+      "archiveTooltipUnarchive": "Unarchive (back to inbox)",
+      "archive": "Archive",
+      "unarchive": "Unarchive",
+      "deleteTooltip": "Delete permanently",
+      "delete": "Delete",
+      "confirmArchiveTitle": "Archive conversation?",
+      "confirmArchiveDescription": "The conversation disappears from the main inbox but can be retrieved from the \"Archived\" filter. When the customer sends a new message, it automatically comes back.",
+      "confirmArchiveAction": "Archive",
+      "confirmDeleteTitle": "Delete conversation permanently?",
+      "confirmDeleteDescription": "This action is IRREVERSIBLE. All messages in this conversation will also be removed. The contact itself is NOT affected — only this conversation.",
+      "confirmDeleteAction": "Yes, delete",
+      "summarizeNoMessagesTitle": "Not enough messages",
+      "summarizeNoMessagesDesc": "The AI couldn't generate a summary — probably there aren't enough exchanged messages yet.",
+      "summarizeSuccess": "Summary generated",
+      "summarizeSuccessDesc": "AI produced a new summary of the conversation.",
+      "summarizeFailed": "Failed to summarize",
+      "resolveSuccess": "Conversation resolved",
+      "resolveFailed": "Failed to resolve",
+      "markReadSuccess": "Marked as read",
+      "markReadFailed": "Failed to mark",
+      "archiveSuccess": "Conversation archived",
+      "archiveFailed": "Failed to archive",
+      "unarchiveSuccess": "Conversation unarchived",
+      "unarchiveFailed": "Failed to unarchive",
+      "deleteSuccess": "Conversation deleted permanently",
+      "deleteFailed": "Failed to delete",
+      "assignSuccess": "Conversation assigned",
+      "unassignSuccess": "Assignment removed",
+      "assignFailed": "Failed to assign",
+      "taskCreatedTitle": "Task created",
+      "taskCreatedDesc": "Linked to the current conversation.",
+      "errorUnknown": "Unknown error",
+      "followUpTitle": "Follow up with {name}"
+    },
+    "summary": {
+      "title": "AI Summary",
+      "fresh": "just generated",
+      "generatedAt": "generated {time}",
+      "now": "now",
+      "minutesAgo": "{n}min ago",
+      "hoursAgo": "{n}h ago",
+      "daysAgo": "{n}d ago",
+      "intent": "Intent",
+      "sentiment": "Sentiment",
+      "temperature": "Temperature",
+      "dismissAria": "Dismiss summary",
+      "intentLabels": {
+        "budget": "quote",
+        "question": "question",
+        "complaint": "complaint",
+        "negotiation": "negotiation",
+        "support": "support",
+        "greeting": "greeting",
+        "farewell": "farewell",
+        "spam": "spam",
+        "other": "other"
+      },
+      "sentimentLabels": {
+        "very_positive": "very positive",
+        "positive": "positive",
+        "neutral": "neutral",
+        "negative": "negative",
+        "very_negative": "very negative"
+      },
+      "temperatureLabels": {
+        "cold": "cold",
+        "warm": "warm",
+        "hot": "hot",
+        "very_hot": "very hot"
+      }
+    },
+    "media": {
+      "imageUnavailable": "Image unavailable",
+      "stickerUnavailable": "Sticker unavailable",
+      "audioNoUrl": "audio without URL",
+      "audioPause": "Pause",
+      "audioPlay": "Play",
+      "videoUnavailable": "Video unavailable",
+      "documentUnavailable": "Document unavailable",
+      "documentFallback": "document",
+      "downloadAria": "Download document",
+      "fileFallback": "File",
+      "openMaps": "Open in Maps",
+      "sharedContact": "Shared contact",
+      "systemEvent": "system event"
+    },
+    "askMessages": {
+      "email": "Could you share your email? I'd like to send the proposal in writing too.",
+      "phone": "What's the best WhatsApp/phone number to reach you when I have it ready?",
+      "name": "How should I address you?",
+      "company": "Which company is this for? I'd like to understand the context better.",
+      "tag": "To suggest the best option, what's your industry or type of operation?",
+      "fallback": "May I ask about your {field}? It will help me serve you better."
+    }
+  },
+  "conhecimento": {
+    "conhecimento": {
+      "category": {
+        "general": "General",
+        "products": "Products",
+        "pricing": "Pricing",
+        "policies": "Policies",
+        "faq": "FAQ",
+        "scripts": "Scripts",
+        "objections": "Objections",
+        "procedures": "Procedures"
+      },
+      "page": {
+        "title": "Knowledge Base",
+        "subtitle": "Documents and products the AI consults to respond to leads and generate suggestions.",
+        "tabs": {
+          "documents": "Documents",
+          "live": "Live Sources",
+          "catalog": "Catalog"
+        }
+      },
+      "docs": {
+        "loadError": "Error loading documents",
+        "searchPlaceholder": "Search by title or content...",
+        "allCategories": "All categories",
+        "allSources": "All sources",
+        "sources": {
+          "manual": "Manual",
+          "url": "URL",
+          "file": "File",
+          "integration": "Integration",
+          "auto": "AI"
+        },
+        "refresh": "Refresh",
+        "uploadFile": "Upload File",
+        "multipleUrls": "Multiple URLs",
+        "importFromUrl": "Import from URL",
+        "newDocument": "New document",
+        "updatedTitle": "Document updated",
+        "updatedDesc": "URL content changed — embedding regenerated.",
+        "noChangesTitle": "No changes",
+        "noChangesDesc": "The URL content is the same.",
+        "refreshFailed": "Failed to refresh",
+        "error": "Error",
+        "pages": "{n} pages",
+        "tokensWord": "tokens",
+        "updatedAt": "Updated {when}",
+        "syncAt": "Sync {when}",
+        "part": "Part {i}/{n}",
+        "refetchUrl": "Re-fetch URL and update content",
+        "active": "Active",
+        "inactive": "Inactive",
+        "emptyTitle": "Your knowledge base is empty",
+        "emptySubtitle": "Create documents with FAQ, scripts, policies — the AI uses this content to respond to leads.",
+        "createFirst": "Create first document"
+      },
+      "live": {
+        "loadError": "Error loading sources",
+        "respondingTitle": "\"{name}\" responding",
+        "charsExtracted": "{n} chars extracted.",
+        "problemTitle": "\"{name}\" with problem",
+        "error": "Error",
+        "testFailed": "Test failed",
+        "refresh": "Refresh",
+        "newLiveSource": "New live source",
+        "description": "<strong>Live sources</strong> are URLs the AI queries in real time when it needs updated information (stock, daily prices, status). Unlike imports, content is not saved — each query fetches fresh data. In-memory cache reduces repeated hits.",
+        "typeWeb": "Web",
+        "typeApi": "API",
+        "typeRss": "RSS",
+        "cacheLabel": "Cache {min}min",
+        "lastQuery": "Last query {when}",
+        "neverQueried": "Never queried",
+        "testConnection": "Test connection and extract content now",
+        "active": "Active",
+        "inactive": "Inactive",
+        "emptyTitle": "No live sources registered",
+        "emptySubtitle": "Register URLs the AI queries in real time for up-to-date data (stock, daily prices, etc.).",
+        "createFirst": "Create first source"
+      },
+      "products": {
+        "loadError": "Error loading products",
+        "searchPlaceholder": "Search by name or SKU...",
+        "refresh": "Refresh",
+        "newProduct": "New product",
+        "inactive": "Inactive",
+        "skuPrefix": "SKU: {sku}",
+        "noSku": "No SKU",
+        "emptyTitle": "No products registered",
+        "emptySubtitle": "Register your catalog so the AI can answer questions about prices and attributes.",
+        "createFirst": "Create first product"
+      },
+      "newDocument": {
+        "title": "New document",
+        "description": "The AI uses this base to respond to leads and give suggestions. The better the content, the better the responses.",
+        "startFromTemplate": "Start from a template:",
+        "titleLabel": "Title",
+        "titlePlaceholder": "e.g. FAQ — products and pricing",
+        "categoryLabel": "Category",
+        "contentLabel": "Content",
+        "contentPlaceholder": "Markdown supported. The more specific, the better the semantic search...",
+        "tokens": "~{n, number} tokens",
+        "cancel": "Cancel",
+        "submit": "Create document",
+        "submitting": "Creating + indexing...",
+        "createError": "Error creating document"
+      },
+      "editDocument": {
+        "title": "Edit document",
+        "updatedAt": "Updated on {when}",
+        "embeddingWillRegenerate": "embedding will be regenerated on save",
+        "saveError": "Error saving",
+        "deleteError": "Error deleting",
+        "titleLabel": "Title",
+        "categoryLabel": "Category",
+        "contentLabel": "Content",
+        "tokens": "~{n, number} tokens",
+        "activeForAi": "Active (visible to AI)",
+        "deleteConfirm": "Delete permanently?",
+        "yesDelete": "Yes, delete",
+        "cancel": "Cancel",
+        "delete": "Delete",
+        "close": "Close",
+        "save": "Save",
+        "saving": "Saving...",
+        "saveReindex": "Save + reindex"
+      }
+    }
+  },
+  "contentCalendar": {
+    "title": "Content Calendar",
+    "subtitle": "Plan and schedule cross-channel publications. {from} to {to}.",
+    "today": "Today",
+    "prevMonth": "Previous month",
+    "nextMonth": "Next month",
+    "prevWeek": "Previous week",
+    "nextWeek": "Next week",
+    "generateWithAi": "Generate plan with AI",
+    "newEvent": "New event",
+    "view": {
+      "month": "Month",
+      "week": "Week",
+      "list": "List"
+    },
+    "filter": {
+      "allStatus": "All statuses",
+      "productLinkedOnly": "Linked to product only",
+      "clearChannels": "clear channels"
+    },
+    "loading": "Loading…",
+    "loadError": "Failed to load",
+    "rescheduleError": "Rescheduling failed",
+    "month": {
+      "names": {
+        "1": "January",
+        "2": "February",
+        "3": "March",
+        "4": "April",
+        "5": "May",
+        "6": "June",
+        "7": "July",
+        "8": "August",
+        "9": "September",
+        "10": "October",
+        "11": "November",
+        "12": "December"
+      }
+    },
+    "weekdayShort": {
+      "sun": "Sun",
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri",
+      "sat": "Sat"
+    },
+    "weekdayLong": {
+      "sun": "Sunday",
+      "mon": "Monday",
+      "tue": "Tuesday",
+      "wed": "Wednesday",
+      "thu": "Thursday",
+      "fri": "Friday",
+      "sat": "Saturday"
+    },
+    "monthYear": "{month} {year}",
+    "longDate": "{weekday}, {month} {day}",
+    "weekRange": "Week of {fromMonth}/{fromDay} to {toMonth}/{toDay}",
+    "weekHint": "Scroll horizontally to see the full week.",
+    "weekNoTimeLabel": "—",
+    "card": {
+      "linkedProduct": "Linked product",
+      "productFallback": "Product",
+      "lateBadge": "overdue"
+    },
+    "list": {
+      "empty": "No events in the period.",
+      "emptyHint": "Create one manually or ask the AI to generate a plan."
+    },
+    "drawer": {
+      "editTitle": "Edit event",
+      "newTitle": "New event",
+      "save": "Save",
+      "create": "Create",
+      "cancel": "Cancel",
+      "delete": "Delete",
+      "deleteConfirm": "Delete this event from the calendar?",
+      "deleteError": "Failed to delete",
+      "saveError": "Failed to save",
+      "requiredError": "Title and date are required",
+      "tabs": {
+        "detalhes": "details",
+        "vincular": "Link SaaS",
+        "notas": "notes",
+        "vincularDisabledTooltip": "Coming soon (NEXT_PUBLIC_SAAS_API_URL not configured)"
+      },
+      "fields": {
+        "titleLabel": "Title *",
+        "titlePlaceholder": "E.g. White shirt launch",
+        "channelLabel": "Channel",
+        "typeLabel": "Type",
+        "dateLabel": "Date *",
+        "timeLabel": "Time",
+        "statusLabel": "Status",
+        "notesLabel": "Notes",
+        "notesPlaceholder": "Brief, post angle, pre-researched hashtags…"
+      },
+      "saas": {
+        "notConfigured": "Linking with SaaS requires NEXT_PUBLIC_SAAS_API_URL configured. Coming soon when SaaS S1/S4 are delivered.",
+        "linkProductLabel": "Link SaaS product",
+        "searchPlaceholder": "Search by product name…",
+        "searching": "Searching…",
+        "linkedPrefix": "Linked: {name}",
+        "remove": "Remove",
+        "comingSoonNote": "Links to social_content_id and ads_campaign_id will be available once SaaS S1/S4 are delivered."
+      }
+    },
+    "ai": {
+      "title": "Generate plan with AI",
+      "periodLabel": "Period",
+      "period": {
+        "week": "1 week",
+        "month": "1 month"
+      },
+      "startLabel": "Start on",
+      "channelsLabel": "Channels ({n})",
+      "businessContextLabel": "Your business context (optional)",
+      "businessContextPlaceholder": "E.g. casual womenswear store, focused on women 25-40 in São Paulo. Launching winter collection.",
+      "cancel": "Cancel",
+      "generate": "Generate plan",
+      "generating": "Generating…",
+      "selectAtLeastOne": "Select at least 1 channel",
+      "failed": "Failed to generate plan",
+      "doneToast": "✓ Plan generated! Cost: ${cost} USD"
+    }
+  },
+  "copilot": {
+    "copilot": {
+      "panel": {
+        "title": "AI Copilot",
+        "aiBadge": "AI",
+        "description": "Your intelligent sales assistant. Ask anything about your CRM.",
+        "clear": "Clear",
+        "enterHint": "Enter to send · Shift+Enter for new line"
+      },
+      "placeholder": {
+        "general": "Ask about your leads, deals, performance...",
+        "deal": "Ask about this deal...",
+        "contact": "Ask about this contact...",
+        "conversation": "Ask about this conversation..."
+      },
+      "contextBadge": {
+        "deal": "Deal",
+        "contact": "Contact",
+        "conversation": "Conversation"
+      },
+      "empty": {
+        "title": "How can I help?",
+        "hint": {
+          "general": "Ask about leads, deals, performance, conversations, or have me create tasks and opportunities right from the chat.",
+          "deal": "Ask about this deal — risk, next step, proposal generation, or follow-up.",
+          "contact": "Ask about this contact — summary, historical objections, best approach.",
+          "conversation": "Ask about this conversation — summary, suggested reply, customer intent."
+        }
+      },
+      "suggestions": {
+        "general": [
+          "Which leads should I prioritize today?",
+          "Summary of my pipeline",
+          "Pending tasks",
+          "Why did I lose sales this week?",
+          "Create follow-up for unresponsive leads",
+          "Which customers haven't responded in 5+ days?",
+          "Team performance this week",
+          "Analysis of recurring objections",
+          "Suggestions to increase conversion",
+          "Hot leads without service",
+          "Next critical tasks",
+          "Where am I losing deals?",
+          "What critical tickets do I have now?",
+          "Today's support summary",
+          "Support performance this week",
+          "Tickets with breached SLA",
+          "Late orders without ticket",
+          "Which products get the most complaints?",
+          "Create a launch post",
+          "Make a social proof carousel",
+          "Content awaiting approval",
+          "Today's Social AI summary"
+        ],
+        "deal": [
+          "Next action?",
+          "Loss risk?",
+          "Generate proposal",
+          "Create follow-up",
+          "Negotiation analysis",
+          "Closing suggestions",
+          "Interaction history",
+          "Compare with similar deals",
+          "Points of attention"
+        ],
+        "contact": [
+          "Customer summary",
+          "Objection history",
+          "Best approach",
+          "Behavior profile",
+          "Purchase probability",
+          "Topics of interest",
+          "Suggested next steps",
+          "Engagement analysis",
+          "Previous deals"
+        ],
+        "conversation": [
+          "Summarize conversation",
+          "Suggest reply",
+          "What does the customer want?",
+          "Identify urgency",
+          "Next question to ask",
+          "Customer sentiment",
+          "Unanswered points",
+          "Summarize sent documents",
+          "Routing suggestion"
+        ]
+      },
+      "floating": {
+        "title": "AI Copilot",
+        "openAria": "Open AI Copilot (Cmd/Ctrl+K)",
+        "clearChat": "Clear chat",
+        "disable": "Disable Copilot",
+        "close": "Close (Esc)",
+        "inputPlaceholder": "Ask about this screen…",
+        "send": "Send",
+        "atPath": "On <code>{pathname}</code>",
+        "errorTalking": "Failed to talk to Copilot",
+        "explain": "Explain \"{title}\"",
+        "allKbTopics": "All KB topics ({count}):",
+        "greeting": "Hi! How can I help?",
+        "topicsForScreen": "{count, plural, one {# topic about this screen.} other {# topics about this screen.}}",
+        "noTopicsForScreen": "No specific topics for this screen.",
+        "orAskBelow": "or ask anything below",
+        "noEntriesYet": "This screen doesn't have dedicated entries in my KB yet.",
+        "seeAllTopics": "See all available topics",
+        "copy": "Copy",
+        "helpful": "Helpful",
+        "notHelpful": "Not helpful"
+      },
+      "baseSuggestions": {
+        "whatIDoHere": {
+          "text": "What do I do on this screen?",
+          "label": "What do I do here?"
+        },
+        "whatsappSetup": {
+          "text": "How to set up WhatsApp here?",
+          "label": "WhatsApp setup"
+        },
+        "commonErrors": {
+          "text": "What are common errors on this screen?",
+          "label": "Common errors"
+        },
+        "bestPractices": {
+          "text": "Automation best practices",
+          "label": "Best practices"
+        },
+        "stepByStep": {
+          "text": "Give me a step by step",
+          "label": "Step by step"
+        },
+        "shortcuts": {
+          "text": "Useful shortcuts",
+          "label": "Shortcuts"
+        },
+        "quickStart": {
+          "text": "How to get started quickly?",
+          "label": "Quick start"
+        },
+        "importantConfigs": {
+          "text": "Important settings",
+          "label": "Settings"
+        },
+        "screenSummary": {
+          "text": "Summarize what I can do here",
+          "label": "Screen summary"
+        }
+      }
+    }
+  },
+  "copiloto": {
+    "copiloto": {
+      "chatInput": {
+        "placeholder": "Ask about your leads, deals, performance...",
+        "send": "Send"
+      }
+    }
+  },
+  "customFields": {
+    "customFields": {
+      "label": {
+        "aiCanFill": "AI can fill in automatically",
+        "apiReadOnly": "Read-only — updated via API"
+      },
+      "input": {
+        "selectPlaceholder": "— Select —",
+        "urlPlaceholder": "https://example.com",
+        "addressShortPlaceholder": "Street, number, neighborhood, city",
+        "unknownType": "Unknown field type: {type}"
+      },
+      "url": {
+        "copied": "URL copied",
+        "copyFailed": "Failed to copy",
+        "visit": "Visit",
+        "visitAria": "Visit URL",
+        "copy": "Copy",
+        "copyAria": "Copy URL"
+      },
+      "address": {
+        "viewOnMap": "View on map",
+        "viewOnGoogleMaps": "View on Google Maps",
+        "cepNotFound": "Postal code not found",
+        "cepInvalid": "Invalid postal code",
+        "countryDefault": "Brazil",
+        "addressAutoFilled": "Address auto-filled",
+        "cepLookupFailed": "Failed to look up postal code",
+        "cep": "Postal code",
+        "country": "Country",
+        "street": "Street",
+        "streetPlaceholder": "Flower Street, 123",
+        "line2": "Complement / District",
+        "line2Placeholder": "Apt 101, Downtown",
+        "city": "City",
+        "state": "State"
+      },
+      "section": {
+        "loadError": "Error loading fields",
+        "saveError": "Failed to save custom fields",
+        "unknownError": "Unknown error",
+        "mainSection": "Main"
+      }
+    }
+  },
+  "equipe": {
+    "equipe": {
+      "role": {
+        "owner": "Owner",
+        "admin": "Admin",
+        "manager": "Manager",
+        "agent": "Agent",
+        "viewer": "Viewer"
+      },
+      "status": {
+        "active": "Active",
+        "invited": "Invited",
+        "suspended": "Suspended"
+      },
+      "page": {
+        "title": "Team",
+        "subtitle": "Manage members, roles and organization permissions.",
+        "memberCount": "{count, plural, one {# member} other {# members}}",
+        "refresh": "Refresh",
+        "inviteMember": "Invite member",
+        "loadError": "Error loading team",
+        "noName": "No name",
+        "you": "You",
+        "seen": "Seen {when}",
+        "neverSeen": "Never accessed",
+        "emptyTitle": "Empty team",
+        "emptySubtitle": "Invite colleagues to collaborate on operations.",
+        "inviteFirst": "Invite first member"
+      },
+      "invite": {
+        "title": "Invite member",
+        "description": "The user will receive a magic link by email to access the organization.",
+        "emailLabel": "Email",
+        "emailPlaceholder": "agent@company.com",
+        "nameLabel": "Name (optional)",
+        "namePlaceholder": "John Smith",
+        "roleLabel": "Role",
+        "ownerOnlyHint": "Only the owner can promote to admin later.",
+        "cancel": "Cancel",
+        "submit": "Invite",
+        "submitting": "Sending invite...",
+        "inviteError": "Error inviting"
+      },
+      "detail": {
+        "title": "Member details",
+        "memberSince": "Member since {date}",
+        "saveError": "Error saving",
+        "removeError": "Error removing",
+        "noName": "No name",
+        "you": "You",
+        "noEmail": "(no email)",
+        "currentActivity": "Current activity",
+        "stats": {
+          "conversations": "Conversations",
+          "deals": "Deals",
+          "tasks": "Tasks"
+        },
+        "lastSeen": "Last access {when}",
+        "neverSeen": "Never accessed",
+        "orgRole": "Organization role",
+        "ownerOnly": "(owner only)",
+        "ownerCantEdit": "The owner cannot be edited.",
+        "noPermissionToEdit": "You don't have permission to edit this member.",
+        "scheduling": "Scheduling",
+        "defaultDuration": "Default duration (min)",
+        "durationPlaceholder": "e.g. 30, 60",
+        "durationHint": "Time for each appointment. System calculates free slots.",
+        "buffer": "Buffer (min)",
+        "bufferHint": "Pause between appointments.",
+        "specialties": "Specialties / Services",
+        "specialtiesPlaceholder": "e.g. nutritionist, haircut, engine, sales…",
+        "removeAria": "Remove {item}",
+        "noSpecialties": "No specialties. AI won't match appointments with this professional until you set at least one.",
+        "specialtiesHint": "Free text by niche. E.g. clinic = [\"nutritionist\"], salon = [\"haircut\", \"manicure\"], shop = [\"engine\", \"electrical\"]. AI Concierge uses this to route appointment requests.",
+        "removeConfirm": "Remove this member?",
+        "yes": "Yes",
+        "no": "No",
+        "remove": "Remove",
+        "close": "Close",
+        "save": "Save"
+      }
+    }
+  },
+  "inbox": {
+    "page": {
+      "errorAuth": "Session expired — sign in again to load conversations.",
+      "errorGeneric": "Error {status}: {message}",
+      "errorNetwork": "Network error: {message}",
+      "loadContactProfileFailed": "Failed to open contact profile",
+      "errorUnknown": "Unknown error",
+      "panelTabContact": "Contact",
+      "panelTabCopilot": "Copilot"
+    },
+    "list": {
+      "title": "Conversations",
+      "loading": "Loading...",
+      "count": "{count, plural, one {# conversation} other {# conversations}}",
+      "newButton": "New",
+      "newButtonTitle": "Start a new conversation",
+      "emptyTitle": "No conversations yet",
+      "emptySubtitle": "Once a message arrives through a channel, it will show up here."
+    },
+    "filters": {
+      "searchPlaceholder": "Search contact...",
+      "clearSearchAria": "Clear search",
+      "all": "All",
+      "mine": "Mine",
+      "unassigned": "Unassigned",
+      "starred": "Starred",
+      "resolved": "Resolved",
+      "archived": "Archived",
+      "suggestions": {
+        "scheduling": "scheduling",
+        "appointment": "appointment",
+        "infusion": "infusion",
+        "private": "private",
+        "insurance": "insurance",
+        "document": "document",
+        "urgent": "urgent",
+        "today": "today"
+      }
+    },
+    "item": {
+      "noName": "no name",
+      "starAdd": "Mark as favorite",
+      "starRemove": "Remove favorite",
+      "starFailed": "Failed to star",
+      "starFailedRetry": "Please try again",
+      "noMessages": "No messages",
+      "youPrefix": "You: ",
+      "mediaFallback": "[media]"
+    },
+    "chatHeader": {
+      "noName": "no name",
+      "backAria": "Back to list",
+      "assign": "Assign",
+      "resolve": "Resolve",
+      "resolved": "Resolved",
+      "moreActions": "More actions",
+      "openPanel": "Open panel",
+      "closePanel": "Close panel"
+    },
+    "messageList": {
+      "emptyState": "No messages yet. Send the first one to start the conversation.",
+      "loadMoreHint": "Scroll up to load more ↑"
+    },
+    "messageBubble": {
+      "aiLabel": "AI",
+      "internalNote": "Internal note"
+    },
+    "messageInput": {
+      "placeholderMessage": "Type your message...",
+      "placeholderInternalNote": "Internal note (only agents see)...",
+      "toggleInternalNote": "Internal note",
+      "toggleMessage": "Message",
+      "shortcutHint": "Enter sends · Shift+Enter for new line",
+      "emojiAria": "Emoji",
+      "attachAria": "Attach",
+      "sendProductAria": "Send product",
+      "sendProductTitle": "Send a product from the catalog",
+      "sendAria": "Send",
+      "sendFailed": "Failed to send",
+      "quickReplies": {
+        "greeting": "Hi! How can I help you today?",
+        "greetingLabel": "Greeting",
+        "wait": "One moment, let me check.",
+        "waitLabel": "Hold on",
+        "time": "What's the best time for you?",
+        "timeLabel": "Time",
+        "docs": "Could you send the paperwork here?",
+        "docsLabel": "Documents",
+        "insurance": "Do you have insurance or will it be out-of-pocket?",
+        "insuranceLabel": "Insurance",
+        "forward": "I'll forward this to the right team.",
+        "forwardLabel": "Forward",
+        "confirm": "Confirmed! I'll save the appointment.",
+        "confirmLabel": "Confirm",
+        "more": "Can I help you with anything else?",
+        "moreLabel": "More help"
+      }
+    },
+    "aiSuggestion": {
+      "labelNormal": "AI Suggestion",
+      "labelLowConfidence": "⚠️ AI suggestion — low confidence",
+      "lowConfidenceHint": "Review carefully before sending — a task was created for you to look into it.",
+      "liveSourcesBadge": "Real-time data",
+      "useNormal": "Use",
+      "useLowConfidence": "Send anyway",
+      "edit": "Edit",
+      "ignoreAria": "Dismiss"
+    },
+    "contactPanel": {
+      "selectConversationHint": "Pick a conversation to see the contact",
+      "noName": "no name",
+      "viaChannel": "via {channel}",
+      "newAppointment": "New appointment",
+      "contactCard": "Contact",
+      "phone": "Phone",
+      "email": "Email",
+      "temperature": "Temperature",
+      "score": "Score",
+      "aiSummary": "AI Summary",
+      "aiSummaryEmpty": "No summary generated yet. Click \"Summarize\" in the chat after a few messages are exchanged.",
+      "tags": "Contact tags",
+      "tagPlaceholder": "Add tag…",
+      "tagSaveFailed": "Failed to save tags",
+      "pendingTasks": "Pending tasks",
+      "pendingTasksPlaceholder": "Endpoint GET /contacts/:id/tasks not implemented yet.",
+      "viewFullProfile": "View full profile",
+      "appointmentCreated": "Appointment created",
+      "funnel": "Funnel & Stage",
+      "funnelEmpty": "Lead has not been routed to any funnel yet.",
+      "funnelClosed": "Closed ({count})",
+      "dealWon": "✓ won",
+      "dealLost": "✕ lost",
+      "stageDefault": "Stage",
+      "pipelineDefault": "Funnel",
+      "humanRequiredBadge": "human",
+      "humanRequiredTitle": "AI is silent at this stage — human handover required"
+    },
+    "transferBriefing": {
+      "title": "📋 Conversation transferred — {reason}",
+      "expand": "View briefing",
+      "collapse": "Collapse",
+      "customerWants": "Customer wants",
+      "approachSuggestion": "Suggested approach",
+      "objections": "Objections detected",
+      "products": "Products/services of interest",
+      "collected": "Collected",
+      "missing": "Missing",
+      "aiSignals": "AI signals",
+      "empty": "—",
+      "footer": "Generated at {time} · {count, plural, one {# message exchanged} other {# messages exchanged}}"
+    },
+    "productPicker": {
+      "title": "Send product",
+      "closeAria": "Close",
+      "searchPlaceholder": "Search by name or SKU…",
+      "loading": "Loading products…",
+      "empty": "No products found.",
+      "skuPrefix": "SKU {sku}",
+      "inStock": "{count} in stock",
+      "outOfStock": "Out of stock",
+      "observationLabel": "Note (optional)",
+      "observationPlaceholder": "E.g. we have this model in stock for immediate delivery.",
+      "errorPrefix": "⚠ {message}",
+      "swapProduct": "Change product",
+      "sendProduct": "Send product"
+    },
+    "startConversation": {
+      "title": "New conversation",
+      "description": "Search a contact, pick a channel, and write the first message.",
+      "contactLabel": "Contact",
+      "contactSearchPlaceholder": "Search by name, phone, or email",
+      "noContactFound": "No contact found",
+      "typeMinChars": "Type at least 2 characters",
+      "noName": "No name",
+      "loadContactFailed": "Failed to load contact",
+      "channelLabel": "Channel",
+      "loadingChannels": "Loading channels…",
+      "noActiveChannel": "No active channel. Connect a channel in Settings.",
+      "noIdentifier": "This contact has no identifier for any active channel. Add a phone or email before starting the conversation.",
+      "messageLabel": "First message",
+      "messagePlaceholder": "Write the message that will open this conversation…",
+      "messageCounter": "{length} / {max}",
+      "shortcutHint": "Enter for new line · Ctrl+Enter to send",
+      "cancel": "Cancel",
+      "start": "Start conversation",
+      "conversationReused": "Existing conversation — opening",
+      "conversationCreated": "Conversation started with {name}",
+      "fallbackName": "contact",
+      "messageFailed": "Message failed to send",
+      "messageFailedDefault": "Check the channel and try sending again from the chat.",
+      "startFailed": "Failed to start conversation",
+      "swap": "Change",
+      "whatsappVerified": "WhatsApp verified",
+      "notWhatsapp": "Not on WhatsApp",
+      "notVerified": "Not verified",
+      "reasons": {
+        "no_phone": "no phone",
+        "no_email": "no email",
+        "no_ig": "no IG profile",
+        "unverified_whatsapp": "not a WhatsApp number"
+      },
+      "firstMessageSuggestions": {
+        "greetingText": "Hi! This is [Your company]. How can I help?",
+        "greetingLabel": "Initial greeting",
+        "followUpText": "Hi! I noticed you were interested. Want to schedule a chat?",
+        "followUpLabel": "Interest follow-up",
+        "scheduleText": "Hi! Any availability this week for an appointment?",
+        "scheduleLabel": "Propose scheduling",
+        "presentText": "Hi! I'm [your name] from [company]. May I walk you through our options?",
+        "presentLabel": "Introduction",
+        "consultText": "Hi! Are you looking for a consultation or some guidance?",
+        "consultLabel": "Consultation",
+        "callText": "Hi! Can I give you a call right now to understand your needs better?",
+        "callLabel": "Request a call"
+      }
+    }
+  },
+  "intelligence": {
+    "intelligence": {
+      "adSignalToast": {
+        "critical": "🚨 Critical",
+        "warning": "⚠️ Warning",
+        "view": "View",
+        "fallback": "New signal: {signalType}",
+        "fallbackWithCampaign": "New signal: {signalType} on \"{campaign}\""
+      }
+    }
+  },
+  "placeholder": {
+    "placeholder": {
+      "inDevelopment": "Under development",
+      "description": "This section is still being built. Soon you'll be able to use all the features of <highlight>{title}</highlight> here."
+    }
+  },
+  "relatorios": {
+    "title": "Reports",
+    "subtitle": "Sales, team, channel and funnel metrics — interpreted by AI.",
+    "interpretWithAi": "Interpret with AI",
+    "loadError": "Failed to load report",
+    "interpretError": "Failed to interpret",
+    "feedbackError": "Failed to load feedback",
+    "tabs": {
+      "sales": "Sales",
+      "agents": "Team",
+      "channels": "Channels",
+      "funnel": "Funnel",
+      "ai": "AI"
+    },
+    "period": {
+      "today": "Today",
+      "7d": "7 days",
+      "30d": "30 days",
+      "90d": "90 days"
+    },
+    "insights": {
+      "analyzing": "Analyzing data...",
+      "analyzingHint": "AI is processing the numbers and generating actionable insights.",
+      "label": "AI analysis",
+      "insightsHeader": "Insights",
+      "recommendationsHeader": "Recommendations"
+    },
+    "sales": {
+      "revenueTotal": "Total revenue",
+      "avgCycle": "Avg. cycle: {days}d",
+      "dealsWon": "Deals won",
+      "dealsOpen": "{n} open",
+      "avgTicket": "Avg. ticket",
+      "conversionRate": "Conversion rate",
+      "closedDealsHint": "{won} of {total} closed",
+      "wonVsLost": "Won vs Lost per week",
+      "emptyWonLost": "No deals closed in the period",
+      "wonLegend": "Won",
+      "lostLegend": "Lost",
+      "revenueCumulative": "Cumulative revenue",
+      "emptyRevenue": "No revenue in the period",
+      "revenueLegend": "Revenue",
+      "lostReasonsTitle": "Top loss reasons",
+      "noLosses": "No losses recorded in the period. Keep it up 🎯"
+    },
+    "agents": {
+      "empty": "No performance data in the period. Aggregates in",
+      "emptySuffix": "are computed by nightly jobs.",
+      "noName": "Unnamed",
+      "tasksDone": "{n, plural, one {# task completed} other {# tasks completed}}",
+      "firstResponse": "{value} first response",
+      "aiScore": "AI score",
+      "barConversations": "Conversations",
+      "barDealsWon": "Deals won",
+      "barDealsLostSuffix": "({n} lost)",
+      "barRevenue": "Revenue"
+    },
+    "channels": {
+      "empty": "No conversations recorded in the period.",
+      "pctOfTotal": "{n}% of total",
+      "statConversations": "Conversations",
+      "statLeads": "Leads",
+      "statConversion": "Conversion",
+      "distributionTitle": "Conversation distribution",
+      "totalLabel": "{n} total",
+      "tooltipConversations": "{n} conversations"
+    },
+    "funnel": {
+      "pipelineLabel": "Pipeline:",
+      "bottleneckLabel": "Bottleneck identified:",
+      "noStages": "No active stages in this pipeline.",
+      "dealsCount": "{n, plural, one {# deal} other {# deals}}",
+      "dropPrefix": "-{n}% drop",
+      "detailsTitle": "Details per stage",
+      "table": {
+        "stage": "Stage",
+        "deals": "Deals",
+        "value": "Value",
+        "avgTime": "Avg. time",
+        "conversion": "Conversion",
+        "dropOff": "Drop-off"
+      },
+      "wonBadge": "Won",
+      "lostBadge": "Lost"
+    },
+    "ai": {
+      "kpi": {
+        "positive": "Positive feedback",
+        "negative": "Negative feedback",
+        "approval": "Approval rate",
+        "approvalHint": "{positive} of {total} answers were helpful",
+        "noFeedback": "No feedback in the period",
+        "pctOfTotal": "{n}% of total",
+        "noFeedbackShort": "No feedback"
+      },
+      "distribution": "Distribution",
+      "weeklyApproval": "Approval per week",
+      "noData": "No data",
+      "donutPositiveLabel": "positive",
+      "recentNegative": "Recent negative comments",
+      "noNegative": "No negative comments recorded in the period."
+    }
+  },
+  "sac": {
+    "dashboard": {
+      "title": "Smart Support",
+      "openTickets": "{count, plural, one {# open ticket} other {# open tickets}}",
+      "loading": "Loading…",
+      "risks": "Risks",
+      "reports": "Reports",
+      "refresh": "Refresh",
+      "diagnose": "AI Diagnostic",
+      "analyzing": "Analyzing…",
+      "kpi": {
+        "new": "New",
+        "critical": "Critical",
+        "slaDueSoon": "SLA <1h",
+        "slaBreached": "SLA breached",
+        "reputationRisk": "Rep. risk",
+        "resolvedToday": "Resolved today"
+      },
+      "section": {
+        "critical": "Critical tickets",
+        "criticalEmpty": "No critical tickets open 🎉",
+        "slaDue": "SLA due soon",
+        "slaDueEmpty": "Everything on time",
+        "aiRecs": "AI recommendations",
+        "noAnalysis": "No analysis yet",
+        "generateNow": "Generate now"
+      },
+      "allTickets": "All tickets",
+      "allTicketsEmpty": "No tickets yet. Tickets are auto-created when AI detects post-sale/support.",
+      "analysisFailed": "Failed to generate analysis"
+    },
+    "detail": {
+      "loading": "Loading ticket…",
+      "notFound": "Ticket not found",
+      "backToSac": "Back to Support",
+      "ticketTitle": "Ticket #{number} — {summary}",
+      "noSummary": "No summary",
+      "linkOrder": "Link order",
+      "reopen": "Reopen",
+      "resolve": "Resolve",
+      "escalate": "Escalate",
+      "hasChat": "This conversation has",
+      "chatLink": "chat history ↗",
+      "timeline": "Timeline",
+      "resolveTitle": "Resolve ticket",
+      "resolutionType": "Resolution type",
+      "notesOptional": "Notes (optional)",
+      "notesPlaceholder": "What was done?",
+      "cancel": "Cancel",
+      "saving": "Saving…",
+      "confirm": "Confirm",
+      "linkTitle": "Link order from SaaS",
+      "linkHint": "Paste the order number (marketplace_order_id) or tracking code",
+      "linkPlaceholder": "ML-123456789 or BR123456789BR",
+      "searching": "Searching…",
+      "link": "Link",
+      "resolutionOptions": {
+        "resolved": "Resolved",
+        "refunded": "Refunded",
+        "exchanged": "Exchanged",
+        "returned": "Returned",
+        "cancelled": "Cancelled",
+        "escalated": "Escalated externally",
+        "no_action_needed": "No action needed",
+        "duplicate": "Duplicate"
+      }
+    },
+    "reports": {
+      "title": "Support reports",
+      "metricsLast": "Metrics for the last",
+      "days7": "7 days",
+      "days30": "30 days",
+      "days90": "90 days",
+      "diagnose": "AI Diagnostic",
+      "analyzing": "Analyzing…",
+      "kpi": {
+        "slaFulfilled": "SLA fulfilled",
+        "slaFulfilledSub": "{fulfilled} of {total}",
+        "slaBreached": "SLA breached",
+        "avgFirstResponse": "Avg. first response",
+        "avgResolution": "Avg. resolution"
+      },
+      "openTodaySnapshot": "Tickets open today (snapshot)",
+      "stat": {
+        "new": "New",
+        "in_progress": "In progress",
+        "waiting_customer": "Waiting on customer",
+        "waiting_internal": "Waiting internally",
+        "resolved_today": "Resolved today",
+        "critical": "Critical",
+        "reputation_risk": "Reputation risk"
+      }
+    },
+    "risks": {
+      "title": "Reputation risk",
+      "subtitle": "Critical tickets + delayed orders without ticket",
+      "back": "← Back to Support",
+      "createPreventive": "Create preventive tickets",
+      "scanning": "Scanning…",
+      "preventiveResult": "{count, plural, one {# preventive ticket created} other {# preventive tickets created}}",
+      "preventiveFailed": "Failed to run scan",
+      "criticalSection": "Tickets with reputation risk",
+      "criticalEmpty": "No tickets with medium or higher reputation risk 🎯",
+      "breachedSection": "Tickets with SLA breached",
+      "breachedEmpty": "No SLA breached — great work 👏",
+      "delayedSection": "Delayed orders in SaaS",
+      "loading": "Loading…",
+      "bridgeOff": "Bridge with e-Click SaaS is not active for this organization. Connect SaaS to automatically monitor delayed orders.",
+      "delayedEmpty": "No delayed orders found 🎉",
+      "table": {
+        "marketplace": "Marketplace",
+        "order": "Order",
+        "customer": "Customer",
+        "status": "Status",
+        "delay": "Delay",
+        "value": "Value"
+      },
+      "delayDays": "{n}d",
+      "preventiveHint": "Use the \"Create preventive tickets\" button to proactively contact each delayed customer. Orders with an open ticket are skipped."
+    },
+    "diagnostico": {
+      "fail": "Failed to generate diagnostic: {message}",
+      "title": "AI Diagnostic — {period}",
+      "close": "Close",
+      "mainIssues": "Main issues",
+      "recommendations": "Recommendations",
+      "problemProducts": "Problem products",
+      "problemChannels": "Channels with most problems",
+      "agentsTraining": "Agents needing training",
+      "period": {
+        "today": "today",
+        "week": "last 7 days",
+        "month": "last 30 days"
+      }
+    },
+    "badges": {
+      "priority": {
+        "low": "Low",
+        "normal": "Normal",
+        "high": "High",
+        "critical": "Critical",
+        "reputation_risk": "Rep. risk"
+      },
+      "status": {
+        "new": "New",
+        "in_progress": "In progress",
+        "waiting_customer": "Waiting on customer",
+        "waiting_internal": "Waiting internally",
+        "resolved": "Resolved",
+        "reopened": "Reopened",
+        "cancelled": "Cancelled"
+      },
+      "category": {
+        "pre_sale": "Pre-sale",
+        "post_sale": "Post-sale",
+        "order_status": "Order status",
+        "delivery_delay": "Delay",
+        "exchange": "Exchange",
+        "return": "Return",
+        "warranty": "Warranty",
+        "cancellation": "Cancellation",
+        "refund": "Refund",
+        "defective_product": "Defective",
+        "wrong_product": "Wrong product",
+        "missing_parts": "Missing parts",
+        "invoice": "Invoice",
+        "payment": "Payment",
+        "technical": "Technical",
+        "complaint": "Complaint",
+        "mediation": "Mediation",
+        "negative_review": "Negative review",
+        "general": "General"
+      },
+      "risk": {
+        "none": "—",
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High",
+        "critical": "Critical"
+      },
+      "riskLabel": "Risk {level}"
+    },
+    "table": {
+      "loading": "Loading tickets…",
+      "empty": "No tickets found",
+      "col": {
+        "number": "#",
+        "status": "Status",
+        "priority": "Priority",
+        "category": "Category",
+        "sla": "SLA",
+        "risk": "Risk",
+        "channel": "Channel",
+        "created": "Created"
+      },
+      "preventive": "Prev",
+      "aiBadge": "AI",
+      "now": "now",
+      "minutesAgo": "{n}m ago",
+      "hoursAgo": "{n}h ago"
+    },
+    "sla": {
+      "none": "No SLA",
+      "breachedAgo": "Breached {duration} ago"
+    },
+    "side": {
+      "card": {
+        "ticket": "Ticket",
+        "ai": "AI",
+        "order": "Order",
+        "contact": "Contact",
+        "resolution": "Resolution"
+      },
+      "preventive": "Preventive",
+      "slaLabel": "SLA: ",
+      "select": {
+        "status": "Status",
+        "priority": "Priority",
+        "category": "Category"
+      },
+      "aiNotClassified": "Not classified by AI yet",
+      "riskScore": "Risk score",
+      "aiSuggestion": "AI suggestion",
+      "suggestedResponse": "Suggested response",
+      "generating": "Generating…",
+      "regenerate": "Regenerate",
+      "suggestResponse": "Suggest response",
+      "marketplace": "Marketplace",
+      "number": "Number",
+      "status": "Status",
+      "tracking": "Tracking",
+      "value": "Value",
+      "noOrder": "No order linked. Use \"Link order\" to look it up from SaaS.",
+      "contactIdLabel": "ID:",
+      "viewProfile": "View full profile →",
+      "resolutionType": "Type:",
+      "satisfaction": "Satisfaction:"
+    },
+    "ticketSection": {
+      "title": "Support ticket",
+      "orderFallback": "Order"
+    },
+    "timeline": {
+      "empty": "No actions recorded yet",
+      "actor": {
+        "ai": "AI",
+        "system": "System",
+        "customer": "Customer"
+      },
+      "labels": {
+        "created": "Ticket created",
+        "status_changed": "Status changed",
+        "priority_changed": "Priority changed",
+        "category_changed": "Category changed",
+        "assigned": "Assigned",
+        "escalated": "Escalated",
+        "note_added": "Internal note",
+        "response_sent": "Response sent",
+        "order_linked": "Order linked",
+        "order_checked": "Order checked",
+        "logistics_contacted": "Logistics contacted",
+        "refund_initiated": "Refund initiated",
+        "exchange_initiated": "Exchange initiated",
+        "sla_breached": "SLA breached",
+        "resolved": "Resolved",
+        "reopened": "Reopened",
+        "ai_classified": "AI classified",
+        "ai_suggested": "AI suggested response",
+        "preventive_created": "Preventive ticket created",
+        "customer_rated": "Customer rated service"
+      },
+      "now": "now",
+      "minutesAgo": "{n}m ago",
+      "hoursAgo": "{n}h ago"
+    }
+  },
+  "tarefas": {
+    "page": {
+      "title": "Tasks",
+      "count": "· {count, plural, one {# task} other {# tasks}}",
+      "subtitle": "Your activities and follow-ups, created by you or suggested by AI.",
+      "refresh": "Refresh",
+      "newTask": "New task",
+      "emptyTitle": "No tasks here",
+      "emptySubtitle": "Create tasks to track follow-ups, calls, and proposals.",
+      "createFirst": "Create first task"
+    },
+    "dialog": {
+      "title": "New task",
+      "description": "Create a task assigned to you. You can reassign it later.",
+      "fields": {
+        "title": "Title",
+        "titlePlaceholder": "E.g. Call João about the proposal",
+        "type": "Type",
+        "priority": "Priority",
+        "description": "Description",
+        "descriptionPlaceholder": "Additional details...",
+        "date": "Date",
+        "time": "Time",
+        "linkContact": "Link to contact",
+        "linkDeal": "Link to deal"
+      },
+      "cancel": "Cancel",
+      "create": "Create task",
+      "creating": "Creating...",
+      "errorDefault": "Error creating task",
+      "contactPicker": {
+        "selected": "Contact selected",
+        "removeAria": "Remove contact",
+        "placeholder": "Search contact (name, phone, email)...",
+        "searching": "Searching...",
+        "noResults": "No contacts",
+        "noName": "no name"
+      },
+      "dealPicker": {
+        "selected": "Deal selected",
+        "removeAria": "Remove deal",
+        "placeholder": "Search deal by title...",
+        "loading": "Loading...",
+        "noResults": "No deals",
+        "recent": "Recent"
+      }
+    },
+    "row": {
+      "completeAria": "Mark as completed",
+      "completedAria": "Task completed",
+      "deleteAria": "Delete task",
+      "errors": {
+        "complete": "Error completing task",
+        "delete": "Error deleting task"
+      },
+      "dueLabel": {
+        "today": "Today {time}",
+        "noDate": "—"
+      }
+    },
+    "filters": {
+      "status": {
+        "all": "All",
+        "pending": "Pending",
+        "in_progress": "In progress",
+        "overdue": "Overdue",
+        "completed": "Completed"
+      },
+      "priority": {
+        "label": "Priority",
+        "all": "All",
+        "low": "Low",
+        "normal": "Normal",
+        "high": "High",
+        "urgent": "Urgent"
+      },
+      "type": {
+        "label": "Type",
+        "all": "All",
+        "call": "Call",
+        "email": "Email",
+        "meeting": "Meeting",
+        "follow_up": "Follow-up",
+        "whatsapp": "WhatsApp",
+        "proposal": "Proposal",
+        "custom": "Custom"
+      },
+      "onlyMine": "Only mine"
+    },
+    "badges": {
+      "priority": {
+        "low": "Low",
+        "normal": "Normal",
+        "high": "High",
+        "urgent": "Urgent"
+      },
+      "status": {
+        "pending": "Pending",
+        "in_progress": "In progress",
+        "completed": "Completed",
+        "cancelled": "Cancelled",
+        "overdue": "Overdue"
+      },
+      "type": {
+        "call": "Call",
+        "email": "Email",
+        "meeting": "Meeting",
+        "follow_up": "Follow-up",
+        "whatsapp": "WhatsApp",
+        "proposal": "Proposal",
+        "custom": "Custom"
+      },
+      "aiCreated": "Created by AI"
+    }
   }
 }

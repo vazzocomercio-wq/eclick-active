@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import { CalendarRange } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import type { ContentCalendarEvent } from '@/lib/api/content-calendar';
 import { cn } from '@/lib/utils';
 import { EventCard } from './event-card';
@@ -22,6 +23,7 @@ export function CalendarListView({
   onEventClick,
   className,
 }: CalendarListViewProps) {
+  const t = useTranslations('contentCalendar');
   const groups = useMemo(() => {
     const map = new Map<string, ContentCalendarEvent[]>();
     for (const e of events) {
@@ -49,9 +51,9 @@ export function CalendarListView({
       >
         <CalendarRange className="h-8 w-8 text-muted-foreground" />
         <div>
-          <p className="text-sm font-medium">Nenhum evento no período.</p>
+          <p className="text-sm font-medium">{t('list.empty')}</p>
           <p className="text-xs text-muted-foreground">
-            Crie um manualmente ou peça à IA pra gerar um plano.
+            {t('list.emptyHint')}
           </p>
         </div>
       </div>
@@ -73,10 +75,10 @@ export function CalendarListView({
                 isToday && 'border-cyan-400/40 text-cyan-300',
               )}
             >
-              {formatLongDate(date)}
+              {formatLongDate(date, (k, v) => t(k, v))}
               {isToday && (
                 <span className="rounded-full bg-cyan-500/20 px-2 py-0 text-[10px] font-medium uppercase tracking-wide">
-                  Hoje
+                  {t('today')}
                 </span>
               )}
             </h4>

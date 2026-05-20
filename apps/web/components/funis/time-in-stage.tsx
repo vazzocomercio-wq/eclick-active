@@ -1,3 +1,6 @@
+'use client';
+
+import { useTranslations } from 'next-intl';
 import { AlertTriangle, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -8,6 +11,7 @@ interface TimeInStageProps {
 }
 
 export function TimeInStage({ hours, slaBreached, className }: TimeInStageProps) {
+  const t = useTranslations('funis.deal.card');
   return (
     <span
       className={cn(
@@ -15,7 +19,7 @@ export function TimeInStage({ hours, slaBreached, className }: TimeInStageProps)
         slaBreached ? 'text-red-500' : 'text-muted-foreground',
         className,
       )}
-      title={slaBreached ? 'SLA estourado' : 'Tempo na etapa'}
+      title={slaBreached ? t('slaBreached') : t('timeInStage')}
     >
       {slaBreached ? <AlertTriangle className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
       {formatHours(hours)}

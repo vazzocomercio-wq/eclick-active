@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import type { ContentCalendarEvent } from '@/lib/api/content-calendar';
 import { cn } from '@/lib/utils';
 import { EventCard } from './event-card';
@@ -26,7 +27,7 @@ interface CalendarMonthViewProps {
   className?: string;
 }
 
-const WEEKDAYS_PT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
 
 /**
  * Grade 7×N do mês (desktop) ou stack vertical de dias com eventos (mobile).
@@ -39,6 +40,7 @@ export function CalendarMonthView({
   onLongPressEvent,
   className,
 }: CalendarMonthViewProps) {
+  const t = useTranslations('contentCalendar');
   const [cursor, setCursor] = useState(() => new Date());
   const [dragOverDay, setDragOverDay] = useState<string | null>(null);
 
@@ -77,14 +79,14 @@ export function CalendarMonthView({
       {/* Header com navegação */}
       <div className="flex items-center justify-between">
         <h3 className="text-base font-semibold capitalize">
-          {formatMonthYear(cursor)}
+          {formatMonthYear(cursor, (k, v) => t(k, v))}
         </h3>
         <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={() => setCursor((d) => shiftMonth(d, -1))}
             className="flex h-9 w-9 items-center justify-center rounded-md border border-border hover:bg-accent"
-            aria-label="Mês anterior"
+            aria-label={t('prevMonth')}
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
@@ -93,13 +95,13 @@ export function CalendarMonthView({
             onClick={() => setCursor(new Date())}
             className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-accent"
           >
-            Hoje
+            {t('today')}
           </button>
           <button
             type="button"
             onClick={() => setCursor((d) => shiftMonth(d, 1))}
             className="flex h-9 w-9 items-center justify-center rounded-md border border-border hover:bg-accent"
-            aria-label="Próximo mês"
+            aria-label={t('nextMonth')}
           >
             <ChevronRight className="h-4 w-4" />
           </button>
@@ -110,12 +112,12 @@ export function CalendarMonthView({
       <div className="hidden md:block">
         {/* Cabeçalho dos dias da semana */}
         <div className="grid grid-cols-7 gap-1 pb-1">
-          {WEEKDAYS_PT.map((d) => (
+          {WEEKDAY_KEYS.map((key) => (
             <div
-              key={d}
+              key={key}
               className="text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
             >
-              {d}
+              {t(`weekdayShort.${key}`)}
             </div>
           ))}
         </div>
@@ -207,11 +209,11 @@ export function CalendarMonthView({
                     {day.date.getDate()}
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    {WEEKDAYS_PT[day.date.getDay()]}
+                    {t(`weekdayShort.${WEEKDAY_KEYS[day.date.getDay()]}`)}
                   </span>
                   {isTodayCell && (
                     <span className="ml-auto rounded-full bg-cyan-500/20 px-2 py-0.5 text-[10px] font-medium text-cyan-300">
-                      Hoje
+                      {t('today')}
                     </span>
                   )}
                 </div>

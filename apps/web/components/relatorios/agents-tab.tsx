@@ -1,6 +1,7 @@
 'use client';
 
 import { Crown } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import type { AgentReport } from '@/lib/api/reports';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { getInitials } from '@/lib/format';
@@ -12,6 +13,7 @@ interface AgentsTabProps {
 }
 
 export function AgentsTab({ data, loading }: AgentsTabProps) {
+  const t = useTranslations('relatorios');
   if (loading || !data) {
     return (
       <div className="flex flex-col gap-2">
@@ -25,11 +27,11 @@ export function AgentsTab({ data, loading }: AgentsTabProps) {
   if (data.agents.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-border p-12 text-center text-sm text-muted-foreground">
-        Sem dados de performance no período. Os agregados em
+        {t('agents.empty')}
         <code className="mx-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]">
           agent_performance
         </code>
-        são calculados em jobs noturnos.
+        {t('agents.emptySuffix')}
       </div>
     );
   }
@@ -63,19 +65,19 @@ export function AgentsTab({ data, loading }: AgentsTabProps) {
 
             <div className="flex min-w-0 flex-1 flex-col">
               <span className="truncate text-sm font-semibold">
-                {a.display_name ?? 'Sem nome'}
+                {a.display_name ?? t('agents.noName')}
               </span>
               <span className="text-[11px] text-muted-foreground">
-                {a.tasks_completed} tarefa{a.tasks_completed === 1 ? '' : 's'} concluída{a.tasks_completed === 1 ? '' : 's'}
+                {t('agents.tasksDone', { n: a.tasks_completed })}
                 {a.avg_first_response_ms !== null &&
-                  ` · ${formatResponseTime(a.avg_first_response_ms)} 1ª resposta`}
+                  ` · ${t('agents.firstResponse', { value: formatResponseTime(a.avg_first_response_ms) })}`}
               </span>
             </div>
 
             {a.ai_score !== null && (
               <div className="flex flex-col items-end">
                 <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                  Score IA
+                  {t('agents.aiScore')}
                 </span>
                 <span
                   className={cn(
@@ -94,21 +96,21 @@ export function AgentsTab({ data, loading }: AgentsTabProps) {
           {/* Bars comparativas */}
           <div className="grid grid-cols-3 gap-3">
             <ComparativeBar
-              label="Conversas"
+              label={t('agents.barConversations')}
               value={a.conversations_handled}
               max={maxConversations}
               color="bg-blue-500/70"
               displayValue={String(a.conversations_handled)}
             />
             <ComparativeBar
-              label="Deals ganhos"
+              label={t('agents.barDealsWon')}
               value={a.deals_won}
               max={maxDealsWon}
               color="bg-emerald-500/70"
-              displayValue={`${a.deals_won}${a.deals_lost > 0 ? ` (${a.deals_lost} perdidos)` : ''}`}
+              displayValue={`${a.deals_won}${a.deals_lost > 0 ? ` ${t('agents.barDealsLostSuffix', { n: a.deals_lost })}` : ''}`}
             />
             <ComparativeBar
-              label="Receita"
+              label={t('agents.barRevenue')}
               value={a.revenue}
               max={maxRevenue}
               color="bg-primary/70"

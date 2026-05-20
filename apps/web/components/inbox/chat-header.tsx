@@ -1,6 +1,7 @@
 'use client';
 
 import { ArrowLeft, CheckCheck, MoreVertical, PanelRightClose, PanelRightOpen, UserPlus } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import type { ConversationDetail } from '@eclick-active/shared';
 import { Button } from '@/components/ui/button';
 import { AvatarWithChannel } from '@/components/contacts/avatar-with-channel';
@@ -26,6 +27,7 @@ export function ChatHeader({
   onTogglePanel,
   onBack,
 }: ChatHeaderProps) {
+  const t = useTranslations('inbox.chatHeader');
   if (!conversation) {
     return <div className="h-16 border-b border-border" />;
   }
@@ -40,7 +42,7 @@ export function ChatHeader({
           <button
             type="button"
             onClick={onBack}
-            aria-label="Voltar para lista"
+            aria-label={t('backAria')}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground md:hidden"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -55,7 +57,7 @@ export function ChatHeader({
         <div className="flex flex-col min-w-0">
           <div className="flex items-center gap-2 min-w-0">
             <span className="truncate text-sm font-semibold">
-              {contact?.name ?? <span className="italic text-muted-foreground">sem nome</span>}
+              {contact?.name ?? <span className="italic text-muted-foreground">{t('noName')}</span>}
             </span>
             {contact?.temperature && <TemperatureBadge temperature={contact.temperature} />}
           </div>
@@ -77,7 +79,7 @@ export function ChatHeader({
           className="hidden gap-1.5 sm:inline-flex"
         >
           <UserPlus className="h-3.5 w-3.5" />
-          Atribuir
+          {t('assign')}
         </Button>
         <Button
           variant="ghost"
@@ -87,16 +89,16 @@ export function ChatHeader({
           className="hidden gap-1.5 sm:inline-flex"
         >
           <CheckCheck className="h-3.5 w-3.5" />
-          {isResolved ? 'Resolvida' : 'Resolver'}
+          {isResolved ? t('resolved') : t('resolve')}
         </Button>
-        <Button variant="ghost" size="icon" aria-label="Mais ações">
+        <Button variant="ghost" size="icon" aria-label={t('moreActions')}>
           <MoreVertical className="h-4 w-4" />
         </Button>
         <Button
           variant="ghost"
           size="icon"
           onClick={onTogglePanel}
-          aria-label={panelOpen ? 'Fechar painel' : 'Abrir painel'}
+          aria-label={panelOpen ? t('closePanel') : t('openPanel')}
           className="hidden lg:inline-flex"
         >
           {panelOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}

@@ -10,6 +10,7 @@ import {
   Loader2,
   UserX,
 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { aiApi, type GapsResult } from '@/lib/api/ai';
 import { ApiError } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
@@ -50,6 +51,8 @@ export function AIInsightsCard({
   onScrollToMessage,
   compact = false,
 }: AIInsightsCardProps) {
+  const t = useTranslations('chat.aiInsights');
+  const tAsk = useTranslations('chat.askMessages');
   const [gaps, setGaps] = useState<GapsResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -81,7 +84,7 @@ export function AIInsightsCard({
             ? `${err.status}: ${err.message}`
             : err instanceof Error
               ? err.message
-              : 'Erro ao buscar gaps',
+              : t('errorPrefix'),
         );
       })
       .finally(() => setLoading(false));
@@ -124,13 +127,13 @@ export function AIInsightsCard({
             headerText,
           )}
         >
-          Atenção da IA
+          {t('title')}
         </span>
         {loading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
         {gaps && hasGaps && (
           <span className="text-[10px] text-muted-foreground">
-            {gaps.unanswered_questions.length + gaps.missing_profile_data.length} pendência(s)
-            {gaps.suggested_actions.length > 0 && ` · ${gaps.suggested_actions.length} sugestão(ões)`}
+            {t('pendings', { count: gaps.unanswered_questions.length + gaps.missing_profile_data.length })}
+            {gaps.suggested_actions.length > 0 && ` ${t('suggestions', { count: gaps.suggested_actions.length })}`}
           </span>
         )}
         <span className="ml-auto flex items-center gap-1 text-muted-foreground">
@@ -148,13 +151,13 @@ export function AIInsightsCard({
 
           {/* Perguntas sem resposta */}
           {gaps && gaps.unanswered_questions.length > 0 && (
-            <Section title="Perguntas sem resposta" compact={compact}>
+            <Section title={t('unansweredSection')} compact={compact}>
               {gaps.unanswered_questions.map((q, i) => (
                 <Row
                   key={`q-${i}`}
                   icon={HelpCircle}
                   label={q.question}
-                  actionLabel={onScrollToMessage ? 'Ver mensagem' : undefined}
+                  actionLabel={onScrollToMessage ? t('viewMessage') : undefined}
                   onAction={() => onScrollToMessage?.(q.message_index)}
                   compact={compact}
                 />
@@ -164,7 +167,7 @@ export function AIInsightsCard({
 
           {/* Dados faltando */}
           {gaps && gaps.missing_profile_data.length > 0 && (
-            <Section title="Dados faltando" compact={compact}>
+            <Section title={t('missingSection')} compact={compact}>
               {gaps.missing_profile_data.map((m, i) => (
                 <Row
                   key={`m-${i}`}
@@ -175,8 +178,8 @@ export function AIInsightsCard({
                       <span className="text-muted-foreground"> — {m.reason}</span>
                     </span>
                   }
-                  actionLabel="Perguntar agora"
-                  onAction={() => onAskNow?.(buildAskMessage(m.field))}
+                  actionLabel={t('askNow')}
+                  onAction={() => onAskNow?.(buildAskMessage(m.field, tAsk))}
                   compact={compact}
                 />
               ))}
@@ -185,7 +188,7 @@ export function AIInsightsCard({
 
           {/* Sugestões */}
           {gaps && gaps.suggested_actions.length > 0 && (
-            <Section title="Sugestões" compact={compact}>
+            <Section title={t('suggestionsSection')} compact={compact}>
               {gaps.suggested_actions.map((a, i) => (
                 <Row
                   key={`s-${i}`}
@@ -203,7 +206,7 @@ export function AIInsightsCard({
               onClick={() => setDismissed(true)}
               className="text-[10px] text-muted-foreground transition-colors hover:text-foreground"
             >
-              Dispensar até próxima atualização
+              {t('dismiss')}
             </button>
           </div>
         </div>
@@ -272,22 +275,25 @@ function Row({
 }
 
 /** Gera texto natural pra perguntar o dado ao cliente. */
-function buildAskMessage(field: string): string {
+function buildAskMessage(
+  field: string,
+  t: (key: string, vars?: Record<string, string>) => string,
+): string {
   const f = field.toLowerCase();
   if (f.includes('email')) {
-    return 'Pode me passar seu e-mail? Quero te enviar a proposta por escrito também.';
+    return t('email');
   }
   if (f.includes('phone') || f.includes('telefone')) {
-    return 'Qual é o melhor número de WhatsApp/celular pra eu te chamar quando estiver pronto?';
+    return t('phone');
   }
   if (f.includes('name') || f.includes('nome')) {
-    return 'Como posso te chamar?';
+    return t('name');
   }
   if (f.includes('company') || f.includes('empresa')) {
-    return 'Você está olhando isso pra qual empresa? Quero entender melhor o cenário.';
+    return t('company');
   }
   if (f.includes('tag') || f.includes('segment')) {
-    return 'Pra eu te indicar a melhor opção, qual o setor ou tipo de operação que você tem?';
+    return t('tag');
   }
-  return `Posso te perguntar sobre seu ${field}? Vai me ajudar a te atender melhor.`;
+  return t('fallback', { field });
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Loader2, Search, X } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import type { Contact, TaskPriority, TaskType } from '@eclick-active/shared';
 import {
   Dialog,
@@ -25,8 +26,6 @@ import { cn } from '@/lib/utils';
 import {
   TASK_PRIORITY_VALUES,
   TASK_TYPE_VALUES,
-  priorityLabel,
-  taskTypeLabel,
 } from './task-badges';
 
 interface NewTaskDialogProps {
@@ -84,6 +83,9 @@ export function NewTaskDialog({
   defaultConversationId,
   onCreated,
 }: NewTaskDialogProps) {
+  const t = useTranslations('tarefas.dialog');
+  const tType = useTranslations('tarefas.badges.type');
+  const tPriority = useTranslations('tarefas.badges.priority');
   const [form, setForm] = useState<FormState>(EMPTY);
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -151,7 +153,7 @@ export function NewTaskDialog({
           ? `${err.status}: ${err.message}`
           : err instanceof Error
             ? err.message
-            : 'Erro ao criar tarefa',
+            : t('errorDefault'),
       );
     } finally {
       setSubmitting(false);
@@ -163,24 +165,24 @@ export function NewTaskDialog({
       <DialogContent className="max-w-lg">
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <DialogHeader>
-            <DialogTitle>Nova tarefa</DialogTitle>
+            <DialogTitle>{t('title')}</DialogTitle>
             <DialogDescription>
-              Crie uma tarefa atribuída a você. Você pode reatribuir depois.
+              {t('description')}
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="Título" required className="sm:col-span-2">
+            <Field label={t('fields.title')} required className="sm:col-span-2">
               <Input
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
-                placeholder="Ex: Ligar para João sobre proposta"
+                placeholder={t('fields.titlePlaceholder')}
                 autoFocus
                 required
               />
             </Field>
 
-            <Field label="Tipo">
+            <Field label={t('fields.type')}>
               <select
                 value={form.task_type}
                 onChange={(e) =>
@@ -191,15 +193,15 @@ export function NewTaskDialog({
                   'focus:outline-none focus:ring-2 focus:ring-ring',
                 )}
               >
-                {TASK_TYPE_VALUES.map((t) => (
-                  <option key={t} value={t}>
-                    {taskTypeLabel(t)}
+                {TASK_TYPE_VALUES.map((tt) => (
+                  <option key={tt} value={tt}>
+                    {tType(tt)}
                   </option>
                 ))}
               </select>
             </Field>
 
-            <Field label="Prioridade">
+            <Field label={t('fields.priority')}>
               <select
                 value={form.priority}
                 onChange={(e) =>
@@ -212,22 +214,22 @@ export function NewTaskDialog({
               >
                 {TASK_PRIORITY_VALUES.map((p) => (
                   <option key={p} value={p}>
-                    {priorityLabel(p)}
+                    {tPriority(p)}
                   </option>
                 ))}
               </select>
             </Field>
 
-            <Field label="Descrição" className="sm:col-span-2">
+            <Field label={t('fields.description')} className="sm:col-span-2">
               <Textarea
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
-                placeholder="Detalhes adicionais..."
+                placeholder={t('fields.descriptionPlaceholder')}
                 rows={2}
               />
             </Field>
 
-            <Field label="Data">
+            <Field label={t('fields.date')}>
               <Input
                 type="date"
                 value={form.due_date}
@@ -235,7 +237,7 @@ export function NewTaskDialog({
               />
             </Field>
 
-            <Field label="Hora">
+            <Field label={t('fields.time')}>
               <Input
                 type="time"
                 value={form.due_time}
@@ -244,7 +246,7 @@ export function NewTaskDialog({
               />
             </Field>
 
-            <Field label="Vincular a contato" className="sm:col-span-2">
+            <Field label={t('fields.linkContact')} className="sm:col-span-2">
               <ContactPicker
                 value={form.contact_id}
                 displayName={form.contact_name}
@@ -254,7 +256,7 @@ export function NewTaskDialog({
               />
             </Field>
 
-            <Field label="Vincular a negócio" className="sm:col-span-2">
+            <Field label={t('fields.linkDeal')} className="sm:col-span-2">
               <DealPicker
                 value={form.deal_id}
                 displayTitle={form.deal_title}
@@ -278,14 +280,14 @@ export function NewTaskDialog({
               onClick={() => onOpenChange(false)}
               disabled={submitting}
             >
-              Cancelar
+              {t('cancel')}
             </Button>
             <Button
               type="submit"
               disabled={submitting || !form.title.trim() || !currentUserId}
             >
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {submitting ? 'Criando...' : 'Criar tarefa'}
+              {submitting ? t('creating') : t('create')}
             </Button>
           </DialogFooter>
         </form>
@@ -307,6 +309,7 @@ function ContactPicker({
   displayName: string;
   onChange: (id: string | null, name: string) => void;
 }) {
+  const t = useTranslations('tarefas.dialog.contactPicker');
   const [query, setQuery] = useState('');
   const debounced = useDebounce(query, 300);
   const [results, setResults] = useState<Contact[]>([]);
@@ -329,12 +332,12 @@ function ContactPicker({
   if (value) {
     return (
       <div className="flex items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm">
-        <span className="truncate">{displayName || 'Contato selecionado'}</span>
+        <span className="truncate">{displayName || t('selected')}</span>
         <button
           type="button"
           onClick={() => onChange(null, '')}
           className="rounded-md p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-          aria-label="Remover contato"
+          aria-label={t('removeAria')}
         >
           <X className="h-3.5 w-3.5" />
         </button>
@@ -353,29 +356,29 @@ function ContactPicker({
         }}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
-        placeholder="Buscar contato (nome, telefone, email)..."
+        placeholder={t('placeholder')}
         className="pl-9"
       />
       {open && debounced.trim().length >= 2 && (
         <div className="absolute z-10 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-border bg-popover shadow-lg">
           {searching ? (
-            <div className="px-3 py-2 text-xs text-muted-foreground">Buscando...</div>
+            <div className="px-3 py-2 text-xs text-muted-foreground">{t('searching')}</div>
           ) : results.length === 0 ? (
-            <div className="px-3 py-2 text-xs text-muted-foreground">Nenhum contato</div>
+            <div className="px-3 py-2 text-xs text-muted-foreground">{t('noResults')}</div>
           ) : (
             results.map((c) => (
               <button
                 key={c.id}
                 type="button"
                 onClick={() => {
-                  onChange(c.id, c.name ?? c.phone ?? c.email ?? 'sem nome');
+                  onChange(c.id, c.name ?? c.phone ?? c.email ?? t('noName'));
                   setQuery('');
                   setOpen(false);
                 }}
                 className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-sm hover:bg-muted"
               >
                 <span className="truncate font-medium">
-                  {c.name ?? <span className="italic text-muted-foreground">sem nome</span>}
+                  {c.name ?? <span className="italic text-muted-foreground">{t('noName')}</span>}
                 </span>
                 <span className="truncate text-[11px] text-muted-foreground">
                   {c.phone ?? c.email ?? '—'}
@@ -409,6 +412,7 @@ function DealPicker({
   displayTitle: string;
   onChange: (id: string | null, title: string) => void;
 }) {
+  const t = useTranslations('tarefas.dialog.dealPicker');
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [allDeals, setAllDeals] = useState<DealLite[]>([]);
@@ -440,12 +444,12 @@ function DealPicker({
   if (value) {
     return (
       <div className="flex items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm">
-        <span className="truncate">{displayTitle || 'Negócio selecionado'}</span>
+        <span className="truncate">{displayTitle || t('selected')}</span>
         <button
           type="button"
           onClick={() => onChange(null, '')}
           className="rounded-md p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-          aria-label="Remover negócio"
+          aria-label={t('removeAria')}
         >
           <X className="h-3.5 w-3.5" />
         </button>
@@ -469,20 +473,20 @@ function DealPicker({
         }}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
-        placeholder="Buscar negócio pelo título..."
+        placeholder={t('placeholder')}
         className="pl-9"
       />
       {open && (
         <div className="absolute z-10 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-border bg-popover shadow-lg">
           {loading ? (
-            <div className="px-3 py-2 text-xs text-muted-foreground">Carregando...</div>
+            <div className="px-3 py-2 text-xs text-muted-foreground">{t('loading')}</div>
           ) : filtered.length === 0 ? (
-            <div className="px-3 py-2 text-xs text-muted-foreground">Nenhum negócio</div>
+            <div className="px-3 py-2 text-xs text-muted-foreground">{t('noResults')}</div>
           ) : (
             <>
               {q.length === 0 && (
                 <div className="border-b border-border px-3 py-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-                  Recentes
+                  {t('recent')}
                 </div>
               )}
               {filtered.map((d) => (

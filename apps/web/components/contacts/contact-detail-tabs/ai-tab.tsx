@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { Sparkles, ThermometerSun } from 'lucide-react';
 import type { Contact } from '@eclick-active/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,8 +24,9 @@ interface ContactAITabProps {
  *     reaproveitamos as tags que parecem objeção (heurística leve)
  */
 export function ContactAITab({ contact }: ContactAITabProps) {
-  const objections = (contact.tags ?? []).filter((t) =>
-    /(obje|barreira|preo|caro|sem.budget|n[ãa]o.tem|cancel|hesit)/i.test(t),
+  const t = useTranslations('contacts.aiTab');
+  const objections = (contact.tags ?? []).filter((tag) =>
+    /(obje|barreira|preo|caro|sem.budget|n[ãa]o.tem|cancel|hesit)/i.test(tag),
   );
 
   return (
@@ -34,7 +36,7 @@ export function ContactAITab({ contact }: ContactAITabProps) {
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-1.5 text-xs">
             <Sparkles className="h-3.5 w-3.5 text-primary" />
-            Resumo IA
+            {t('summaryTitle')}
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
@@ -44,7 +46,7 @@ export function ContactAITab({ contact }: ContactAITabProps) {
             </p>
           ) : (
             <p className="text-xs italic text-muted-foreground">
-              Sem resumo ainda. A IA gera um resumo após algumas trocas de mensagem.
+              {t('summaryEmpty')}
             </p>
           )}
         </CardContent>
@@ -56,20 +58,22 @@ export function ContactAITab({ contact }: ContactAITabProps) {
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-1.5 text-xs">
               <ThermometerSun className="h-3 w-3 text-orange-500" />
-              Temperatura
+              {t('temperatureTitle')}
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-1.5 pt-0">
             <TemperatureBadge temperature={contact.temperature} />
             <p className="text-[10px] text-muted-foreground">
-              {temperatureExplanation(contact.temperature)}
+              {contact.temperature
+                ? t(`tempExplanations.${contact.temperature}`)
+                : t('tempExplanations.none')}
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs">Score</CardTitle>
+            <CardTitle className="text-xs">{t('scoreTitle')}</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-1 pt-0">
             <span className="text-2xl font-semibold tabular-nums">
@@ -84,16 +88,16 @@ export function ContactAITab({ contact }: ContactAITabProps) {
       {/* Objeções (heurística sobre tags) */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-xs">Objeções detectadas</CardTitle>
+          <CardTitle className="text-xs">{t('objectionsTitle')}</CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
           {objections.length > 0 ? (
             <TagPills tags={objections} max={20} />
           ) : (
             <p className="text-[11px] italic text-muted-foreground">
-              Sem objeções marcadas via tags. Adicione tags como{' '}
-              <code className="text-[10px]">objecao-preco</code> ou{' '}
-              <code className="text-[10px]">sem-budget</code> pra rastrear aqui.
+              {t('objectionsEmptyPre')}{' '}
+              <code className="text-[10px]">{t('objectionsExampleA')}</code> {t('objectionsExampleConnector')}{' '}
+              <code className="text-[10px]">{t('objectionsExampleB')}</code> {t('objectionsEmptyPost')}
             </p>
           )}
         </CardContent>
@@ -102,28 +106,16 @@ export function ContactAITab({ contact }: ContactAITabProps) {
       {/* Histórico de temperatura — placeholder MVP */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-xs">Histórico de temperatura</CardTitle>
+          <CardTitle className="text-xs">{t('historyTitle')}</CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
           <p className="text-[11px] italic text-muted-foreground">
-            Histórico detalhado vem da timeline na próxima aba (eventos{' '}
-            <code className="text-[10px]">score_changed</code> e{' '}
-            <code className="text-[10px]">ai_insight</code>).
+            {t('historyHintPre')}{' '}
+            <code className="text-[10px]">{t('historyEventA')}</code> {t('historyEventConnector')}{' '}
+            <code className="text-[10px]">{t('historyEventB')}</code>{t('historyHintPost')}
           </p>
         </CardContent>
       </Card>
     </div>
   );
-}
-
-const TEMP_EXPLANATIONS: Record<NonNullable<Contact['temperature']>, string> = {
-  cold: 'Sem engajamento recente. Reativar via campanha ou follow-up.',
-  warm: 'Demonstra interesse. Manter cadência de contato.',
-  hot: 'Alto engajamento. Acelerar próxima ação.',
-  very_hot: 'Pronto pra fechar. Priorize esta conversa hoje.',
-};
-
-function temperatureExplanation(t: Contact['temperature']): string {
-  if (!t) return 'Não classificada ainda.';
-  return TEMP_EXPLANATIONS[t];
 }

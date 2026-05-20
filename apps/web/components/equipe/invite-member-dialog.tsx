@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Loader2 } from 'lucide-react';
 import {
   Dialog,
@@ -16,7 +17,7 @@ import { Label } from '@/components/ui/label';
 import { teamApi, type InviteMemberInput } from '@/lib/api/team';
 import { ApiError } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
-import { roleLabel } from './role-badge';
+import { useRoleLabel } from './role-badge';
 
 const ROLES: InviteMemberInput['role'][] = ['admin', 'manager', 'agent', 'viewer'];
 
@@ -31,6 +32,8 @@ export function InviteMemberDialog({
   onOpenChange,
   onInvited,
 }: InviteMemberDialogProps) {
+  const t = useTranslations('equipe.invite');
+  const roleLabel = useRoleLabel();
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [role, setRole] = useState<InviteMemberInput['role']>('agent');
@@ -65,7 +68,7 @@ export function InviteMemberDialog({
           ? `${err.status}: ${err.message}`
           : err instanceof Error
             ? err.message
-            : 'Erro ao convidar',
+            : t('inviteError'),
       );
     } finally {
       setSubmitting(false);
@@ -77,36 +80,34 @@ export function InviteMemberDialog({
       <DialogContent className="max-w-md">
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <DialogHeader>
-            <DialogTitle>Convidar membro</DialogTitle>
-            <DialogDescription>
-              O usuário receberá um magic link por email para acessar a organização.
-            </DialogDescription>
+            <DialogTitle>{t('title')}</DialogTitle>
+            <DialogDescription>{t('description')}</DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">
-              <Label className="text-xs">Email <span className="text-destructive">*</span></Label>
+              <Label className="text-xs">{t('emailLabel')} <span className="text-destructive">*</span></Label>
               <Input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="agente@empresa.com"
+                placeholder={t('emailPlaceholder')}
                 required
                 autoFocus
               />
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label className="text-xs">Nome (opcional)</Label>
+              <Label className="text-xs">{t('nameLabel')}</Label>
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="João Silva"
+                placeholder={t('namePlaceholder')}
               />
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label className="text-xs">Papel</Label>
+              <Label className="text-xs">{t('roleLabel')}</Label>
               <select
                 value={role}
                 onChange={(e) => setRole(e.target.value as InviteMemberInput['role'])}
@@ -121,9 +122,7 @@ export function InviteMemberDialog({
                   </option>
                 ))}
               </select>
-              <p className="text-[10px] text-muted-foreground">
-                Apenas owner pode promover a admin depois.
-              </p>
+              <p className="text-[10px] text-muted-foreground">{t('ownerOnlyHint')}</p>
             </div>
           </div>
 
@@ -140,11 +139,11 @@ export function InviteMemberDialog({
               onClick={() => onOpenChange(false)}
               disabled={submitting}
             >
-              Cancelar
+              {t('cancel')}
             </Button>
             <Button type="submit" disabled={submitting || !email.trim()}>
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {submitting ? 'Enviando convite...' : 'Convidar'}
+              {submitting ? t('submitting') : t('submit')}
             </Button>
           </DialogFooter>
         </form>

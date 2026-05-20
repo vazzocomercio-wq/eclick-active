@@ -11,6 +11,7 @@ import {
   Tag as TagIcon,
   Package,
 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import type { SacTicketAction } from '@/lib/api/sac';
 import { cn } from '@/lib/utils';
 
@@ -32,38 +33,24 @@ const ACTION_ICONS: Record<string, typeof Sparkles> = {
   customer_rated: CheckCircle2,
 };
 
-const ACTION_LABELS: Record<string, string> = {
-  created: 'Ticket criado',
-  status_changed: 'Status alterado',
-  priority_changed: 'Prioridade alterada',
-  category_changed: 'Categoria alterada',
-  assigned: 'Atribuído',
-  escalated: 'Escalado',
-  note_added: 'Nota interna',
-  response_sent: 'Resposta enviada',
-  order_linked: 'Pedido vinculado',
-  order_checked: 'Pedido verificado',
-  logistics_contacted: 'Logística contatada',
-  refund_initiated: 'Reembolso iniciado',
-  exchange_initiated: 'Troca iniciada',
-  sla_breached: 'SLA violado',
-  resolved: 'Resolvido',
-  reopened: 'Reaberto',
-  ai_classified: 'Classificado pela IA',
-  ai_suggested: 'IA sugeriu resposta',
-  preventive_created: 'Ticket preventivo criado',
-  customer_rated: 'Cliente avaliou atendimento',
-};
+const LABEL_KEYS = new Set([
+  'created', 'status_changed', 'priority_changed', 'category_changed',
+  'assigned', 'escalated', 'note_added', 'response_sent', 'order_linked',
+  'order_checked', 'logistics_contacted', 'refund_initiated',
+  'exchange_initiated', 'sla_breached', 'resolved', 'reopened',
+  'ai_classified', 'ai_suggested', 'preventive_created', 'customer_rated',
+]);
 
 interface TicketTimelineProps {
   actions: SacTicketAction[];
 }
 
 export function TicketTimeline({ actions }: TicketTimelineProps) {
+  const t = useTranslations('sac.timeline');
   if (actions.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-border bg-muted/20 p-4 text-center text-xs text-muted-foreground">
-        Sem ações registradas ainda
+        {t('empty')}
       </div>
     );
   }
@@ -71,8 +58,8 @@ export function TicketTimeline({ actions }: TicketTimelineProps) {
     <ol className="flex flex-col">
       {actions.map((a, i) => {
         const Icon = ACTION_ICONS[a.action_type] ?? Sparkles;
-        const label = ACTION_LABELS[a.action_type] ?? a.action_type;
-        const time = formatTime(a.created_at);
+        const label = LABEL_KEYS.has(a.action_type) ? t(`labels.${a.action_type}`) : a.action_type;
+        const time = formatTime(a.created_at, t);
         return (
           <li key={a.id} className="relative flex gap-3 pb-3">
             {i < actions.length - 1 && (
@@ -106,9 +93,9 @@ export function TicketTimeline({ actions }: TicketTimelineProps) {
               )}
               <div className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">
                 {time}
-                {a.actor_type === 'ai' && ' • IA'}
-                {a.actor_type === 'system' && ' • Sistema'}
-                {a.actor_type === 'customer' && ' • Cliente'}
+                {a.actor_type === 'ai' && ` • ${t('actor.ai')}`}
+                {a.actor_type === 'system' && ` • ${t('actor.system')}`}
+                {a.actor_type === 'customer' && ` • ${t('actor.customer')}`}
               </div>
             </div>
           </li>
@@ -118,14 +105,17 @@ export function TicketTimeline({ actions }: TicketTimelineProps) {
   );
 }
 
-function formatTime(iso: string): string {
+function formatTime(
+  iso: string,
+  t: (key: string, vars?: Record<string, number>) => string,
+): string {
   try {
     const d = new Date(iso);
     const diff = Date.now() - d.getTime();
     const min = Math.floor(diff / 60_000);
-    if (min < 1) return 'agora';
-    if (min < 60) return `${min}m atrás`;
-    if (min < 1440) return `${Math.floor(min / 60)}h atrás`;
+    if (min < 1) return t('now');
+    if (min < 60) return t('minutesAgo', { n: min });
+    if (min < 1440) return t('hoursAgo', { n: Math.floor(min / 60) });
     return d.toLocaleString('pt-BR', {
       day: '2-digit',
       month: 'short',

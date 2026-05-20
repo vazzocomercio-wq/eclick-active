@@ -2,12 +2,14 @@
 
 import { useState } from 'react';
 import { BarChart3, Sparkles, Clock, CheckCircle2 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { useSacSlaStats, useSacDashboard } from '@/hooks/use-sac';
 import { sacApi } from '@/lib/api/sac';
 import { DiagnosticoIaCard } from '@/components/sac/diagnostico-ia-card';
 import { Button } from '@/components/ui/button';
 
 export default function SacReportsPage() {
+  const t = useTranslations('sac.reports');
   const [days, setDays] = useState(30);
   const { stats, loading } = useSacSlaStats(days);
   const { counts } = useSacDashboard(60_000);
@@ -31,50 +33,53 @@ export default function SacReportsPage() {
         <div className="flex items-center gap-2">
           <BarChart3 className="h-5 w-5 text-primary" />
           <div>
-            <h1 className="text-lg font-semibold">Relatórios SAC</h1>
+            <h1 className="text-lg font-semibold">{t('title')}</h1>
             <p className="text-xs text-muted-foreground">
-              Métricas dos últimos{' '}
+              {t('metricsLast')}{' '}
               <select
                 value={days}
                 onChange={(e) => setDays(Number(e.target.value))}
                 className="bg-transparent font-medium text-foreground focus:outline-none"
               >
-                <option value={7}>7 dias</option>
-                <option value={30}>30 dias</option>
-                <option value={90}>90 dias</option>
+                <option value={7}>{t('days7')}</option>
+                <option value={30}>{t('days30')}</option>
+                <option value={90}>{t('days90')}</option>
               </select>
             </p>
           </div>
         </div>
         <Button size="sm" onClick={runAnalysis} disabled={analyzing}>
           <Sparkles className="h-3.5 w-3.5" />
-          <span className="ml-1">{analyzing ? 'Analisando…' : 'Diagnóstico IA'}</span>
+          <span className="ml-1">{analyzing ? t('analyzing') : t('diagnose')}</span>
         </Button>
       </header>
 
       <div className="flex-1 overflow-y-auto p-4 md:p-6">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
           <KpiCard
-            label="SLA cumprido"
+            label={t('kpi.slaFulfilled')}
             value={`${stats?.fulfilled_pct ?? 0}%`}
-            sub={loading ? '…' : `${stats?.fulfilled ?? 0} de ${(stats?.fulfilled ?? 0) + (stats?.breached ?? 0)}`}
+            sub={loading ? '…' : t('kpi.slaFulfilledSub', {
+              fulfilled: stats?.fulfilled ?? 0,
+              total: (stats?.fulfilled ?? 0) + (stats?.breached ?? 0),
+            })}
             icon={CheckCircle2}
             color="emerald"
           />
           <KpiCard
-            label="SLA violados"
+            label={t('kpi.slaBreached')}
             value={String(stats?.breached ?? 0)}
             icon={Clock}
             color="red"
           />
           <KpiCard
-            label="1ª resposta média"
+            label={t('kpi.avgFirstResponse')}
             value={formatMin(stats?.avg_first_response_minutes ?? 0)}
             icon={Clock}
             color="amber"
           />
           <KpiCard
-            label="Resolução média"
+            label={t('kpi.avgResolution')}
             value={formatMin(stats?.avg_resolution_minutes ?? 0)}
             icon={Clock}
             color="blue"
@@ -83,15 +88,15 @@ export default function SacReportsPage() {
 
         <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="rounded-lg border border-border bg-card p-4">
-            <h2 className="mb-3 text-sm font-semibold">Tickets abertos hoje (snapshot)</h2>
+            <h2 className="mb-3 text-sm font-semibold">{t('openTodaySnapshot')}</h2>
             <ul className="space-y-1 text-sm">
-              <Stat label="Novos" value={counts?.new ?? 0} />
-              <Stat label="Em andamento" value={counts?.in_progress ?? 0} />
-              <Stat label="Aguardando cliente" value={counts?.waiting_customer ?? 0} />
-              <Stat label="Aguardando interno" value={counts?.waiting_internal ?? 0} />
-              <Stat label="Resolvidos hoje" value={counts?.resolved_today ?? 0} highlight="emerald" />
-              <Stat label="Críticos" value={counts?.critical ?? 0} highlight="red" />
-              <Stat label="Risco reputacional" value={counts?.reputation_risk ?? 0} highlight="red" />
+              <Stat label={t('stat.new')} value={counts?.new ?? 0} />
+              <Stat label={t('stat.in_progress')} value={counts?.in_progress ?? 0} />
+              <Stat label={t('stat.waiting_customer')} value={counts?.waiting_customer ?? 0} />
+              <Stat label={t('stat.waiting_internal')} value={counts?.waiting_internal ?? 0} />
+              <Stat label={t('stat.resolved_today')} value={counts?.resolved_today ?? 0} highlight="emerald" />
+              <Stat label={t('stat.critical')} value={counts?.critical ?? 0} highlight="red" />
+              <Stat label={t('stat.reputation_risk')} value={counts?.reputation_risk ?? 0} highlight="red" />
             </ul>
           </div>
 

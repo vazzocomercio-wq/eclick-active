@@ -1,3 +1,6 @@
+'use client';
+
+import { useTranslations } from 'next-intl';
 import type { ContactTemperature } from '@eclick-active/shared';
 import { cn } from '@/lib/utils';
 
@@ -6,14 +9,32 @@ interface TemperatureBadgeProps {
   className?: string;
 }
 
-const STYLES: Record<ContactTemperature, { bg: string; text: string; label: string }> = {
-  cold: { bg: 'bg-blue-500/15', text: 'text-blue-400', label: 'Frio' },
-  warm: { bg: 'bg-yellow-500/15', text: 'text-yellow-400', label: 'Morno' },
-  hot: { bg: 'bg-orange-500/15', text: 'text-orange-400', label: 'Quente' },
-  very_hot: { bg: 'bg-red-500/15', text: 'text-red-400', label: 'Muito quente' },
+const STYLE_MAP: Record<ContactTemperature, { bg: string; text: string }> = {
+  cold: { bg: 'bg-blue-500/15', text: 'text-blue-400' },
+  warm: { bg: 'bg-yellow-500/15', text: 'text-yellow-400' },
+  hot: { bg: 'bg-orange-500/15', text: 'text-orange-400' },
+  very_hot: { bg: 'bg-red-500/15', text: 'text-red-400' },
 };
 
+/**
+ * Hook que retorna mapa de estilos + label traduzido por temperatura.
+ * Use em components que precisam exibir o label fora do badge (ex: filtros).
+ */
+export function useTemperatureStyles(): Record<
+  ContactTemperature,
+  { bg: string; text: string; label: string }
+> {
+  const t = useTranslations('contacts.temperature');
+  return {
+    cold: { ...STYLE_MAP.cold, label: t('cold') },
+    warm: { ...STYLE_MAP.warm, label: t('warm') },
+    hot: { ...STYLE_MAP.hot, label: t('hot') },
+    very_hot: { ...STYLE_MAP.very_hot, label: t('very_hot') },
+  };
+}
+
 export function TemperatureBadge({ temperature, className }: TemperatureBadgeProps) {
+  const t = useTranslations('contacts.temperature');
   if (!temperature) {
     return (
       <span
@@ -26,7 +47,7 @@ export function TemperatureBadge({ temperature, className }: TemperatureBadgePro
       </span>
     );
   }
-  const style = STYLES[temperature];
+  const style = STYLE_MAP[temperature];
   return (
     <span
       className={cn(
@@ -36,9 +57,7 @@ export function TemperatureBadge({ temperature, className }: TemperatureBadgePro
         className,
       )}
     >
-      {style.label}
+      {t(temperature)}
     </span>
   );
 }
-
-export { STYLES as TEMPERATURE_STYLES };

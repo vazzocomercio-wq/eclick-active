@@ -12,6 +12,7 @@ import {
   Trash2,
   UserPlus,
 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import type { ConversationDetail } from '@eclick-active/shared';
 import { Button } from '@/components/ui/button';
@@ -71,6 +72,7 @@ export function ChatActions({
   onAction,
   compact = false,
 }: ChatActionsProps) {
+  const t = useTranslations('chat.actions');
   const [summarizing, setSummarizing] = useState(false);
   const [resolving, setResolving] = useState(false);
   const [marking, setMarking] = useState(false);
@@ -96,20 +98,19 @@ export function ChatActions({
     try {
       const r = await aiApi.summarizeConversation(conversationId);
       if (!r.summary || !r.summary.trim()) {
-        toast.info('Sem mensagens suficientes', {
-          description:
-            'A IA não conseguiu gerar resumo — provavelmente a conversa não tem mensagens trocadas ainda.',
+        toast.info(t('summarizeNoMessagesTitle'), {
+          description: t('summarizeNoMessagesDesc'),
         });
         return;
       }
       onSummary?.(r.summary);
       onUpdated?.({ ai_summary: r.summary });
       onAction?.('summarize');
-      toast.success('Resumo gerado', {
-        description: 'A IA produziu um novo resumo da conversa.',
+      toast.success(t('summarizeSuccess'), {
+        description: t('summarizeSuccessDesc'),
       });
     } catch (err) {
-      toast.error('Falha ao resumir', { description: extractMessage(err) });
+      toast.error(t('summarizeFailed'), { description: extractMessage(err, t) });
     } finally {
       setSummarizing(false);
     }
@@ -122,9 +123,9 @@ export function ChatActions({
       const updated = await conversationsApi.update(conversationId, { status: 'resolved' });
       onUpdated?.(updated);
       onAction?.('resolve');
-      toast.success('Conversa resolvida');
+      toast.success(t('resolveSuccess'));
     } catch (err) {
-      toast.error('Falha ao resolver', { description: extractMessage(err) });
+      toast.error(t('resolveFailed'), { description: extractMessage(err, t) });
     } finally {
       setResolving(false);
     }
@@ -137,9 +138,9 @@ export function ChatActions({
       const updated = await conversationsApi.markAsRead(conversationId);
       onUpdated?.(updated);
       onAction?.('mark-read');
-      toast.success('Marcada como lida');
+      toast.success(t('markReadSuccess'));
     } catch (err) {
-      toast.error('Falha ao marcar', { description: extractMessage(err) });
+      toast.error(t('markReadFailed'), { description: extractMessage(err, t) });
     } finally {
       setMarking(false);
     }
@@ -152,9 +153,9 @@ export function ChatActions({
       const updated = await conversationsApi.update(conversationId, { status: 'archived' });
       onUpdated?.(updated);
       onAction?.('archive');
-      toast.success('Conversa arquivada');
+      toast.success(t('archiveSuccess'));
     } catch (err) {
-      toast.error('Falha ao arquivar', { description: extractMessage(err) });
+      toast.error(t('archiveFailed'), { description: extractMessage(err, t) });
       throw err; // ConfirmDialog mantém aberto se rejeitar
     } finally {
       setArchiving(false);
@@ -172,9 +173,9 @@ export function ChatActions({
       const updated = await conversationsApi.update(conversationId, { status: 'open' });
       onUpdated?.(updated);
       onAction?.('unarchive');
-      toast.success('Conversa desarquivada');
+      toast.success(t('unarchiveSuccess'));
     } catch (err) {
-      toast.error('Falha ao desarquivar', { description: extractMessage(err) });
+      toast.error(t('unarchiveFailed'), { description: extractMessage(err, t) });
     } finally {
       setArchiving(false);
     }
@@ -190,9 +191,9 @@ export function ChatActions({
     try {
       await conversationsApi.remove(conversationId);
       onAction?.('delete');
-      toast.success('Conversa excluída permanentemente');
+      toast.success(t('deleteSuccess'));
     } catch (err) {
-      toast.error('Falha ao excluir', { description: extractMessage(err) });
+      toast.error(t('deleteFailed'), { description: extractMessage(err, t) });
       throw err;
     } finally {
       setDeleting(false);
@@ -208,10 +209,10 @@ export function ChatActions({
       });
       onUpdated?.(updated);
       onAction?.('assign');
-      toast.success(userId ? 'Conversa atribuída' : 'Atribuição removida');
+      toast.success(userId ? t('assignSuccess') : t('unassignSuccess'));
       setAssignOpen(false);
     } catch (err) {
-      toast.error('Falha ao atribuir', { description: extractMessage(err) });
+      toast.error(t('assignFailed'), { description: extractMessage(err, t) });
     } finally {
       setAssigning(false);
     }
@@ -232,10 +233,10 @@ export function ChatActions({
           disabled={summarizing}
           loading={summarizing}
           compact={compact}
-          tooltip="Resumir conversa"
+          tooltip={t('summarizeTooltip')}
         >
           <Sparkles className="h-3.5 w-3.5 text-primary" />
-          {!compact && 'Resumir'}
+          {!compact && t('summarize')}
         </Pill>
 
         <Pill
@@ -243,12 +244,12 @@ export function ChatActions({
           disabled={resolving || isResolved}
           loading={resolving}
           compact={compact}
-          tooltip={isResolved ? 'Já resolvida' : 'Resolver conversa'}
+          tooltip={isResolved ? t('resolveTooltipResolved') : t('resolveTooltip')}
         >
           <CheckCircle2
             className={cn('h-3.5 w-3.5', isResolved ? 'text-emerald-500' : 'text-muted-foreground')}
           />
-          {!compact && (isResolved ? 'Resolvida' : 'Resolver')}
+          {!compact && (isResolved ? t('resolved') : t('resolve'))}
         </Pill>
 
         <Pill
@@ -256,19 +257,19 @@ export function ChatActions({
           disabled={marking || !isUnread}
           loading={marking}
           compact={compact}
-          tooltip={isUnread ? `Marcar como lida (${conversation?.unread_count})` : 'Já lida'}
+          tooltip={isUnread ? t('markReadTooltip', { count: conversation?.unread_count ?? 0 }) : t('markReadAlready')}
         >
           <BookOpenCheck className="h-3.5 w-3.5 text-muted-foreground" />
-          {!compact && (isUnread ? `Marcar lida (${conversation?.unread_count})` : 'Lida')}
+          {!compact && (isUnread ? t('markReadShort', { count: conversation?.unread_count ?? 0 }) : t('markReadDone'))}
         </Pill>
 
         <Pill
           onClick={() => setCreateTaskOpen(true)}
           compact={compact}
-          tooltip="Criar tarefa vinculada"
+          tooltip={t('createTaskTooltip')}
         >
           <ListTodo className="h-3.5 w-3.5 text-muted-foreground" />
-          {!compact && 'Criar tarefa'}
+          {!compact && t('createTask')}
         </Pill>
 
         <AssignPill
@@ -285,12 +286,12 @@ export function ChatActions({
           disabled={archiving}
           loading={archiving}
           compact={compact}
-          tooltip={isArchived ? 'Desarquivar (volta pra inbox)' : 'Arquivar conversa'}
+          tooltip={isArchived ? t('archiveTooltipUnarchive') : t('archiveTooltipArchive')}
         >
           <Archive
             className={cn('h-3.5 w-3.5', isArchived ? 'text-amber-500' : 'text-muted-foreground')}
           />
-          {!compact && (isArchived ? 'Desarquivar' : 'Arquivar')}
+          {!compact && (isArchived ? t('unarchive') : t('archive'))}
         </Pill>
 
         <Pill
@@ -298,18 +299,18 @@ export function ChatActions({
           disabled={deleting}
           loading={deleting}
           compact={compact}
-          tooltip="Excluir permanentemente"
+          tooltip={t('deleteTooltip')}
         >
           <Trash2 className="h-3.5 w-3.5 text-destructive" />
-          {!compact && 'Excluir'}
+          {!compact && t('delete')}
         </Pill>
 
         <ConfirmDialog
           open={confirmArchiveOpen}
           onOpenChange={setConfirmArchiveOpen}
-          title="Arquivar conversa?"
-          description='A conversa some da inbox principal mas pode ser recuperada no filtro "Arquivadas". Quando o cliente mandar uma nova mensagem, a conversa volta automaticamente pra inbox.'
-          confirmLabel="Arquivar"
+          title={t('confirmArchiveTitle')}
+          description={t('confirmArchiveDescription')}
+          confirmLabel={t('confirmArchiveAction')}
           icon={Archive}
           onConfirm={handleArchiveConfirmed}
         />
@@ -317,9 +318,9 @@ export function ChatActions({
         <ConfirmDialog
           open={confirmDeleteOpen}
           onOpenChange={setConfirmDeleteOpen}
-          title="Excluir conversa permanentemente?"
-          description="Esta ação é IRREVERSÍVEL. Todas as mensagens dessa conversa também serão removidas. O contato em si NÃO é afetado — só esta conversa."
-          confirmLabel="Sim, excluir"
+          title={t('confirmDeleteTitle')}
+          description={t('confirmDeleteDescription')}
+          confirmLabel={t('confirmDeleteAction')}
           variant="destructive"
           icon={Trash2}
           onConfirm={handleDeleteConfirmed}
@@ -330,11 +331,11 @@ export function ChatActions({
           onOpenChange={setCreateTaskOpen}
           {...(contactId ? { defaultContactId: contactId } : {})}
           {...(conversationId ? { defaultConversationId: conversationId } : {})}
-          {...(contactName ? { defaultTitle: `Follow-up com ${contactName}` } : {})}
+          {...(contactName ? { defaultTitle: t('followUpTitle', { name: contactName }) } : {})}
           onCreated={() => {
             onAction?.('create-task');
-            toast.success('Tarefa criada', {
-              description: 'Vinculada à conversa atual.',
+            toast.success(t('taskCreatedTitle'), {
+              description: t('taskCreatedDesc'),
             });
           }}
         />
@@ -391,6 +392,7 @@ interface AssignPillProps {
 }
 
 function AssignPill({ open, onOpenChange, assignedTo, assigning, onAssign, compact = false }: AssignPillProps) {
+  const t = useTranslations('chat.actions');
   const { members, loading } = useTeamMembers();
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -418,14 +420,14 @@ function AssignPill({ open, onOpenChange, assignedTo, assigning, onAssign, compa
         compact={compact}
         tooltip={
           current
-            ? `Atribuída a ${current.display_name ?? current.email ?? 'usuário'}`
-            : 'Atribuir conversa'
+            ? t('assignTooltipAssigned', { name: current.display_name ?? current.email ?? t('assignedFallback') })
+            : t('assignTooltipNone')
         }
       >
         <UserPlus className="h-3.5 w-3.5 text-muted-foreground" />
         {!compact && (current
-          ? (current.display_name ?? current.email ?? 'Atribuído')
-          : 'Atribuir')}
+          ? (current.display_name ?? current.email ?? t('assignedBtn'))
+          : t('assign'))}
       </Pill>
 
       {open && (
@@ -434,20 +436,20 @@ function AssignPill({ open, onOpenChange, assignedTo, assigning, onAssign, compa
           className="absolute bottom-full left-0 z-30 mb-1 w-64 overflow-hidden rounded-md border border-border bg-popover shadow-lg"
         >
           <div className="border-b border-border px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Atribuir a
+            {t('assignedTitle')}
           </div>
 
           <div className="max-h-64 overflow-y-auto py-1">
             {loading && (
               <div className="flex items-center justify-center px-3 py-4 text-xs text-muted-foreground">
                 <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                Carregando...
+                {t('loadingMembers')}
               </div>
             )}
 
             {!loading && members.length === 0 && (
               <p className="px-3 py-2 text-xs text-muted-foreground">
-                Nenhum membro encontrado.
+                {t('noMembers')}
               </p>
             )}
 
@@ -472,7 +474,7 @@ function AssignPill({ open, onOpenChange, assignedTo, assigning, onAssign, compa
                     />
                     <div className="flex flex-1 flex-col min-w-0">
                       <span className="truncate font-medium">
-                        {m.display_name ?? m.email ?? 'Sem nome'}
+                        {m.display_name ?? m.email ?? t('memberNoName')}
                       </span>
                       <span className="truncate text-[10px] text-muted-foreground">
                         {m.role}
@@ -490,7 +492,7 @@ function AssignPill({ open, onOpenChange, assignedTo, assigning, onAssign, compa
               onClick={() => onAssign(null)}
               className="block w-full border-t border-border px-3 py-2 text-left text-xs text-destructive hover:bg-destructive/10"
             >
-              Remover atribuição
+              {t('unassign')}
             </button>
           )}
         </div>
@@ -499,8 +501,11 @@ function AssignPill({ open, onOpenChange, assignedTo, assigning, onAssign, compa
   );
 }
 
-function extractMessage(err: unknown): string {
+function extractMessage(
+  err: unknown,
+  t: (key: string) => string,
+): string {
   if (err instanceof ApiError) return `${err.status}: ${err.message}`;
   if (err instanceof Error) return err.message;
-  return 'Erro desconhecido';
+  return t('errorUnknown');
 }

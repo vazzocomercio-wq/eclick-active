@@ -8,6 +8,7 @@ import {
   Lock,
   Sparkles,
 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import type { Message, MessageDeliveryStatus } from '@eclick-active/shared';
 import type { ConversationAttachment } from '@/lib/api/attachments';
 import { AttachmentCard } from '@/components/chat/attachment-card';
@@ -21,6 +22,7 @@ interface MessageBubbleProps {
 }
 
 export function MessageBubble({ message, attachments }: MessageBubbleProps) {
+  const t = useTranslations('inbox.messageBubble');
   const isOutbound = message.direction === 'outbound';
   const isBot = message.sender_type === 'bot';
   const isInternalNote = message.is_internal_note;
@@ -45,12 +47,12 @@ export function MessageBubble({ message, attachments }: MessageBubbleProps) {
           <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider">
             {isBot && (
               <span className="inline-flex items-center gap-1 rounded-sm bg-primary/20 px-1.5 py-0.5 text-primary">
-                <Sparkles className="h-3 w-3" /> IA
+                <Sparkles className="h-3 w-3" /> {t('aiLabel')}
               </span>
             )}
             {isInternalNote && (
               <span className="inline-flex items-center gap-1 text-yellow-500">
-                <Lock className="h-3 w-3" /> Nota interna
+                <Lock className="h-3 w-3" /> {t('internalNote')}
               </span>
             )}
           </div>

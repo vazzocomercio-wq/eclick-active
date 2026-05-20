@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Headphones, Sparkles, RefreshCw, AlertTriangle, Clock, CheckCircle2, ShieldAlert, BarChart3 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { useSacDashboard, useSacTickets } from '@/hooks/use-sac';
 import { sacApi } from '@/lib/api/sac';
 import { SacTicketsTable } from '@/components/sac/sac-tickets-table';
@@ -11,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 export default function SacDashboardPage() {
+  const t = useTranslations('sac.dashboard');
   const { counts, loading: dashLoading, refresh: refreshDash } = useSacDashboard();
   const { data: critical } = useSacTickets({
     priority: ['critical', 'reputation_risk'],
@@ -35,7 +37,7 @@ export default function SacDashboardPage() {
       const res = await sacApi.ai.performance('week');
       setAnalysis(res);
     } catch {
-      setAnalysis({ error: 'Falha ao gerar análise' });
+      setAnalysis({ error: t('analysisFailed') });
     } finally {
       setAnalyzing(false);
     }
@@ -48,9 +50,9 @@ export default function SacDashboardPage() {
         <div className="flex items-center gap-3">
           <Headphones className="h-5 w-5 text-primary" />
           <div>
-            <h1 className="text-lg font-semibold leading-tight">SAC Inteligente</h1>
+            <h1 className="text-lg font-semibold leading-tight">{t('title')}</h1>
             <p className="text-xs text-muted-foreground">
-              {counts ? `${counts.total_open} ticket(s) aberto(s)` : 'Carregando…'}
+              {counts ? t('openTickets', { count: counts.total_open }) : t('loading')}
             </p>
           </div>
         </div>
@@ -58,13 +60,13 @@ export default function SacDashboardPage() {
           <Button variant="ghost" size="sm" asChild>
             <Link href="/sac/riscos">
               <ShieldAlert className="h-3.5 w-3.5" />
-              <span className="hidden md:inline ml-1">Riscos</span>
+              <span className="hidden md:inline ml-1">{t('risks')}</span>
             </Link>
           </Button>
           <Button variant="ghost" size="sm" asChild>
             <Link href="/sac/relatorios">
               <BarChart3 className="h-3.5 w-3.5" />
-              <span className="hidden md:inline ml-1">Relatórios</span>
+              <span className="hidden md:inline ml-1">{t('reports')}</span>
             </Link>
           </Button>
           <Button
@@ -76,7 +78,7 @@ export default function SacDashboardPage() {
             }}
           >
             <RefreshCw className={cn('h-3.5 w-3.5', dashLoading && 'animate-spin')} />
-            <span className="hidden md:inline ml-1">Atualizar</span>
+            <span className="hidden md:inline ml-1">{t('refresh')}</span>
           </Button>
           <Button
             variant="outline"
@@ -85,7 +87,7 @@ export default function SacDashboardPage() {
             disabled={analyzing}
           >
             <Sparkles className="h-3.5 w-3.5" />
-            <span className="hidden md:inline ml-1">{analyzing ? 'Analisando…' : 'Diagnóstico IA'}</span>
+            <span className="hidden md:inline ml-1">{analyzing ? t('analyzing') : t('diagnose')}</span>
           </Button>
         </div>
       </header>
@@ -94,38 +96,38 @@ export default function SacDashboardPage() {
         {/* KPI cards */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
           <KpiCard
-            label="Novos"
+            label={t('kpi.new')}
             value={counts?.new ?? 0}
             color="cyan"
             icon={Headphones}
           />
           <KpiCard
-            label="Críticos"
+            label={t('kpi.critical')}
             value={counts?.critical ?? 0}
             color="red"
             pulse={(counts?.critical ?? 0) > 0}
             icon={AlertTriangle}
           />
           <KpiCard
-            label="SLA <1h"
+            label={t('kpi.slaDueSoon')}
             value={counts?.sla_due_soon ?? 0}
             color="amber"
             icon={Clock}
           />
           <KpiCard
-            label="SLA vencidos"
+            label={t('kpi.slaBreached')}
             value={counts?.sla_breached ?? 0}
             color="red"
             icon={Clock}
           />
           <KpiCard
-            label="Risco rep."
+            label={t('kpi.reputationRisk')}
             value={counts?.reputation_risk ?? 0}
             color="red"
             icon={ShieldAlert}
           />
           <KpiCard
-            label="Resolvidos hoje"
+            label={t('kpi.resolvedToday')}
             value={counts?.resolved_today ?? 0}
             color="emerald"
             icon={CheckCircle2}
@@ -145,34 +147,34 @@ export default function SacDashboardPage() {
 
         {/* Linha 2 — 3 colunas */}
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <Section title="Tickets críticos" icon={AlertTriangle}>
+          <Section title={t('section.critical')} icon={AlertTriangle}>
             {critical?.rows.length === 0 ? (
-              <EmptyHint>Nenhum ticket crítico aberto 🎉</EmptyHint>
+              <EmptyHint>{t('section.criticalEmpty')}</EmptyHint>
             ) : (
               <SacTicketsTable tickets={critical?.rows ?? []} compact />
             )}
           </Section>
 
-          <Section title="SLA vencendo" icon={Clock}>
+          <Section title={t('section.slaDue')} icon={Clock}>
             {due?.rows.length === 0 ? (
-              <EmptyHint>Tudo dentro do prazo</EmptyHint>
+              <EmptyHint>{t('section.slaDueEmpty')}</EmptyHint>
             ) : (
               <SacTicketsTable tickets={due?.rows ?? []} compact />
             )}
           </Section>
 
-          <Section title="Recomendações IA" icon={Sparkles}>
+          <Section title={t('section.aiRecs')} icon={Sparkles}>
             <RecomendacoesPreview analysis={analysis} onAnalyze={runAnalysis} loading={analyzing} />
           </Section>
         </div>
 
         {/* Linha 3 — Tickets recentes */}
         <div className="mt-6">
-          <h2 className="mb-3 text-sm font-semibold">Todos os tickets</h2>
+          <h2 className="mb-3 text-sm font-semibold">{t('allTickets')}</h2>
           <SacTicketsTable
             tickets={recent?.rows ?? []}
             loading={recentLoading}
-            emptyMessage="Sem tickets ainda. Tickets serão criados automaticamente quando a IA detectar pós-venda/suporte."
+            emptyMessage={t('allTicketsEmpty')}
           />
         </div>
       </div>
@@ -253,6 +255,7 @@ function RecomendacoesPreview({
   onAnalyze: () => void;
   loading: boolean;
 }) {
+  const t = useTranslations('sac.dashboard');
   // Tenta extrair recommendations do output
   const recs = (() => {
     if (!analysis || typeof analysis !== 'object') return null;
@@ -276,10 +279,10 @@ function RecomendacoesPreview({
 
   return (
     <div className="rounded-lg border border-dashed border-border bg-muted/20 p-3 text-center text-sm text-muted-foreground">
-      <p className="mb-2 text-xs">Sem análise ainda</p>
+      <p className="mb-2 text-xs">{t('section.noAnalysis')}</p>
       <Button size="sm" variant="outline" onClick={onAnalyze} disabled={loading}>
         <Sparkles className="h-3 w-3" />
-        <span className="ml-1">{loading ? 'Analisando…' : 'Gerar agora'}</span>
+        <span className="ml-1">{loading ? t('analyzing') : t('section.generateNow')}</span>
       </Button>
     </div>
   );

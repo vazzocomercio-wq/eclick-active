@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import {
   Bell,
   CheckSquare,
@@ -20,6 +21,7 @@ import { SacAttentionCard } from '@/components/central-de-acao/sac-attention-car
 import { SocialAttentionCard } from '@/components/central-de-acao/social-attention-card';
 
 export default function CentralDeAcaoPage() {
+  const t = useTranslations('centralAcao.page');
   const { data, loading, error, refetch } = useDashboard();
   const m = data?.metrics;
 
@@ -29,16 +31,14 @@ export default function CentralDeAcaoPage() {
         <div className="flex flex-col">
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-accent" />
-            <h1 className="text-lg font-semibold">Central de Ação</h1>
+            <h1 className="text-lg font-semibold">{t('title')}</h1>
           </div>
-          <p className="text-xs text-muted-foreground">
-            O que precisa da sua atenção agora.
-          </p>
+          <p className="text-xs text-muted-foreground">{t('subtitle')}</p>
         </div>
 
         <Button variant="outline" size="sm" onClick={() => refetch()} disabled={loading}>
           <RefreshCw className={`mr-2 h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-          Atualizar
+          {t('refresh')}
         </Button>
       </header>
 
@@ -53,7 +53,7 @@ export default function CentralDeAcaoPage() {
           {/* BLOCO 1 — Métricas (4 cards) */}
           <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <MetricCard
-              label="Conversas não respondidas"
+              label={t('metrics.unreadConversations')}
               value={m?.unread_conversations ?? 0}
               urgentThreshold={10}
               icon={Bell}
@@ -62,7 +62,7 @@ export default function CentralDeAcaoPage() {
               loading={loading && !data}
             />
             <MetricCard
-              label="Leads quentes"
+              label={t('metrics.hotLeads')}
               value={m?.hot_leads ?? 0}
               icon={Flame}
               iconClassName="bg-orange-500/15 text-orange-400"
@@ -70,7 +70,7 @@ export default function CentralDeAcaoPage() {
               loading={loading && !data}
             />
             <MetricCard
-              label="Valor do pipeline"
+              label={t('metrics.pipelineValue')}
               value={m?.pipeline_value ?? 0}
               isCurrency
               icon={DollarSign}
@@ -79,7 +79,7 @@ export default function CentralDeAcaoPage() {
               loading={loading && !data}
             />
             <MetricCard
-              label="Tarefas para hoje"
+              label={t('metrics.tasksToday')}
               value={m?.pending_tasks_today ?? 0}
               icon={CheckSquare}
               iconClassName="bg-purple-500/15 text-purple-400"
@@ -93,11 +93,11 @@ export default function CentralDeAcaoPage() {
             <header className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <TrendingUp className="h-4 w-4 text-primary" />
-                <h2 className="text-sm font-semibold">Precisa da sua atenção agora</h2>
+                <h2 className="text-sm font-semibold">{t('attentionTitle')}</h2>
               </div>
               {data && data.attention.length > 0 && (
                 <span className="text-[11px] text-muted-foreground">
-                  Top {data.attention.length}
+                  {t('topN', { n: data.attention.length })}
                 </span>
               )}
             </header>
@@ -120,7 +120,7 @@ export default function CentralDeAcaoPage() {
           <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-5">
             <header className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-muted-foreground" />
-              <h2 className="text-sm font-semibold">Atividade recente</h2>
+              <h2 className="text-sm font-semibold">{t('recentActivityTitle')}</h2>
             </header>
             <ActivityTimeline items={data?.recent_activity ?? []} loading={loading && !data} />
           </section>

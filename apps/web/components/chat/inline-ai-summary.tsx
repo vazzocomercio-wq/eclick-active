@@ -2,39 +2,19 @@
 
 import { useState } from 'react';
 import { ChevronDown, ChevronUp, Sparkles, X } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 
-const INTENT_LABEL: Record<string, string> = {
-  budget: 'orçamento',
-  question: 'dúvida',
-  complaint: 'reclamação',
-  negotiation: 'negociação',
-  support: 'suporte',
-  greeting: 'saudação',
-  farewell: 'despedida',
-  spam: 'spam',
-  other: 'outro',
-};
-
-const SENTIMENT_LABEL: Record<string, string> = {
-  very_positive: 'muito positivo',
-  positive: 'positivo',
-  neutral: 'neutro',
-  negative: 'negativo',
-  very_negative: 'muito negativo',
-};
-
-const TEMPERATURE_LABEL: Record<string, string> = {
-  cold: 'frio',
-  warm: 'morno',
-  hot: 'quente',
-  very_hot: 'muito quente',
-};
-
-function tr(map: Record<string, string>, v: string | null | undefined): string | null {
-  if (!v) return null;
-  return map[v] ?? v;
-}
+const INTENT_KEYS = new Set([
+  'budget', 'question', 'complaint', 'negotiation', 'support',
+  'greeting', 'farewell', 'spam', 'other',
+]);
+const SENTIMENT_KEYS = new Set([
+  'very_positive', 'positive', 'neutral', 'negative', 'very_negative',
+]);
+const TEMPERATURE_KEYS = new Set([
+  'cold', 'warm', 'hot', 'very_hot',
+]);
 
 interface InlineAISummaryProps {
   summary: string;
@@ -70,17 +50,18 @@ export function InlineAISummary({
   onDismiss,
   compact = false,
 }: InlineAISummaryProps) {
+  const t = useTranslations('chat.summary');
   const [open, setOpen] = useState(true);
 
-  const intentPt = tr(INTENT_LABEL, intent);
-  const sentimentPt = tr(SENTIMENT_LABEL, sentiment);
-  const temperaturePt = tr(TEMPERATURE_LABEL, temperature);
+  const intentPt = intent && INTENT_KEYS.has(intent) ? t(`intentLabels.${intent}`) : intent ?? null;
+  const sentimentPt = sentiment && SENTIMENT_KEYS.has(sentiment) ? t(`sentimentLabels.${sentiment}`) : sentiment ?? null;
+  const temperaturePt = temperature && TEMPERATURE_KEYS.has(temperature) ? t(`temperatureLabels.${temperature}`) : temperature ?? null;
   const hasBadges = !!(intentPt || sentimentPt || temperaturePt);
 
   const timestampLabel = fresh
-    ? 'recém gerado'
+    ? t('fresh')
     : generatedAt
-      ? `gerado ${formatTime(generatedAt)}`
+      ? t('generatedAt', { time: formatTime(generatedAt, t) })
       : null;
 
   const padding = compact ? 'px-3 py-2' : 'px-4 py-3';
@@ -119,7 +100,7 @@ export function InlineAISummary({
             labelSize,
           )}
         >
-          Resumo da IA
+          {t('title')}
         </span>
         {timestampLabel && (
           <span className={cn('text-muted-foreground', labelSize)}>{timestampLabel}</span>
@@ -140,7 +121,7 @@ export function InlineAISummary({
                   onDismiss();
                 }
               }}
-              aria-label="Dispensar resumo"
+              aria-label={t('dismissAria')}
               className={cn(
                 'rounded-md p-1 transition-colors hover:bg-cyan-500/10 hover:text-foreground',
               )}
@@ -164,9 +145,9 @@ export function InlineAISummary({
           </p>
           {hasBadges && (
             <div className={cn('mt-1 flex flex-wrap gap-1', labelSize)}>
-              {intentPt && <Pill label="Intenção" value={intentPt} />}
-              {sentimentPt && <Pill label="Sentimento" value={sentimentPt} />}
-              {temperaturePt && <Pill label="Temperatura" value={temperaturePt} />}
+              {intentPt && <Pill label={t('intent')} value={intentPt} />}
+              {sentimentPt && <Pill label={t('sentiment')} value={sentimentPt} />}
+              {temperaturePt && <Pill label={t('temperature')} value={temperaturePt} />}
             </div>
           )}
         </div>
@@ -184,18 +165,21 @@ function Pill({ label, value }: { label: string; value: string }) {
   );
 }
 
-function formatTime(iso: string): string {
+function formatTime(
+  iso: string,
+  t: (key: string, vars?: Record<string, number>) => string,
+): string {
   try {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return '';
     const now = Date.now();
     const diffMin = Math.floor((now - d.getTime()) / 60_000);
-    if (diffMin < 1) return 'agora';
-    if (diffMin < 60) return `há ${diffMin}min`;
+    if (diffMin < 1) return t('now');
+    if (diffMin < 60) return t('minutesAgo', { n: diffMin });
     const diffH = Math.floor(diffMin / 60);
-    if (diffH < 24) return `há ${diffH}h`;
+    if (diffH < 24) return t('hoursAgo', { n: diffH });
     const diffD = Math.floor(diffH / 24);
-    if (diffD < 7) return `há ${diffD}d`;
+    if (diffD < 7) return t('daysAgo', { n: diffD });
     return d.toLocaleDateString('pt-BR');
   } catch {
     return '';

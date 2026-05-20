@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Plus, X } from 'lucide-react';
 import { tagsApi, type TagDefinition, type TagEntityType } from '@/lib/api/tags';
 import { TagPills } from '@/components/contacts/tag-pills';
@@ -36,8 +37,10 @@ export function TagPicker({
   entityType,
   allowCreate = true,
   className,
-  placeholder = 'Adicionar tag…',
+  placeholder,
 }: TagPickerProps) {
+  const t = useTranslations('tags.picker');
+  const effectivePlaceholder = placeholder ?? t('placeholder');
   const [definitions, setDefinitions] = useState<TagDefinition[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
@@ -161,7 +164,7 @@ export function TagPicker({
           }}
           onFocus={() => setOpen(true)}
           onKeyDown={onKeyDown}
-          placeholder={value.length === 0 ? placeholder : ''}
+          placeholder={value.length === 0 ? effectivePlaceholder : ''}
           className="flex-1 min-w-[120px] bg-transparent text-sm outline-none placeholder:text-muted-foreground"
         />
       </div>
@@ -170,7 +173,7 @@ export function TagPicker({
       {open && (loading || suggestions.length > 0 || canCreate) && (
         <div className="absolute z-30 mt-1 w-full overflow-hidden rounded-md border border-border bg-popover shadow-md">
           {loading && (
-            <div className="px-3 py-2 text-xs text-muted-foreground">Carregando…</div>
+            <div className="px-3 py-2 text-xs text-muted-foreground">{t('loading')}</div>
           )}
           {!loading && suggestions.map((d) => (
             <button
@@ -192,7 +195,7 @@ export function TagPicker({
               className="flex w-full items-center gap-2 border-t border-border px-3 py-2 text-left text-xs text-primary hover:bg-primary/5"
             >
               <Plus className="h-3 w-3" />
-              Criar nova tag <strong className="font-mono">{inputSlug}</strong>
+              {t('createNew')} <strong className="font-mono">{inputSlug}</strong>
             </button>
           )}
         </div>
@@ -214,6 +217,7 @@ function TagPillsInteractive({
   definitions: TagDefinition[];
   onRemove: (slug: string) => void;
 }) {
+  const t = useTranslations('tags.picker');
   const defMap = new Map(definitions.map((d) => [d.slug, d]));
   return (
     <>
@@ -232,7 +236,7 @@ function TagPillsInteractive({
                 onRemove(slug);
               }}
               className="rounded-full p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-              aria-label={`Remover ${slug}`}
+              aria-label={t('removeLabel', { slug })}
             >
               <X className="h-3 w-3" />
             </button>

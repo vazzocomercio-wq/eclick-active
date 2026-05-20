@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { Check, Loader2 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import type { CalendarTask } from '@/lib/api/tasks';
 import { tasksApi } from '@/lib/api/tasks';
 import { ApiError } from '@/lib/api/client';
@@ -36,6 +37,7 @@ export function DayView({
   onCreateOnSlot,
   onChanged,
 }: DayViewProps) {
+  const t = useTranslations('calendario');
   const today = new Date();
   const isToday = isSameDay(current, today);
 
@@ -59,7 +61,7 @@ export function DayView({
         {allDay.length > 0 && (
           <div className="border-b border-border bg-muted/20 px-4 py-2">
             <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-              Dia inteiro
+              {t('dayView.allDay')}
             </span>
             <div className="mt-1 flex flex-wrap gap-1">
               {allDay.map((t) => (
@@ -100,6 +102,7 @@ export function DayView({
             isToday={isToday}
             onSelectTask={onSelectTask}
             onCreateOnSlot={onCreateOnSlot}
+            createAtLabel={(hour) => t('dayView.createAt', { hour: String(hour).padStart(2, '0') })}
           />
         </div>
       </div>
@@ -107,15 +110,15 @@ export function DayView({
       {/* Sidebar lista do dia (esconde em mobile) */}
       <aside className="hidden w-72 shrink-0 border-l border-border bg-card md:flex md:flex-col">
         <div className="border-b border-border px-4 py-3">
-          <h3 className="text-sm font-semibold">Tarefas de hoje</h3>
+          <h3 className="text-sm font-semibold">{t('dayView.tasksToday')}</h3>
           <p className="text-[11px] text-muted-foreground">
-            {tasks.length} {tasks.length === 1 ? 'tarefa' : 'tarefas'}
+            {t('dayView.tasksCount', { n: tasks.length })}
           </p>
         </div>
         <div className="flex-1 overflow-y-auto p-2">
           {tasks.length === 0 ? (
             <p className="px-2 py-4 text-center text-xs text-muted-foreground">
-              Nenhuma tarefa neste dia.
+              {t('dayView.emptyDay')}
             </p>
           ) : (
             <ul className="flex flex-col gap-1">
@@ -138,6 +141,7 @@ interface DayColumnProps {
   isToday: boolean;
   onSelectTask: (task: CalendarTask, anchor: { x: number; y: number }) => void;
   onCreateOnSlot: (date: Date) => void;
+  createAtLabel: (hour: number) => string;
 }
 
 function DayColumn({
@@ -146,6 +150,7 @@ function DayColumn({
   isToday,
   onSelectTask,
   onCreateOnSlot,
+  createAtLabel,
 }: DayColumnProps) {
   const dateKey = toDateKey(current);
   const { setNodeRef, isOver } = useDroppable({
@@ -172,7 +177,7 @@ function DayColumn({
           }}
           className="block w-full border-b border-border/60 transition-colors hover:bg-muted/30"
           style={{ height: `${HOUR_HEIGHT_PX}px` }}
-          aria-label={`Criar às ${HOUR_RANGE.start + i}:00`}
+          aria-label={createAtLabel(HOUR_RANGE.start + i)}
         />
       ))}
 
@@ -200,6 +205,7 @@ function SidebarTaskItem({
   task: CalendarTask;
   onChanged: () => void;
 }) {
+  const t = useTranslations('calendario');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isCompleted = task.status === 'completed';
@@ -217,7 +223,7 @@ function SidebarTaskItem({
           ? err.message
           : err instanceof Error
             ? err.message
-            : 'Erro ao concluir',
+            : t('dayView.completeError'),
       );
     } finally {
       setBusy(false);
@@ -235,7 +241,7 @@ function SidebarTaskItem({
         type="button"
         onClick={handleComplete}
         disabled={busy || isCompleted}
-        aria-label={isCompleted ? 'Concluída' : 'Concluir'}
+        aria-label={isCompleted ? t('dayView.completed') : t('dayView.complete')}
         className={cn(
           'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 transition-colors',
           isCompleted
@@ -278,6 +284,8 @@ function SidebarTaskItem({
 }
 
 function NowLine() {
+  const t = useTranslations('calendario');
+  const nowLabel = t('dayView.now');
   const [top, setTop] = useState<number | null>(null);
   useEffect(() => {
     function update() {
@@ -302,7 +310,7 @@ function NowLine() {
     >
       <div className="absolute -left-1 -top-1 h-2 w-2 rounded-full bg-red-500" />
       <span className="absolute -top-2.5 left-2 rounded bg-red-500 px-1 text-[9px] font-medium text-white">
-        agora
+        {nowLabel}
       </span>
     </div>
   );

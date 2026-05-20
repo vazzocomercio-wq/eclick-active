@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useDroppable } from '@dnd-kit/core';
+import { useTranslations } from 'next-intl';
 import type { CalendarTask } from '@/lib/api/tasks';
 import { cn } from '@/lib/utils';
 import {
@@ -31,6 +32,7 @@ export function WeekView({
   onSelectTask,
   onCreateOnSlot,
 }: WeekViewProps) {
+  const t = useTranslations('calendario');
   const days = useMemo(() => {
     const start = startOfWeek(current);
     return Array.from({ length: 7 }, (_, i) => addDays(start, i));
@@ -55,7 +57,7 @@ export function WeekView({
                 )}
               >
                 <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                  {WEEKDAY_3[d.getDay() === 0 ? 6 : d.getDay() - 1]}
+                  {t(`weekdayShort.${WEEKDAY_KEYS[d.getDay() === 0 ? 6 : d.getDay() - 1]}`)}
                 </span>
                 <span
                   className={cn(
@@ -105,6 +107,7 @@ export function WeekView({
                 isToday={isSameDay(d, today)}
                 onSelectTask={onSelectTask}
                 onCreateOnSlot={onCreateOnSlot}
+                createAtLabel={(hour) => t('weekView.createAt', { hour: String(hour).padStart(2, '0') })}
               />
             ))}
           </div>
@@ -120,6 +123,7 @@ interface DayColumnProps {
   isToday: boolean;
   onSelectTask: (task: CalendarTask, anchor: { x: number; y: number }) => void;
   onCreateOnSlot: (date: Date) => void;
+  createAtLabel: (hour: number) => string;
 }
 
 function DayColumn({
@@ -128,6 +132,7 @@ function DayColumn({
   isToday,
   onSelectTask,
   onCreateOnSlot,
+  createAtLabel,
 }: DayColumnProps) {
   const dateKey = toDateKey(date);
   const { setNodeRef, isOver } = useDroppable({
@@ -191,7 +196,7 @@ function DayColumn({
             }}
             className="block w-full border-b border-border/60 transition-colors hover:bg-muted/30"
             style={{ height: `${HOUR_HEIGHT_PX}px` }}
-            aria-label={`Criar às ${HOUR_RANGE.start + i}:00`}
+            aria-label={createAtLabel(HOUR_RANGE.start + i)}
           />
         ))}
 
@@ -264,4 +269,4 @@ function NowLine() {
   );
 }
 
-const WEEKDAY_3 = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+const WEEKDAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;

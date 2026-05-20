@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarDays, Layers, List, Plus, Sparkles } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import {
   contentCalendarApi,
   type ContentCalendarEvent,
@@ -31,6 +32,7 @@ const STATUSES: ContentStatus[] = [
 ];
 
 export default function CalendarioConteudoPage() {
+  const t = useTranslations('contentCalendar');
   const [view, setView] = useState<ViewMode>('month');
   const [events, setEvents] = useState<ContentCalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,11 +69,11 @@ export default function CalendarioConteudoPage() {
       });
       setEvents(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Falha ao carregar');
+      setError(err instanceof Error ? err.message : t('loadError'));
     } finally {
       setLoading(false);
     }
-  }, [range.from, range.to]);
+  }, [range.from, range.to, t]);
 
   useEffect(() => {
     void reload();
@@ -143,10 +145,10 @@ export default function CalendarioConteudoPage() {
               : e,
           ),
         );
-        setError(err instanceof Error ? err.message : 'Reagendamento falhou');
+        setError(err instanceof Error ? err.message : t('rescheduleError'));
       }
     },
-    [events],
+    [events, t],
   );
 
   const onAIGenerated = useCallback(
@@ -171,10 +173,12 @@ export default function CalendarioConteudoPage() {
       {/* Header */}
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-6">
         <div>
-          <h1 className="text-lg font-bold">Calendário de Conteúdo</h1>
+          <h1 className="text-lg font-bold">{t('title')}</h1>
           <p className="text-xs text-muted-foreground">
-            Planeje e agende publicações cross-canal. {addDaysIsoDate(range.from, 0)} até{' '}
-            {addDaysIsoDate(range.to, 0)}.
+            {t('subtitle', {
+              from: addDaysIsoDate(range.from, 0),
+              to: addDaysIsoDate(range.to, 0),
+            })}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -184,14 +188,14 @@ export default function CalendarioConteudoPage() {
             className="flex min-h-[36px] items-center gap-1.5 rounded-md border border-cyan-500/40 bg-cyan-500/10 px-3 py-1.5 text-xs font-medium text-cyan-300 hover:bg-cyan-500/20"
           >
             <Sparkles className="h-3.5 w-3.5" />
-            Gerar plano com IA
+            {t('generateWithAi')}
           </button>
           <button
             type="button"
             onClick={onCreate}
             className="flex min-h-[36px] items-center gap-1.5 rounded-md bg-cyan-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-cyan-400"
           >
-            <Plus className="h-3.5 w-3.5" /> Novo evento
+            <Plus className="h-3.5 w-3.5" /> {t('newEvent')}
           </button>
         </div>
       </header>
@@ -203,19 +207,19 @@ export default function CalendarioConteudoPage() {
             active={view === 'month'}
             onClick={() => setView('month')}
             icon={<Layers className="h-3.5 w-3.5" />}
-            label="Mês"
+            label={t('view.month')}
           />
           <ViewToggle
             active={view === 'week'}
             onClick={() => setView('week')}
             icon={<CalendarDays className="h-3.5 w-3.5" />}
-            label="Semana"
+            label={t('view.week')}
           />
           <ViewToggle
             active={view === 'list'}
             onClick={() => setView('list')}
             icon={<List className="h-3.5 w-3.5" />}
-            label="Lista"
+            label={t('view.list')}
           />
         </div>
 
@@ -229,7 +233,7 @@ export default function CalendarioConteudoPage() {
           onChange={(e) => setStatusFilter(e.target.value as ContentStatus | 'all')}
           className="rounded-md border border-border bg-background px-2 py-1.5 text-xs"
         >
-          <option value="all">Todos status</option>
+          <option value="all">{t('filter.allStatus')}</option>
           {STATUSES.map((s) => (
             <option key={s} value={s}>
               {STATUS_LABEL[s]}
@@ -244,7 +248,7 @@ export default function CalendarioConteudoPage() {
             onChange={(e) => setProductLinkedOnly(e.target.checked)}
             className="h-3.5 w-3.5"
           />
-          Só vinculados a produto
+          {t('filter.productLinkedOnly')}
         </label>
 
         {channelFilter.length > 0 && (
@@ -253,7 +257,7 @@ export default function CalendarioConteudoPage() {
             onClick={() => setChannelFilter([])}
             className="text-[11px] text-muted-foreground underline hover:text-foreground"
           >
-            limpar canais
+            {t('filter.clearChannels')}
           </button>
         )}
       </div>
@@ -261,7 +265,7 @@ export default function CalendarioConteudoPage() {
       {/* Body */}
       <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6">
         {loading ? (
-          <p className="text-xs text-muted-foreground">Carregando…</p>
+          <p className="text-xs text-muted-foreground">{t('loading')}</p>
         ) : error ? (
           <p className="text-xs text-destructive">{error}</p>
         ) : (

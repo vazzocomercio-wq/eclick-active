@@ -10,6 +10,7 @@ import {
   Phone,
   Sparkles,
 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import type { ConversationDetail } from '@eclick-active/shared';
 import { Button } from '@/components/ui/button';
@@ -40,6 +41,7 @@ interface ContactPanelProps {
 }
 
 export function ContactPanel({ conversation, loading, onOpenFullProfile }: ContactPanelProps) {
+  const t = useTranslations('inbox.contactPanel');
   const [appointmentOpen, setAppointmentOpen] = useState(false);
 
   if (loading) {
@@ -58,7 +60,7 @@ export function ContactPanel({ conversation, loading, onOpenFullProfile }: Conta
   if (!contact) {
     return (
       <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
-        Selecione uma conversa pra ver o contato
+        {t('selectConversationHint')}
       </div>
     );
   }
@@ -76,7 +78,7 @@ export function ContactPanel({ conversation, loading, onOpenFullProfile }: Conta
           />
           <div>
             <h3 className="text-base font-semibold">
-              {contact.name ?? <span className="italic text-muted-foreground">sem nome</span>}
+              {contact.name ?? <span className="italic text-muted-foreground">{t('noName')}</span>}
             </h3>
             <p className="inline-flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
               {contact.phone ? formatPhone(contact.phone) : '—'}
@@ -90,7 +92,7 @@ export function ContactPanel({ conversation, loading, onOpenFullProfile }: Conta
             </p>
             {conversation?.channel_type && (
               <p className="mt-0.5 text-[11px] text-muted-foreground">
-                via {channelLabel(conversation.channel_type)}
+                {t('viaChannel', { channel: channelLabel(conversation.channel_type) })}
               </p>
             )}
           </div>
@@ -102,19 +104,19 @@ export function ContactPanel({ conversation, loading, onOpenFullProfile }: Conta
             onClick={() => setAppointmentOpen(true)}
           >
             <CalendarPlus className="mr-1.5 h-3.5 w-3.5" />
-            Novo agendamento
+            {t('newAppointment')}
           </Button>
         </div>
 
         {/* Info */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs">Contato</CardTitle>
+            <CardTitle className="text-xs">{t('contactCard')}</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-2 text-sm">
             <Row
               icon={Phone}
-              label="Telefone"
+              label={t('phone')}
               value={contact.phone ? formatPhone(contact.phone) : null}
               extra={
                 contact.phone && (
@@ -126,7 +128,7 @@ export function ContactPanel({ conversation, loading, onOpenFullProfile }: Conta
                 )
               }
             />
-            <Row icon={Mail} label="Email" value={contact.email} />
+            <Row icon={Mail} label={t('email')} value={contact.email} />
           </CardContent>
         </Card>
 
@@ -135,7 +137,7 @@ export function ContactPanel({ conversation, loading, onOpenFullProfile }: Conta
           <Card>
             <CardHeader className="pb-1">
               <CardTitle className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                Temperatura
+                {t('temperature')}
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-1">
@@ -145,7 +147,7 @@ export function ContactPanel({ conversation, loading, onOpenFullProfile }: Conta
           <Card>
             <CardHeader className="pb-1">
               <CardTitle className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                Score
+                {t('score')}
               </CardTitle>
             </CardHeader>
             <CardContent className="flex items-center gap-1 pt-1">
@@ -160,14 +162,14 @@ export function ContactPanel({ conversation, loading, onOpenFullProfile }: Conta
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-1.5 text-xs">
-              <Sparkles className="h-3 w-3 text-primary" /> Resumo IA
+              <Sparkles className="h-3 w-3 text-primary" /> {t('aiSummary')}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-xs leading-relaxed text-muted-foreground">
               {conversation.ai_summary
                 ? conversation.ai_summary
-                : 'Sem resumo gerado ainda. Clique em "Resumir" no chat após algumas mensagens trocadas.'}
+                : t('aiSummaryEmpty')}
             </p>
           </CardContent>
         </Card>
@@ -175,7 +177,7 @@ export function ContactPanel({ conversation, loading, onOpenFullProfile }: Conta
         {/* Tags do contato (editáveis) */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs">Tags do contato</CardTitle>
+            <CardTitle className="text-xs">{t('tags')}</CardTitle>
           </CardHeader>
           <CardContent>
             <ContactTagsEditor contact={contact} />
@@ -191,11 +193,11 @@ export function ContactPanel({ conversation, loading, onOpenFullProfile }: Conta
         {/* Tasks placeholder */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs">Tarefas pendentes</CardTitle>
+            <CardTitle className="text-xs">{t('pendingTasks')}</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-[11px] text-muted-foreground">
-              Endpoint <code>GET /contacts/:id/tasks</code> ainda não existe.
+              {t('pendingTasksPlaceholder')}
             </p>
           </CardContent>
         </Card>
@@ -206,13 +208,13 @@ export function ContactPanel({ conversation, loading, onOpenFullProfile }: Conta
             onClick={() => onOpenFullProfile(contact.id)}
           >
             <ExternalLink className="mr-2 h-3.5 w-3.5" />
-            Ver perfil completo
+            {t('viewFullProfile')}
           </Button>
         ) : (
           <Button variant="outline" asChild>
             <a href="/contatos">
               <ExternalLink className="mr-2 h-3.5 w-3.5" />
-              Ver perfil completo
+              {t('viewFullProfile')}
             </a>
           </Button>
         )}
@@ -225,7 +227,7 @@ export function ContactPanel({ conversation, loading, onOpenFullProfile }: Conta
         defaultConversationId={conversation?.id}
         onCreated={() => {
           setAppointmentOpen(false);
-          toast.success('Agendamento criado');
+          toast.success(t('appointmentCreated'));
         }}
       />
     </ScrollArea>
@@ -237,6 +239,7 @@ export function ContactPanel({ conversation, loading, onOpenFullProfile }: Conta
 // ──────────────────────────────────────────────────────────
 
 function ContactTagsEditor({ contact }: { contact: NonNullable<ConversationDetail['contact']> }) {
+  const t = useTranslations('inbox.contactPanel');
   const [tags, setTags] = useState<string[]>(contact.tags ?? []);
 
   // Re-sincroniza quando o contato troca (selecionou outra conversa)
@@ -254,12 +257,12 @@ function ContactTagsEditor({ contact }: { contact: NonNullable<ConversationDetai
         contactsApi.update(contact.id, { tags: next }).catch((err) => {
           // Reverte UI em caso de falha
           setTags(prev);
-          toast.error('Falha ao salvar tags', {
+          toast.error(t('tagSaveFailed'), {
             description: err instanceof ApiError ? err.message : undefined,
           });
         });
       }}
-      placeholder="Adicionar tag…"
+      placeholder={t('tagPlaceholder')}
     />
   );
 }
@@ -289,6 +292,7 @@ function Row({ icon: Icon, label, value, extra }: RowProps) {
  * badge 🔒 indicando que IA Concierge silencia em deals nessa stage.
  */
 function FunnelStageSection({ contactId }: { contactId: string }) {
+  const t = useTranslations('inbox.contactPanel');
   const [deals, setDeals] = useState<ContactDealItem[] | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -315,7 +319,7 @@ function FunnelStageSection({ contactId }: { contactId: string }) {
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-1.5 text-xs">
-          <GitBranch className="h-3 w-3 text-primary" /> Funil & Etapa
+          <GitBranch className="h-3 w-3 text-primary" /> {t('funnel')}
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
@@ -323,7 +327,7 @@ function FunnelStageSection({ contactId }: { contactId: string }) {
           <Skeleton className="h-10 w-full" />
         ) : open.length === 0 && closed.length === 0 ? (
           <p className="text-[11px] italic text-muted-foreground">
-            Lead ainda não foi roteado pra nenhum funil.
+            {t('funnelEmpty')}
           </p>
         ) : (
           <>
@@ -333,7 +337,7 @@ function FunnelStageSection({ contactId }: { contactId: string }) {
             {closed.length > 0 && (
               <details className="text-[11px] text-muted-foreground">
                 <summary className="cursor-pointer select-none hover:text-foreground">
-                  Fechados ({closed.length})
+                  {t('funnelClosed', { count: closed.length })}
                 </summary>
                 <div className="mt-1.5 flex flex-col gap-1.5">
                   {closed.map((d) => (
@@ -350,8 +354,9 @@ function FunnelStageSection({ contactId }: { contactId: string }) {
 }
 
 function DealFunnelRow({ deal, closed = false }: { deal: ContactDealItem; closed?: boolean }) {
+  const t = useTranslations('inbox.contactPanel');
   const stageColor = deal.stage_color ?? '#00E5FF';
-  const closedTag = deal.won_at ? '✓ ganho' : deal.lost_at ? '✕ perdido' : null;
+  const closedTag = deal.won_at ? t('dealWon') : deal.lost_at ? t('dealLost') : null;
 
   return (
     <div
@@ -374,14 +379,14 @@ function DealFunnelRow({ deal, closed = false }: { deal: ContactDealItem; closed
       </div>
       <div className="flex items-center gap-1 pl-3.5 text-[10px] text-muted-foreground">
         <span className="truncate">
-          {deal.pipeline_name ?? 'Funil'} · <span style={{ color: stageColor }}>{deal.stage_name ?? 'Etapa'}</span>
+          {deal.pipeline_name ?? t('pipelineDefault')} · <span style={{ color: stageColor }}>{deal.stage_name ?? t('stageDefault')}</span>
         </span>
         {deal.stage_requires_human && (
           <span
             className="ml-auto inline-flex shrink-0 items-center gap-0.5 rounded bg-amber-500/15 px-1 text-[9px] font-medium text-amber-700 dark:text-amber-400"
-            title="IA silencia nessa etapa — atendimento humano obrigatório"
+            title={t('humanRequiredTitle')}
           >
-            <Lock className="h-2.5 w-2.5" /> humano
+            <Lock className="h-2.5 w-2.5" /> {t('humanRequiredBadge')}
           </span>
         )}
       </div>

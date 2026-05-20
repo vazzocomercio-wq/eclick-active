@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Loader2, MoreVertical, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Contact } from '@eclick-active/shared';
@@ -33,6 +34,7 @@ export function ContactHeader({
   onDelete,
   deleting,
 }: ContactHeaderProps) {
+  const t = useTranslations('contacts.header');
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -58,12 +60,14 @@ export function ContactHeader({
 
         <div className="flex flex-1 flex-col gap-1 min-w-0">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Contato · #{contact.id.slice(-4).toUpperCase()}
+            {t('kicker', { id: contact.id.slice(-4).toUpperCase() })}
           </span>
 
           <InlineNameField
             value={contact.name ?? ''}
-            placeholder="Sem nome"
+            placeholder={t('namePlaceholder')}
+            ariaLabel={t('nameAria')}
+            ariaClickLabel={t('nameClickToEdit')}
             onSave={async (next) => {
               try {
                 // DTO trata `undefined` como "não mexer" — pra "limpar" o
@@ -71,9 +75,9 @@ export function ContactHeader({
                 // schema mas o DTO atual não expõe `null`).
                 await contactsApi.update(contact.id, { name: next });
                 await onChanged();
-                toast.success('Nome salvo');
+                toast.success(t('nameSaved'));
               } catch (err) {
-                toast.error('Falha ao salvar', {
+                toast.error(t('saveFailed'), {
                   description: extractMessage(err),
                 });
                 throw err;
@@ -84,7 +88,7 @@ export function ContactHeader({
           <div className="flex flex-wrap items-center gap-2">
             {contact.temperature && <TemperatureBadge temperature={contact.temperature} />}
             <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              Score{' '}
+              {t('scoreLabel')}{' '}
               <span className="font-semibold tabular-nums text-foreground">
                 {contact.score}
               </span>
@@ -98,7 +102,7 @@ export function ContactHeader({
             variant="ghost"
             size="icon"
             onClick={() => setMenuOpen((v) => !v)}
-            aria-label="Mais opções"
+            aria-label={t('moreOptions')}
             className="h-7 w-7"
           >
             <MoreVertical className="h-3.5 w-3.5" />
@@ -123,7 +127,7 @@ export function ContactHeader({
                 ) : (
                   <Trash2 className="h-3.5 w-3.5" />
                 )}
-                Excluir contato
+                {t('delete')}
               </button>
             </div>
           )}
@@ -140,10 +144,14 @@ export function ContactHeader({
 function InlineNameField({
   value,
   placeholder,
+  ariaLabel,
+  ariaClickLabel,
   onSave,
 }: {
   value: string;
   placeholder: string;
+  ariaLabel: string;
+  ariaClickLabel: string;
   onSave: (next: string) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
@@ -193,7 +201,7 @@ function InlineNameField({
           }
         }}
         disabled={saving}
-        aria-label="Nome do contato"
+        aria-label={ariaLabel}
         className="rounded-md border border-input bg-background px-2 py-1 text-base font-semibold leading-tight outline-none focus:ring-2 focus:ring-ring"
       />
     );
@@ -203,7 +211,7 @@ function InlineNameField({
     <button
       type="button"
       onClick={() => setEditing(true)}
-      aria-label="Nome (clique pra editar)"
+      aria-label={ariaClickLabel}
       className={cn(
         'rounded-md px-2 py-1 text-left text-base font-semibold leading-tight transition-colors hover:bg-muted/60',
         !value && 'italic text-muted-foreground',
@@ -217,5 +225,7 @@ function InlineNameField({
 function extractMessage(err: unknown): string {
   if (err instanceof ApiError) return `${err.status}: ${err.message}`;
   if (err instanceof Error) return err.message;
-  return 'Erro desconhecido';
+  // Mensagem final neutra — Header não tem hook scope aqui pra i18n.
+  // O toast pai já traduz o título; isto é apenas a description fallback.
+  return 'Error';
 }

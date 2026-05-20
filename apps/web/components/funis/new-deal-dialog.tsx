@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Loader2, Search, X } from 'lucide-react';
 import type { Contact } from '@eclick-active/shared';
 import {
@@ -58,6 +59,7 @@ export function NewDealDialog({
   defaultStageId,
   onCreated,
 }: NewDealDialogProps) {
+  const t = useTranslations('funis.deal.newDialog');
   const [form, setForm] = useState<FormState>(EMPTY);
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -100,7 +102,7 @@ export function NewDealDialog({
           ? `${err.status}: ${err.message}`
           : err instanceof Error
             ? err.message
-            : 'Erro ao criar deal',
+            : t('errors.createFailed'),
       );
     } finally {
       setSubmitting(false);
@@ -112,33 +114,33 @@ export function NewDealDialog({
       <DialogContent className="max-w-lg">
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <DialogHeader>
-            <DialogTitle>Novo negócio</DialogTitle>
+            <DialogTitle>{t('title')}</DialogTitle>
             <DialogDescription>
-              {pipeline?.name ?? 'Selecione um pipeline primeiro'}
+              {pipeline?.name ?? t('descriptionFallback')}
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="Título" required className="sm:col-span-2">
+            <Field label={t('fields.title')} required className="sm:col-span-2">
               <Input
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
-                placeholder="Ex: Venda Acme — 50 licenças"
+                placeholder={t('fields.titlePlaceholder')}
                 autoFocus
                 required
               />
             </Field>
 
-            <Field label="Valor (R$)">
+            <Field label={t('fields.value')}>
               <Input
                 value={form.value}
                 onChange={(e) => setForm({ ...form, value: e.target.value })}
                 inputMode="decimal"
-                placeholder="0,00"
+                placeholder={t('fields.valuePlaceholder')}
               />
             </Field>
 
-            <Field label="Stage">
+            <Field label={t('fields.stage')}>
               <select
                 value={form.stageId}
                 onChange={(e) => setForm({ ...form, stageId: e.target.value })}
@@ -156,7 +158,7 @@ export function NewDealDialog({
               </select>
             </Field>
 
-            <Field label="Contato" className="sm:col-span-2">
+            <Field label={t('fields.contact')} className="sm:col-span-2">
               <ContactPicker
                 value={form.contactId}
                 displayName={form.contactName}
@@ -166,7 +168,7 @@ export function NewDealDialog({
               />
             </Field>
 
-            <Field label="Data esperada de fechamento">
+            <Field label={t('fields.expectedClose')}>
               <Input
                 type="date"
                 value={form.expectedClose}
@@ -174,11 +176,11 @@ export function NewDealDialog({
               />
             </Field>
 
-            <Field label="Tags" hint="Vírgula entre tags">
+            <Field label={t('fields.tags')} hint={t('fields.tagsHint')}>
               <Input
                 value={form.tags}
                 onChange={(e) => setForm({ ...form, tags: e.target.value })}
-                placeholder="lead-quente, b2b"
+                placeholder={t('fields.tagsPlaceholder')}
               />
             </Field>
           </div>
@@ -191,11 +193,11 @@ export function NewDealDialog({
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
-              Cancelar
+              {t('cancel')}
             </Button>
             <Button type="submit" disabled={submitting || !form.title.trim() || !form.stageId}>
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {submitting ? 'Criando...' : 'Criar deal'}
+              {submitting ? t('submitting') : t('submit')}
             </Button>
           </DialogFooter>
         </form>
@@ -215,6 +217,7 @@ interface ContactPickerProps {
 }
 
 function ContactPicker({ value, displayName, onChange }: ContactPickerProps) {
+  const t = useTranslations('funis.deal.newDialog.contactPicker');
   const [query, setQuery] = useState('');
   const debounced = useDebounce(query, 300);
   const [results, setResults] = useState<Contact[]>([]);
@@ -237,12 +240,12 @@ function ContactPicker({ value, displayName, onChange }: ContactPickerProps) {
   if (value) {
     return (
       <div className="flex items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm">
-        <span className="truncate">{displayName || 'Contato selecionado'}</span>
+        <span className="truncate">{displayName || t('selectedFallback')}</span>
         <button
           type="button"
           onClick={() => onChange(null, '')}
           className="rounded-md p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-          aria-label="Remover contato"
+          aria-label={t('remove')}
         >
           <X className="h-3.5 w-3.5" />
         </button>
@@ -261,29 +264,29 @@ function ContactPicker({ value, displayName, onChange }: ContactPickerProps) {
         }}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
-        placeholder="Buscar contato (nome, telefone, email)..."
+        placeholder={t('placeholder')}
         className="pl-9"
       />
       {open && debounced.trim().length >= 2 && (
         <div className="absolute z-10 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-border bg-popover shadow-lg">
           {searching ? (
-            <div className="px-3 py-2 text-xs text-muted-foreground">Buscando...</div>
+            <div className="px-3 py-2 text-xs text-muted-foreground">{t('searching')}</div>
           ) : results.length === 0 ? (
-            <div className="px-3 py-2 text-xs text-muted-foreground">Nenhum contato</div>
+            <div className="px-3 py-2 text-xs text-muted-foreground">{t('noContact')}</div>
           ) : (
             results.map((c) => (
               <button
                 key={c.id}
                 type="button"
                 onClick={() => {
-                  onChange(c.id, c.name ?? c.phone ?? c.email ?? 'sem nome');
+                  onChange(c.id, c.name ?? c.phone ?? c.email ?? t('noName'));
                   setQuery('');
                   setOpen(false);
                 }}
                 className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-sm hover:bg-muted"
               >
                 <span className="truncate font-medium">
-                  {c.name ?? <span className="italic text-muted-foreground">sem nome</span>}
+                  {c.name ?? <span className="italic text-muted-foreground">{t('noName')}</span>}
                 </span>
                 <span className="truncate text-[11px] text-muted-foreground">
                   {c.phone ?? c.email ?? '—'}

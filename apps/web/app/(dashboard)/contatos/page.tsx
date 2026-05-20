@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Plus, RefreshCw, AlertTriangle } from 'lucide-react';
 import type { Contact, ContactTemperature } from '@eclick-active/shared';
 import { Button } from '@/components/ui/button';
@@ -20,6 +21,7 @@ import { getSocket } from '@/lib/realtime/socket-client';
 const PAGE_SIZE = 25;
 
 export default function ContatosPage() {
+  const t = useTranslations('contacts.page');
   // Filters
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 300);
@@ -187,11 +189,13 @@ export default function ContatosPage() {
       {/* Header */}
       <header className="flex items-center justify-between border-b border-border px-8 py-6">
         <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Contatos</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t('title')}</h1>
           <p className="text-sm text-muted-foreground">
-            Base de leads e clientes
+            {t('subtitle')}
             {total > 0 && (
-              <span className="ml-2 text-foreground/70">· {total.toLocaleString('pt-BR')} no total</span>
+              <span className="ml-2 text-foreground/70">
+                · {t('totalSuffix', { total: total.toLocaleString('pt-BR') })}
+              </span>
             )}
           </p>
         </div>
@@ -201,14 +205,14 @@ export default function ContatosPage() {
             size="icon"
             onClick={() => void load()}
             disabled={loading}
-            aria-label="Recarregar"
-            title="Recarregar"
+            aria-label={t('reload')}
+            title={t('reload')}
           >
             <RefreshCw className={loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
           </Button>
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
-            Novo contato
+            {t('newContact')}
           </Button>
         </div>
       </header>
@@ -219,10 +223,12 @@ export default function ContatosPage() {
           <AlertTriangle className="h-4 w-4 shrink-0" />
           <span>
             {error.status === 401
-              ? 'Sessão expirada — faça login pra carregar os contatos.'
+              ? t('errors.sessionExpired')
               : error.status === 403
-                ? 'Sem permissão pra ver contatos desta organização.'
-                : `Erro ao carregar (${error.status || 'rede'}): ${error.message}`}
+                ? t('errors.noPermission')
+                : error.status === 0
+                  ? t('errors.loadErrorNetwork', { message: error.message })
+                  : t('errors.loadError', { status: error.status, message: error.message })}
           </span>
         </div>
       )}

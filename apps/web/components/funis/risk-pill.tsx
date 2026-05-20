@@ -1,3 +1,6 @@
+'use client';
+
+import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 
 type DealRisk = 'low' | 'medium' | 'high' | 'critical';
@@ -7,14 +10,15 @@ interface RiskPillProps {
   className?: string;
 }
 
-const STYLES: Record<DealRisk, { bg: string; text: string; label: string }> = {
-  low: { bg: 'bg-accent/15', text: 'text-accent', label: 'Baixo' },
-  medium: { bg: 'bg-yellow-500/15', text: 'text-yellow-500', label: 'Médio' },
-  high: { bg: 'bg-orange-500/15', text: 'text-orange-500', label: 'Alto' },
-  critical: { bg: 'bg-red-500/15', text: 'text-red-500', label: 'Crítico' },
+const STYLES: Record<DealRisk, { bg: string; text: string }> = {
+  low: { bg: 'bg-accent/15', text: 'text-accent' },
+  medium: { bg: 'bg-yellow-500/15', text: 'text-yellow-500' },
+  high: { bg: 'bg-orange-500/15', text: 'text-orange-500' },
+  critical: { bg: 'bg-red-500/15', text: 'text-red-500' },
 };
 
 export function RiskPill({ risk, className }: RiskPillProps) {
+  const t = useTranslations('funis.deal.risk');
   if (!risk) return null;
   const s = STYLES[risk];
   return (
@@ -26,7 +30,7 @@ export function RiskPill({ risk, className }: RiskPillProps) {
         className,
       )}
     >
-      {s.label}
+      {t(risk)}
     </span>
   );
 }

@@ -8,6 +8,7 @@ import {
   Tooltip,
 } from 'recharts';
 import { MessageCircle } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import type { ChannelReport } from '@/lib/api/reports';
 import { cn } from '@/lib/utils';
 
@@ -41,6 +42,7 @@ const CHANNEL_LABELS: Record<string, string> = {
 };
 
 export function ChannelsTab({ data, loading }: ChannelsTabProps) {
+  const t = useTranslations('relatorios');
   if (loading || !data) {
     return (
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
@@ -53,7 +55,7 @@ export function ChannelsTab({ data, loading }: ChannelsTabProps) {
   if (data.channels.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-border p-12 text-center text-sm text-muted-foreground">
-        Nenhuma conversa registrada no período.
+        {t('channels.empty')}
       </div>
     );
   }
@@ -91,15 +93,15 @@ export function ChannelsTab({ data, loading }: ChannelsTabProps) {
                 </span>
                 <span className="text-sm font-semibold">{label}</span>
                 <span className="ml-auto text-[11px] text-muted-foreground tabular-nums">
-                  {pctOfTotal.toFixed(0)}% do total
+                  {t('channels.pctOfTotal', { n: pctOfTotal.toFixed(0) })}
                 </span>
               </div>
 
               <div className="grid grid-cols-3 gap-2 pt-1">
-                <Stat label="Conversas" value={c.conversations.toLocaleString('pt-BR')} />
-                <Stat label="Leads" value={c.leads.toLocaleString('pt-BR')} />
+                <Stat label={t('channels.statConversations')} value={c.conversations.toLocaleString('pt-BR')} />
+                <Stat label={t('channels.statLeads')} value={c.leads.toLocaleString('pt-BR')} />
                 <Stat
-                  label="Conversão"
+                  label={t('channels.statConversion')}
                   value={`${c.conversion_rate}%`}
                   highlight={c.conversion_rate}
                 />
@@ -112,9 +114,9 @@ export function ChannelsTab({ data, loading }: ChannelsTabProps) {
       {/* Donut chart */}
       <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-5">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Distribuição de conversas</h2>
+          <h2 className="text-sm font-semibold">{t('channels.distributionTitle')}</h2>
           <span className="text-xs text-muted-foreground tabular-nums">
-            {data.total_conversations.toLocaleString('pt-BR')} total
+            {t('channels.totalLabel', { n: data.total_conversations.toLocaleString('pt-BR') })}
           </span>
         </div>
 
@@ -142,7 +144,7 @@ export function ChannelsTab({ data, loading }: ChannelsTabProps) {
                     <div className="rounded-md border border-border bg-popover p-2 text-xs shadow-md">
                       <p className="font-medium">{p.name}</p>
                       <p className="text-muted-foreground">
-                        {String(p.value)} conversas
+                        {t('channels.tooltipConversations', { n: String(p.value) })}
                       </p>
                     </div>
                   );

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CalendarClock,
   CheckCircle2,
@@ -17,6 +17,7 @@ import {
   Smile,
   Sparkles,
 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -24,19 +25,6 @@ import {
   type PromptSuggestion,
 } from '@/components/ui/animated-prompt-suggestions';
 import { cn } from '@/lib/utils';
-
-/** Sugestões de respostas rápidas — fluem acima do textarea quando vazio.
- *  Click cola no textarea pro atendente editar antes de enviar. */
-const QUICK_REPLY_SUGGESTIONS: PromptSuggestion[] = [
-  { text: 'Olá! Como posso ajudar você hoje?', label: 'Saudação', icon: MessageSquare, accent: '#00E5FF' },
-  { text: 'Aguarde um momento, vou verificar.', label: 'Aguarde', icon: Clock, accent: '#fcd34d' },
-  { text: 'Qual o melhor horário pra você?', label: 'Horário', icon: CalendarClock, accent: '#a78bfa' },
-  { text: 'Pode me enviar a documentação por aqui?', label: 'Documentação', icon: FileText, accent: '#67e8f9' },
-  { text: 'Você tem algum convênio ou seria particular?', label: 'Convênio', icon: HelpCircle, accent: '#fde68a' },
-  { text: 'Vou encaminhar pro setor responsável.', label: 'Encaminhar', icon: PhoneCall, accent: '#34d399' },
-  { text: 'Confirmado! Vou registrar o agendamento.', label: 'Confirmar', icon: CheckCircle2, accent: '#34d399' },
-  { text: 'Posso te ajudar com mais alguma coisa?', label: 'Mais ajuda', icon: Sparkles, accent: '#f472b6' },
-];
 
 interface MessageInputProps {
   onSend: (text: string, isInternalNote: boolean) => Promise<void>;
@@ -62,10 +50,25 @@ export function MessageInput({
   compact = false,
   onOpenProductPicker,
 }: MessageInputProps) {
+  const t = useTranslations('inbox.messageInput');
   const [value, setValue] = useState('');
   const [isInternalNote, setIsInternalNote] = useState(false);
   const [sending, setSending] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
+
+  const QUICK_REPLY_SUGGESTIONS = useMemo<PromptSuggestion[]>(
+    () => [
+      { text: t('quickReplies.greeting'), label: t('quickReplies.greetingLabel'), icon: MessageSquare, accent: '#00E5FF' },
+      { text: t('quickReplies.wait'), label: t('quickReplies.waitLabel'), icon: Clock, accent: '#fcd34d' },
+      { text: t('quickReplies.time'), label: t('quickReplies.timeLabel'), icon: CalendarClock, accent: '#a78bfa' },
+      { text: t('quickReplies.docs'), label: t('quickReplies.docsLabel'), icon: FileText, accent: '#67e8f9' },
+      { text: t('quickReplies.insurance'), label: t('quickReplies.insuranceLabel'), icon: HelpCircle, accent: '#fde68a' },
+      { text: t('quickReplies.forward'), label: t('quickReplies.forwardLabel'), icon: PhoneCall, accent: '#34d399' },
+      { text: t('quickReplies.confirm'), label: t('quickReplies.confirmLabel'), icon: CheckCircle2, accent: '#34d399' },
+      { text: t('quickReplies.more'), label: t('quickReplies.moreLabel'), icon: Sparkles, accent: '#f472b6' },
+    ],
+    [t],
+  );
 
   /**
    * Foca o textarea de forma robusta. requestAnimationFrame garante que
@@ -168,11 +171,11 @@ export function MessageInput({
           )}
         >
           <Lock className="h-3 w-3" />
-          {isInternalNote ? 'Nota interna' : 'Mensagem'}
+          {isInternalNote ? t('toggleInternalNote') : t('toggleMessage')}
         </button>
         {!compact && (
           <span className="text-[10px] text-muted-foreground">
-            Enter envia · Shift+Enter quebra linha
+            {t('shortcutHint')}
           </span>
         )}
       </div>
@@ -199,17 +202,17 @@ export function MessageInput({
       <div className="flex items-end gap-2">
         {!compact && (
           <>
-            <Button variant="ghost" size="icon" aria-label="Emoji" disabled>
+            <Button variant="ghost" size="icon" aria-label={t('emojiAria')} disabled>
               <Smile className="h-4 w-4 text-muted-foreground" />
             </Button>
-            <Button variant="ghost" size="icon" aria-label="Anexar" disabled>
+            <Button variant="ghost" size="icon" aria-label={t('attachAria')} disabled>
               <Paperclip className="h-4 w-4 text-muted-foreground" />
             </Button>
             {onOpenProductPicker && (
-              <Button variant="ghost" size="icon" aria-label="Mandar produto"
+              <Button variant="ghost" size="icon" aria-label={t('sendProductAria')}
                 onClick={onOpenProductPicker}
                 disabled={disabled || sending || isInternalNote}
-                title="Mandar produto do catálogo">
+                title={t('sendProductTitle')}>
                 <Package className="h-4 w-4 text-cyan-400" />
               </Button>
             )}
@@ -223,8 +226,8 @@ export function MessageInput({
           onKeyDown={onKeyDown}
           placeholder={
             isInternalNote
-              ? 'Nota interna (só agentes veem)...'
-              : 'Digite sua mensagem...'
+              ? t('placeholderInternalNote')
+              : t('placeholderMessage')
           }
           rows={1}
           disabled={disabled || sending}
@@ -239,7 +242,7 @@ export function MessageInput({
           onClick={submit}
           disabled={!value.trim() || sending || disabled}
           size={compact ? 'sm' : 'default'}
-          aria-label="Enviar"
+          aria-label={t('sendAria')}
         >
           {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
         </Button>

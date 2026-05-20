@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { Target, TrendingUp } from 'lucide-react';
 import type { TopDealItem } from '@/lib/api/dashboard';
 import { cn } from '@/lib/utils';
@@ -11,11 +12,12 @@ interface TopDealsCardProps {
 }
 
 export function TopDealsCard({ items, loading }: TopDealsCardProps) {
+  const t = useTranslations('centralAcao.topDeals');
   return (
     <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-5">
       <header className="flex items-center gap-2">
         <Target className="h-4 w-4 text-accent" />
-        <h2 className="text-sm font-semibold">Próximos de fechar</h2>
+        <h2 className="text-sm font-semibold">{t('title')}</h2>
       </header>
 
       {loading ? (
@@ -44,6 +46,7 @@ export function TopDealsCard({ items, loading }: TopDealsCardProps) {
 }
 
 function TopDealRow({ item }: { item: TopDealItem }) {
+  const t = useTranslations('centralAcao.topDeals');
   const probability = item.ai_close_probability ?? 0;
 
   return (
@@ -58,7 +61,7 @@ function TopDealRow({ item }: { item: TopDealItem }) {
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="truncate text-sm font-medium">{item.title}</span>
           <span className="truncate text-[11px] text-muted-foreground">
-            {item.contact_name ?? 'Sem contato'} · {item.stage_name}
+            {item.contact_name ?? t('noContact')} · {item.stage_name}
           </span>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-0.5">
@@ -82,12 +85,13 @@ function TopDealRow({ item }: { item: TopDealItem }) {
 }
 
 function EmptyTopDeals() {
+  const t = useTranslations('centralAcao.topDeals');
   return (
     <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border p-6 text-center">
       <Target className="h-6 w-6 text-muted-foreground" />
-      <p className="text-xs font-medium">Nenhum negócio com probabilidade ainda</p>
+      <p className="text-xs font-medium">{t('emptyTitle')}</p>
       <Link href="/funis" className="text-[11px] font-medium text-primary hover:underline">
-        Crie seu primeiro negócio →
+        {t('createFirst')}
       </Link>
     </div>
   );

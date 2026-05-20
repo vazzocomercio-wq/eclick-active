@@ -1,3 +1,6 @@
+'use client';
+
+import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 
 interface AIScoreCircleProps {
@@ -12,6 +15,7 @@ interface AIScoreCircleProps {
  *  0-25: vermelho · 26-50: laranja · 51-75: amarelo · 76-100: verde
  */
 export function AIScoreCircle({ score, size = 36, className }: AIScoreCircleProps) {
+  const t = useTranslations('funis.deal');
   const clamped = Math.max(0, Math.min(100, Math.round(score)));
   const stroke = scoreColorClass(clamped);
   const radius = (size - 4) / 2;
@@ -24,7 +28,7 @@ export function AIScoreCircle({ score, size = 36, className }: AIScoreCircleProp
     <div
       className={cn('relative inline-flex items-center justify-center', className)}
       style={{ width: size, height: size }}
-      aria-label={`AI score ${clamped} de 100`}
+      aria-label={t('ariaScoreOf', { score: clamped })}
     >
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="rotate-[-90deg]">
         <circle

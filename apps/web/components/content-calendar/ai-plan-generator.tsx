@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Loader2, Sparkles, X } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import {
   contentCalendarApi,
   CHANNEL_COLOR,
@@ -39,6 +40,7 @@ export function AIPlanGenerator({
   onClose,
   onGenerated,
 }: AIPlanGeneratorProps) {
+  const t = useTranslations('contentCalendar');
   const [period, setPeriod] = useState<'week' | 'month'>('week');
   const [startDate, setStartDate] = useState(() =>
     new Date().toISOString().slice(0, 10),
@@ -60,7 +62,7 @@ export function AIPlanGenerator({
 
   async function handleGenerate() {
     if (channels.length === 0) {
-      setError('Selecione ao menos 1 canal');
+      setError(t('ai.selectAtLeastOne'));
       return;
     }
     setBusy(true);
@@ -84,7 +86,7 @@ export function AIPlanGenerator({
         onClose();
       }, 1500);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Falha ao gerar plano');
+      setError(err instanceof Error ? err.message : t('ai.failed'));
     } finally {
       setBusy(false);
     }
@@ -104,7 +106,7 @@ export function AIPlanGenerator({
             <span className="flex h-8 w-8 items-center justify-center rounded-md bg-gradient-to-br from-cyan-500 to-blue-600">
               <Sparkles className="h-4 w-4 text-white" />
             </span>
-            <h2 className="text-sm font-semibold">Gerar plano com IA</h2>
+            <h2 className="text-sm font-semibold">{t('ai.title')}</h2>
           </div>
           <button
             type="button"
@@ -120,7 +122,7 @@ export function AIPlanGenerator({
           {/* Período */}
           <div>
             <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Período
+              {t('ai.periodLabel')}
             </label>
             <div className="flex gap-1">
               {(['week', 'month'] as const).map((p) => (
@@ -135,7 +137,7 @@ export function AIPlanGenerator({
                       : 'border-border hover:bg-accent',
                   )}
                 >
-                  {p === 'week' ? '1 semana' : '1 mês'}
+                  {t(`ai.period.${p}`)}
                 </button>
               ))}
             </div>
@@ -144,7 +146,7 @@ export function AIPlanGenerator({
           {/* Data inicial */}
           <div>
             <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Começar em
+              {t('ai.startLabel')}
             </label>
             <input
               type="date"
@@ -157,7 +159,7 @@ export function AIPlanGenerator({
           {/* Canais */}
           <div>
             <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Canais ({channels.length})
+              {t('ai.channelsLabel', { n: channels.length })}
             </label>
             <div className="flex flex-wrap gap-1.5">
               {CHANNELS.map((c) => {
@@ -192,13 +194,13 @@ export function AIPlanGenerator({
           {/* Contexto do negócio */}
           <div>
             <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Contexto do seu negócio (opcional)
+              {t('ai.businessContextLabel')}
             </label>
             <textarea
               value={businessContext}
               onChange={(e) => setBusinessContext(e.target.value)}
               rows={3}
-              placeholder="Ex: loja de roupas femininas casuais, foco em mulheres 25-40 anos em SP. Lançando coleção de inverno."
+              placeholder={t('ai.businessContextPlaceholder')}
               className="w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm"
               maxLength={500}
             />
@@ -210,7 +212,7 @@ export function AIPlanGenerator({
 
           {costUsd !== null && (
             <p className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-2 text-xs text-emerald-300">
-              ✓ Plano gerado! Custo: ${costUsd.toFixed(4)} USD
+              {t('ai.doneToast', { cost: costUsd.toFixed(4) })}
             </p>
           )}
         </div>
@@ -222,7 +224,7 @@ export function AIPlanGenerator({
             disabled={busy}
             className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
           >
-            Cancelar
+            {t('ai.cancel')}
           </button>
           <button
             type="button"
@@ -233,12 +235,12 @@ export function AIPlanGenerator({
             {busy ? (
               <>
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Gerando…
+                {t('ai.generating')}
               </>
             ) : (
               <>
                 <Sparkles className="h-3.5 w-3.5" />
-                Gerar plano
+                {t('ai.generate')}
               </>
             )}
           </button>

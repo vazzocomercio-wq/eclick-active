@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Loader2, Trash2 } from 'lucide-react';
 import type { KnowledgeCategory } from '@eclick-active/shared';
 import {
@@ -20,7 +21,7 @@ import {
 } from '@/lib/api/knowledge';
 import { ApiError } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
-import { KNOWLEDGE_CATEGORIES, categoryLabel } from './category-badge';
+import { KNOWLEDGE_CATEGORIES, useCategoryLabel } from './category-badge';
 
 interface EditDocumentSheetProps {
   open: boolean;
@@ -35,6 +36,8 @@ export function EditDocumentSheet({
   document,
   onChanged,
 }: EditDocumentSheetProps) {
+  const t = useTranslations('conhecimento.editDocument');
+  const categoryLabel = useCategoryLabel();
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<KnowledgeCategory>('general');
   const [content, setContent] = useState('');
@@ -85,7 +88,7 @@ export function EditDocumentSheet({
           ? `${err.status}: ${err.message}`
           : err instanceof Error
             ? err.message
-            : 'Erro ao salvar',
+            : t('saveError'),
       );
     } finally {
       setSaving(false);
@@ -106,7 +109,7 @@ export function EditDocumentSheet({
           ? err.message
           : err instanceof Error
             ? err.message
-            : 'Erro ao excluir',
+            : t('deleteError'),
       );
     } finally {
       setDeleting(false);
@@ -117,10 +120,12 @@ export function EditDocumentSheet({
     <Sheet open={open} onOpenChange={(o) => !saving && !deleting && onOpenChange(o)}>
       <SheetContent className="flex w-full flex-col gap-0 sm:max-w-2xl" side="right">
         <SheetHeader className="border-b border-border pb-4">
-          <SheetTitle>Editar documento</SheetTitle>
+          <SheetTitle>{t('title')}</SheetTitle>
           <SheetDescription>
-            Atualizado em {new Date(document.updated_at).toLocaleString('pt-BR')}
-            {contentChanged && ' · embedding será regenerado ao salvar'}
+            {t('updatedAt', {
+              when: new Date(document.updated_at).toLocaleString('pt-BR'),
+            })}
+            {contentChanged && ` · ${t('embeddingWillRegenerate')}`}
           </SheetDescription>
         </SheetHeader>
 
@@ -133,12 +138,12 @@ export function EditDocumentSheet({
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="flex flex-col gap-1.5 sm:col-span-2">
-              <Label className="text-xs">Título</Label>
+              <Label className="text-xs">{t('titleLabel')}</Label>
               <Input value={title} onChange={(e) => setTitle(e.target.value)} />
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label className="text-xs">Categoria</Label>
+              <Label className="text-xs">{t('categoryLabel')}</Label>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value as KnowledgeCategory)}
@@ -158,9 +163,9 @@ export function EditDocumentSheet({
 
           <div className="mt-3 flex flex-col gap-1.5">
             <div className="flex items-center justify-between">
-              <Label className="text-xs">Conteúdo</Label>
+              <Label className="text-xs">{t('contentLabel')}</Label>
               <span className="text-[10px] text-muted-foreground tabular-nums">
-                ~{tokens.toLocaleString('pt-BR')} tokens
+                {t('tokens', { n: tokens })}
               </span>
             </div>
             <Textarea
@@ -180,7 +185,7 @@ export function EditDocumentSheet({
               className="h-4 w-4 rounded border-input"
             />
             <Label htmlFor="is-active" className="text-xs cursor-pointer">
-              Ativo (visível para a IA)
+              {t('activeForAi')}
             </Label>
           </div>
         </div>
@@ -188,7 +193,7 @@ export function EditDocumentSheet({
         <div className="flex items-center justify-between gap-2 border-t border-border pt-4">
           {confirmDelete ? (
             <div className="flex items-center gap-2 text-xs">
-              <span className="text-destructive">Excluir permanentemente?</span>
+              <span className="text-destructive">{t('deleteConfirm')}</span>
               <Button
                 size="sm"
                 variant="destructive"
@@ -196,10 +201,10 @@ export function EditDocumentSheet({
                 disabled={deleting}
               >
                 {deleting && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
-                Sim, excluir
+                {t('yesDelete')}
               </Button>
               <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(false)}>
-                Cancelar
+                {t('cancel')}
               </Button>
             </div>
           ) : (
@@ -210,17 +215,17 @@ export function EditDocumentSheet({
               className="text-destructive hover:bg-destructive/10 hover:text-destructive"
             >
               <Trash2 className="mr-1 h-3.5 w-3.5" />
-              Excluir
+              {t('delete')}
             </Button>
           )}
 
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-              Fechar
+              {t('close')}
             </Button>
             <Button onClick={handleSave} disabled={!dirty || saving || !title.trim() || !content.trim()}>
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {saving ? 'Salvando...' : contentChanged ? 'Salvar + reindexar' : 'Salvar'}
+              {saving ? t('saving') : contentChanged ? t('saveReindex') : t('save')}
             </Button>
           </div>
         </div>

@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, CheckCircle2, ArrowUp, RotateCw, Link as LinkIcon } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { useSacTicket } from '@/hooks/use-sac';
 import { sacApi } from '@/lib/api/sac';
 import type { SacResolutionType } from '@/lib/api/sac';
@@ -10,22 +11,22 @@ import { TicketDetailSide } from '@/components/sac/ticket-detail-side';
 import { TicketTimeline } from '@/components/sac/ticket-timeline';
 import { Button } from '@/components/ui/button';
 
-const RESOLUTION_OPTIONS: Array<[SacResolutionType, string]> = [
-  ['resolved', 'Resolvido'],
-  ['refunded', 'Reembolsado'],
-  ['exchanged', 'Trocado'],
-  ['returned', 'Devolvido'],
-  ['cancelled', 'Cancelado'],
-  ['escalated', 'Escalado externamente'],
-  ['no_action_needed', 'Sem ação necessária'],
-  ['duplicate', 'Duplicado'],
+const RESOLUTION_KEYS: SacResolutionType[] = [
+  'resolved', 'refunded', 'exchanged', 'returned', 'cancelled',
+  'escalated', 'no_action_needed', 'duplicate',
 ];
 
 export default function SacDetailPage() {
+  const t = useTranslations('sac.detail');
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const id = params?.id ?? null;
   const { ticket, actions, loading, refresh } = useSacTicket(id);
+
+  const RESOLUTION_OPTIONS = useMemo<Array<[SacResolutionType, string]>>(
+    () => RESOLUTION_KEYS.map((k) => [k, t(`resolutionOptions.${k}`)]),
+    [t],
+  );
 
   const [resolveOpen, setResolveOpen] = useState(false);
   const [resolutionType, setResolutionType] = useState<SacResolutionType>('resolved');
@@ -37,16 +38,16 @@ export default function SacDetailPage() {
   if (loading && !ticket) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-        Carregando ticket…
+        {t('loading')}
       </div>
     );
   }
   if (!ticket) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-sm text-muted-foreground">
-        Ticket não encontrado
+        {t('notFound')}
         <Button variant="outline" size="sm" onClick={() => router.push('/sac')}>
-          Voltar ao SAC
+          {t('backToSac')}
         </Button>
       </div>
     );
@@ -104,8 +105,10 @@ export default function SacDetailPage() {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <h1 className="flex-1 truncate text-sm font-semibold">
-          Ticket #{ticket.ticket_number} —{' '}
-          <span className="text-muted-foreground">{ticket.ai_summary ?? 'Sem resumo'}</span>
+          {t('ticketTitle', {
+            number: ticket.ticket_number,
+            summary: ticket.ai_summary ?? t('noSummary'),
+          })}
         </h1>
         <div className="flex items-center gap-1">
           <Button
@@ -114,12 +117,12 @@ export default function SacDetailPage() {
             onClick={() => setLinkOpen(true)}
           >
             <LinkIcon className="h-3.5 w-3.5" />
-            <span className="hidden md:inline ml-1">Vincular pedido</span>
+            <span className="hidden md:inline ml-1">{t('linkOrder')}</span>
           </Button>
           {ticket.status === 'resolved' ? (
             <Button variant="outline" size="sm" onClick={submitReopen} disabled={busy}>
               <RotateCw className="h-3.5 w-3.5" />
-              <span className="hidden md:inline ml-1">Reabrir</span>
+              <span className="hidden md:inline ml-1">{t('reopen')}</span>
             </Button>
           ) : (
             <Button
@@ -130,12 +133,12 @@ export default function SacDetailPage() {
               className="bg-emerald-600 hover:bg-emerald-700"
             >
               <CheckCircle2 className="h-3.5 w-3.5" />
-              <span className="hidden md:inline ml-1">Resolver</span>
+              <span className="hidden md:inline ml-1">{t('resolve')}</span>
             </Button>
           )}
           <Button variant="outline" size="sm" disabled>
             <ArrowUp className="h-3.5 w-3.5" />
-            <span className="hidden md:inline ml-1">Escalar</span>
+            <span className="hidden md:inline ml-1">{t('escalate')}</span>
           </Button>
         </div>
       </header>
@@ -146,17 +149,17 @@ export default function SacDetailPage() {
         <div className="flex-1 overflow-y-auto p-4">
           {ticket.conversation_id ? (
             <div className="mb-4 rounded-lg border border-cyan-500/30 bg-cyan-500/5 p-3 text-xs">
-              Esta conversa tem{' '}
+              {t('hasChat')}{' '}
               <a
                 href={`/conversas?conversation=${ticket.conversation_id}`}
                 className="font-medium text-cyan-700 underline dark:text-cyan-300"
               >
-                histórico no chat ↗
+                {t('chatLink')}
               </a>
             </div>
           ) : null}
 
-          <h2 className="mb-3 text-sm font-semibold">Timeline</h2>
+          <h2 className="mb-3 text-sm font-semibold">{t('timeline')}</h2>
           <TicketTimeline actions={actions} />
         </div>
 
@@ -166,9 +169,9 @@ export default function SacDetailPage() {
 
       {/* Dialog Resolver */}
       {resolveOpen && (
-        <Modal title="Resolver ticket" onClose={() => setResolveOpen(false)}>
+        <Modal title={t('resolveTitle')} onClose={() => setResolveOpen(false)}>
           <label className="flex flex-col gap-1 text-xs">
-            <span className="text-muted-foreground">Tipo de resolução</span>
+            <span className="text-muted-foreground">{t('resolutionType')}</span>
             <select
               value={resolutionType}
               onChange={(e) => setResolutionType(e.target.value as SacResolutionType)}
@@ -180,21 +183,21 @@ export default function SacDetailPage() {
             </select>
           </label>
           <label className="mt-3 flex flex-col gap-1 text-xs">
-            <span className="text-muted-foreground">Notas (opcional)</span>
+            <span className="text-muted-foreground">{t('notesOptional')}</span>
             <textarea
               value={resolutionNotes}
               onChange={(e) => setResolutionNotes(e.target.value)}
               className="rounded-md border border-border bg-background p-2 text-sm"
               rows={3}
-              placeholder="O que foi feito?"
+              placeholder={t('notesPlaceholder')}
             />
           </label>
           <div className="mt-3 flex justify-end gap-2">
             <Button variant="outline" size="sm" onClick={() => setResolveOpen(false)}>
-              Cancelar
+              {t('cancel')}
             </Button>
             <Button size="sm" onClick={submitResolve} disabled={busy}>
-              {busy ? 'Salvando…' : 'Confirmar'}
+              {busy ? t('saving') : t('confirm')}
             </Button>
           </div>
         </Modal>
@@ -202,22 +205,22 @@ export default function SacDetailPage() {
 
       {/* Dialog Vincular pedido */}
       {linkOpen && (
-        <Modal title="Vincular pedido do SaaS" onClose={() => setLinkOpen(false)}>
+        <Modal title={t('linkTitle')} onClose={() => setLinkOpen(false)}>
           <p className="text-xs text-muted-foreground">
-            Cole o número do pedido (marketplace_order_id) ou rastreio
+            {t('linkHint')}
           </p>
           <input
             value={linkQuery}
             onChange={(e) => setLinkQuery(e.target.value)}
-            placeholder="ML-123456789 ou BR123456789BR"
+            placeholder={t('linkPlaceholder')}
             className="mt-2 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
           />
           <div className="mt-3 flex justify-end gap-2">
             <Button variant="outline" size="sm" onClick={() => setLinkOpen(false)}>
-              Cancelar
+              {t('cancel')}
             </Button>
             <Button size="sm" onClick={submitLink} disabled={busy || !linkQuery.trim()}>
-              {busy ? 'Buscando…' : 'Vincular'}
+              {busy ? t('searching') : t('link')}
             </Button>
           </div>
         </Modal>

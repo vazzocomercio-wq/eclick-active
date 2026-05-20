@@ -1,3 +1,5 @@
+'use client';
+
 import {
   Calendar,
   CheckCircle2,
@@ -9,6 +11,7 @@ import {
   Users,
   Video,
 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import type { TaskPriority, TaskStatus, TaskType } from '@eclick-active/shared';
 import { cn } from '@/lib/utils';
 
@@ -16,11 +19,11 @@ import { cn } from '@/lib/utils';
 // Priority
 // ──────────────────────────────────────────────────────────
 
-const PRIORITY_STYLES: Record<TaskPriority, { bg: string; text: string; label: string }> = {
-  low: { bg: 'bg-slate-500/15', text: 'text-slate-400', label: 'Baixa' },
-  normal: { bg: 'bg-blue-500/15', text: 'text-blue-400', label: 'Normal' },
-  high: { bg: 'bg-orange-500/15', text: 'text-orange-400', label: 'Alta' },
-  urgent: { bg: 'bg-red-500/15', text: 'text-red-400', label: 'Urgente' },
+const PRIORITY_STYLES: Record<TaskPriority, { bg: string; text: string }> = {
+  low: { bg: 'bg-slate-500/15', text: 'text-slate-400' },
+  normal: { bg: 'bg-blue-500/15', text: 'text-blue-400' },
+  high: { bg: 'bg-orange-500/15', text: 'text-orange-400' },
+  urgent: { bg: 'bg-red-500/15', text: 'text-red-400' },
 };
 
 export function PriorityBadge({
@@ -30,6 +33,7 @@ export function PriorityBadge({
   priority: TaskPriority;
   className?: string;
 }) {
+  const t = useTranslations('tarefas.badges.priority');
   const s = PRIORITY_STYLES[priority];
   return (
     <span
@@ -40,7 +44,7 @@ export function PriorityBadge({
         className,
       )}
     >
-      {s.label}
+      {t(priority)}
     </span>
   );
 }
@@ -49,12 +53,12 @@ export function PriorityBadge({
 // Status
 // ──────────────────────────────────────────────────────────
 
-const STATUS_STYLES: Record<TaskStatus, { bg: string; text: string; label: string }> = {
-  pending: { bg: 'bg-yellow-500/15', text: 'text-yellow-400', label: 'Pendente' },
-  in_progress: { bg: 'bg-blue-500/15', text: 'text-blue-400', label: 'Em andamento' },
-  completed: { bg: 'bg-emerald-500/15', text: 'text-emerald-400', label: 'Concluída' },
-  cancelled: { bg: 'bg-slate-500/15', text: 'text-slate-400', label: 'Cancelada' },
-  overdue: { bg: 'bg-red-500/15', text: 'text-red-400', label: 'Atrasada' },
+const STATUS_STYLES: Record<TaskStatus, { bg: string; text: string }> = {
+  pending: { bg: 'bg-yellow-500/15', text: 'text-yellow-400' },
+  in_progress: { bg: 'bg-blue-500/15', text: 'text-blue-400' },
+  completed: { bg: 'bg-emerald-500/15', text: 'text-emerald-400' },
+  cancelled: { bg: 'bg-slate-500/15', text: 'text-slate-400' },
+  overdue: { bg: 'bg-red-500/15', text: 'text-red-400' },
 };
 
 export function StatusBadge({
@@ -64,6 +68,7 @@ export function StatusBadge({
   status: TaskStatus;
   className?: string;
 }) {
+  const t = useTranslations('tarefas.badges.status');
   const s = STATUS_STYLES[status];
   return (
     <span
@@ -74,7 +79,7 @@ export function StatusBadge({
         className,
       )}
     >
-      {s.label}
+      {t(status)}
     </span>
   );
 }
@@ -83,14 +88,14 @@ export function StatusBadge({
 // Task type icon
 // ──────────────────────────────────────────────────────────
 
-const TYPE_ICONS: Record<TaskType, { icon: LucideIcon; color: string; label: string }> = {
-  call: { icon: Phone, color: 'text-blue-400', label: 'Ligação' },
-  email: { icon: Mail, color: 'text-cyan-400', label: 'Email' },
-  meeting: { icon: Video, color: 'text-purple-400', label: 'Reunião' },
-  follow_up: { icon: Users, color: 'text-emerald-400', label: 'Follow-up' },
-  whatsapp: { icon: MessageCircle, color: 'text-green-400', label: 'WhatsApp' },
-  proposal: { icon: CheckCircle2, color: 'text-orange-400', label: 'Proposta' },
-  custom: { icon: Calendar, color: 'text-muted-foreground', label: 'Personalizado' },
+const TYPE_ICONS: Record<TaskType, { icon: LucideIcon; color: string }> = {
+  call: { icon: Phone, color: 'text-blue-400' },
+  email: { icon: Mail, color: 'text-cyan-400' },
+  meeting: { icon: Video, color: 'text-purple-400' },
+  follow_up: { icon: Users, color: 'text-emerald-400' },
+  whatsapp: { icon: MessageCircle, color: 'text-green-400' },
+  proposal: { icon: CheckCircle2, color: 'text-orange-400' },
+  custom: { icon: Calendar, color: 'text-muted-foreground' },
 };
 
 export function TaskTypeIcon({
@@ -100,13 +105,15 @@ export function TaskTypeIcon({
   type: TaskType;
   className?: string;
 }) {
+  const t = useTranslations('tarefas.badges.type');
   const v = TYPE_ICONS[type];
   const Icon = v.icon;
-  return <Icon className={cn('h-4 w-4', v.color, className)} aria-label={v.label} />;
+  return <Icon className={cn('h-4 w-4', v.color, className)} aria-label={t(type)} />;
 }
 
 export function TaskTypeLabel({ type }: { type: TaskType }) {
-  return <>{TYPE_ICONS[type].label}</>;
+  const t = useTranslations('tarefas.badges.type');
+  return <>{t(type)}</>;
 }
 
 // ──────────────────────────────────────────────────────────
@@ -114,6 +121,7 @@ export function TaskTypeLabel({ type }: { type: TaskType }) {
 // ──────────────────────────────────────────────────────────
 
 export function AICreatedBadge({ className }: { className?: string }) {
+  const t = useTranslations('tarefas.badges');
   return (
     <span
       className={cn(
@@ -122,7 +130,7 @@ export function AICreatedBadge({ className }: { className?: string }) {
       )}
     >
       <Sparkles className="h-3 w-3" />
-      Criada por IA
+      {t('aiCreated')}
     </span>
   );
 }
@@ -138,11 +146,3 @@ export const TASK_TYPE_VALUES: TaskType[] = [
 ];
 
 export const TASK_PRIORITY_VALUES: TaskPriority[] = ['low', 'normal', 'high', 'urgent'];
-
-export function priorityLabel(p: TaskPriority): string {
-  return PRIORITY_STYLES[p].label;
-}
-
-export function taskTypeLabel(t: TaskType): string {
-  return TYPE_ICONS[t].label;
-}

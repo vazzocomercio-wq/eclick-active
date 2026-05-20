@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { Plus, RefreshCw, Settings, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { BoardResponse } from '@/lib/api/pipelines';
@@ -28,12 +29,13 @@ export function BoardHeader({
   onCreateDeal,
   onAnalyze,
 }: BoardHeaderProps) {
+  const t = useTranslations('funis.board.header');
   return (
     <header className="flex flex-col gap-3 border-b border-border px-6 py-4 lg:flex-row lg:items-center lg:justify-between">
       {/* Esquerda: título + seletor */}
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-2">
-          <h1 className="text-xl font-semibold tracking-tight">Funil</h1>
+          <h1 className="text-xl font-semibold tracking-tight">{t('title')}</h1>
           {pipelines.length > 1 && (
             <select
               value={selectedPipelineId ?? ''}
@@ -42,7 +44,7 @@ export function BoardHeader({
                 'h-8 rounded-md border border-input bg-background px-2 text-sm',
                 'focus:outline-none focus:ring-2 focus:ring-ring',
               )}
-              aria-label="Selecionar pipeline"
+              aria-label={t('pipelineSelector')}
             >
               {pipelines.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -53,18 +55,22 @@ export function BoardHeader({
           )}
         </div>
         <p className="text-xs text-muted-foreground">
-          Inteligência Comercial Ativa · arraste cards entre etapas
+          {t('subtitle')}
         </p>
       </div>
 
       {/* Centro: métricas */}
       {summary && (
         <div className="flex items-center gap-6">
-          <Metric label="Total no funil" value={formatBRL(summary.total_value)} />
+          <Metric label={t('totalLabel')} value={formatBRL(summary.total_value)} />
           <Metric
-            label="Ponderado"
+            label={t('weightedLabel')}
             value={formatBRL(summary.weighted_value)}
-            hint={`${summary.total_deals} ${summary.total_deals === 1 ? 'deal' : 'deals'}`}
+            hint={
+              summary.total_deals === 1
+                ? t('dealHint', { count: summary.total_deals })
+                : t('dealsHint', { count: summary.total_deals })
+            }
             accent
           />
         </div>
@@ -77,23 +83,23 @@ export function BoardHeader({
           size="icon"
           onClick={onRefresh}
           disabled={loading}
-          aria-label="Recarregar"
-          title="Recarregar"
+          aria-label={t('reload')}
+          title={t('reload')}
         >
           <RefreshCw className={loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
         </Button>
-        <Button asChild variant="outline" size="icon" aria-label="Configurações">
-          <Link href="/funis/configuracoes" title="Configurações de pipeline">
+        <Button asChild variant="outline" size="icon" aria-label={t('settings')}>
+          <Link href="/funis/configuracoes" title={t('settingsTitle')}>
             <Settings className="h-4 w-4" />
           </Link>
         </Button>
         <Button variant="outline" onClick={onAnalyze} disabled={!summary}>
           <Sparkles className="mr-1.5 h-4 w-4" />
-          Análise IA
+          {t('analyze')}
         </Button>
         <Button onClick={onCreateDeal} disabled={!selectedPipelineId}>
           <Plus className="mr-1.5 h-4 w-4" />
-          Novo negócio
+          {t('newDeal')}
         </Button>
       </div>
     </header>

@@ -1,6 +1,7 @@
 'use client';
 
 import { Lightbulb, Loader2, Sparkles, Target } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import type { InterpretResult } from '@/lib/api/reports';
 
 interface InsightsPanelProps {
@@ -10,15 +11,16 @@ interface InsightsPanelProps {
 }
 
 export function InsightsPanel({ loading, result, error }: InsightsPanelProps) {
+  const t = useTranslations('relatorios');
   if (loading) {
     return (
       <section className="flex flex-col gap-2 rounded-xl border border-primary/30 bg-primary/5 p-5">
         <div className="flex items-center gap-2">
           <Loader2 className="h-4 w-4 animate-spin text-primary" />
-          <span className="text-sm font-semibold">Analisando dados...</span>
+          <span className="text-sm font-semibold">{t('insights.analyzing')}</span>
         </div>
         <p className="text-xs text-muted-foreground">
-          A IA está processando os números e gerando insights acionáveis.
+          {t('insights.analyzingHint')}
         </p>
       </section>
     );
@@ -42,7 +44,7 @@ export function InsightsPanel({ loading, result, error }: InsightsPanelProps) {
         </div>
         <div className="flex flex-1 flex-col gap-1">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">
-            Análise da IA
+            {t('insights.label')}
           </span>
           <p className="text-sm font-semibold leading-snug">{result.summary}</p>
         </div>
@@ -53,7 +55,7 @@ export function InsightsPanel({ loading, result, error }: InsightsPanelProps) {
           <div className="flex flex-col gap-2">
             <h3 className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-yellow-400">
               <Lightbulb className="h-3 w-3" />
-              Insights
+              {t('insights.insightsHeader')}
             </h3>
             <ul className="flex flex-col gap-1.5">
               {result.insights.map((s, i) => (
@@ -73,7 +75,7 @@ export function InsightsPanel({ loading, result, error }: InsightsPanelProps) {
           <div className="flex flex-col gap-2">
             <h3 className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-emerald-400">
               <Target className="h-3 w-3" />
-              Recomendações
+              {t('insights.recommendationsHeader')}
             </h3>
             <ul className="flex flex-col gap-1.5">
               {result.recommendations.map((s, i) => (

@@ -1,6 +1,7 @@
 'use client';
 
 import { AlertTriangle, Globe, Sparkles, X } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { AIFeedbackButtons } from '@/components/ai/ai-feedback-buttons';
 import { cn } from '@/lib/utils';
@@ -35,6 +36,7 @@ export function AISuggestionBar({
   onEdit,
   onIgnore,
 }: AISuggestionBarProps) {
+  const t = useTranslations('inbox.aiSuggestion');
   if (!suggestion) return null;
   const hasLiveSources = (liveSourcesUsed?.length ?? 0) > 0;
 
@@ -63,7 +65,7 @@ export function AISuggestionBar({
               isLowConfidence ? 'text-destructive' : 'text-primary',
             )}
           >
-            {isLowConfidence ? '⚠️ Sugestão IA — baixa confiança' : 'Sugestão IA'}
+            {isLowConfidence ? t('labelLowConfidence') : t('labelNormal')}
           </span>
           {confidence !== undefined && (
             <span
@@ -86,7 +88,7 @@ export function AISuggestionBar({
           <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px]">
             <span className="inline-flex items-center gap-1 rounded bg-emerald-500/15 px-1.5 py-0.5 font-medium text-emerald-700 dark:text-emerald-400">
               <Globe className="h-2.5 w-2.5" />
-              Dados em tempo real
+              {t('liveSourcesBadge')}
             </span>
             <span className="text-muted-foreground">
               {liveSourcesUsed!.map((s) => s.name).join(', ')}
@@ -95,7 +97,7 @@ export function AISuggestionBar({
         )}
         {isLowConfidence && (
           <p className="mt-0.5 text-[11px] text-destructive/80">
-            Revise com cuidado antes de enviar — uma tarefa foi criada pra você analisar.
+            {t('lowConfidenceHint')}
           </p>
         )}
       </div>
@@ -105,12 +107,12 @@ export function AISuggestionBar({
           variant={isLowConfidence ? 'outline' : 'default'}
           onClick={onUse}
         >
-          {isLowConfidence ? 'Enviar mesmo assim' : 'Usar'}
+          {isLowConfidence ? t('useLowConfidence') : t('useNormal')}
         </Button>
         <Button size="sm" variant="outline" onClick={onEdit}>
-          Editar
+          {t('edit')}
         </Button>
-        <Button size="icon" variant="ghost" onClick={onIgnore} aria-label="Ignorar">
+        <Button size="icon" variant="ghost" onClick={onIgnore} aria-label={t('ignoreAria')}>
           <X className="h-3.5 w-3.5" />
         </Button>
       </div>

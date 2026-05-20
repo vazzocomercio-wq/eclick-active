@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   closestCorners,
   DndContext,
@@ -48,6 +49,7 @@ interface PendingMove {
 }
 
 export default function FunisPage() {
+  const tPage = useTranslations('funis.page');
   // ── Pipelines (lista + seleção) ──
   const [pipelines, setPipelines] = useState<PipelineWithStages[]>([]);
   const [pipelinesLoading, setPipelinesLoading] = useState(true);
@@ -158,14 +160,14 @@ export default function FunisPage() {
     onDealMoved: (payload) => {
       // Não toasta as próprias ações — só de outros agentes
       if (payload.moved_by_user_id === currentUserIdRef.current) return;
-      const title = payload.deal_title ?? 'Negócio';
-      const stage = payload.to_stage_name ?? 'outra etapa';
+      const title = payload.deal_title ?? tPage('toasts.fallbackTitle');
+      const stage = payload.to_stage_name ?? tPage('toasts.fallbackStage');
       if (payload.closed_state === 'won') {
-        toast.success(`🏆 ${title} marcado como ganho!`);
+        toast.success(`🏆 ${title} ${tPage('toasts.wonSuffix')}`);
       } else if (payload.closed_state === 'lost') {
-        toast(`📉 ${title} marcado como perdido`);
+        toast(`📉 ${title} ${tPage('toasts.lostSuffix')}`);
       } else {
-        toast(`Alguém moveu "${title}" → ${stage}`);
+        toast(tPage('toasts.moveOther', { title, stage }));
       }
       // Reload otimista — a row já mudou no DB
       void refetch();
@@ -179,29 +181,32 @@ export default function FunisPage() {
       if (tags.includes('ai-concierge')) {
         // Concierge criou — sempre destaca, indicando o funil
         if (inOtherPipeline) {
-          toast.info(`🤖 IA criou lead em outro funil: ${payload.deal.title}`, {
-            description: `Funil: ${dealPipeline.name}`,
+          toast.info(`🤖 ${tPage('toasts.iaCreatedOtherFunnel', { title: payload.deal.title })}`, {
+            description: tPage('toasts.funnelLabel', { name: dealPipeline.name }),
             action: {
-              label: 'Abrir funil',
+              label: tPage('toasts.openFunnel'),
               onClick: () => setSelectedId(payload.deal.pipeline_id),
             },
             duration: 8000,
           });
         } else {
-          toast.info(`🤖 IA criou: ${payload.deal.title}`);
+          toast.info(`🤖 ${tPage('toasts.iaCreated', { title: payload.deal.title })}`);
         }
         void refetch();
       } else if (tags.includes('lead-automatico')) {
-        toast.info(`✨ Novo lead automático: ${payload.deal.title}`);
+        toast.info(`✨ ${tPage('toasts.newAutoLead', { title: payload.deal.title })}`);
         void refetch();
       } else if (inOtherPipeline) {
         // Deal manual em outro funil também merece toast discreto
-        toast.info(`Novo deal em "${dealPipeline.name}": ${payload.deal.title}`, {
-          action: {
-            label: 'Abrir funil',
-            onClick: () => setSelectedId(payload.deal.pipeline_id),
+        toast.info(
+          tPage('toasts.newDealOtherFunnel', { funnel: dealPipeline.name, title: payload.deal.title }),
+          {
+            action: {
+              label: tPage('toasts.openFunnel'),
+              onClick: () => setSelectedId(payload.deal.pipeline_id),
+            },
           },
-        });
+        );
       }
     },
   });
@@ -264,7 +269,7 @@ export default function FunisPage() {
           await dealsApi.reorder({ stage_id: sourceStage.id, deal_ids: newIds });
         } catch (err) {
           // Revert ao estado anterior via refetch (sem otimismo)
-          alertError('Falha ao reordenar — recarregando estado', err);
+          alertError(tPage('alerts.reorderFailed'), err);
           await refetch();
         }
         return;
@@ -289,10 +294,11 @@ export default function FunisPage() {
       try {
         await dealsApi.move(activeId, { stage_id: destStage.id, position: destIndex });
       } catch (err) {
-        alertError('Falha ao mover deal — recarregando estado', err);
+        alertError(tPage('alerts.moveFailed'), err);
         await refetch();
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [board, moveDealLocal, reorderInStageLocal, refetch],
   );
 
@@ -309,7 +315,7 @@ export default function FunisPage() {
         lost_reason: reason,
       });
     } catch (err) {
-      alertError('Falha ao mover pra Perdido — recarregando', err);
+      alertError(tPage('alerts.moveToLostFailed'), err);
       await refetch();
     }
   }
@@ -331,8 +337,8 @@ export default function FunisPage() {
           <AlertTriangle className="h-3.5 w-3.5" />
           <span>
             {pipelinesError?.status === 401 || boardError?.status === 401
-              ? 'Sessão expirada — faça login pra carregar o funil.'
-              : `Erro: ${(pipelinesError ?? boardError)?.message}`}
+              ? tPage('errors.sessionExpired')
+              : tPage('errors.generic', { message: (pipelinesError ?? boardError)?.message ?? '' })}
           </span>
         </div>
       )}
@@ -477,14 +483,14 @@ function BoardSkeleton() {
 }
 
 function EmptyPipelines() {
+  const t = useTranslations('funis.page.empty');
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 p-12 text-center">
       <Inbox className="h-10 w-10 text-muted-foreground" />
       <div>
-        <p className="text-base font-medium">Nenhum pipeline ainda</p>
+        <p className="text-base font-medium">{t('title')}</p>
         <p className="text-xs text-muted-foreground">
-          Crie um pipeline rodando <code className="text-xs">setup_new_organization()</code> no
-          Supabase ou via API.
+          {t('descriptionPre')} <code className="text-xs">{t('descriptionFn')}</code> {t('descriptionPost')}
         </p>
       </div>
       <Button asChild variant="outline">
@@ -493,7 +499,7 @@ function EmptyPipelines() {
           target="_blank"
           rel="noopener noreferrer"
         >
-          Ver função SQL
+          {t('seeSql')}
         </a>
       </Button>
     </div>

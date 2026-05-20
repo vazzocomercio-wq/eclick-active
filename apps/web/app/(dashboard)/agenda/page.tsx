@@ -12,6 +12,7 @@ import {
   Users,
   Video,
 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import type {
   AppointmentDetail,
@@ -36,9 +37,10 @@ const LOCATION_ICON: Record<AppointmentLocationType, typeof CalendarClock> = {
 // fim de noite) sumiam silenciosamente do grid — appointment existia no DB
 // mas computeBlockPosition retornava null pra startHour < minHour.
 const HOURS = Array.from({ length: 17 }, (_, i) => i + 6); // 6h–22h
-const DAYS_PT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
 
 export default function AgendaPage() {
+  const t = useTranslations('agenda');
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [appointments, setAppointments] = useState<AppointmentDetail[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,8 +65,8 @@ export default function AgendaPage() {
       );
       setAppointments(data);
     } catch (err) {
-      toast.error('Falha ao carregar agenda', {
-        description: err instanceof ApiError ? err.message : 'Erro',
+      toast.error(t('loadError'), {
+        description: err instanceof ApiError ? err.message : t('genericError'),
       });
     } finally {
       setLoading(false);
@@ -106,17 +108,17 @@ export default function AgendaPage() {
       <header className="flex flex-wrap items-center gap-3 border-b border-border px-6 py-4">
         <div className="flex items-center gap-2">
           <CalendarClock className="h-4 w-4 text-cyan-500" />
-          <h1 className="text-lg font-semibold">Agenda</h1>
+          <h1 className="text-lg font-semibold">{t('title')}</h1>
         </div>
 
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="sm" onClick={() => navigateWeek(-1)} aria-label="Semana anterior">
+          <Button variant="ghost" size="sm" onClick={() => navigateWeek(-1)} aria-label={t('prevWeek')}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <Button variant="outline" size="sm" onClick={goToToday}>
-            Hoje
+            {t('today')}
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => navigateWeek(1)} aria-label="Próxima semana">
+          <Button variant="ghost" size="sm" onClick={() => navigateWeek(1)} aria-label={t('nextWeek')}>
             <ChevronRight className="h-4 w-4" />
           </Button>
           <span className="ml-2 text-sm font-medium">
@@ -132,10 +134,10 @@ export default function AgendaPage() {
         <div className="ml-auto flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => void reload()} disabled={loading}>
             <RefreshCw className={cn('mr-1 h-3 w-3', loading && 'animate-spin')} />
-            Atualizar
+            {t('refresh')}
           </Button>
           <Button size="sm" onClick={() => setCreating({})}>
-            <Plus className="mr-1 h-3 w-3" /> Novo agendamento
+            <Plus className="mr-1 h-3 w-3" /> {t('newAppointment')}
           </Button>
         </div>
       </header>
@@ -157,7 +159,7 @@ export default function AgendaPage() {
                   )}
                 >
                   <span className="text-[10px] uppercase text-muted-foreground">
-                    {DAYS_PT[d.getDay()]}
+                    {t(`weekdaysShort.${WEEKDAY_KEYS[d.getDay()]}`)}
                   </span>
                   <span
                     className={cn(
@@ -250,7 +252,7 @@ export default function AgendaPage() {
                     borderLeftColor: color,
                     boxShadow: `inset 0 0 0 1px ${color}25`,
                   }}
-                  title={`${appt.title}${appt.contact?.name ? ` — ${appt.contact.name}` : ''}\n${startTime} – ${endTime}${appt.agent?.display_name ? `\nProfissional: ${appt.agent.display_name}` : ''}`}
+                  title={`${appt.title}${appt.contact?.name ? ` — ${appt.contact.name}` : ''}\n${startTime} – ${endTime}${appt.agent?.display_name ? `\n${t('professional')}: ${appt.agent.display_name}` : ''}`}
                 >
                   {isCompact ? (
                     // Compacto: 1 linha — hora + título inline
@@ -277,8 +279,8 @@ export default function AgendaPage() {
                         {appt.created_by_ai && (
                           <span
                             className="ml-auto text-[9px]"
-                            title="Agendado pela IA"
-                            aria-label="Agendado pela IA"
+                            title={t('aiAriaLabel')}
+                            aria-label={t('aiAriaLabel')}
                           >
                             🤖
                           </span>

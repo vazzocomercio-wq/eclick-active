@@ -1,5 +1,7 @@
 'use client';
 
+import { useMemo } from 'react';
+import { useTranslations } from 'next-intl';
 import type { TaskPriority, TaskStatus, TaskType } from '@eclick-active/shared';
 import { cn } from '@/lib/utils';
 
@@ -16,33 +18,6 @@ interface TaskFiltersProps {
   onChangeMine: (mine: boolean) => void;
 }
 
-const STATUS_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
-  { value: 'all', label: 'Todas' },
-  { value: 'pending', label: 'Pendentes' },
-  { value: 'in_progress', label: 'Em andamento' },
-  { value: 'overdue', label: 'Atrasadas' },
-  { value: 'completed', label: 'Concluídas' },
-];
-
-const PRIORITY_OPTIONS: Array<{ value: TaskPriority | null; label: string }> = [
-  { value: null, label: 'Todas' },
-  { value: 'low', label: 'Baixa' },
-  { value: 'normal', label: 'Normal' },
-  { value: 'high', label: 'Alta' },
-  { value: 'urgent', label: 'Urgente' },
-];
-
-const TYPE_OPTIONS: Array<{ value: TaskType | null; label: string }> = [
-  { value: null, label: 'Todos' },
-  { value: 'call', label: 'Ligação' },
-  { value: 'email', label: 'Email' },
-  { value: 'meeting', label: 'Reunião' },
-  { value: 'follow_up', label: 'Follow-up' },
-  { value: 'whatsapp', label: 'WhatsApp' },
-  { value: 'proposal', label: 'Proposta' },
-  { value: 'custom', label: 'Personalizado' },
-];
-
 export function TaskFilters({
   statusFilter,
   priorityFilter,
@@ -53,6 +28,44 @@ export function TaskFilters({
   onChangeType,
   onChangeMine,
 }: TaskFiltersProps) {
+  const t = useTranslations('tarefas.filters');
+
+  const STATUS_OPTIONS = useMemo<Array<{ value: StatusFilter; label: string }>>(
+    () => [
+      { value: 'all', label: t('status.all') },
+      { value: 'pending', label: t('status.pending') },
+      { value: 'in_progress', label: t('status.in_progress') },
+      { value: 'overdue', label: t('status.overdue') },
+      { value: 'completed', label: t('status.completed') },
+    ],
+    [t],
+  );
+
+  const PRIORITY_OPTIONS = useMemo<Array<{ value: TaskPriority | null; label: string }>>(
+    () => [
+      { value: null, label: t('priority.all') },
+      { value: 'low', label: t('priority.low') },
+      { value: 'normal', label: t('priority.normal') },
+      { value: 'high', label: t('priority.high') },
+      { value: 'urgent', label: t('priority.urgent') },
+    ],
+    [t],
+  );
+
+  const TYPE_OPTIONS = useMemo<Array<{ value: TaskType | null; label: string }>>(
+    () => [
+      { value: null, label: t('type.all') },
+      { value: 'call', label: t('type.call') },
+      { value: 'email', label: t('type.email') },
+      { value: 'meeting', label: t('type.meeting') },
+      { value: 'follow_up', label: t('type.follow_up') },
+      { value: 'whatsapp', label: t('type.whatsapp') },
+      { value: 'proposal', label: t('type.proposal') },
+      { value: 'custom', label: t('type.custom') },
+    ],
+    [t],
+  );
+
   return (
     <div className="flex flex-col gap-3">
       {/* Status row */}
@@ -77,13 +90,13 @@ export function TaskFilters({
       {/* Secondary filters row */}
       <div className="flex flex-wrap items-center gap-2">
         <FilterSelect
-          label="Prioridade"
+          label={t('priority.label')}
           value={priorityFilter}
           options={PRIORITY_OPTIONS}
           onChange={(v) => onChangePriority(v as TaskPriority | null)}
         />
         <FilterSelect
-          label="Tipo"
+          label={t('type.label')}
           value={typeFilter}
           options={TYPE_OPTIONS}
           onChange={(v) => onChangeType(v as TaskType | null)}
@@ -96,7 +109,7 @@ export function TaskFilters({
             onChange={(e) => onChangeMine(e.target.checked)}
             className="h-3.5 w-3.5 rounded border-input"
           />
-          <span className="font-medium">Só minhas</span>
+          <span className="font-medium">{t('onlyMine')}</span>
         </label>
       </div>
     </div>

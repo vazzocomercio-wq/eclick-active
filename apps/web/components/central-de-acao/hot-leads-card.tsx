@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { Flame, MessageCircle } from 'lucide-react';
 import type { HotLeadItem } from '@/lib/api/dashboard';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -14,11 +15,12 @@ interface HotLeadsCardProps {
 }
 
 export function HotLeadsCard({ items, loading }: HotLeadsCardProps) {
+  const t = useTranslations('centralAcao.hotLeads');
   return (
     <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-5">
       <header className="flex items-center gap-2">
         <Flame className="h-4 w-4 text-orange-400" />
-        <h2 className="text-sm font-semibold">Leads mais quentes</h2>
+        <h2 className="text-sm font-semibold">{t('title')}</h2>
       </header>
 
       {loading ? (
@@ -47,10 +49,11 @@ export function HotLeadsCard({ items, loading }: HotLeadsCardProps) {
 }
 
 function HotLeadRow({ item }: { item: HotLeadItem }) {
+  const t = useTranslations('centralAcao.hotLeads');
   const href = item.conversation_id
     ? `/conversas?conversation=${item.conversation_id}`
     : `/contatos/${item.id}`;
-  const displayName = item.name ?? 'Sem nome';
+  const displayName = item.name ?? t('noName');
 
   return (
     <Link
@@ -71,7 +74,7 @@ function HotLeadRow({ item }: { item: HotLeadItem }) {
           <TemperatureBadge temperature={item.temperature} className="shrink-0 text-[10px]" />
         </div>
         <span className="truncate text-xs text-muted-foreground">
-          {item.last_message_preview ?? 'Sem mensagens'}
+          {item.last_message_preview ?? t('noMessages')}
           {item.last_message_at && ` · ${formatRelativeTime(item.last_message_at)}`}
         </span>
       </div>
@@ -85,15 +88,16 @@ function HotLeadRow({ item }: { item: HotLeadItem }) {
 }
 
 function EmptyHotLeads() {
+  const t = useTranslations('centralAcao.hotLeads');
   return (
     <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border p-6 text-center">
       <Flame className="h-6 w-6 text-muted-foreground" />
-      <p className="text-xs font-medium">Nenhum lead quente ainda</p>
+      <p className="text-xs font-medium">{t('emptyTitle')}</p>
       <Link
         href="/conversas"
         className="text-[11px] font-medium text-primary hover:underline"
       >
-        Conecte seu WhatsApp →
+        {t('connectWhatsapp')}
       </Link>
     </div>
   );

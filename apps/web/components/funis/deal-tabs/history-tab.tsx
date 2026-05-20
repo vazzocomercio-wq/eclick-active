@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   ArrowRight,
   Calendar,
@@ -52,6 +53,7 @@ export function DealHistoryTab({
   pipeline,
   onActivityAdded,
 }: DealHistoryTabProps) {
+  const t = useTranslations('funis.deal.historyTab');
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -70,10 +72,10 @@ export function DealHistoryTab({
         description: text,
       });
       setNote('');
-      toast.success('Nota adicionada');
+      toast.success(t('noteAdded'));
       await onActivityAdded?.();
     } catch (err) {
-      toast.error('Falha ao adicionar nota', {
+      toast.error(t('noteFailed'), {
         description: err instanceof ApiError ? `${err.status}: ${err.message}` : String(err),
       });
     } finally {
@@ -95,20 +97,20 @@ export function DealHistoryTab({
         <CardContent className="flex flex-col gap-2 p-3">
           <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             <StickyNote className="h-3 w-3" />
-            Adicionar nota
+            {t('addNote')}
           </div>
           <Textarea
             value={note}
             onChange={(e) => setNote(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="O que aconteceu? Detalhes da última interação..."
+            placeholder={t('notePlaceholder')}
             rows={2}
             disabled={submitting}
             className="min-h-[60px] resize-none text-sm"
           />
           <div className="flex items-center justify-between">
             <span className="text-[10px] text-muted-foreground">
-              Ctrl+Enter envia
+              {t('ctrlEnterHint')}
             </span>
             <Button
               size="sm"
@@ -121,7 +123,7 @@ export function DealHistoryTab({
               ) : (
                 <Send className="mr-1.5 h-3 w-3" />
               )}
-              Salvar nota
+              {t('saveNote')}
             </Button>
           </div>
         </CardContent>
@@ -138,7 +140,7 @@ export function DealHistoryTab({
             </div>
           ) : activities.length === 0 ? (
             <div className="flex items-center justify-center py-8 text-xs text-muted-foreground">
-              Sem atividades registradas ainda.
+              {t('emptyList')}
             </div>
           ) : (
             <ol className="flex flex-col">
@@ -175,19 +177,6 @@ const ICON_MAP: Record<DealActivityType, typeof FileText> = {
   ai_insight: Sparkles,
 };
 
-const TITLE_MAP: Record<DealActivityType, string> = {
-  stage_changed: 'Mudança de etapa',
-  value_changed: 'Valor atualizado',
-  assigned: 'Atribuição alterada',
-  note_added: 'Nota interna',
-  task_created: 'Tarefa criada',
-  email_sent: 'Email enviado',
-  call_made: 'Ligação registrada',
-  meeting_scheduled: 'Reunião agendada',
-  proposal_sent: 'Proposta enviada',
-  ai_insight: 'Insight da IA',
-};
-
 interface ActivityRowProps {
   activity: DealActivity;
   stagesById: Map<string, { name: string; color: string }>;
@@ -195,8 +184,9 @@ interface ActivityRowProps {
 }
 
 function ActivityRow({ activity, stagesById, isLast }: ActivityRowProps) {
+  const t = useTranslations('funis.deal.historyTab');
   const Icon = ICON_MAP[activity.activity_type] ?? FileText;
-  const title = activity.title ?? TITLE_MAP[activity.activity_type];
+  const title = activity.title ?? t(`titles.${activity.activity_type}`);
   // `created_by IS NULL` indica origem sistema/IA (per shared types comment)
   const isAi = activity.activity_type === 'ai_insight' || activity.created_by === null;
 
@@ -222,7 +212,7 @@ function ActivityRow({ activity, stagesById, isLast }: ActivityRowProps) {
           {isAi && (
             <span className="inline-flex items-center gap-0.5 rounded-sm bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
               <Sparkles className="h-2.5 w-2.5" />
-              IA
+              {t('aiBadge')}
             </span>
           )}
           <span className="ml-auto text-[10px] text-muted-foreground">

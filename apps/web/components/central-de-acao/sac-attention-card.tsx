@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { Headphones, AlertTriangle, Clock, ShieldAlert, ChevronRight } from 'lucide-react';
 import { useSacDashboard } from '@/hooks/use-sac';
 import { cn } from '@/lib/utils';
@@ -11,6 +12,7 @@ import { cn } from '@/lib/utils';
  * quando algo precisa de ação. Click leva pro /sac.
  */
 export function SacAttentionCard() {
+  const t = useTranslations('centralAcao.sac');
   const { counts, loading } = useSacDashboard(60_000);
 
   const critical = counts?.critical ?? 0;
@@ -39,41 +41,39 @@ export function SacAttentionCard() {
               totalAlert > 0 ? 'text-red-500' : 'text-primary',
             )}
           />
-          <h2 className="text-sm font-semibold">SAC — Atenção imediata</h2>
+          <h2 className="text-sm font-semibold">{t('title')}</h2>
         </div>
         <ChevronRight className="h-4 w-4 text-muted-foreground" />
       </header>
 
       {loading && !counts ? (
-        <p className="text-xs text-muted-foreground">Carregando…</p>
+        <p className="text-xs text-muted-foreground">{t('loading')}</p>
       ) : !hasAlert ? (
-        <p className="text-xs text-muted-foreground">
-          Tudo sob controle 🎯 — sem tickets críticos, SLA dentro do prazo.
-        </p>
+        <p className="text-xs text-muted-foreground">{t('allClear')}</p>
       ) : (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <Metric
             icon={AlertTriangle}
-            label="Críticos"
+            label={t('critical')}
             value={critical}
             color="red"
             pulse={critical > 0}
           />
           <Metric
             icon={Clock}
-            label="SLA <1h"
+            label={t('slaDueSoon')}
             value={slaDue}
             color="amber"
           />
           <Metric
             icon={Clock}
-            label="SLA vencidos"
+            label={t('slaBreached')}
             value={slaBreached}
             color="red"
           />
           <Metric
             icon={ShieldAlert}
-            label="Risco rep."
+            label={t('reputationRisk')}
             value={reputation}
             color="red"
             pulse={reputation > 0}

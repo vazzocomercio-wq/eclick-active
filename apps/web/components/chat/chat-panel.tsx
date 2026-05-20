@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { MessageSquare, Sparkles } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import type { ConversationDetail } from '@eclick-active/shared';
 import { conversationsApi } from '@/lib/api/conversations';
 import { useChat } from '@/hooks/use-chat';
@@ -107,6 +108,7 @@ export function ChatPanel({
   onAction,
   className,
 }: ChatPanelProps) {
+  const t = useTranslations('chat.panel');
   // Default: header em full, sem header em compact (drawer já tem o seu)
   const headerVisible = showHeader ?? !compact;
 
@@ -305,7 +307,7 @@ export function ChatPanel({
       {typing.active && (
         <div className="flex items-center gap-2 border-t border-border bg-cyan-500/5 px-4 py-2 text-xs text-cyan-700 dark:text-cyan-300 animate-in fade-in">
           <Sparkles className="h-3.5 w-3.5 shrink-0" />
-          <span className="font-medium">{typing.personaName ?? 'IA'} está digitando</span>
+          <span className="font-medium">{typing.personaName ?? t('aiTypingFallback')} {t('aiTypingSuffix')}</span>
           <span className="inline-flex gap-0.5">
             <span className="h-1 w-1 animate-bounce rounded-full bg-cyan-500 [animation-delay:0ms]" />
             <span className="h-1 w-1 animate-bounce rounded-full bg-cyan-500 [animation-delay:150ms]" />
@@ -404,6 +406,7 @@ export function ChatPanel({
 }
 
 function EmptyChatState({ compact, className }: { compact: boolean; className?: string }) {
+  const t = useTranslations('chat.panel');
   if (compact) {
     return (
       <div
@@ -413,7 +416,7 @@ function EmptyChatState({ compact, className }: { compact: boolean; className?: 
         )}
       >
         <MessageSquare className="h-5 w-5" />
-        <p>Sem conversa carregada</p>
+        <p>{t('emptyCompact')}</p>
       </div>
     );
   }
@@ -427,9 +430,9 @@ function EmptyChatState({ compact, className }: { compact: boolean; className?: 
       <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-border bg-card">
         <MessageSquare className="h-8 w-8 text-muted-foreground" />
       </div>
-      <p className="text-base font-medium">Nenhuma conversa selecionada</p>
+      <p className="text-base font-medium">{t('emptyTitle')}</p>
       <p className="max-w-md text-sm text-muted-foreground">
-        Escolha uma conversa na lista ao lado pra começar a responder.
+        {t('emptySubtitle')}
       </p>
     </div>
   );

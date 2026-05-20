@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { ArrowRight, Search } from 'lucide-react';
 import {
   Dialog,
@@ -30,6 +31,7 @@ export function BoardSearchPalette({
   deals,
   onSelect,
 }: BoardSearchPaletteProps) {
+  const t = useTranslations('funis.board.search');
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -69,7 +71,7 @@ export function BoardSearchPalette({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl gap-0 overflow-hidden p-0">
-        <DialogTitle className="sr-only">Buscar negócio</DialogTitle>
+        <DialogTitle className="sr-only">{t('title')}</DialogTitle>
         <div className="flex items-center gap-2 border-b border-border px-4">
           <Search className="h-4 w-4 text-muted-foreground" />
           <input
@@ -77,22 +79,22 @@ export function BoardSearchPalette({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Buscar deal por título, contato ou stage..."
+            placeholder={t('placeholder')}
             className="h-12 flex-1 bg-transparent text-sm focus:outline-none"
           />
           <kbd className="hidden rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground sm:inline-block">
-            ESC
+            {t('esc')}
           </kbd>
         </div>
 
         <div className="max-h-80 overflow-y-auto">
           {deals.length === 0 ? (
             <div className="px-4 py-8 text-center text-xs text-muted-foreground">
-              Nenhum deal no funil atual.
+              {t('emptyFunnel')}
             </div>
           ) : results.length === 0 ? (
             <div className="px-4 py-8 text-center text-xs text-muted-foreground">
-              Nenhum resultado para &quot;{query}&quot;.
+              {t('noResults', { query })}
             </div>
           ) : (
             <ul>
@@ -117,7 +119,7 @@ export function BoardSearchPalette({
                     <div className="flex min-w-0 flex-1 flex-col">
                       <span className="truncate text-sm font-medium">{d.title}</span>
                       <span className="truncate text-[11px] text-muted-foreground">
-                        {d.contact_name ?? 'Sem contato'} · {d.stage_name}
+                        {d.contact_name ?? t('noContact')} · {d.stage_name}
                       </span>
                     </div>
                     {d.value > 0 && (
@@ -134,8 +136,8 @@ export function BoardSearchPalette({
         </div>
 
         <div className="flex items-center justify-between border-t border-border bg-muted/20 px-4 py-2 text-[10px] text-muted-foreground">
-          <span>↑↓ navegar · Enter selecionar</span>
-          <span>{results.length} de {deals.length}</span>
+          <span>{t('footerHint')}</span>
+          <span>{t('footerCount', { shown: results.length, total: deals.length })}</span>
         </div>
       </DialogContent>
     </Dialog>

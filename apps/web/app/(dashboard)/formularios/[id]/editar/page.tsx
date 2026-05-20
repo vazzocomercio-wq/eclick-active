@@ -1,6 +1,7 @@
 'use client';
 
 import { use, useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -52,24 +53,24 @@ import { cn } from '@/lib/utils';
 
 type Tab = 'fields' | 'settings' | 'branding';
 
-const NEW_FIELD_TYPES: { type: FormFieldType; label: string }[] = [
-  { type: 'text', label: 'Texto curto' },
-  { type: 'textarea', label: 'Texto longo' },
-  { type: 'email', label: 'Email' },
-  { type: 'phone', label: 'Telefone' },
-  { type: 'select', label: 'Dropdown' },
-  { type: 'radio', label: 'Radio' },
-  { type: 'checkbox', label: 'Checkbox' },
-  { type: 'date', label: 'Data' },
-  { type: 'number', label: 'Número' },
-  { type: 'currency', label: 'Valor (R$)' },
-  { type: 'cpf_cnpj', label: 'CPF/CNPJ' },
-  { type: 'address', label: 'Endereço' },
-  { type: 'url', label: 'URL' },
-  { type: 'file_upload', label: 'Upload' },
-  { type: 'heading', label: 'Título' },
-  { type: 'paragraph', label: 'Parágrafo' },
-  { type: 'divider', label: 'Divisor' },
+const NEW_FIELD_TYPES: FormFieldType[] = [
+  'text',
+  'textarea',
+  'email',
+  'phone',
+  'select',
+  'radio',
+  'checkbox',
+  'date',
+  'number',
+  'currency',
+  'cpf_cnpj',
+  'address',
+  'url',
+  'file_upload',
+  'heading',
+  'paragraph',
+  'divider',
 ];
 
 export default function EditFormPage({
@@ -77,6 +78,7 @@ export default function EditFormPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const t = useTranslations('formularios.editor');
   const { id } = use(params);
   const router = useRouter();
 
@@ -115,11 +117,12 @@ export default function EditFormPage({
           ? `${err.status}: ${err.message}`
           : err instanceof Error
             ? err.message
-            : 'Erro ao carregar',
+            : t('loadError'),
       );
     } finally {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   useEffect(() => {
@@ -152,7 +155,7 @@ export default function EditFormPage({
           ? crypto.randomUUID()
           : `field_${Date.now()}_${Math.random().toString(36).slice(2)}`,
       type,
-      label: defaultLabel(type),
+      label: defaultLabel(type, (key) => t(`defaultLabels.${key}`)),
       required: type === 'phone' || type === 'email',
       position: form.fields.length,
       width: 'full',
@@ -201,7 +204,7 @@ export default function EditFormPage({
       });
       setForm(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao salvar');
+      setError(err instanceof Error ? err.message : t('saveError'));
     } finally {
       setSaving(false);
     }
@@ -216,7 +219,7 @@ export default function EditFormPage({
           : await formsApi.publish(form.id);
       setForm(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao atualizar status');
+      setError(err instanceof Error ? err.message : t('statusError'));
     }
   }
 
@@ -231,7 +234,7 @@ export default function EditFormPage({
   if (!form) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-        Formulário não encontrado.
+        {t('notFound')}
       </div>
     );
   }
@@ -249,13 +252,13 @@ export default function EditFormPage({
             onClick={() => router.push('/formularios')}
           >
             <ArrowLeft className="h-3.5 w-3.5" />
-            Voltar
+            {t('back')}
           </Button>
           <Input
             value={form.name}
             onChange={(e) => update({ name: e.target.value })}
             className="h-8 w-72 font-semibold"
-            placeholder="Nome do formulário"
+            placeholder={t('namePlaceholder')}
           />
           <span
             className={cn(
@@ -273,7 +276,7 @@ export default function EditFormPage({
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={togglePublish}>
             <Eye className="h-3.5 w-3.5" />
-            {form.status === 'active' ? 'Pausar' : 'Publicar'}
+            {form.status === 'active' ? t('pause') : t('publish')}
           </Button>
           {form.status === 'active' && (
             <Button
@@ -282,7 +285,7 @@ export default function EditFormPage({
               onClick={() => setPublishOpen(true)}
             >
               <Share2 className="h-3.5 w-3.5" />
-              Compartilhar
+              {t('share')}
             </Button>
           )}
           <Button size="sm" onClick={save} disabled={saving}>
@@ -291,7 +294,7 @@ export default function EditFormPage({
             ) : (
               <Save className="h-3.5 w-3.5" />
             )}
-            Salvar
+            {t('save')}
           </Button>
         </div>
       </header>
@@ -313,25 +316,25 @@ export default function EditFormPage({
             <TabsList className="px-4">
               <TabsTrigger value="fields">
                 <SlidersHorizontal className="h-3 w-3" />
-                Campos
+                {t('tabs.fields')}
               </TabsTrigger>
               <TabsTrigger value="settings">
                 <Settings className="h-3 w-3" />
-                Configurações
+                {t('tabs.settings')}
               </TabsTrigger>
               <TabsTrigger value="branding">
                 <Palette className="h-3 w-3" />
-                Aparência
+                {t('tabs.branding')}
               </TabsTrigger>
             </TabsList>
 
             <TabsContent value="fields" className="overflow-y-auto p-4">
               <div className="mb-3">
                 <Label className="text-[10px] uppercase text-muted-foreground">
-                  Slug (URL pública)
+                  {t('slugLabel')}
                 </Label>
                 <div className="flex items-center gap-1 text-sm">
-                  <span className="text-muted-foreground">/f/</span>
+                  <span className="text-muted-foreground">{t('slugPrefix')}</span>
                   <Input
                     value={form.slug}
                     onChange={(e) =>
@@ -343,41 +346,41 @@ export default function EditFormPage({
                       })
                     }
                     className="h-8 max-w-xs"
-                    placeholder="meu-formulario"
+                    placeholder={t('slugPlaceholder')}
                   />
                 </div>
               </div>
 
               <div className="mb-3">
                 <Label className="text-[10px] uppercase text-muted-foreground">
-                  Descrição
+                  {t('descriptionLabel')}
                 </Label>
                 <Input
                   value={form.description ?? ''}
                   onChange={(e) => update({ description: e.target.value })}
                   className="h-8"
-                  placeholder="Mostrada no topo da página pública"
+                  placeholder={t('descriptionPlaceholder')}
                 />
               </div>
 
               <div className="mb-3 flex flex-wrap gap-1">
-                {NEW_FIELD_TYPES.map((t) => (
+                {NEW_FIELD_TYPES.map((ftype) => (
                   <Button
-                    key={t.type}
+                    key={ftype}
                     variant="outline"
                     size="sm"
                     className="h-7 text-xs"
-                    onClick={() => addField(t.type)}
+                    onClick={() => addField(ftype)}
                   >
                     <Plus className="h-3 w-3" />
-                    {t.label}
+                    {t(`newFieldTypes.${ftype}`)}
                   </Button>
                 ))}
               </div>
 
               {sortedFields.length === 0 ? (
                 <div className="rounded-md border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-                  Nenhum campo ainda. Clique nos botões acima para adicionar.
+                  {t('emptyFields')}
                 </div>
               ) : (
                 <DndContext
@@ -427,7 +430,7 @@ export default function EditFormPage({
         {/* Right: Preview */}
         <div className="overflow-y-auto bg-muted/30 p-6">
           <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">
-            Preview
+            {t('previewLabel')}
           </p>
           <FormPreview
             fields={form.fields}
@@ -448,7 +451,7 @@ export default function EditFormPage({
 
       {/* Hint pra mobile */}
       <div className="lg:hidden border-t border-border bg-muted/30 px-4 py-2 text-center text-xs text-muted-foreground">
-        Preview disponível em telas maiores. Editar e salvar funciona normalmente.
+        {t('mobileHint')}
       </div>
 
       {/* Hidden preview link for mobile */}
@@ -456,34 +459,37 @@ export default function EditFormPage({
 
       {/* Bottom action bar links */}
       <div className="hidden">
-        <Link href="/formularios">Voltar</Link>
+        <Link href="/formularios">{t('backLink')}</Link>
       </div>
     </div>
   );
 }
 
-function defaultLabel(type: FormFieldType): string {
-  const map: Record<FormFieldType, string> = {
-    text: 'Texto',
-    textarea: 'Mensagem',
-    email: 'Email',
-    phone: 'WhatsApp',
-    number: 'Número',
-    currency: 'Valor',
-    date: 'Data',
-    select: 'Selecione uma opção',
-    multi_select: 'Selecione (múltiplas)',
-    radio: 'Escolha uma opção',
-    checkbox: 'Marque o que se aplica',
-    url: 'Site',
-    cpf_cnpj: 'CPF / CNPJ',
-    address: 'Endereço',
-    file_upload: 'Anexo',
-    heading: 'Título da seção',
-    divider: '',
-    paragraph: 'Texto explicativo',
+function defaultLabel(type: FormFieldType, tr: (key: string) => string): string {
+  // Mapa de chaves do fragmento por tipo — fallback retornado por `tr('fallback')`.
+  const KEYS: Record<FormFieldType, string> = {
+    text: 'text',
+    textarea: 'textarea',
+    email: 'email',
+    phone: 'phone',
+    number: 'number',
+    currency: 'currency',
+    date: 'date',
+    select: 'select',
+    multi_select: 'multi_select',
+    radio: 'radio',
+    checkbox: 'checkbox',
+    url: 'url',
+    cpf_cnpj: 'cpf_cnpj',
+    address: 'address',
+    file_upload: 'file_upload',
+    heading: 'heading',
+    divider: 'divider',
+    paragraph: 'paragraph',
   };
-  return map[type] ?? 'Campo';
+  const key = KEYS[type];
+  if (!key) return tr('fallback');
+  return tr(key);
 }
 
 // ────────────────────────────────────────────────────────────
@@ -505,6 +511,7 @@ function SettingsPanel({
   stages: { id: string; name: string }[];
   onChange: (next: FormSettings) => void;
 }) {
+  const t = useTranslations('formularios.settings');
   function patch(p: Partial<FormSettings>) {
     onChange({ ...settings, ...p });
   }
@@ -512,11 +519,11 @@ function SettingsPanel({
   return (
     <div className="space-y-5 max-w-xl">
       <section>
-        <h3 className="mb-2 text-sm font-semibold">Pipeline & Deal</h3>
+        <h3 className="mb-2 text-sm font-semibold">{t('sections.pipeline')}</h3>
         <div className="space-y-2">
           <div>
             <Label className="text-[10px] uppercase text-muted-foreground">
-              Pipeline
+              {t('pipelineLabel')}
             </Label>
             <select
               value={settings.pipeline_id ?? ''}
@@ -528,7 +535,7 @@ function SettingsPanel({
               }
               className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
             >
-              <option value="">— Padrão da org —</option>
+              <option value="">{t('pipelineDefault')}</option>
               {pipelines.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -539,7 +546,7 @@ function SettingsPanel({
           {settings.pipeline_id && (
             <div>
               <Label className="text-[10px] uppercase text-muted-foreground">
-                Stage inicial
+                {t('stageLabel')}
               </Label>
               <select
                 value={settings.stage_id ?? ''}
@@ -548,7 +555,7 @@ function SettingsPanel({
                 }
                 className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
               >
-                <option value="">— Primeiro stage —</option>
+                <option value="">{t('stageDefault')}</option>
                 {stages.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
@@ -559,19 +566,18 @@ function SettingsPanel({
           )}
           <div>
             <Label className="text-[10px] uppercase text-muted-foreground">
-              Título do deal (template)
+              {t('dealTitleLabel')}
             </Label>
             <Input
               value={settings.deal_title_template ?? ''}
               onChange={(e) =>
                 patch({ deal_title_template: e.target.value })
               }
-              placeholder="Ex: Lead {name} — {company}"
+              placeholder={t('dealTitlePlaceholder', { placeholderName: '{name}', placeholderCompany: '{company}' })}
               className="h-9"
             />
             <p className="mt-1 text-[10px] text-muted-foreground">
-              Placeholders: <code>{'{name}'}</code>, <code>{'{company}'}</code>.
-              Default: &quot;Lead via formulário — &lt;nome&gt;&quot;.
+              {t('dealTitleHintPre')} <code>{t('dealTitlePh1')}</code>, <code>{t('dealTitlePh2')}</code>{t('dealTitleHintPost')}
             </p>
           </div>
           <label className="flex items-center gap-2 text-sm">
@@ -582,13 +588,13 @@ function SettingsPanel({
                 patch({ auto_create_deal: e.target.checked })
               }
             />
-            Criar deal automaticamente em cada submissão
+            {t('autoCreateDeal')}
           </label>
         </div>
       </section>
 
       <section>
-        <h3 className="mb-2 text-sm font-semibold">Atribuição</h3>
+        <h3 className="mb-2 text-sm font-semibold">{t('sections.assignment')}</h3>
         <div className="space-y-2">
           <select
             value={settings.assignment_rule ?? 'round_robin'}
@@ -602,9 +608,9 @@ function SettingsPanel({
             }
             className="h-9 w-full max-w-xs rounded-md border border-border bg-background px-2 text-sm"
           >
-            <option value="round_robin">Round-robin (rotativo)</option>
-            <option value="specific">Membro específico</option>
-            <option value="none">Sem atribuir</option>
+            <option value="round_robin">{t('assignmentOptions.round_robin')}</option>
+            <option value="specific">{t('assignmentOptions.specific')}</option>
+            <option value="none">{t('assignmentOptions.none')}</option>
           </select>
           {settings.assignment_rule === 'specific' && (
             <select
@@ -614,7 +620,7 @@ function SettingsPanel({
               }
               className="h-9 w-full max-w-xs rounded-md border border-border bg-background px-2 text-sm"
             >
-              <option value="">— Selecione —</option>
+              <option value="">{t('selectMember')}</option>
               {members.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.display_name ?? m.email ?? m.id.slice(0, 8)}
@@ -626,7 +632,7 @@ function SettingsPanel({
       </section>
 
       <section>
-        <h3 className="mb-2 text-sm font-semibold">Mensagem de boas-vindas</h3>
+        <h3 className="mb-2 text-sm font-semibold">{t('sections.welcome')}</h3>
         <div className="space-y-2">
           <select
             value={settings.welcome_channel_id ?? ''}
@@ -635,7 +641,7 @@ function SettingsPanel({
             }
             className="h-9 w-full max-w-xs rounded-md border border-border bg-background px-2 text-sm"
           >
-            <option value="">— Não enviar —</option>
+            <option value="">{t('welcomeChannelEmpty')}</option>
             {channels
               .filter((c) => c.status === 'active')
               .map((c) => (
@@ -648,17 +654,17 @@ function SettingsPanel({
             value={settings.welcome_message ?? ''}
             onChange={(e) => patch({ welcome_message: e.target.value })}
             rows={3}
-            placeholder="Olá {name}, recebemos seu cadastro! Em breve um especialista vai falar com você."
+            placeholder={t('welcomePlaceholder', { placeholderName: '{name}' })}
             className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
           />
           <p className="text-[10px] text-muted-foreground">
-            Use <code>{'{name}'}</code> e <code>{'{company}'}</code>.
+            {t('welcomeHintPre')} <code>{t('welcomePh1')}</code> {t('welcomeConnector')} <code>{t('welcomePh2')}</code>{t('welcomeHintPost')}
           </p>
         </div>
       </section>
 
       <section>
-        <h3 className="mb-2 text-sm font-semibold">Tags automáticas</h3>
+        <h3 className="mb-2 text-sm font-semibold">{t('sections.autoTags')}</h3>
         <Input
           value={(settings.auto_tags ?? []).join(', ')}
           onChange={(e) =>
@@ -669,33 +675,33 @@ function SettingsPanel({
                 .filter(Boolean),
             })
           }
-          placeholder="lead-quente, formulario, web"
+          placeholder={t('autoTagsPlaceholder')}
           className="h-9"
         />
       </section>
 
       <section>
-        <h3 className="mb-2 text-sm font-semibold">Após envio</h3>
+        <h3 className="mb-2 text-sm font-semibold">{t('sections.afterSubmit')}</h3>
         <div className="space-y-2">
           <div>
             <Label className="text-[10px] uppercase text-muted-foreground">
-              Mensagem de sucesso
+              {t('successMessageLabel')}
             </Label>
             <Input
               value={settings.success_message ?? ''}
               onChange={(e) => patch({ success_message: e.target.value })}
-              placeholder="Recebemos seus dados! Em breve entraremos em contato."
+              placeholder={t('successMessagePlaceholder')}
               className="h-9"
             />
           </div>
           <div>
             <Label className="text-[10px] uppercase text-muted-foreground">
-              Redirecionar para URL (opcional)
+              {t('redirectLabel')}
             </Label>
             <Input
               value={settings.redirect_url ?? ''}
               onChange={(e) => patch({ redirect_url: e.target.value })}
-              placeholder="https://meusite.com/obrigado"
+              placeholder={t('redirectPlaceholder')}
               className="h-9"
             />
           </div>
@@ -703,7 +709,7 @@ function SettingsPanel({
       </section>
 
       <section>
-        <h3 className="mb-2 text-sm font-semibold">Notificações</h3>
+        <h3 className="mb-2 text-sm font-semibold">{t('sections.notifications')}</h3>
         <div className="space-y-2">
           <Input
             value={settings.notifications?.email ?? ''}
@@ -715,7 +721,7 @@ function SettingsPanel({
                 },
               })
             }
-            placeholder="Email pra avisar (opcional)"
+            placeholder={t('notificationsEmailPlaceholder')}
             className="h-9"
             type="email"
           />
@@ -729,7 +735,7 @@ function SettingsPanel({
                 },
               })
             }
-            placeholder="Webhook URL (opcional)"
+            placeholder={t('notificationsWebhookPlaceholder')}
             className="h-9"
           />
         </div>
@@ -749,6 +755,7 @@ function BrandingPanel({
   branding: FormBranding;
   onChange: (next: FormBranding) => void;
 }) {
+  const t = useTranslations('formularios.branding');
   function patch(p: Partial<FormBranding>) {
     onChange({ ...branding, ...p });
   }
@@ -757,12 +764,12 @@ function BrandingPanel({
     <div className="space-y-4 max-w-xl">
       <div>
         <Label className="text-[10px] uppercase text-muted-foreground">
-          URL do logo
+          {t('logoUrl')}
         </Label>
         <Input
           value={branding.logo_url ?? ''}
           onChange={(e) => patch({ logo_url: e.target.value })}
-          placeholder="https://..."
+          placeholder={t('logoPlaceholder')}
           className="h-9"
         />
       </div>
@@ -770,7 +777,7 @@ function BrandingPanel({
       <div className="grid grid-cols-2 gap-3">
         <div>
           <Label className="text-[10px] uppercase text-muted-foreground">
-            Cor primária
+            {t('primaryColor')}
           </Label>
           <div className="flex items-center gap-2">
             <input
@@ -788,7 +795,7 @@ function BrandingPanel({
         </div>
         <div>
           <Label className="text-[10px] uppercase text-muted-foreground">
-            Cor de fundo
+            {t('backgroundColor')}
           </Label>
           <div className="flex items-center gap-2">
             <input
@@ -800,7 +807,7 @@ function BrandingPanel({
             <Input
               value={branding.background_color ?? ''}
               onChange={(e) => patch({ background_color: e.target.value })}
-              placeholder="auto"
+              placeholder={t('backgroundPlaceholder')}
               className="h-9 flex-1 font-mono text-xs"
             />
           </div>
@@ -809,19 +816,19 @@ function BrandingPanel({
 
       <div>
         <Label className="text-[10px] uppercase text-muted-foreground">
-          Família tipográfica (CSS font-family)
+          {t('fontFamily')}
         </Label>
         <Input
           value={branding.font_family ?? ''}
           onChange={(e) => patch({ font_family: e.target.value })}
-          placeholder="Inter, system-ui, sans-serif"
+          placeholder={t('fontPlaceholder')}
           className="h-9"
         />
       </div>
 
       <div>
         <Label className="text-[10px] uppercase text-muted-foreground">
-          Texto de cabeçalho (opcional)
+          {t('headerText')}
         </Label>
         <Input
           value={branding.header_text ?? ''}
@@ -832,7 +839,7 @@ function BrandingPanel({
 
       <div>
         <Label className="text-[10px] uppercase text-muted-foreground">
-          Texto de rodapé (opcional)
+          {t('footerText')}
         </Label>
         <Input
           value={branding.footer_text ?? ''}
@@ -847,7 +854,7 @@ function BrandingPanel({
           checked={branding.show_powered_by !== false}
           onChange={(e) => patch({ show_powered_by: e.target.checked })}
         />
-        Mostrar &ldquo;Powered by e-Click Active&rdquo;
+        {t('showPoweredBy')}
       </label>
     </div>
   );

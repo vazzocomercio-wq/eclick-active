@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import {
   Archive,
@@ -25,6 +26,7 @@ import { useConfirm } from '@/components/ui/confirm-provider';
 import { cn } from '@/lib/utils';
 
 export default function PipelineSettingsPage() {
+  const t = useTranslations('funis.config');
   const [pipelines, setPipelines] = useState<PipelineWithStages[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,11 +49,12 @@ export default function PipelineSettingsPage() {
           ? `${err.status}: ${err.message}`
           : err instanceof Error
             ? err.message
-            : 'Erro ao carregar pipelines',
+            : t('errors.load'),
       );
     } finally {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -60,18 +63,18 @@ export default function PipelineSettingsPage() {
 
   async function handleArchive(p: PipelineWithStages) {
     const ok = await confirm({
-      title: `Arquivar "${p.name}"?`,
-      description: 'Não aparece no board, mas todos os dados ficam preservados. Pode restaurar depois.',
-      confirmLabel: 'Arquivar',
+      title: t('archive.confirmTitle', { name: p.name }),
+      description: t('archive.confirmDescription'),
+      confirmLabel: t('archive.confirmLabel'),
       icon: Archive,
     });
     if (!ok) return;
     try {
       await pipelinesApi.archive(p.id);
-      toast.success('Pipeline arquivado');
+      toast.success(t('archive.success'));
       await reload();
     } catch (err) {
-      toast.error('Falha ao arquivar', {
+      toast.error(t('archive.failed'), {
         description: err instanceof ApiError ? err.message : String(err),
       });
     }
@@ -80,10 +83,10 @@ export default function PipelineSettingsPage() {
   async function handleRestore(p: PipelineWithStages) {
     try {
       await pipelinesApi.restore(p.id);
-      toast.success('Pipeline restaurado');
+      toast.success(t('archive.restoreSuccess'));
       await reload();
     } catch (err) {
-      toast.error('Falha ao restaurar', {
+      toast.error(t('archive.restoreFailed'), {
         description: err instanceof ApiError ? err.message : String(err),
       });
     }
@@ -91,10 +94,10 @@ export default function PipelineSettingsPage() {
 
   async function handleDeletePipeline(id: string) {
     const ok = await confirm({
-      title: 'Excluir esse pipeline?',
-      description: 'Essa ação é irreversível e remove todos os deals associados.',
+      title: t('delete.confirmTitle'),
+      description: t('delete.confirmDescription'),
       variant: 'destructive',
-      confirmLabel: 'Excluir',
+      confirmLabel: t('delete.confirmLabel'),
       icon: Trash2,
     });
     if (!ok) return;
@@ -108,7 +111,7 @@ export default function PipelineSettingsPage() {
           ? `${err.status}: ${err.message}`
           : err instanceof Error
             ? err.message
-            : 'Erro ao excluir pipeline',
+            : t('errors.remove'),
       );
     }
   }
@@ -125,7 +128,7 @@ export default function PipelineSettingsPage() {
           ? err.message
           : err instanceof Error
             ? err.message
-            : 'Erro ao renomear',
+            : t('errors.rename'),
       );
     }
   }
@@ -139,20 +142,20 @@ export default function PipelineSettingsPage() {
             className="mb-1 inline-flex items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
           >
             <ArrowLeft className="h-3 w-3" />
-            Voltar ao funil
+            {t('backLink')}
           </Link>
           <div className="flex items-center gap-2">
             <Settings className="h-4 w-4 text-primary" />
-            <h1 className="text-lg font-semibold">Configurações de Pipelines</h1>
+            <h1 className="text-lg font-semibold">{t('title')}</h1>
           </div>
           <p className="text-xs text-muted-foreground">
-            Gerencie pipelines, etapas, cores, probabilidade e SLA.
+            {t('subtitle')}
           </p>
         </div>
 
         <Button size="sm" onClick={() => setNewDialogOpen(true)}>
           <Plus className="mr-2 h-3.5 w-3.5" />
-          Novo pipeline
+          {t('newPipeline')}
         </Button>
       </header>
 
@@ -217,6 +220,7 @@ function PipelineCard({
   onArchive: () => void;
   onRestore: () => void;
 }) {
+  const t = useTranslations('funis.config.card');
   const [editingName, setEditingName] = useState(false);
   const [name, setName] = useState(pipeline.name);
 
@@ -271,38 +275,43 @@ function PipelineCard({
               {isArchived && (
                 <span className="ml-2 inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                   <Archive className="h-2.5 w-2.5" />
-                  Arquivado
+                  {t('archivedBadge')}
                 </span>
               )}
             </button>
           )}
           <span className="text-xs text-muted-foreground">
-            {pipeline.stages.length} etapa{pipeline.stages.length === 1 ? '' : 's'} ·{' '}
-            {totalDeals} deal{totalDeals === 1 ? '' : 's'}
-            {pipeline.is_default && ' · padrão'}
+            {pipeline.stages.length === 1
+              ? t('stagesOne', { count: pipeline.stages.length })
+              : t('stagesMany', { count: pipeline.stages.length })}{' '}
+            ·{' '}
+            {totalDeals === 1
+              ? t('dealsOne', { count: totalDeals })
+              : t('dealsMany', { count: totalDeals })}
+            {pipeline.is_default && ` · ${t('defaultBadge')}`}
           </span>
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
-          <Button variant="ghost" size="sm" disabled title="Em breve">
+          <Button variant="ghost" size="sm" disabled title={t('duplicateSoon')}>
             <Copy className="mr-1 h-3.5 w-3.5" />
-            Duplicar
+            {t('duplicate')}
           </Button>
           <Button variant="outline" size="sm" onClick={onConfigure}>
             <Settings className="mr-1 h-3.5 w-3.5" />
-            Configurar etapas
+            {t('configureStages')}
           </Button>
           {isArchived ? (
             <Button variant="outline" size="sm" onClick={onRestore}>
               <ArchiveRestore className="mr-1 h-3.5 w-3.5" />
-              Restaurar
+              {t('restore')}
             </Button>
           ) : (
             <Button
               variant="ghost"
               size="sm"
               onClick={onArchive}
-              title="Arquivar pipeline"
+              title={t('archiveTitle')}
             >
               <Archive className="h-3.5 w-3.5" />
             </Button>
@@ -327,7 +336,7 @@ function PipelineCard({
               'inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-[11px]',
               (s.is_won || s.is_lost) && 'opacity-60',
             )}
-            title={`${s.probability}% · ${s.sla_hours ? `SLA ${s.sla_hours}h` : 'sem SLA'}`}
+            title={`${s.probability}% · ${s.sla_hours ? t('tooltipSlaSome', { hours: s.sla_hours }) : t('tooltipNoSla')}`}
           >
             <span className="h-2 w-2 rounded-full" style={{ backgroundColor: s.color }} />
             {s.name}
@@ -342,20 +351,21 @@ function PipelineCard({
 }
 
 function EmptyState({ onCreate }: { onCreate: () => void }) {
+  const t = useTranslations('funis.config.empty');
   return (
     <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-card/50 p-12 text-center">
       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
         <Settings className="h-6 w-6" />
       </div>
       <div className="flex flex-col gap-1">
-        <p className="text-sm font-medium">Nenhum pipeline configurado</p>
+        <p className="text-sm font-medium">{t('title')}</p>
         <p className="text-xs text-muted-foreground">
-          Crie seu primeiro pipeline para começar a organizar oportunidades.
+          {t('description')}
         </p>
       </div>
       <Button size="sm" onClick={onCreate}>
         <Plus className="mr-2 h-3.5 w-3.5" />
-        Criar pipeline
+        {t('create')}
       </Button>
     </div>
   );

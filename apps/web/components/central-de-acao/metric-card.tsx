@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CountUp } from './count-up';
@@ -28,6 +29,7 @@ export function MetricCard({
   href,
   loading,
 }: MetricCardProps) {
+  const t = useTranslations('centralAcao.metric');
   const urgent =
     urgentThreshold !== undefined && value > urgentThreshold && !loading;
 
@@ -65,7 +67,7 @@ export function MetricCard({
         {urgent && (
           <span className="mb-1 inline-flex items-center rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-semibold text-red-400">
             <span className="mr-1 h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />
-            urgente
+            {t('urgent')}
           </span>
         )}
       </div>

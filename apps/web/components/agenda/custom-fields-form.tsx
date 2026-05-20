@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import type { AppointmentCustomField } from '@eclick-active/shared';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -26,6 +27,7 @@ export function CustomFieldsForm({
   onChange,
   readOnly = false,
 }: CustomFieldsFormProps) {
+  const t = useTranslations('agenda');
   if (!schema || schema.length === 0) return null;
 
   function setValue(key: string, v: unknown) {
@@ -35,7 +37,7 @@ export function CustomFieldsForm({
   return (
     <div className="flex flex-col gap-3 rounded-md border border-border/60 bg-muted/20 p-3">
       <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-        Informações adicionais
+        {t('customFields.title')}
       </span>
       {schema.map((field) => {
         const value = values[field.key];
@@ -117,7 +119,7 @@ export function CustomFieldsForm({
                     readOnly && 'opacity-60',
                   )}
                 >
-                  <option value="">— selecione —</option>
+                  <option value="">{t('customFields.selectPlaceholder')}</option>
                   {(field.options ?? []).map((opt) => (
                     <option key={opt} value={opt}>
                       {opt}

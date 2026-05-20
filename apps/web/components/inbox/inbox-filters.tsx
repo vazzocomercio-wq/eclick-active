@@ -13,6 +13,8 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
+import { useMemo } from 'react';
 import { Input } from '@/components/ui/input';
 import {
   AnimatedPromptSuggestions,
@@ -21,19 +23,6 @@ import {
 import { cn } from '@/lib/utils';
 import type { InboxFilter } from '@/hooks/use-inbox';
 
-/** Sugestões de busca textual fluindo embaixo quando search está vazio.
- *  Click preenche o input. Termos comuns que aparecem em conversas. */
-const SEARCH_SUGGESTIONS: PromptSuggestion[] = [
-  { text: 'agendamento', icon: CalendarClock, accent: '#00E5FF' },
-  { text: 'consulta', icon: Stethoscope, accent: '#67e8f9' },
-  { text: 'infusão', icon: Syringe, accent: '#a78bfa' },
-  { text: 'particular', icon: CreditCard, accent: '#34d399' },
-  { text: 'convênio', icon: CreditCard, accent: '#fcd34d' },
-  { text: 'documento', icon: FileText, accent: '#f472b6' },
-  { text: 'urgente', icon: HelpCircle, accent: '#ef4444' },
-  { text: 'hoje', icon: Calendar, accent: '#fde68a' },
-];
-
 interface InboxFiltersProps {
   filter: InboxFilter;
   onFilterChange: (f: InboxFilter) => void;
@@ -41,21 +30,37 @@ interface InboxFiltersProps {
   onSearchChange: (q: string) => void;
 }
 
-const FILTERS: Array<{ value: InboxFilter; label: string; icon?: LucideIcon }> = [
-  { value: 'all', label: 'Todas' },
-  { value: 'mine', label: 'Minhas' },
-  { value: 'unassigned', label: 'Não atribuídas' },
-  { value: 'starred', label: 'Favoritas', icon: Star },
-  { value: 'resolved', label: 'Resolvidas' },
-  { value: 'archived', label: 'Arquivadas' },
-];
-
 export function InboxFilters({
   filter,
   onFilterChange,
   search,
   onSearchChange,
 }: InboxFiltersProps) {
+  const t = useTranslations('inbox.filters');
+
+  const SEARCH_SUGGESTIONS = useMemo<PromptSuggestion[]>(
+    () => [
+      { text: t('suggestions.scheduling'), icon: CalendarClock, accent: '#00E5FF' },
+      { text: t('suggestions.appointment'), icon: Stethoscope, accent: '#67e8f9' },
+      { text: t('suggestions.infusion'), icon: Syringe, accent: '#a78bfa' },
+      { text: t('suggestions.private'), icon: CreditCard, accent: '#34d399' },
+      { text: t('suggestions.insurance'), icon: CreditCard, accent: '#fcd34d' },
+      { text: t('suggestions.document'), icon: FileText, accent: '#f472b6' },
+      { text: t('suggestions.urgent'), icon: HelpCircle, accent: '#ef4444' },
+      { text: t('suggestions.today'), icon: Calendar, accent: '#fde68a' },
+    ],
+    [t],
+  );
+
+  const FILTERS: Array<{ value: InboxFilter; label: string; icon?: LucideIcon }> = [
+    { value: 'all', label: t('all') },
+    { value: 'mine', label: t('mine') },
+    { value: 'unassigned', label: t('unassigned') },
+    { value: 'starred', label: t('starred'), icon: Star },
+    { value: 'resolved', label: t('resolved') },
+    { value: 'archived', label: t('archived') },
+  ];
+
   return (
     <div className="flex flex-col gap-2 border-b border-border p-3">
       {/* Search com sugestões animadas embaixo quando vazio */}
@@ -72,7 +77,7 @@ export function InboxFilters({
             <Input
               value={search}
               onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Buscar contato..."
+              placeholder={t('searchPlaceholder')}
               className="h-9 pl-8 pr-8 text-sm"
             />
           </div>
@@ -83,12 +88,12 @@ export function InboxFilters({
           <Input
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Buscar contato..."
+            placeholder={t('searchPlaceholder')}
             className="h-9 pl-8 pr-8 text-sm"
           />
           <button
             type="button"
-            aria-label="Limpar busca"
+            aria-label={t('clearSearchAria')}
             onClick={() => onSearchChange('')}
             className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
           >

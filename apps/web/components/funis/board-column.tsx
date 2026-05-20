@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -25,6 +26,7 @@ export function BoardColumn({
   onSelectDeal,
   onChanged,
 }: BoardColumnProps) {
+  const t = useTranslations('funis.board.column');
   const isClosingColumn = stage.is_won || stage.is_lost;
   const [quickAddOpen, setQuickAddOpen] = useState(false);
 
@@ -78,8 +80,8 @@ export function BoardColumn({
             <button
               type="button"
               onClick={() => setQuickAddOpen(true)}
-              aria-label="Adicionar negócio"
-              title="Adicionar negócio rápido"
+              aria-label={t('addDeal')}
+              title={t('addDealQuick')}
               className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
             >
               <Plus className="h-3 w-3" />
@@ -89,7 +91,7 @@ export function BoardColumn({
             <button
               type="button"
               onClick={() => setCollapsed(true)}
-              aria-label="Colapsar coluna"
+              aria-label={t('collapseColumn')}
               className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               <ChevronRight className="h-3 w-3" />
@@ -117,7 +119,7 @@ export function BoardColumn({
         <div
           ref={setNodeRef}
           className="flex min-h-full flex-col gap-2 p-2"
-          aria-label={`Coluna ${stage.name}`}
+          aria-label={t('ariaColumn', { name: stage.name })}
         >
           <SortableContext items={dealIds} strategy={verticalListSortingStrategy}>
             {stage.deals.length === 0 ? (
@@ -131,7 +133,7 @@ export function BoardColumn({
             )}
             {isClosingColumn && stage.deals.length > 10 && (
               <p className="px-2 py-1 text-center text-[11px] text-muted-foreground">
-                + {stage.deals.length - 10} mais (use os relatórios pra ver tudo)
+                {t('moreSuffix', { count: stage.deals.length - 10 })}
               </p>
             )}
           </SortableContext>
@@ -147,7 +149,7 @@ export function BoardColumn({
             onClick={() => setQuickAddOpen(true)}
           >
             <Plus className="mr-1.5 h-3.5 w-3.5" />
-            Adicionar negócio
+            {t('addDeal')}
           </Button>
         </footer>
       )}
@@ -170,12 +172,13 @@ function CollapsedColumn({
   isOver: boolean;
   onExpand: () => void;
 }) {
+  const t = useTranslations('funis.board.column');
   return (
     <div
       ref={setNodeRef}
       onClick={onExpand}
       role="button"
-      aria-label={`Expandir coluna ${stage.name}`}
+      aria-label={t('expandColumn', { name: stage.name })}
       className={cn(
         'group relative flex h-full w-[80px] shrink-0 cursor-pointer flex-col items-center justify-between rounded-lg border border-border bg-card/30 py-3 transition-colors',
         'hover:border-primary/30 hover:bg-card/60',
@@ -207,6 +210,7 @@ function CollapsedColumn({
 }
 
 function EmptyColumn({ isOver }: { isOver: boolean }) {
+  const t = useTranslations('funis.board.column');
   return (
     <div
       className={cn(
@@ -214,7 +218,7 @@ function EmptyColumn({ isOver }: { isOver: boolean }) {
         isOver && 'border-primary/50 bg-primary/5 text-primary',
       )}
     >
-      {isOver ? 'Solte aqui' : 'Sem negócios'}
+      {isOver ? t('dropHere') : t('noDeals')}
     </div>
   );
 }

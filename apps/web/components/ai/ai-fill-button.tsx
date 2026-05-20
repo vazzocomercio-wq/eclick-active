@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Loader2, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { aiApi } from '@/lib/api/ai';
@@ -43,6 +44,7 @@ export function AiFillButton({
   className,
   disabled,
 }: AiFillButtonProps) {
+  const t = useTranslations('ai.fillButton');
   const [loading, setLoading] = useState(false);
 
   if (!entityId || !fieldName) return null;
@@ -58,17 +60,17 @@ export function AiFillButton({
         ...(hint ? { hint } : {}),
       });
       onFill(result.value);
-      toast.success('Preenchido com IA', {
+      toast.success(t('filledWithAi'), {
         description: result.value.slice(0, 80),
       });
     } catch (err) {
-      toast.error('Falha ao gerar com IA', {
+      toast.error(t('generateFailed'), {
         description:
           err instanceof ApiError
             ? `${err.status}: ${err.message}`
             : err instanceof Error
               ? err.message
-              : 'Erro desconhecido',
+              : t('unknownError'),
       });
     } finally {
       setLoading(false);
@@ -83,8 +85,8 @@ export function AiFillButton({
       type="button"
       onClick={handleClick}
       disabled={disabled || loading}
-      aria-label="Preencher com IA"
-      title="Preencher com IA"
+      aria-label={t('fillWithAi')}
+      title={t('fillWithAi')}
       className={cn(
         'inline-flex shrink-0 items-center justify-center rounded-md text-primary transition-colors',
         'hover:bg-primary/10 disabled:opacity-50 disabled:cursor-not-allowed',

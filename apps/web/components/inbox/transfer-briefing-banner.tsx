@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { ChevronDown, ChevronUp, FileText, Sparkles } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import type { ConversationDetail } from '@eclick-active/shared';
 import { cn } from '@/lib/utils';
 
@@ -27,6 +28,7 @@ interface TransferBriefingBannerProps {
 }
 
 export function TransferBriefingBanner({ conversation }: TransferBriefingBannerProps) {
+  const t = useTranslations('inbox.transferBriefing');
   const [expanded, setExpanded] = useState(false);
   const briefing = (conversation?.metadata as Record<string, unknown> | null)?.transfer_briefing as
     | TransferBriefing
@@ -43,10 +45,10 @@ export function TransferBriefingBanner({ conversation }: TransferBriefingBannerP
       >
         <FileText className="h-3.5 w-3.5 shrink-0 text-amber-700 dark:text-amber-300" />
         <span className="text-xs font-semibold text-amber-800 dark:text-amber-200">
-          📋 Conversa transferida — {briefing.reason}
+          {t('title', { reason: briefing.reason })}
         </span>
         <span className="ml-auto text-[10px] text-amber-700/70 dark:text-amber-300/70">
-          {expanded ? 'Recolher' : 'Ver briefing'}
+          {expanded ? t('collapse') : t('expand')}
         </span>
         {expanded ? (
           <ChevronUp className="h-3 w-3 text-amber-700 dark:text-amber-300" />
@@ -57,44 +59,46 @@ export function TransferBriefingBanner({ conversation }: TransferBriefingBannerP
 
       {expanded && (
         <div className="grid gap-3 border-t border-amber-500/20 px-4 py-3 text-xs md:grid-cols-2">
-          <BriefingCard title="Cliente quer" content={briefing.customer_wants} />
+          <BriefingCard title={t('customerWants')} content={briefing.customer_wants} />
           <BriefingCard
-            title="Sugestão de abordagem"
+            title={t('approachSuggestion')}
             content={briefing.approach_suggestion}
             icon={<Sparkles className="h-3 w-3" />}
           />
 
           {briefing.objections.length > 0 && (
-            <BriefingList title="Objeções detectadas" items={briefing.objections} />
+            <BriefingList title={t('objections')} items={briefing.objections} />
           )}
           {briefing.products_of_interest.length > 0 && (
             <BriefingList
-              title="Produtos/serviços de interesse"
+              title={t('products')}
               items={briefing.products_of_interest}
             />
           )}
 
           <div className="md:col-span-2 grid gap-3 sm:grid-cols-3">
             <BriefingChips
-              label="Coletados"
+              label={t('collected')}
               items={briefing.collected_data}
               tone="positive"
-              empty="—"
+              empty={t('empty')}
             />
-            <BriefingChips label="Faltam" items={briefing.missing_data} tone="warning" empty="—" />
+            <BriefingChips label={t('missing')} items={briefing.missing_data} tone="warning" empty={t('empty')} />
             <BriefingChips
-              label="Sinais IA"
+              label={t('aiSignals')}
               items={[briefing.ai_intent, briefing.ai_sentiment, briefing.ai_temperature].filter(
                 (v): v is string => !!v,
               )}
               tone="neutral"
-              empty="—"
+              empty={t('empty')}
             />
           </div>
 
           <div className="md:col-span-2 text-[10px] text-muted-foreground">
-            Gerado em {new Date(briefing.generated_at).toLocaleString('pt-BR')} ·{' '}
-            {briefing.conversation.message_count} mensagens trocadas
+            {t('footer', {
+              time: new Date(briefing.generated_at).toLocaleString('pt-BR'),
+              count: briefing.conversation.message_count,
+            })}
           </div>
         </div>
       )}

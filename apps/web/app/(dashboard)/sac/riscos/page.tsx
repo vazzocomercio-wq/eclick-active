@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ShieldAlert, Package, AlertTriangle, RefreshCw, Sparkles } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { useSacTickets } from '@/hooks/use-sac';
 import { sacApi } from '@/lib/api/sac';
 import { bridgeApi, type SaasOrder, type BridgeStatus } from '@/lib/api/bridge';
@@ -15,6 +16,7 @@ import { Button } from '@/components/ui/button';
  * (se bridge ativa) pedidos do SaaS atrasados que ainda não têm ticket.
  */
 export default function SacRiscosPage() {
+  const t = useTranslations('sac.risks');
   // Tickets em risco
   const { data: critical } = useSacTickets({
     reputation_risk_min: 'medium',
@@ -65,10 +67,10 @@ export default function SacRiscosPage() {
     setScanResult(null);
     try {
       const r = await sacApi.runPreventive();
-      setScanResult(`${r.created} ticket(s) preventivo(s) criados`);
+      setScanResult(t('preventiveResult', { count: r.created }));
       void loadBridge();
     } catch {
-      setScanResult('Falha ao rodar scan');
+      setScanResult(t('preventiveFailed'));
     } finally {
       setRunning(false);
     }
@@ -80,20 +82,20 @@ export default function SacRiscosPage() {
         <div className="flex items-center gap-3">
           <ShieldAlert className="h-5 w-5 text-red-500" />
           <div>
-            <h1 className="text-lg font-semibold">Risco reputacional</h1>
+            <h1 className="text-lg font-semibold">{t('title')}</h1>
             <p className="text-xs text-muted-foreground">
-              Tickets críticos + pedidos atrasados sem ticket
+              {t('subtitle')}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" asChild>
-            <Link href="/sac">← Voltar ao SAC</Link>
+            <Link href="/sac">{t('back')}</Link>
           </Button>
           {bridgeStatus?.has_saas && (
             <Button size="sm" onClick={runPreventive} disabled={running}>
               <Sparkles className="h-3.5 w-3.5" />
-              <span className="ml-1">{running ? 'Escaneando…' : 'Criar tickets preventivos'}</span>
+              <span className="ml-1">{running ? t('scanning') : t('createPreventive')}</span>
             </Button>
           )}
         </div>
@@ -110,14 +112,14 @@ export default function SacRiscosPage() {
         <section className="mb-6">
           <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
             <AlertTriangle className="h-4 w-4 text-red-500" />
-            Tickets com risco reputacional
+            {t('criticalSection')}
             <span className="rounded-full bg-red-500/15 px-1.5 text-[11px] font-medium text-red-700 dark:text-red-300">
               {critical?.total ?? 0}
             </span>
           </h2>
           <SacTicketsTable
             tickets={critical?.rows ?? []}
-            emptyMessage="Nenhum ticket com risco reputacional médio ou maior 🎯"
+            emptyMessage={t('criticalEmpty')}
           />
         </section>
 
@@ -125,14 +127,14 @@ export default function SacRiscosPage() {
         <section className="mb-6">
           <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
             <AlertTriangle className="h-4 w-4 text-amber-500" />
-            Tickets com SLA vencido
+            {t('breachedSection')}
             <span className="rounded-full bg-amber-500/15 px-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
               {breached?.total ?? 0}
             </span>
           </h2>
           <SacTicketsTable
             tickets={breached?.rows ?? []}
-            emptyMessage="Nenhum SLA vencido — bom trabalho 👏"
+            emptyMessage={t('breachedEmpty')}
           />
         </section>
 
@@ -141,7 +143,7 @@ export default function SacRiscosPage() {
           <div className="mb-3 flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-sm font-semibold">
               <Package className="h-4 w-4 text-orange-500" />
-              Pedidos atrasados no SaaS
+              {t('delayedSection')}
               {bridgeStatus?.has_saas && (
                 <span className="rounded-full bg-orange-500/15 px-1.5 text-[11px] font-medium text-orange-700 dark:text-orange-300">
                   {delayedOrders.length}
@@ -154,28 +156,27 @@ export default function SacRiscosPage() {
           </div>
 
           {loadingBridge ? (
-            <p className="text-sm text-muted-foreground">Carregando…</p>
+            <p className="text-sm text-muted-foreground">{t('loading')}</p>
           ) : !bridgeStatus?.has_saas ? (
             <div className="rounded-lg border border-dashed border-border bg-muted/20 p-6 text-center text-sm text-muted-foreground">
               <Package className="mx-auto mb-2 h-6 w-6 opacity-50" />
-              Bridge com e-Click SaaS não está ativa pra esta organização. Conecte o
-              SaaS pra monitorar pedidos atrasados automaticamente.
+              {t('bridgeOff')}
             </div>
           ) : delayedOrders.length === 0 ? (
             <div className="rounded-lg border border-dashed border-border bg-muted/20 p-6 text-center text-sm text-muted-foreground">
-              Nenhum pedido atrasado encontrado 🎉
+              {t('delayedEmpty')}
             </div>
           ) : (
             <div className="overflow-hidden rounded-lg border border-border bg-card">
               <table className="w-full text-sm">
                 <thead className="border-b border-border bg-muted/30 text-xs uppercase tracking-wider text-muted-foreground">
                   <tr>
-                    <th className="px-3 py-2 text-left">Marketplace</th>
-                    <th className="px-3 py-2 text-left">Pedido</th>
-                    <th className="px-3 py-2 text-left">Cliente</th>
-                    <th className="px-3 py-2 text-left">Status</th>
-                    <th className="px-3 py-2 text-left">Atraso</th>
-                    <th className="px-3 py-2 text-left">Valor</th>
+                    <th className="px-3 py-2 text-left">{t('table.marketplace')}</th>
+                    <th className="px-3 py-2 text-left">{t('table.order')}</th>
+                    <th className="px-3 py-2 text-left">{t('table.customer')}</th>
+                    <th className="px-3 py-2 text-left">{t('table.status')}</th>
+                    <th className="px-3 py-2 text-left">{t('table.delay')}</th>
+                    <th className="px-3 py-2 text-left">{t('table.value')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -202,7 +203,7 @@ export default function SacRiscosPage() {
                         </td>
                         <td className="px-3 py-2 align-middle">
                           <span className="inline-flex items-center rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[11px] font-medium text-red-700 dark:text-red-300">
-                            {delayDays}d
+                            {t('delayDays', { n: delayDays })}
                           </span>
                         </td>
                         <td className="px-3 py-2 align-middle text-xs">
@@ -223,8 +224,7 @@ export default function SacRiscosPage() {
 
           {bridgeStatus?.has_saas && delayedOrders.length > 0 && (
             <p className="mt-2 text-xs text-muted-foreground">
-              Use o botão &quot;Criar tickets preventivos&quot; pra disparar contato proativo
-              com cada cliente atrasado. Pedidos com ticket aberto são pulados.
+              {t('preventiveHint')}
             </p>
           )}
         </section>

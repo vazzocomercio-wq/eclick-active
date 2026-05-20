@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   ArrowRight,
   CheckCircle2,
@@ -38,6 +39,7 @@ interface ContactHistoryTabProps {
  * relevantes ficam no chat e em deal_activities). Pode ser adicionado depois.
  */
 export function ContactHistoryTab({ contactId }: ContactHistoryTabProps) {
+  const t = useTranslations('contacts.historyTab');
   const [items, setItems] = useState<ContactTimelineItem[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +58,7 @@ export function ContactHistoryTab({ contactId }: ContactHistoryTabProps) {
             ? `${err.status}: ${err.message}`
             : err instanceof Error
               ? err.message
-              : 'Erro ao buscar timeline',
+              : t('fetchError'),
         );
       })
       .finally(() => setLoading(false));
@@ -85,10 +87,9 @@ export function ContactHistoryTab({ contactId }: ContactHistoryTabProps) {
     return (
       <Card className="m-4 border-dashed">
         <CardContent className="flex flex-col items-center gap-2 py-10 text-center">
-          <p className="text-sm font-medium">Sem eventos registrados</p>
+          <p className="text-sm font-medium">{t('emptyTitle')}</p>
           <p className="max-w-xs text-xs text-muted-foreground">
-            Eventos da timeline são gerados automaticamente quando o contato
-            interage com o CRM (mensagens, deals, mudanças de stage, etc.).
+            {t('emptyDescription')}
           </p>
         </CardContent>
       </Card>
@@ -132,22 +133,6 @@ const ICON_MAP: Record<ContactTimelineEventType, LucideIcon> = {
   form_submitted: FileText,
 };
 
-const TITLE_MAP: Record<ContactTimelineEventType, string> = {
-  message_received: 'Mensagem recebida',
-  message_sent: 'Mensagem enviada',
-  deal_created: 'Negócio criado',
-  deal_won: 'Negócio ganho',
-  deal_lost: 'Negócio perdido',
-  stage_changed: 'Mudança de etapa',
-  task_completed: 'Tarefa concluída',
-  note_added: 'Nota adicionada',
-  tag_added: 'Tag adicionada',
-  score_changed: 'Score alterado',
-  ai_insight: 'Insight da IA',
-  channel_connected: 'Canal conectado',
-  form_submitted: 'Formulário enviado',
-};
-
 function TimelineRow({
   item,
   isLast,
@@ -155,8 +140,9 @@ function TimelineRow({
   item: ContactTimelineItem;
   isLast: boolean;
 }) {
+  const t = useTranslations('contacts.historyTab');
   const Icon = ICON_MAP[item.event_type] ?? FileText;
-  const title = item.title ?? TITLE_MAP[item.event_type];
+  const title = item.title ?? t(`titles.${item.event_type}`);
   const isAi = item.event_type === 'ai_insight' || item.created_by === null;
 
   return (
@@ -181,7 +167,7 @@ function TimelineRow({
           {isAi && (
             <span className="inline-flex items-center gap-0.5 rounded-sm bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
               <Sparkles className="h-2.5 w-2.5" />
-              IA
+              {t('aiBadge')}
             </span>
           )}
           <span className="ml-auto text-[10px] text-muted-foreground">

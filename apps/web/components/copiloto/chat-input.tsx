@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { useTranslations } from 'next-intl';
 import { Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -21,6 +22,7 @@ export function ChatInput({
   disabled,
   placeholder,
 }: ChatInputProps) {
+  const t = useTranslations('copiloto.chatInput');
   const ref = useRef<HTMLTextAreaElement>(null);
 
   // Auto-resize
@@ -53,7 +55,7 @@ export function ChatInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder={placeholder ?? 'Pergunte sobre seus leads, deals, performance...'}
+        placeholder={placeholder ?? t('placeholder')}
         rows={1}
         disabled={disabled}
         className="flex-1 resize-none bg-transparent px-2 py-2 text-sm leading-relaxed placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
@@ -63,7 +65,7 @@ export function ChatInput({
         type="button"
         onClick={onSubmit}
         disabled={!canSubmit}
-        aria-label="Enviar"
+        aria-label={t('send')}
         className={cn(
           'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all',
           canSubmit

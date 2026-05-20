@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { CheckCircle2, Loader2, Tag, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -25,6 +26,7 @@ interface BulkActionsBarProps {
  * iteração — quando entregar pelos endpoints.
  */
 export function BulkActionsBar({ selectedIds, onClear, onChanged }: BulkActionsBarProps) {
+  const t = useTranslations('contacts.bulkActions');
   const confirm = useConfirm();
   const [verifying, setVerifying] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -37,15 +39,14 @@ export function BulkActionsBar({ selectedIds, onClear, onChanged }: BulkActionsB
     try {
       const ids = Array.from(selectedIds);
       const data = await contactsApi.verifyWhatsappBatch(ids);
-      toast.success(
-        `${data.enqueued} contato(s) na fila de verificação`,
-        { description: 'A IA vai checar o WhatsApp em background. Pode demorar até 1 min.' },
-      );
+      toast.success(t('verifyEnqueuedTitle', { count: data.enqueued }), {
+        description: t('verifyEnqueuedDescription'),
+      });
       onClear();
       // Refetch após pequeno delay pra primeiros resultados aparecerem
       setTimeout(() => void onChanged(), 3000);
     } catch (err) {
-      toast.error('Falha ao enfileirar verificação', {
+      toast.error(t('verifyEnqueueFailed'), {
         description: err instanceof ApiError ? err.message : (err instanceof Error ? err.message : undefined),
       });
     } finally {
@@ -55,11 +56,10 @@ export function BulkActionsBar({ selectedIds, onClear, onChanged }: BulkActionsB
 
   async function handleDelete() {
     const ok = await confirm({
-      title: `Excluir ${count} contato(s)?`,
-      description:
-        'Esta ação é PERMANENTE. Conversas, deals e mensagens vinculadas a esses contatos também serão removidos. Não dá pra desfazer.',
-      confirmLabel: 'Sim, excluir',
-      cancelLabel: 'Cancelar',
+      title: t('deleteConfirmTitle', { count }),
+      description: t('deleteConfirmDescription'),
+      confirmLabel: t('deleteConfirm'),
+      cancelLabel: t('cancel'),
       variant: 'destructive',
     });
     if (!ok) return;
@@ -73,11 +73,11 @@ export function BulkActionsBar({ selectedIds, onClear, onChanged }: BulkActionsB
       const failed = results.filter((r) => r.status === 'rejected').length;
       const success = results.length - failed;
       if (success > 0) {
-        toast.success(`${success} contato(s) excluído(s)`);
+        toast.success(t('deleteSuccess', { count: success }));
       }
       if (failed > 0) {
-        toast.error(`${failed} contato(s) falharam`, {
-          description: 'Alguns podem ter deals ativos vinculados. Verifique e tente novamente.',
+        toast.error(t('deleteFailed', { count: failed }), {
+          description: t('deleteFailedDescription'),
         });
       }
       onClear();
@@ -93,13 +93,13 @@ export function BulkActionsBar({ selectedIds, onClear, onChanged }: BulkActionsB
         <button
           type="button"
           onClick={onClear}
-          aria-label="Limpar seleção"
+          aria-label={t('clearSelection')}
           className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-primary/20"
         >
           <X className="h-3.5 w-3.5" />
         </button>
         <span className="font-medium">
-          {count} contato{count > 1 ? 's' : ''} selecionado{count > 1 ? 's' : ''}
+          {count > 1 ? t('selectedMany', { count }) : t('selectedOne', { count })}
         </span>
       </div>
 
@@ -116,7 +116,7 @@ export function BulkActionsBar({ selectedIds, onClear, onChanged }: BulkActionsB
           ) : (
             <CheckCircle2 className="h-3.5 w-3.5" />
           )}
-          Verificar WhatsApp
+          {t('verifyWhatsapp')}
         </Button>
 
         <Button
@@ -124,10 +124,10 @@ export function BulkActionsBar({ selectedIds, onClear, onChanged }: BulkActionsB
           variant="outline"
           disabled
           className="gap-1.5 opacity-50"
-          title="Em breve"
+          title={t('addTagSoonTitle')}
         >
           <Tag className="h-3.5 w-3.5" />
-          Adicionar tag
+          {t('addTag')}
         </Button>
 
         <Button
@@ -142,7 +142,7 @@ export function BulkActionsBar({ selectedIds, onClear, onChanged }: BulkActionsB
           ) : (
             <Trash2 className="h-3.5 w-3.5" />
           )}
-          Excluir
+          {t('delete')}
         </Button>
       </div>
     </div>

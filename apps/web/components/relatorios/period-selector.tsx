@@ -1,6 +1,7 @@
 'use client';
 
 import { Calendar } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 
 export type PresetKey = '7d' | '30d' | '90d' | 'today';
@@ -16,14 +17,15 @@ interface PeriodSelectorProps {
   onChange: (next: Period) => void;
 }
 
-const PRESETS: Array<{ key: PresetKey; label: string; days: number }> = [
-  { key: 'today', label: 'Hoje', days: 0 },
-  { key: '7d', label: '7 dias', days: 7 },
-  { key: '30d', label: '30 dias', days: 30 },
-  { key: '90d', label: '90 dias', days: 90 },
+const PRESETS: Array<{ key: PresetKey; days: number }> = [
+  { key: 'today', days: 0 },
+  { key: '7d', days: 7 },
+  { key: '30d', days: 30 },
+  { key: '90d', days: 90 },
 ];
 
 export function PeriodSelector({ value, onChange }: PeriodSelectorProps) {
+  const t = useTranslations('relatorios');
   function applyPreset(preset: PresetKey) {
     const now = new Date();
     const to = new Date(now);
@@ -59,7 +61,7 @@ export function PeriodSelector({ value, onChange }: PeriodSelectorProps) {
                 : 'text-muted-foreground hover:bg-muted hover:text-foreground',
             )}
           >
-            {p.label}
+            {t(`period.${p.key}`)}
           </button>
         );
       })}

@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   AlertTriangle,
   Building2,
@@ -78,6 +79,7 @@ export function AIGapsCard({
   onAskClient,
   className,
 }: AIGapsCardProps) {
+  const t = useTranslations('ai.gaps');
   const [unanswered, setUnanswered] = useState<UnansweredItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,14 +103,17 @@ export function AIGapsCard({
             ? `${err.status}: ${err.message}`
             : err instanceof Error
               ? err.message
-              : 'Erro ao buscar pendências',
+              : t('fetchError'),
         );
       })
       .finally(() => setLoading(false));
     return () => ctrl.abort();
-  }, [conversationId]);
+  }, [conversationId, t]);
 
-  const gaps = computeGaps({ contact: contact ?? null, deal: deal ?? null });
+  const gaps = useMemo(
+    () => computeGaps({ contact: contact ?? null, deal: deal ?? null }, t),
+    [contact, deal, t],
+  );
 
   function handleAsk(suggestion: string) {
     if (onAskClient) {
@@ -118,9 +123,9 @@ export function AIGapsCard({
     // Fallback: copia pra clipboard
     try {
       void navigator.clipboard.writeText(suggestion);
-      toast.success('Sugestão copiada', { description: suggestion.slice(0, 80) });
+      toast.success(t('suggestionCopied'), { description: suggestion.slice(0, 80) });
     } catch {
-      toast.info('Sugestão pronta', { description: suggestion });
+      toast.info(t('suggestionReady'), { description: suggestion });
     }
   }
 
@@ -132,7 +137,7 @@ export function AIGapsCard({
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-1.5 text-xs">
           <AlertTriangle className="h-3.5 w-3.5 text-yellow-500" />
-          Gaps & pendências
+          {t('title')}
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-2 pt-0">
@@ -143,7 +148,7 @@ export function AIGapsCard({
             icon={g.icon}
             tone="warning"
             label={g.label}
-            actionLabel="Pedir ao cliente"
+            actionLabel={t('askClient')}
             onAction={() => handleAsk(g.suggestedMessage)}
           />
         ))}
@@ -162,13 +167,12 @@ export function AIGapsCard({
               key={q.message_id}
               icon={q.is_question ? HelpCircle : MessageCircle}
               tone={q.is_question ? 'question' : 'warning'}
-              label={q.text || '(mensagem sem texto)'}
-              actionLabel="Responder agora"
+              label={q.text || t('emptyMessage')}
+              actionLabel={t('answerNow')}
               onAction={() => {
-                // Sugestão genérica — vendor pode editar
                 const suggestion = q.is_question
-                  ? `Boa pergunta! Sobre isso: `
-                  : `Sobre o que você comentou: `;
+                  ? t('suggestionForQuestion')
+                  : t('suggestionForComment');
                 handleAsk(suggestion);
               }}
             />
@@ -181,9 +185,7 @@ export function AIGapsCard({
         )}
 
         {!loading && gaps.length === 0 && unanswered.length === 0 && !error && (
-          <p className="text-[11px] italic text-muted-foreground">
-            Nenhum gap detectado. Boa cobertura de dados.
-          </p>
+          <p className="text-[11px] italic text-muted-foreground">{t('empty')}</p>
         )}
       </CardContent>
     </Card>
@@ -235,13 +237,16 @@ function GapRow({ icon: Icon, tone, label, actionLabel, onAction }: GapRowProps)
 // Cálculo de gaps (puro, sem fetch)
 // ──────────────────────────────────────────────────────────
 
-function computeGaps({
-  contact,
-  deal,
-}: {
-  contact: AIGapsCardProps['contact'];
-  deal: AIGapsCardProps['deal'];
-}): Gap[] {
+function computeGaps(
+  {
+    contact,
+    deal,
+  }: {
+    contact: AIGapsCardProps['contact'];
+    deal: AIGapsCardProps['deal'];
+  },
+  t: (key: string) => string,
+): Gap[] {
   const out: Gap[] = [];
 
   if (contact) {
@@ -249,36 +254,32 @@ function computeGaps({
       out.push({
         id: 'contact:email',
         icon: Mail,
-        label: 'Falta email do contato',
-        suggestedMessage:
-          'Posso te pedir um e-mail pra eu te enviar a proposta por escrito? Ajuda a manter tudo organizado.',
+        label: t('gap.contactEmail.label'),
+        suggestedMessage: t('gap.contactEmail.message'),
       });
     }
     if (!contact.phone) {
       out.push({
         id: 'contact:phone',
         icon: Phone,
-        label: 'Telefone não confirmado',
-        suggestedMessage:
-          'Pra eu te ligar quando tudo estiver pronto, posso confirmar o melhor número de WhatsApp/celular?',
+        label: t('gap.contactPhone.label'),
+        suggestedMessage: t('gap.contactPhone.message'),
       });
     }
     if (!contact.company_id) {
       out.push({
         id: 'contact:company',
         icon: Building2,
-        label: 'Sem empresa vinculada',
-        suggestedMessage:
-          'Você está olhando isso pra qual empresa? Quero garantir que eu entenda o cenário direito.',
+        label: t('gap.contactCompany.label'),
+        suggestedMessage: t('gap.contactCompany.message'),
       });
     }
     if (!contact.tags || contact.tags.length === 0) {
       out.push({
         id: 'contact:segment',
         icon: TagIcon,
-        label: 'Cliente sem segmento/tag',
-        suggestedMessage:
-          'Pra eu te sugerir o caminho certo, qual o setor ou tipo de operação que você atua?',
+        label: t('gap.contactSegment.label'),
+        suggestedMessage: t('gap.contactSegment.message'),
       });
     }
   }
@@ -288,18 +289,16 @@ function computeGaps({
       out.push({
         id: 'deal:value',
         icon: TrendingUp,
-        label: 'Valor do deal não definido',
-        suggestedMessage:
-          'Pra eu te dar a melhor recomendação, qual o orçamento aproximado que você tem em mente?',
+        label: t('gap.dealValue.label'),
+        suggestedMessage: t('gap.dealValue.message'),
       });
     }
     if (!deal.expected_close_date) {
       out.push({
         id: 'deal:close-date',
         icon: TrendingUp,
-        label: 'Sem previsão de fechamento',
-        suggestedMessage:
-          'Você tem alguma data ou prazo em mente pra fechar isso? Me ajuda a priorizar do meu lado.',
+        label: t('gap.dealCloseDate.label'),
+        suggestedMessage: t('gap.dealCloseDate.message'),
       });
     }
   }

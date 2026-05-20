@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   Loader2,
   MoreVertical,
@@ -51,6 +52,7 @@ export function DealHeader({
   saving,
   deleting,
 }: DealHeaderProps) {
+  const t = useTranslations('funis.deal.header');
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -85,9 +87,9 @@ export function DealHeader({
     try {
       await dealsApi.move(deal.id, { stage_id: stageId });
       await onChanged();
-      toast.success(target?.is_won ? 'Deal marcado como ganho!' : 'Deal movido');
+      toast.success(target?.is_won ? t('wonMarked') : t('moved'));
     } catch (err) {
-      toast.error('Falha ao mover', { description: extractMessage(err) });
+      toast.error(t('moveFailed'), { description: extractMessage(err, t('unknownError')) });
     }
   }
 
@@ -96,14 +98,14 @@ export function DealHeader({
       {/* Linha 1: número + ações ⋯ */}
       <div className="flex items-center justify-between">
         <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Negócio · #{dealNumber}
+          {t('kicker', { number: dealNumber })}
         </span>
         <div ref={menuRef} className="relative">
           <Button
             variant="ghost"
             size="icon"
             onClick={() => setMenuOpen((v) => !v)}
-            aria-label="Mais opções"
+            aria-label={t('moreOptions')}
             className="h-7 w-7"
           >
             <MoreVertical className="h-3.5 w-3.5" />
@@ -128,7 +130,7 @@ export function DealHeader({
                 ) : (
                   <Trash2 className="h-3.5 w-3.5" />
                 )}
-                Excluir deal
+                {t('deleteDeal')}
               </button>
             </div>
           )}
@@ -138,12 +140,13 @@ export function DealHeader({
       {/* Linha 2: título inline-editável */}
       <InlineTextField
         value={deal.title}
-        placeholder="Sem título"
+        placeholder={t('noTitle')}
         className="text-lg font-semibold leading-tight"
-        ariaLabel="Título do deal"
+        ariaLabel={t('ariaTitle')}
+        ariaClickLabel={t('titleClickEdit')}
         onSave={async (next) => {
           if (next === deal.title) return;
-          await save({ title: next }, deal.id, onChanged, 'Título salvo');
+          await save({ title: next }, deal.id, onChanged, t('titleSaved'), t('saveFailed'), t('unknownError'));
         }}
       />
 
@@ -152,9 +155,12 @@ export function DealHeader({
         <InlineCurrencyField
           value={deal.value}
           currency={deal.currency || 'BRL'}
+          ariaLabel={t('valueAria')}
+          ariaClickLabel={t('valueClickEdit')}
+          noValueLabel={t('noValue')}
           onSave={async (next) => {
             if (next === deal.value) return;
-            await save({ value: next }, deal.id, onChanged, 'Valor salvo');
+            await save({ value: next }, deal.id, onChanged, t('valueSaved'), t('saveFailed'), t('unknownError'));
           }}
         />
 
@@ -164,6 +170,8 @@ export function DealHeader({
           currentColor={currentStage?.color ?? '#6B7280'}
           disabled={saving || isClosed}
           onSelect={handleMoveStage}
+          fallbackLabel={t('stageFallback')}
+          changeStageLabel={t('changeStage')}
         />
       </div>
 
@@ -171,14 +179,14 @@ export function DealHeader({
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-1.5">
           <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-            Score
+            {t('score')}
           </span>
           <AIScoreCircle score={deal.ai_score} size={28} />
         </div>
         {deal.ai_risk && (
           <div className="flex items-center gap-1.5">
             <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-              Risco
+              {t('risk')}
             </span>
             <RiskPill risk={deal.ai_risk} />
           </div>
@@ -186,7 +194,7 @@ export function DealHeader({
         {deal.contact?.temperature && (
           <div className="flex items-center gap-1.5">
             <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-              Temp
+              {t('temp')}
             </span>
             <TemperatureBadge temperature={deal.contact.temperature} />
           </div>
@@ -202,7 +210,7 @@ export function DealHeader({
           className="flex-1 bg-accent hover:bg-accent/90 text-accent-foreground"
         >
           <TrendingUp className="mr-1 h-3.5 w-3.5" />
-          {isWon ? 'Ganho' : 'Marcar ganho'}
+          {isWon ? t('won') : t('markWon')}
         </Button>
         <Button
           variant="destructive"
@@ -212,7 +220,7 @@ export function DealHeader({
           className="flex-1"
         >
           <TrendingDown className="mr-1 h-3.5 w-3.5" />
-          {isLost ? 'Perdido' : 'Marcar perdido'}
+          {isLost ? t('lost') : t('markLost')}
         </Button>
       </div>
     </div>
@@ -228,12 +236,14 @@ function InlineTextField({
   placeholder,
   className,
   ariaLabel,
+  ariaClickLabel,
   onSave,
 }: {
   value: string;
   placeholder: string;
   className?: string;
   ariaLabel: string;
+  ariaClickLabel: string;
   onSave: (next: string) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
@@ -302,7 +312,7 @@ function InlineTextField({
     <button
       type="button"
       onClick={() => setEditing(true)}
-      aria-label={`${ariaLabel} (clique pra editar)`}
+      aria-label={ariaClickLabel}
       className={cn(
         'rounded-md px-2 py-1 text-left transition-colors hover:bg-muted/60',
         !value && 'italic text-muted-foreground',
@@ -317,10 +327,16 @@ function InlineTextField({
 function InlineCurrencyField({
   value,
   currency,
+  ariaLabel,
+  ariaClickLabel,
+  noValueLabel,
   onSave,
 }: {
   value: number;
   currency: string;
+  ariaLabel: string;
+  ariaClickLabel: string;
+  noValueLabel: string;
   onSave: (next: number) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
@@ -378,7 +394,7 @@ function InlineCurrencyField({
           }}
           disabled={saving}
           inputMode="decimal"
-          aria-label="Valor"
+          aria-label={ariaLabel}
           className="w-28 rounded-md border border-input bg-background px-2 py-1 text-sm font-semibold tabular-nums outline-none focus:ring-2 focus:ring-ring"
         />
       </div>
@@ -389,10 +405,10 @@ function InlineCurrencyField({
     <button
       type="button"
       onClick={() => setEditing(true)}
-      aria-label="Valor (clique pra editar)"
+      aria-label={ariaClickLabel}
       className="rounded-md px-2 py-1 text-sm font-semibold tabular-nums text-accent transition-colors hover:bg-muted/60"
     >
-      {formatCurrencyDisplay(value, currency)}
+      {formatCurrencyDisplay(value, currency, noValueLabel)}
     </button>
   );
 }
@@ -403,12 +419,16 @@ function StageDropdown({
   currentColor,
   disabled,
   onSelect,
+  fallbackLabel,
+  changeStageLabel,
 }: {
   stages: Array<{ id: string; name: string; color: string }>;
   currentStageId: string;
   currentColor: string;
   disabled: boolean;
   onSelect: (id: string) => void;
+  fallbackLabel: string;
+  changeStageLabel: string;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -429,14 +449,14 @@ function StageDropdown({
         type="button"
         onClick={() => !disabled && setOpen((v) => !v)}
         disabled={disabled}
-        aria-label="Mudar stage"
+        aria-label={changeStageLabel}
         className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
         style={{
           backgroundColor: `${currentColor}20`,
           color: currentColor,
         }}
       >
-        {current?.name ?? 'Stage'}
+        {current?.name ?? fallbackLabel}
       </button>
       {open && (
         <div className="absolute left-0 top-full z-30 mt-1 w-48 overflow-hidden rounded-md border border-border bg-popover shadow-lg">
@@ -475,19 +495,21 @@ async function save(
   dealId: string,
   onChanged: () => void | Promise<void>,
   successLabel: string,
+  failureLabel: string,
+  unknownFallback: string,
 ): Promise<void> {
   try {
     await dealsApi.update(dealId, patch);
     await onChanged();
     toast.success(successLabel);
   } catch (err) {
-    toast.error('Falha ao salvar', { description: extractMessage(err) });
+    toast.error(failureLabel, { description: extractMessage(err, unknownFallback) });
     throw err;
   }
 }
 
-function formatCurrencyDisplay(value: number, currency: string): string {
-  if (!value) return 'Sem valor';
+function formatCurrencyDisplay(value: number, currency: string, noValueLabel: string): string {
+  if (!value) return noValueLabel;
   return value.toLocaleString('pt-BR', {
     style: 'currency',
     currency: currency || 'BRL',
@@ -510,8 +532,8 @@ function parseCurrency(raw: string): number | null {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
-function extractMessage(err: unknown): string {
+function extractMessage(err: unknown, fallback: string): string {
   if (err instanceof ApiError) return `${err.status}: ${err.message}`;
   if (err instanceof Error) return err.message;
-  return 'Erro desconhecido';
+  return fallback;
 }
