@@ -17,6 +17,8 @@ import type {
   NotifyLojistaResult,
   SendBroadcastInput,
   SendBroadcastResult,
+  SendDirectInput,
+  SendDirectResult,
   TriggerCartRecoveryInput,
   TriggerCartRecoveryResult,
 } from './automation-bridge.types';
@@ -107,6 +109,30 @@ export class AutomationBridgeController {
     @Body() body: SendBroadcastInput,
   ): Promise<SendBroadcastResult> {
     return this.service.sendBroadcast(body);
+  }
+
+  /**
+   * POST /commerce/automation-bridge/send-direct
+   *
+   * Mensagem WhatsApp 1-a-1 transacional. Usado pelas notificações da
+   * Loja Própria do SaaS: pedido pago/enviado/entregue, promoção de tier.
+   *
+   * Cria/recupera contato pelo telefone + dispatch via canal WhatsApp
+   * ativo da org. Idempotente via `dedup_key` (consulta
+   * automation_executions com mesmo target_ref + execution_type).
+   *
+   * Body:
+   *   organization_id: string
+   *   phone: string                                (sanitizado pra digits)
+   *   message: string                              (texto pronto, pode ter *bold*)
+   *   dedup_key?: string                           ("storefront_order:abc:shipped")
+   *
+   * Retorna { ok, sent, skipped?, reason?, execution_id }
+   */
+  @Post('send-direct')
+  @HttpCode(HttpStatus.OK)
+  sendDirect(@Body() body: SendDirectInput): Promise<SendDirectResult> {
+    return this.service.sendDirect(body);
   }
 
   /**

@@ -9,6 +9,7 @@ import { SupabaseService } from '../../common/supabase/supabase.service';
 import { ChannelDispatcherService } from '../../common/channels/channel-dispatcher.service';
 import { DealsService } from '../deals/deals.service';
 import { TasksService } from '../tasks/tasks.service';
+import { ContactsService } from '../contacts/contacts.service';
 import type {
   AutomationExecutionRow,
   AutomationSeverity,
@@ -24,6 +25,8 @@ import type {
   OrgAutomationBridgeSettings,
   SendBroadcastInput,
   SendBroadcastResult,
+  SendDirectInput,
+  SendDirectResult,
   TriggerCartRecoveryInput,
   TriggerCartRecoveryResult,
 } from './automation-bridge.types';
@@ -90,6 +93,7 @@ export class AutomationBridgeService {
     private readonly dispatcher: ChannelDispatcherService,
     private readonly deals: DealsService,
     private readonly tasks: TasksService,
+    private readonly contacts: ContactsService,
   ) {}
 
   // ────────────────────────────────────────────
@@ -516,6 +520,130 @@ export class AutomationBridgeService {
     if (error) {
       this.log.warn(`markExecution falhou ${id}: ${error.message}`);
     }
+  }
+
+  // ────────────────────────────────────────────
+  // 2.5) Send Direct (Storefront notifications da Loja Própria)
+  //      Mensagem 1-a-1 transacional. Idempotente via dedup_key.
+  // ────────────────────────────────────────────
+
+  async sendDirect(input: SendDirectInput): Promise<SendDirectResult> {
+    const orgId = input.organization_id;
+    const message = (input.message ?? '').trim();
+    if (!message) throw new BadRequestException('message é obrigatório');
+
+    // Sanitiza phone — só dígitos, mínimo 10
+    const phone = (input.phone ?? '').replace(/\D/g, '');
+    if (phone.length < 10) {
+      throw new BadRequestException('phone inválido (mínimo 10 dígitos)');
+    }
+
+    // Idempotência via dedup_key — checa execução prévia 'sent'
+    if (input.dedup_key) {
+      const existing = await this.findExecutionByDedupKey(orgId, input.dedup_key);
+      if (existing && existing.status === 'sent') {
+        return {
+          ok: true,
+          sent: false,
+          skipped: true,
+          reason: 'dedup_key já enviado anteriormente',
+          execution_id: existing.id,
+        };
+      }
+    }
+
+    // Cria execução pending pra audit
+    const exec = await this.insertExecution({
+      org_id: orgId,
+      execution_type: 'whatsapp_send_direct',
+      severity: null,
+      source_action_id: null,
+      target_ref: input.dedup_key ?? null,
+      payload: {
+        phone,
+        message,
+        dedup_key: input.dedup_key ?? null,
+      },
+    });
+
+    try {
+      // Resolve canal WhatsApp ativo da org
+      const channelId = await this.resolvePrimaryWhatsAppChannel(orgId);
+      if (!channelId) {
+        await this.markExecution(exec.id, {
+          status: 'skipped',
+          error_message: 'Org não tem canal WhatsApp ativo',
+        });
+        return {
+          ok: true,
+          sent: false,
+          skipped: true,
+          reason: 'Org não tem canal WhatsApp ativo',
+          execution_id: exec.id,
+        };
+      }
+
+      // Cria/recupera contato pelo telefone
+      const contact = await this.contacts.findOrCreateByPhone(orgId, phone);
+
+      // Envia via ChannelDispatcher (mesma pipeline do notifyLojista)
+      const result = await this.dispatcher.send({
+        org_id: orgId,
+        channel_id: channelId,
+        contact_id: contact.id,
+        content_type: 'text',
+        content: { body: message },
+      });
+
+      await this.markExecution(exec.id, {
+        status: 'sent',
+        result: {
+          channel_message_id: result.channel_message_id,
+          status: result.status,
+          contact_id: contact.id,
+        },
+      });
+
+      return {
+        ok: true,
+        sent: true,
+        execution_id: exec.id,
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.log.warn(`sendDirect falhou exec=${exec.id}: ${msg}`);
+      await this.markExecution(exec.id, {
+        status: 'failed',
+        error_message: msg.slice(0, 500),
+      });
+      return {
+        ok: true,
+        sent: false,
+        skipped: true,
+        reason: msg.slice(0, 200),
+        execution_id: exec.id,
+      };
+    }
+  }
+
+  /** Procura execução prévia com mesmo dedup_key (target_ref).
+   *  Retorna a mais recente (status mais informativo).
+   *  Limita scope a execution_type='whatsapp_send_direct' pra não
+   *  conflitar com target_ref de outros tipos. */
+  private async findExecutionByDedupKey(
+    orgId: string,
+    dedupKey: string,
+  ): Promise<AutomationExecutionRow | null> {
+    const { data } = await this.supabase.adminClient
+      .from('automation_executions')
+      .select('*')
+      .eq('org_id', orgId)
+      .eq('execution_type', 'whatsapp_send_direct')
+      .eq('target_ref', dedupKey)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return (data as AutomationExecutionRow | null) ?? null;
   }
 
   // ────────────────────────────────────────────

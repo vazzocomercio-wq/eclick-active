@@ -26,7 +26,8 @@ export type BroadcastSegment =
 export type ExecutionType =
   | 'whatsapp_notify_lojista'
   | 'cart_recovery_send'
-  | 'whatsapp_broadcast';
+  | 'whatsapp_broadcast'
+  | 'whatsapp_send_direct';
 
 export type ExecutionStatus = 'pending' | 'sent' | 'failed' | 'skipped';
 
@@ -209,6 +210,32 @@ export interface AutomationExecutionRow {
   digest_id: string | null;
   created_at: string;
   executed_at: string | null;
+}
+
+// ──────────────────────────────────────────────────────────
+// Send Direct — mensagem WhatsApp 1-a-1 transacional
+// (usado pelas notificações da Loja Própria do SaaS:
+//  pedido pago / enviado / entregue / promoção de tier)
+// ──────────────────────────────────────────────────────────
+
+export interface SendDirectInput {
+  organization_id: string;
+  /** Telefone do destinatário. E.164 preferido (+55...) ou nacional (11...).
+   *  Backend sanitiza pra digits-only antes de passar pro contacts service. */
+  phone: string;
+  /** Texto da mensagem (já formatado no SaaS — pode ter *bold* markdown WA). */
+  message: string;
+  /** Chave de idempotência ("storefront_order:abc:shipped"). Quando setada,
+   *  bridge consulta automation_executions pra evitar duplicar envio. */
+  dedup_key?: string;
+}
+
+export interface SendDirectResult {
+  ok: true;
+  sent: boolean;
+  skipped?: boolean;
+  reason?: string;
+  execution_id: string;
 }
 
 // ──────────────────────────────────────────────────────────

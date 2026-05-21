@@ -4,6 +4,7 @@ import { AutomationBridgeService } from './automation-bridge.service';
 import { NotifyDigestWorker } from './notify-digest.worker';
 import { DealsModule } from '../deals/deals.module';
 import { TasksModule } from '../tasks/tasks.module';
+import { ContactsModule } from '../contacts/contacts.module';
 
 /**
  * Onda 4 / A3 — SaaS↔Active Automation Bridge.
@@ -20,7 +21,7 @@ import { TasksModule } from '../tasks/tasks.module';
  * (SaaS Campaign Center cria card no kanban + task vinculada).
  */
 @Module({
-  imports: [DealsModule, TasksModule],
+  imports: [DealsModule, TasksModule, ContactsModule],
   controllers: [AutomationBridgeController],
   providers: [AutomationBridgeService, NotifyDigestWorker],
   exports: [AutomationBridgeService],
