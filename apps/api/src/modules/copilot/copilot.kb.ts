@@ -368,6 +368,21 @@ export const KB: KbEntry[] = [
     ].join('\n'),
     tags: ['agenda', 'calendario', 'agendamento'],
   },
+  {
+    routes: ['/conversas', '/conversas/:id', '/agenda'],
+    category: 'AGENDA',
+    title: 'IA oferece e marca horário sozinha',
+    content: [
+      'Quando a IA (Concierge) já **qualificou** um lead cujo serviço precisa de hora marcada, ela **oferece o agendamento** na própria conversa (ex: "Posso já ver os horários disponíveis pra você?").',
+      '',
+      '- Se o lead **aceita** (ou pede agendamento direto), a IA **busca a agenda real** da equipe e lista os horários livres **numerados**.',
+      '- O lead responde só com o **número** → a IA **cria o agendamento automaticamente** e confirma.',
+      '- Os horários vêm de quem está **ativo na Equipe** (owner/admin/agent) com **disponibilidade / horário de funcionamento** configurado. Se a pessoa tem *especialidade* cadastrada, a IA tenta casar com o que o lead pediu.',
+      '',
+      '**Pré-requisito pra aparecer horário:** ao menos 1 membro ativo com agenda/horário comercial em *Configurações → Equipe / Organização*. Sem isso (ou sem vaga livre), o lead recebe um aviso de que a equipe retorna com as opções — a IA **não** promete horário que não existe.',
+    ].join('\n'),
+    tags: ['agenda', 'agendamento', 'concierge', 'ia', 'slots'],
+  },
 
   // ── SOCIAL ────────────────────────────────────────────
   {

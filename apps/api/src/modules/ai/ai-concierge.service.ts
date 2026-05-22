@@ -754,11 +754,16 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
       });
       if (offered) {
         stateAfterRoute = 'awaiting_slot_choice';
-      } else if (decision.bridge_message) {
-        // Sem slots disponíveis — manda bridge_message original (que já avisa
-        // que equipe humana entra em contato).
+      } else {
+        // Sem slots disponíveis. NÃO reaproveita decision.bridge_message: ela
+        // agora é a introdução da lista de horários (prompt), então enviá-la
+        // sozinha prometeria uma lista que não vem. Manda aviso honesto.
         await this.applyResponseDelay(persona);
-        await this.sendOutbound(orgId, conversation, decision.bridge_message);
+        await this.sendOutbound(
+          orgId,
+          conversation,
+          'Quero muito te encaixar! No momento não localizei um horário livre aqui no sistema, mas já passei seu pedido pra equipe e a gente te retorna com as opções rapidinho. 🙏',
+        );
       }
     } else if (
       settings.send_bridge_message &&
@@ -887,17 +892,32 @@ REGRAS:
 
    - Os outros campos (pipeline_id, stage_id, etc.) podem ser null.
 
+2.5. **OFEREÇA AGENDAMENTO no momento certo (só se a empresa trabalha com hora marcada):**
+   Se o serviço do lead envolve atendimento agendado (consulta, sessão, avaliação,
+   visita, procedimento, etc.) e ele JÁ está qualificado (intenção clara + 1-2
+   dados-chave), a sua próxima pergunta deve OFERECER o agendamento — ex:
+   "Posso já verificar os horários disponíveis pra você?".
+   - Isso é "needs_more_info": true (você está aguardando o lead topar). NÃO marque
+     "AGENDAMENTO_SOLICITADO" ainda — só quando ele aceitar (cai na regra 3).
+   - Se a persona/empresa NÃO faz agendamento (ex: e-commerce, B2B sem visita),
+     ignore este passo e roteie normalmente.
+
 3. **Se já tem info suficiente OU está em forceRoute:**
    - "needs_more_info": false
-   - **AGENDAMENTO**: se o cliente PEDIU agendamento explicitamente
-     ("quero agendar", "tem horário?", "vagas pra X", "marcar consulta",
-     "agendar tratamento", "quando posso ir", etc.):
+   - **AGENDAMENTO**: marque agendamento quando o lead PEDIU explicitamente
+     ("quero agendar", "tem horário?", "marcar consulta", "quando posso ir")
+     OU quando ACEITOU a oferta de agendar que você fez ("sim", "pode ser",
+     "quero sim", "bora", "manda os horários"):
      • SEMPRE inclua a tag "AGENDAMENTO_SOLICITADO" em "tags"
      • Prefira stages avançados ("Aguardando agendamento", "Agendado",
        ou similar conforme as descrições)
-     • A bridge_message DEVE indicar que a equipe humana entrará em
-       contato pra propor data/horário concreto (NUNCA prometa horário
-       específico — você não tem acesso à agenda real do profissional)
+     • ⚠️ O sistema TEM acesso à agenda real: logo após a sua bridge_message
+       ele vai BUSCAR os horários livres e listá-los automaticamente pro lead
+       escolher por número. Então a bridge_message deve ser uma frase CURTA e
+       positiva que INTRODUZ essa lista — ex: "Perfeito! Já separei os horários
+       disponíveis, é só escolher:". NÃO escreva nenhum horário no texto (o
+       sistema injeta os reais) e NUNCA diga que "a equipe humana entrará em
+       contato" (isso contradiz a lista que vem logo abaixo).
      • Aumente a temperatura pra "hot" (cliente quer agir)
    - "pipeline_id": ID do pipeline que melhor encaixa
    - "stage_id": ID de UM stage DISPONÍVEL desse pipeline.
