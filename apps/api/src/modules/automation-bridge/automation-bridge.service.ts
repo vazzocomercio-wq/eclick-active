@@ -107,6 +107,7 @@ export class AutomationBridgeService {
   // ────────────────────────────────────────────
 
   async notifyLojista(input: NotifyLojistaInput): Promise<NotifyLojistaResult> {
+    input = { ...input, organization_id: await this.resolveActiveOrgId(input.organization_id) };
     const exec = await this.insertExecution({
       org_id: input.organization_id,
       execution_type: 'whatsapp_notify_lojista',
@@ -193,7 +194,7 @@ export class AutomationBridgeService {
   async triggerCartRecovery(
     input: TriggerCartRecoveryInput,
   ): Promise<TriggerCartRecoveryResult> {
-    const orgId = input.organization_id;
+    const orgId = await this.resolveActiveOrgId(input.organization_id);
     const rateLimit = Math.max(
       0,
       input.rate_limit_ms ?? DEFAULT_RATE_LIMIT_MS,
@@ -470,6 +471,48 @@ export class AutomationBridgeService {
   }
 
   // ────────────────────────────────────────────
+  // SaaS org_id → Active org_id
+  // ────────────────────────────────────────────
+
+  // Cache do mapeamento (TTL curto; fallback = o próprio id)
+  private readonly orgMapCache = new Map<string, { value: string; until: number }>();
+
+  /**
+   * O SaaS chama o bridge com o organization_id DELE (`public.organizations`).
+   * As tabelas nativas do Active (channels, contacts, deals, pipelines,
+   * org_members, whatsapp_carts…) são chaveadas pelo id de
+   * `active.organizations`. Traduz SaaS→Active via
+   * `active.organizations.saas_org_id`. Sem mapeamento → devolve o próprio id
+   * (compat com chamador que já manda o id do Active / single-tenant).
+   *
+   * Aplicado no topo de TODA entrada pública: assim o `org_id` gravado no
+   * audit (`automation_executions`) também fica como o id do Active, o que
+   * mantém o digest worker (`resolveOwnerTarget(row.org_id)`) e a RLS de
+   * leitura do lojista funcionando.
+   */
+  private async resolveActiveOrgId(incomingOrgId: string): Promise<string> {
+    if (!incomingOrgId) return incomingOrgId;
+    const cached = this.orgMapCache.get(incomingOrgId);
+    if (cached && cached.until > Date.now()) return cached.value;
+
+    let value = incomingOrgId;
+    try {
+      const { data } = await this.supabase.adminClient
+        .from('organizations')
+        .select('id')
+        .eq('saas_org_id', incomingOrgId)
+        .limit(1)
+        .maybeSingle();
+      const mapped = (data as { id: string } | null)?.id;
+      if (mapped) value = mapped;
+    } catch (err) {
+      this.log.warn(`resolveActiveOrgId falhou para ${incomingOrgId}: ${String(err)}`);
+    }
+    this.orgMapCache.set(incomingOrgId, { value, until: Date.now() + 5 * 60 * 1000 });
+    return value;
+  }
+
+  // ────────────────────────────────────────────
   // Persistence helpers
   // ────────────────────────────────────────────
 
@@ -534,7 +577,7 @@ export class AutomationBridgeService {
   // ────────────────────────────────────────────
 
   async sendDirect(input: SendDirectInput): Promise<SendDirectResult> {
-    const orgId = input.organization_id;
+    const orgId = await this.resolveActiveOrgId(input.organization_id);
     const message = (input.message ?? '').trim();
     if (!message) throw new BadRequestException('message é obrigatório');
 
@@ -679,7 +722,7 @@ export class AutomationBridgeService {
   async sendBroadcast(
     input: SendBroadcastInput,
   ): Promise<SendBroadcastResult> {
-    const orgId = input.organization_id;
+    const orgId = await this.resolveActiveOrgId(input.organization_id);
 
     // Validações de input
     const message = (input.message ?? '').trim();
@@ -1082,6 +1125,7 @@ export class AutomationBridgeService {
     if (!input.organization_id || !input.pipeline_id || !input.stage_id) {
       throw new BadRequestException('organization_id, pipeline_id, stage_id são obrigatórios');
     }
+    input = { ...input, organization_id: await this.resolveActiveOrgId(input.organization_id) };
     // assigned_to opcional — resolve o dono da org se ausente.
     const assignedTo = input.assigned_to ?? (await this.resolveOrgOwnerMember(input.organization_id)) ?? undefined;
 
@@ -1159,6 +1203,7 @@ export class AutomationBridgeService {
     if (!input.organization_id || !input.pipeline_id || !input.stage_id) {
       throw new BadRequestException('organization_id, pipeline_id, stage_id são obrigatórios');
     }
+    input = { ...input, organization_id: await this.resolveActiveOrgId(input.organization_id) };
     const phone = (input.contact?.phone ?? '').replace(/\D/g, '');
     const email = (input.contact?.email ?? '').trim().toLowerCase();
     const name  = (input.contact?.name ?? '').trim() || undefined;
@@ -1240,6 +1285,7 @@ export class AutomationBridgeService {
     if (!input.organization_id) {
       throw new BadRequestException('organization_id é obrigatório');
     }
+    input = { ...input, organization_id: await this.resolveActiveOrgId(input.organization_id) };
     const phone = (input.phone ?? '').replace(/\D/g, '');
     const email = (input.email ?? '').trim().toLowerCase();
     const name  = (input.name ?? '').trim() || undefined;
@@ -1288,6 +1334,7 @@ export class AutomationBridgeService {
 
   async ensureServicePipeline(input: EnsureServicePipelineInput): Promise<EnsureServicePipelineResult> {
     if (!input.organization_id) throw new BadRequestException('organization_id é obrigatório');
+    input = { ...input, organization_id: await this.resolveActiveOrgId(input.organization_id) };
     const name = (input.name ?? 'Atendimento da Loja').trim() || 'Atendimento da Loja';
     const stageNames = (input.stages && input.stages.length >= 2)
       ? input.stages
@@ -1414,6 +1461,11 @@ export class AutomationBridgeService {
     }
     if (!input.to_stage_id && !input.to_stage_name) {
       throw new BadRequestException('Informe to_stage_id ou to_stage_name');
+    }
+    // Traduz SaaS→Active só no caminho org+dedup_key (o caminho deal_id deriva
+    // a org direto do deal, não precisa).
+    if (input.organization_id) {
+      input = { ...input, organization_id: await this.resolveActiveOrgId(input.organization_id) };
     }
 
     // Acha o deal: por id direto (deriva a org) ou por org + dedup_key.
