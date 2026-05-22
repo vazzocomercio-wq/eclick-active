@@ -11,6 +11,8 @@ import { AutomationBridgeGuard } from './automation-bridge.guard';
 import type {
   CreateCampaignCardInput,
   CreateCampaignCardResult,
+  CreateLeadInput,
+  CreateLeadResult,
   MoveCardInput,
   MoveCardResult,
   NotifyLojistaInput,
@@ -166,6 +168,21 @@ export class AutomationBridgeController {
     @Body() body: CreateCampaignCardInput,
   ): Promise<CreateCampaignCardResult> {
     return this.service.createCampaignCard(body);
+  }
+
+  /**
+   * POST /commerce/automation-bridge/create-lead
+   *
+   * Formulário editável da Loja Própria → cria/atualiza contato (por
+   * phone/email) + deal no funil+etapa escolhidos, vinculados. Se
+   * assigned_to ausente, resolve o dono da org. Idempotente por dedup_key.
+   *
+   * Body: CreateLeadInput. Retorna { ok, deal_id, contact_id, assigned_to, created }.
+   */
+  @Post('create-lead')
+  @HttpCode(HttpStatus.OK)
+  createLead(@Body() body: CreateLeadInput): Promise<CreateLeadResult> {
+    return this.service.createLead(body);
   }
 
   /**

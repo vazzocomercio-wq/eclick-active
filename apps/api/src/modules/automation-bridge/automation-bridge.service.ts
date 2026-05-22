@@ -17,6 +17,8 @@ import type {
   CartSegment,
   CreateCampaignCardInput,
   CreateCampaignCardResult,
+  CreateLeadInput,
+  CreateLeadResult,
   ExecutionType,
   MoveCardInput,
   MoveCardResult,
@@ -1118,6 +1120,104 @@ export class AutomationBridgeService {
     }
 
     return { ok: true, deal_id: deal.id, task_id: taskId, created: true };
+  }
+
+  // ────────────────────────────────────────────
+  // 5b) Create Lead — formulário da Loja Própria → contato + deal
+  // ────────────────────────────────────────────
+
+  async createLead(input: CreateLeadInput): Promise<CreateLeadResult> {
+    if (!input.organization_id || !input.pipeline_id || !input.stage_id) {
+      throw new BadRequestException('organization_id, pipeline_id, stage_id são obrigatórios');
+    }
+    const phone = (input.contact?.phone ?? '').replace(/\D/g, '');
+    const email = (input.contact?.email ?? '').trim().toLowerCase();
+    const name  = (input.contact?.name ?? '').trim() || undefined;
+    if (!phone && !email) {
+      throw new BadRequestException('contato precisa de phone ou email');
+    }
+
+    // Dedup: deal existente com mesma chave
+    if (input.dedup_key) {
+      const { data: existing } = await this.supabase.adminClient
+        .from('deals')
+        .select('id, contact_id, assigned_to')
+        .eq('org_id', input.organization_id)
+        .filter('custom_fields->>dedup_key', 'eq', input.dedup_key)
+        .limit(1)
+        .maybeSingle();
+      if (existing?.id) {
+        this.log.log(`[create-lead] dedup hit: deal ${existing.id}`);
+        return {
+          ok: true,
+          deal_id: existing.id as string,
+          contact_id: (existing.contact_id as string | null) ?? null,
+          assigned_to: (existing.assigned_to as string | null) ?? null,
+          created: false,
+        };
+      }
+    }
+
+    // 1. Upsert contato (phone preferido; senão email)
+    let contactId: string | null = null;
+    try {
+      const contact = phone
+        ? await this.contacts.findOrCreateByPhone(input.organization_id, phone, name)
+        : await this.contacts.findOrCreateByEmail(input.organization_id, email, name);
+      contactId = contact.id;
+      // Completa email no contato se veio do form e ainda não tinha
+      if (phone && email && !contact.email) {
+        await this.supabase.adminClient
+          .from('contacts')
+          .update({ email })
+          .eq('id', contact.id)
+          .eq('org_id', input.organization_id);
+      }
+    } catch (e) {
+      this.log.warn(`[create-lead] contato falhou: ${(e as Error).message}`);
+    }
+
+    // 2. Resolve assignee: input.assigned_to ou dono/primeiro membro da org
+    const assignedTo = input.assigned_to ?? (await this.resolveOrgOwnerMember(input.organization_id));
+
+    // 3. Cria deal vinculado ao contato
+    const customFields: Record<string, unknown> = {
+      ...(input.custom_fields ?? {}),
+      ...(input.message ? { lead_message: input.message } : {}),
+      ...(input.dedup_key ? { dedup_key: input.dedup_key } : {}),
+      source: 'storefront:lead-form',
+    };
+    const title = (input.title ?? '').trim() || `${name ?? phone ?? email} — lead da loja`;
+    const deal = await this.deals.create(input.organization_id, {
+      title,
+      pipeline_id:   input.pipeline_id,
+      stage_id:      input.stage_id,
+      contact_id:    contactId ?? undefined,
+      assigned_to:   assignedTo ?? undefined,
+      currency:      'BRL',
+      tags:          input.tags ?? ['lead', 'loja-propria'],
+      custom_fields: customFields,
+    });
+
+    this.log.log(`[create-lead] deal ${deal.id} criado (contato=${contactId ?? '-'}, assignee=${assignedTo ?? '-'})`);
+    return { ok: true, deal_id: deal.id, contact_id: contactId, assigned_to: assignedTo, created: true };
+  }
+
+  /** Resolve o membro "dono" de uma org Active: prioriza role 'owner',
+   *  depois 'admin', senão o primeiro membro ativo. Retorna org_members.id
+   *  ou null se a org não tem membros. */
+  private async resolveOrgOwnerMember(orgId: string): Promise<string | null> {
+    const { data } = await this.supabase.adminClient
+      .from('org_members')
+      .select('id, role')
+      .eq('org_id', orgId)
+      .eq('status', 'active');
+    const members = (data ?? []) as Array<{ id: string; role: string }>;
+    if (members.length === 0) return null;
+    const owner = members.find(m => m.role === 'owner')
+      ?? members.find(m => m.role === 'admin')
+      ?? members[0];
+    return owner?.id ?? null;
   }
 
   // ────────────────────────────────────────────

@@ -146,6 +146,40 @@ export interface CreateCampaignCardResult {
 }
 
 // ──────────────────────────────────────────────────────────
+// Create lead — formulário da Loja Própria → contato + deal no funil
+// ──────────────────────────────────────────────────────────
+
+export interface CreateLeadInput {
+  organization_id: string;
+  pipeline_id:     string;
+  stage_id:        string;
+  /** Dono do card (org_members.id). Opcional — resolve o dono da org se ausente. */
+  assigned_to?:    string;
+  contact: {
+    name?:  string;
+    email?: string;
+    phone?: string;
+  };
+  /** Título do card (default: nome do contato + " — lead da loja"). */
+  title?:          string;
+  /** Mensagem/observação do formulário — vira nota no custom_fields. */
+  message?:        string;
+  /** Campos extras do formulário (label → valor). */
+  custom_fields?:  Record<string, unknown>;
+  tags?:           string[];
+  /** Chave lógica pra dedup (ex: storefront_lead:<uuid>). */
+  dedup_key?:      string;
+}
+
+export interface CreateLeadResult {
+  ok:          true;
+  deal_id:     string;
+  contact_id:  string | null;
+  assigned_to: string | null;
+  created:     boolean;
+}
+
+// ──────────────────────────────────────────────────────────
 // Move card — SaaS avança um card existente de etapa (funil Anúncios ML)
 // ──────────────────────────────────────────────────────────
 
