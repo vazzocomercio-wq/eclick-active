@@ -98,4 +98,14 @@ export const bridgeApi = {
     api.get<SaasProduct | null>(`/bridge/products/${encodeURIComponent(sku)}`, {
       signal,
     }),
+
+  /** Lista produtos do catálogo do SaaS (seletor do Social AI Studio). */
+  listProducts: (
+    params: { search?: string; limit?: number } = {},
+    signal?: AbortSignal,
+  ) =>
+    api.get<SaasProduct[]>('/bridge/products', {
+      query: { search: params.search, limit: params.limit },
+      signal,
+    }),
 };

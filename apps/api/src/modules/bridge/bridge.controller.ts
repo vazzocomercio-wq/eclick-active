@@ -53,6 +53,20 @@ export class BridgeController {
     return this.bridge.getOrderByQuery(user.org_id, q);
   }
 
+  /** Lista produtos do catálogo do SaaS (seletor do Social AI Studio).
+   *  Definido ANTES de :sku pra não ser capturado pela rota com param. */
+  @Get('products')
+  listProducts(
+    @CurrentUser() user: AuthUser,
+    @Query('search') search?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.bridge.listProducts(user.org_id, {
+      search: search ?? undefined,
+      limit: limit ? Number(limit) : 60,
+    });
+  }
+
   @Get('products/:sku')
   productBySku(@CurrentUser() user: AuthUser, @Param('sku') sku: string) {
     return this.bridge.getProduct(user.org_id, { sku });

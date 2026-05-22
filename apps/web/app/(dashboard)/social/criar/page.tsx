@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Sparkles, Lock, Hash } from 'lucide-react';
+import { ArrowLeft, Sparkles, Lock, Hash, Package, Search, X } from 'lucide-react';
 import { useBrands } from '@/hooks/use-social';
 import { socialApi, type ContentPillar, type SocialContent } from '@/lib/api/social';
+import { bridgeApi, type SaasProduct } from '@/lib/api/bridge';
 import { Button } from '@/components/ui/button';
 import { InstagramMockup } from '@/components/social/instagram-mockup';
 import { cn } from '@/lib/utils';
@@ -63,9 +64,45 @@ export default function CreateContentPage() {
   } | null>(null);
   const [tagsLoading, setTagsLoading] = useState(false);
 
+  // Catalog-aware: produto do catálogo do SaaS (via bridge)
+  const [products, setProducts] = useState<SaasProduct[]>([]);
+  const [productSearch, setProductSearch] = useState('');
+  const [selectedProduct, setSelectedProduct] = useState<SaasProduct | null>(null);
+  const [showProductList, setShowProductList] = useState(false);
+
   useEffect(() => {
     if (!brandId && brands.length > 0 && brands[0]) setBrandId(brands[0].id);
   }, [brands, brandId]);
+
+  // Busca produtos (debounce) quando a lista está aberta
+  useEffect(() => {
+    if (!showProductList) return;
+    const ctrl = new AbortController();
+    const t = setTimeout(() => {
+      bridgeApi
+        .listProducts({ search: productSearch.trim() || undefined, limit: 40 }, ctrl.signal)
+        .then(setProducts)
+        .catch(() => { /* fallback vazio */ });
+    }, 300);
+    return () => { clearTimeout(t); ctrl.abort(); };
+  }, [productSearch, showProductList]);
+
+  const pickProduct = (p: SaasProduct) => {
+    setSelectedProduct(p);
+    setShowProductList(false);
+    setProductSearch('');
+    setPillar('product');
+    const priceTxt = p.price != null ? ` Preço: R$ ${Number(p.price).toFixed(2)}.` : '';
+    setTheme(
+      `Post sobre o produto "${p.title ?? p.sku}".${p.category ? ` Categoria: ${p.category}.` : ''}${priceTxt} ` +
+        `Destaque os benefícios e o diferencial, e convide a comprar.`,
+    );
+  };
+
+  const clearProduct = () => {
+    setSelectedProduct(null);
+    setTheme('');
+  };
 
   const generate = async () => {
     if (!brandId || !theme.trim()) return;
@@ -80,7 +117,7 @@ export default function CreateContentPage() {
         cta: cta.trim() || undefined,
         visual_style: visualStyle,
       };
-      const r =
+      let r =
         tab === 'carousel'
           ? await socialApi.generate.carousel({
               ...body,
@@ -88,6 +125,18 @@ export default function CreateContentPage() {
               structure: structure as Parameters<typeof socialApi.generate.carousel>[0]['structure'],
             })
           : await socialApi.generate.post(body);
+
+      // Catalog-aware: se um produto foi selecionado, usa a FOTO REAL do
+      // produto como imagem do post (em vez da imagem gerada por IA) +
+      // vincula o produto. A legenda já saiu sobre o produto (tema).
+      if (selectedProduct?.thumbnail_url) {
+        try {
+          r = await socialApi.contents.update(r.id, {
+            cover_image_url: selectedProduct.thumbnail_url,
+            related_product_id: selectedProduct.id,
+          });
+        } catch { /* mantém a imagem gerada se o PATCH falhar */ }
+      }
       setResult(r);
     } catch (err) {
       alert(`Erro ao gerar: ${err instanceof Error ? err.message : 'desconhecido'}`);
@@ -208,6 +257,81 @@ export default function CreateContentPage() {
                   </option>
                 ))}
               </select>
+            </Field>
+
+            <Field label="Produto do catálogo (opcional)">
+              {selectedProduct ? (
+                <div className="flex items-center gap-2 rounded-md border border-primary/40 bg-primary/5 p-2">
+                  {selectedProduct.thumbnail_url && (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img src={selectedProduct.thumbnail_url} alt="" className="h-10 w-10 rounded object-cover" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-medium">{selectedProduct.title ?? selectedProduct.sku}</p>
+                    {selectedProduct.price != null && (
+                      <p className="text-[10px] text-muted-foreground">R$ {Number(selectedProduct.price).toFixed(2)}</p>
+                    )}
+                  </div>
+                  <button type="button" onClick={clearProduct} className="p-1 text-muted-foreground hover:text-foreground">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ) : showProductList ? (
+                <div className="rounded-md border border-border bg-background">
+                  <div className="relative border-b border-border">
+                    <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      autoFocus
+                      value={productSearch}
+                      onChange={(e) => setProductSearch(e.target.value)}
+                      placeholder="Buscar produto…"
+                      className="w-full bg-transparent py-1.5 pl-7 pr-2 text-sm outline-none"
+                    />
+                  </div>
+                  <div className="max-h-52 overflow-y-auto">
+                    {products.length === 0 ? (
+                      <p className="px-2 py-3 text-center text-[11px] text-muted-foreground">
+                        {productSearch ? 'Nada encontrado.' : 'Digite pra buscar no catálogo…'}
+                      </p>
+                    ) : (
+                      products.map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => pickProduct(p)}
+                          className="flex w-full items-center gap-2 px-2 py-1.5 text-left hover:bg-muted"
+                        >
+                          {p.thumbnail_url ? (
+                            /* eslint-disable-next-line @next/next/no-img-element */
+                            <img src={p.thumbnail_url} alt="" className="h-8 w-8 rounded object-cover" />
+                          ) : (
+                            <span className="flex h-8 w-8 items-center justify-center rounded bg-muted">
+                              <Package className="h-3.5 w-3.5 text-muted-foreground" />
+                            </span>
+                          )}
+                          <span className="min-w-0 flex-1 truncate text-xs">{p.title ?? p.sku}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setShowProductList(false); setProductSearch(''); }}
+                    className="w-full border-t border-border py-1 text-[11px] text-muted-foreground hover:bg-muted"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowProductList(true)}
+                  className="flex w-full items-center gap-2 rounded-md border border-dashed border-border bg-background px-2 py-2 text-sm text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                >
+                  <Package className="h-4 w-4" />
+                  Escolher um produto pra IA criar o post (usa a foto real)
+                </button>
+              )}
             </Field>
 
             <Field label="Tema (sobre o que é o post?)" required>

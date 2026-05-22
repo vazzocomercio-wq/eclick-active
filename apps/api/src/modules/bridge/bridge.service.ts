@@ -151,6 +151,61 @@ export class BridgeService {
     }
   }
 
+  /** Resolve a org do SaaS a partir da org do Active.
+   *  `active.organizations.saas_org_id` mapeia Active→SaaS. Quando null
+   *  (instância única / mesma org id), cai pro próprio orgId. Cache leve. */
+  private readonly saasOrgCache = new Map<string, { value: string | null; until: number }>();
+  private async resolveSaasOrgId(activeOrgId: string): Promise<string | null> {
+    const cached = this.saasOrgCache.get(activeOrgId);
+    if (cached && cached.until > Date.now()) return cached.value;
+    try {
+      const { data, error } = await this.supabase.adminClient
+        .from('organizations')
+        .select('saas_org_id')
+        .eq('id', activeOrgId)
+        .maybeSingle();
+      if (error) throw error;
+      const value =
+        (data as { saas_org_id?: string | null } | null)?.saas_org_id ?? activeOrgId;
+      this.saasOrgCache.set(activeOrgId, { value, until: Date.now() + HAS_SAAS_TTL_MS });
+      return value;
+    } catch (err) {
+      this.log.warn(`resolveSaasOrgId falhou para ${activeOrgId}: ${String(err)}`);
+      return activeOrgId;
+    }
+  }
+
+  /** Lista produtos do catálogo do SaaS (pra seletor no Social AI Studio).
+   *  Resolve a org Active→SaaS, filtra por thumbnail presente, busca por título. */
+  async listProducts(
+    activeOrgId: string,
+    opts: { search?: string; limit?: number } = {},
+  ): Promise<SaasProduct[]> {
+    const saasOrgId = await this.resolveSaasOrgId(activeOrgId);
+    if (!saasOrgId) return [];
+    if (!(await this.hasSaasIntegration(saasOrgId))) return [];
+    try {
+      let q = this.supabase.adminClient
+        .from('v_saas_products')
+        .select(
+          'id,organization_id,ml_listing_id,title,sku,price,cost,stock_quantity,category,thumbnail_url,status,marketplace,margin_percent,metadata,created_at,updated_at',
+        )
+        .eq('organization_id', saasOrgId)
+        .not('thumbnail_url', 'is', null)
+        .order('updated_at', { ascending: false, nullsFirst: false })
+        .limit(Math.min(opts.limit ?? 60, 200));
+      if (opts.search?.trim()) {
+        q = q.ilike('title', `%${opts.search.trim()}%`);
+      }
+      const { data, error } = await q;
+      if (error) throw error;
+      return (data ?? []) as SaasProduct[];
+    } catch (err) {
+      this.log.warn(`listProducts falhou para ${activeOrgId}: ${String(err)}`);
+      return [];
+    }
+  }
+
   /** Produto por SKU ou ml_listing_id. */
   async getProduct(
     orgId: string,
