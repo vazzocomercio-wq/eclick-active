@@ -116,8 +116,9 @@ export interface CreateCampaignCardInput {
   organization_id:    string;
   pipeline_id:        string;
   stage_id:           string;
-  /** Quem vai ficar dono do card e da task (auth.users.id). */
-  assigned_to:        string;
+  /** Quem vai ficar dono do card e da task (org_members.id). Opcional —
+   *  resolve o dono da org se ausente. */
+  assigned_to?:       string;
   /** Título do card no kanban (ex: "DEAL Dia das Mães — D-2"). */
   title:              string;
   /** Texto da task vinculada (ex: "Revisar 13 candidatos antes do deadline"). */
@@ -130,6 +131,8 @@ export interface CreateCampaignCardInput {
   tags?:              string[];
   /** Metadados livres (ml_campaign_id, ml_promotion_type, alert_type, etc). */
   metadata?:          Record<string, unknown>;
+  /** Contato a vincular ao card (active.contacts.id). Opcional. */
+  contact_id?:        string;
   /** Se já existe card pra esse contexto, evita duplicar.
    *  Snapshot de chave lógica — ex: "campaign:<uuid>:deadline_warning". */
   dedup_key?:         string;
@@ -177,6 +180,52 @@ export interface CreateLeadResult {
   contact_id:  string | null;
   assigned_to: string | null;
   created:     boolean;
+}
+
+// ──────────────────────────────────────────────────────────
+// Upsert contact — cria/acha contato (sem deal). Usado pelo
+// Ambientador IA da Loja Própria: ao validar o WhatsApp do cliente,
+// o SaaS cria o contato no Active e guarda o contact_id (sem abrir card —
+// o card só vem quando o cliente gera as imagens).
+// ──────────────────────────────────────────────────────────
+
+export interface UpsertContactInput {
+  organization_id: string;
+  name?:  string;
+  email?: string;
+  phone?: string;
+  tags?:  string[];
+  /** Origem do contato (ex: 'storefront:visualizer'). Vai pra contacts.source. */
+  source?: string;
+}
+
+export interface UpsertContactResult {
+  ok:         true;
+  contact_id: string | null;
+  created:    boolean;
+}
+
+// ──────────────────────────────────────────────────────────
+// Ensure service pipeline — cria (idempotente) um funil dedicado pra
+// org com etapas padrão. Usado pelo Ambientador IA da Loja Própria pra
+// garantir o funil "Atendimento da Loja" antes de abrir o card.
+// ──────────────────────────────────────────────────────────
+
+export interface EnsureServicePipelineInput {
+  organization_id: string;
+  /** Nome do funil (default 'Atendimento da Loja'). */
+  name?: string;
+  /** Nomes das etapas em ordem (default Novo/Em atendimento/Convertido/Perdido). */
+  stages?: string[];
+}
+
+export interface EnsureServicePipelineResult {
+  ok: true;
+  pipeline_id: string;
+  /** Etapa de entrada (1ª). */
+  default_stage_id: string;
+  stages: Array<{ id: string; name: string }>;
+  created: boolean;
 }
 
 // ──────────────────────────────────────────────────────────
@@ -259,6 +308,9 @@ export interface SendDirectInput {
   phone: string;
   /** Texto da mensagem (já formatado no SaaS — pode ter *bold* markdown WA). */
   message: string;
+  /** Imagens (URLs https públicas) a enviar junto. A 1ª leva `message` como
+   *  legenda; as demais vão sem legenda. Usado pelo Ambientador IA. */
+  image_urls?: string[];
   /** Chave de idempotência ("storefront_order:abc:shipped"). Quando setada,
    *  bridge consulta automation_executions pra evitar duplicar envio. */
   dedup_key?: string;

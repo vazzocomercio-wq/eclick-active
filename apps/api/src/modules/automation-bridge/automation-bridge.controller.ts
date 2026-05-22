@@ -13,6 +13,8 @@ import type {
   CreateCampaignCardResult,
   CreateLeadInput,
   CreateLeadResult,
+  EnsureServicePipelineInput,
+  EnsureServicePipelineResult,
   MoveCardInput,
   MoveCardResult,
   NotifyLojistaInput,
@@ -23,6 +25,8 @@ import type {
   SendDirectResult,
   TriggerCartRecoveryInput,
   TriggerCartRecoveryResult,
+  UpsertContactInput,
+  UpsertContactResult,
 } from './automation-bridge.types';
 
 /**
@@ -183,6 +187,39 @@ export class AutomationBridgeController {
   @HttpCode(HttpStatus.OK)
   createLead(@Body() body: CreateLeadInput): Promise<CreateLeadResult> {
     return this.service.createLead(body);
+  }
+
+  /**
+   * POST /commerce/automation-bridge/upsert-contact
+   *
+   * Cria/acha um contato (por phone, senão email) SEM abrir card. Usado
+   * pelo Ambientador IA da Loja Própria: ao validar o WhatsApp do cliente,
+   * o SaaS registra o contato no Active e guarda o contact_id. O card só
+   * é aberto depois, quando o cliente gera as imagens (create-campaign-card).
+   *
+   * Body: UpsertContactInput. Retorna { ok, contact_id, created }.
+   */
+  @Post('upsert-contact')
+  @HttpCode(HttpStatus.OK)
+  upsertContact(@Body() body: UpsertContactInput): Promise<UpsertContactResult> {
+    return this.service.upsertContact(body);
+  }
+
+  /**
+   * POST /commerce/automation-bridge/ensure-service-pipeline
+   *
+   * Garante (idempotente) um funil dedicado de atendimento pra org, com
+   * etapas padrão. Usado pelo Ambientador IA da Loja Própria pra ter o
+   * funil "Atendimento da Loja" antes de abrir o card do cliente.
+   *
+   * Body: EnsureServicePipelineInput. Retorna ids do funil + etapa de entrada.
+   */
+  @Post('ensure-service-pipeline')
+  @HttpCode(HttpStatus.OK)
+  ensureServicePipeline(
+    @Body() body: EnsureServicePipelineInput,
+  ): Promise<EnsureServicePipelineResult> {
+    return this.service.ensureServicePipeline(body);
   }
 
   /**

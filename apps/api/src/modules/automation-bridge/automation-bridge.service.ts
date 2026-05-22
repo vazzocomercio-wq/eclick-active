@@ -19,6 +19,8 @@ import type {
   CreateCampaignCardResult,
   CreateLeadInput,
   CreateLeadResult,
+  EnsureServicePipelineInput,
+  EnsureServicePipelineResult,
   ExecutionType,
   MoveCardInput,
   MoveCardResult,
@@ -31,6 +33,8 @@ import type {
   SendDirectResult,
   TriggerCartRecoveryInput,
   TriggerCartRecoveryResult,
+  UpsertContactInput,
+  UpsertContactResult,
 } from './automation-bridge.types';
 
 // Severidades que disparam mensagem imediata (sem digest)
@@ -588,21 +592,41 @@ export class AutomationBridgeService {
       // Cria/recupera contato pelo telefone
       const contact = await this.contacts.findOrCreateByPhone(orgId, phone);
 
-      // Envia via ChannelDispatcher (mesma pipeline do notifyLojista)
-      const result = await this.dispatcher.send({
-        org_id: orgId,
-        channel_id: channelId,
-        contact_id: contact.id,
-        content_type: 'text',
-        content: { body: message },
-      });
+      // Envia via ChannelDispatcher (mesma pipeline do notifyLojista).
+      // Com image_urls: manda cada imagem (a 1ª leva a mensagem como legenda).
+      const imageUrls = (input.image_urls ?? []).filter(
+        (u): u is string => typeof u === 'string' && /^https:\/\//.test(u),
+      );
+      let result;
+      if (imageUrls.length > 0) {
+        for (let i = 0; i < imageUrls.length; i++) {
+          const content: Record<string, string> = { url: imageUrls[i] };
+          if (i === 0) content.caption = message;
+          result = await this.dispatcher.send({
+            org_id: orgId,
+            channel_id: channelId,
+            contact_id: contact.id,
+            content_type: 'image',
+            content,
+          });
+        }
+      } else {
+        result = await this.dispatcher.send({
+          org_id: orgId,
+          channel_id: channelId,
+          contact_id: contact.id,
+          content_type: 'text',
+          content: { body: message },
+        });
+      }
 
       await this.markExecution(exec.id, {
         status: 'sent',
         result: {
-          channel_message_id: result.channel_message_id,
-          status: result.status,
+          channel_message_id: result?.channel_message_id,
+          status: result?.status,
           contact_id: contact.id,
+          images: imageUrls.length,
         },
       });
 
@@ -1055,9 +1079,11 @@ export class AutomationBridgeService {
    *  exception (SaaS captura no try/catch do alerts service).
    */
   async createCampaignCard(input: CreateCampaignCardInput): Promise<CreateCampaignCardResult> {
-    if (!input.organization_id || !input.pipeline_id || !input.stage_id || !input.assigned_to) {
-      throw new BadRequestException('organization_id, pipeline_id, stage_id, assigned_to são obrigatórios');
+    if (!input.organization_id || !input.pipeline_id || !input.stage_id) {
+      throw new BadRequestException('organization_id, pipeline_id, stage_id são obrigatórios');
     }
+    // assigned_to opcional — resolve o dono da org se ausente.
+    const assignedTo = input.assigned_to ?? (await this.resolveOrgOwnerMember(input.organization_id)) ?? undefined;
 
     // Dedup: se vier dedup_key, busca deal existente com mesma chave
     if (input.dedup_key) {
@@ -1086,7 +1112,8 @@ export class AutomationBridgeService {
       title:               input.title,
       pipeline_id:         input.pipeline_id,
       stage_id:            input.stage_id,
-      assigned_to:         input.assigned_to,
+      assigned_to:         assignedTo,
+      contact_id:          input.contact_id,
       value:               input.value,
       currency:            'BRL',
       expected_close_date: input.due_date,
@@ -1094,29 +1121,31 @@ export class AutomationBridgeService {
       custom_fields:       customFields,
     });
 
-    // 2. Cria task vinculada ao deal
+    // 2. Cria task vinculada ao deal (exige um responsável)
     let taskId: string | null = null;
-    try {
-      const task = await this.tasks.create(
-        input.organization_id,
-        {
-          title:        input.task_title,
-          description:  `Task gerada automaticamente pelo Campaign Center IA do SaaS.\n\nDedup: ${input.dedup_key ?? '-'}`,
-          task_type:    'follow_up',
-          priority:     'high',
-          deal_id:      deal.id,
-          assigned_to:  input.assigned_to,
-          due_date:     input.due_date,
-          created_by_ai: true,
-          ai_context:   `ml-campaigns:${input.dedup_key ?? deal.id}`,
-          metadata:     input.metadata ?? {},
-        },
-        null, // createdBy: null pois é server-to-server (não tem auth.users)
-      );
-      taskId = task.id;
-    } catch (e) {
-      // Falha na task NÃO desfaz o deal — log e segue.
-      this.log.warn(`[campaign-card] task create failed pra deal ${deal.id}: ${(e as Error).message}`);
+    if (assignedTo) {
+      try {
+        const task = await this.tasks.create(
+          input.organization_id,
+          {
+            title:        input.task_title,
+            description:  `Task gerada automaticamente pelo Campaign Center IA do SaaS.\n\nDedup: ${input.dedup_key ?? '-'}`,
+            task_type:    'follow_up',
+            priority:     'high',
+            deal_id:      deal.id,
+            assigned_to:  assignedTo,
+            due_date:     input.due_date,
+            created_by_ai: true,
+            ai_context:   `ml-campaigns:${input.dedup_key ?? deal.id}`,
+            metadata:     input.metadata ?? {},
+          },
+          null, // createdBy: null pois é server-to-server (não tem auth.users)
+        );
+        taskId = task.id;
+      } catch (e) {
+        // Falha na task NÃO desfaz o deal — log e segue.
+        this.log.warn(`[campaign-card] task create failed pra deal ${deal.id}: ${(e as Error).message}`);
+      }
     }
 
     return { ok: true, deal_id: deal.id, task_id: taskId, created: true };
@@ -1201,6 +1230,146 @@ export class AutomationBridgeService {
 
     this.log.log(`[create-lead] deal ${deal.id} criado (contato=${contactId ?? '-'}, assignee=${assignedTo ?? '-'})`);
     return { ok: true, deal_id: deal.id, contact_id: contactId, assigned_to: assignedTo, created: true };
+  }
+
+  // ────────────────────────────────────────────
+  // 5c) Upsert Contact — cria/acha contato sem deal (Ambientador IA)
+  // ────────────────────────────────────────────
+
+  async upsertContact(input: UpsertContactInput): Promise<UpsertContactResult> {
+    if (!input.organization_id) {
+      throw new BadRequestException('organization_id é obrigatório');
+    }
+    const phone = (input.phone ?? '').replace(/\D/g, '');
+    const email = (input.email ?? '').trim().toLowerCase();
+    const name  = (input.name ?? '').trim() || undefined;
+    if (!phone && !email) {
+      throw new BadRequestException('contato precisa de phone ou email');
+    }
+
+    let contactId: string | null = null;
+    let created = false;
+    try {
+      const contact = phone
+        ? await this.contacts.findOrCreateByPhone(input.organization_id, phone, name)
+        : await this.contacts.findOrCreateByEmail(input.organization_id, email, name);
+      contactId = contact.id;
+      // findOrCreate não retorna flag de "novo"; usamos created_at recente como heurística leve.
+      created = Boolean(contact.created_at && Date.now() - new Date(contact.created_at).getTime() < 10_000);
+
+      // Completa campos vazios + tags + source (não sobrescreve dados existentes)
+      const patch: Record<string, unknown> = {};
+      if (phone && email && !contact.email) patch.email = email;
+      if (name && !contact.name) patch.name = name;
+      if (input.source && !contact.source) patch.source = input.source;
+      if (Array.isArray(input.tags) && input.tags.length) {
+        const existing = Array.isArray(contact.tags) ? (contact.tags as string[]) : [];
+        const merged = Array.from(new Set([...existing, ...input.tags]));
+        if (merged.length !== existing.length) patch.tags = merged;
+      }
+      if (Object.keys(patch).length) {
+        await this.supabase.adminClient
+          .from('contacts')
+          .update(patch)
+          .eq('id', contact.id)
+          .eq('org_id', input.organization_id);
+      }
+    } catch (e) {
+      this.log.warn(`[upsert-contact] falhou: ${(e as Error).message}`);
+      throw new InternalServerErrorException('Não foi possível criar/achar o contato');
+    }
+
+    return { ok: true, contact_id: contactId, created };
+  }
+
+  // ────────────────────────────────────────────
+  // 5d) Ensure Service Pipeline — funil dedicado idempotente
+  // ────────────────────────────────────────────
+
+  async ensureServicePipeline(input: EnsureServicePipelineInput): Promise<EnsureServicePipelineResult> {
+    if (!input.organization_id) throw new BadRequestException('organization_id é obrigatório');
+    const name = (input.name ?? 'Atendimento da Loja').trim() || 'Atendimento da Loja';
+    const stageNames = (input.stages && input.stages.length >= 2)
+      ? input.stages
+      : ['Novo', 'Em atendimento', 'Convertido', 'Perdido'];
+
+    // Já existe funil com esse nome pra org? (idempotente)
+    const { data: existing } = await this.supabase.adminClient
+      .from('pipelines')
+      .select('id')
+      .eq('org_id', input.organization_id)
+      .ilike('name', name)
+      .limit(1)
+      .maybeSingle();
+
+    if (existing?.id) {
+      const stages = await this.fetchServiceStages(existing.id as string);
+      return {
+        ok: true,
+        pipeline_id: existing.id as string,
+        default_stage_id: stages[0]?.id ?? '',
+        stages,
+        created: false,
+      };
+    }
+
+    // Cria funil + etapas
+    const { data: pipelineRow, error: pErr } = await this.supabase.adminClient
+      .from('pipelines')
+      .insert({
+        org_id: input.organization_id,
+        name,
+        is_default: false,
+        settings: { source: 'storefront:visualizer' },
+      })
+      .select('id')
+      .single();
+    if (pErr || !pipelineRow) {
+      throw new InternalServerErrorException(pErr?.message ?? 'Falha ao criar funil');
+    }
+    const pipelineId = pipelineRow.id as string;
+
+    const palette = ['#06b6d4', '#6366f1', '#22c55e', '#ef4444', '#eab308', '#a855f7'];
+    const stageRows = stageNames.map((nm, idx) => {
+      const norm = normalizeStageName(nm);
+      const isWon = /converti|ganho|won|vendid/.test(norm);
+      const isLost = /perdid|lost|cancel/.test(norm);
+      return {
+        pipeline_id: pipelineId,
+        name: nm,
+        position: idx,
+        color: isWon ? '#22c55e' : isLost ? '#ef4444' : palette[idx % palette.length],
+        probability: isWon ? 100 : isLost ? 0 : Math.min(90, 10 + idx * 20),
+        is_won: isWon,
+        is_lost: isLost,
+      };
+    });
+    const { error: sErr } = await this.supabase.adminClient
+      .from('pipeline_stages')
+      .insert(stageRows);
+    if (sErr) {
+      await this.supabase.adminClient.from('pipelines').delete().eq('id', pipelineId);
+      throw new InternalServerErrorException(sErr.message);
+    }
+
+    const stages = await this.fetchServiceStages(pipelineId);
+    this.log.log(`[ensure-pipeline] criado funil "${name}" (${pipelineId}) pra org ${input.organization_id}`);
+    return {
+      ok: true,
+      pipeline_id: pipelineId,
+      default_stage_id: stages[0]?.id ?? '',
+      stages,
+      created: true,
+    };
+  }
+
+  private async fetchServiceStages(pipelineId: string): Promise<Array<{ id: string; name: string }>> {
+    const { data } = await this.supabase.adminClient
+      .from('pipeline_stages')
+      .select('id, name, position')
+      .eq('pipeline_id', pipelineId)
+      .order('position', { ascending: true });
+    return ((data ?? []) as Array<{ id: string; name: string }>).map(s => ({ id: s.id, name: s.name }));
   }
 
   /** Resolve o membro "dono" de uma org Active: prioriza role 'owner',
