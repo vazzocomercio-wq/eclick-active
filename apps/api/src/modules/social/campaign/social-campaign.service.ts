@@ -132,6 +132,8 @@ export class SocialCampaignService {
       (await this.bridge.getCommercialSignals(orgId, [dto.product_ref]))[0] ??
       null;
     const commercialEmphasis = buildCommercialEmphasis(recipe, signal);
+    const useInfluencer =
+      dto.use_ai_influencer ?? recipe?.use_ai_influencer ?? false;
 
     // Estimativa de custo
     const reelCost = videoCostUsd(videoModel, videoDuration);
@@ -236,6 +238,7 @@ export class SocialCampaignService {
       videoModel,
       videoDuration,
       commercialEmphasis,
+      useInfluencer,
     }).catch((e) => {
       this.log.error(`runCampaign falhou: ${(e as Error).message}`);
       void this.supabase.adminClient
@@ -261,6 +264,7 @@ export class SocialCampaignService {
       videoModel: string;
       videoDuration: number;
       commercialEmphasis?: string;
+      useInfluencer?: boolean;
     },
   ): Promise<void> {
     const angles = await this.planAngles(
@@ -289,6 +293,11 @@ export class SocialCampaignService {
       try {
         let content: SocialContent;
         if (spec.asset_type === 'reel') {
+          // Modo influenciador IA: gera cena com um criador apresentando o
+          // produto (UGC), em vez de só animar a foto.
+          const stylePrompt = cfg.useInfluencer
+            ? `${spec.style?.prompt ?? ''} — estilo UGC de criador: uma pessoa real/criador(a) apresentando e falando do produto, vibe selfie handheld, autêntico, luz natural`.trim()
+            : spec.style?.prompt;
           content = await this.genReelWithRetry(orgId, {
             brand_id: dto.brand_id,
             theme: angle.angle,
@@ -299,10 +308,10 @@ export class SocialCampaignService {
             product_photo_url: dto.product_photo_url,
             product_description: dto.product_description,
             category: dto.category,
-            video_mode: 'product_photo',
+            video_mode: cfg.useInfluencer ? 'ai_scene' : 'product_photo',
             style: spec.style?.id,
             style_label: spec.style?.label,
-            style_prompt: spec.style?.prompt,
+            style_prompt: stylePrompt,
             framework: spec.framework?.id,
             framework_label: spec.framework?.label,
             framework_prompt: spec.framework?.prompt,
@@ -311,10 +320,11 @@ export class SocialCampaignService {
             model_name: cfg.videoModel,
             camera_motion: spec.style?.camera,
             channels: cfg.channels,
-            multi_scene: !!dto.multi_scene,
+            multi_scene: !!dto.multi_scene && !cfg.useInfluencer,
             photo_urls: dto.product_photos,
           });
           actualCost += videoCostUsd(cfg.videoModel, cfg.videoDuration);
+          if (cfg.useInfluencer) await this.appendAiDisclosure(orgId, content);
         } else if (spec.asset_type === 'carousel') {
           content = await this.ai.createAndGenerateCarousel(orgId, {
             brand_id: dto.brand_id,
@@ -729,6 +739,20 @@ export class SocialCampaignService {
         ],
       })
       .eq('id', contentId)
+      .eq('org_id', orgId);
+  }
+
+  /** Selo de disclosure (Meta/TikTok exigem rotular conteúdo IA). */
+  private async appendAiDisclosure(
+    orgId: string,
+    content: SocialContent,
+  ): Promise<void> {
+    const cap = content.caption ?? '';
+    if (/🤖|intelig[êe]ncia artificial|\bIA\b|\bA\.?I\b/i.test(cap)) return;
+    await this.supabase.adminClient
+      .from('social_contents')
+      .update({ caption: `${cap}\n\n🤖 Conteúdo criado com IA`.trim() })
+      .eq('id', content.id)
       .eq('org_id', orgId);
   }
 

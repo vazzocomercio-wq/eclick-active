@@ -47,6 +47,10 @@ export default function AutomacaoPage() {
   const [maxCost, setMaxCost] = useState(10);
   const [styles, setStyles] = useState<string[]>([]);
   const [frameworks, setFrameworks] = useState<string[]>([]);
+  const [useInfluencer, setUseInfluencer] = useState(false);
+  const [highMargin, setHighMargin] = useState(false);
+  const [overstock, setOverstock] = useState(false);
+  const [followRadar, setFollowRadar] = useState(false);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -65,6 +69,10 @@ export default function AutomacaoPage() {
         setMaxCost(r.max_cost_usd);
         setStyles(r.allowed_video_styles ?? []);
         setFrameworks(r.allowed_frameworks ?? []);
+        setUseInfluencer(r.use_ai_influencer ?? false);
+        setHighMargin(r.prioritize_high_margin ?? false);
+        setOverstock(r.prioritize_overstock ?? false);
+        setFollowRadar(r.follow_radar ?? false);
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Erro ao carregar'))
       .finally(() => setLoading(false));
@@ -93,6 +101,10 @@ export default function AutomacaoPage() {
         max_cost_usd: maxCost,
         allowed_video_styles: styles,
         allowed_frameworks: frameworks,
+        use_ai_influencer: useInfluencer,
+        prioritize_high_margin: highMargin,
+        prioritize_overstock: overstock,
+        follow_radar: followRadar,
       });
       setRecipe(updated);
       setSaved(true);
@@ -251,12 +263,52 @@ export default function AutomacaoPage() {
               <Num label="Teto (US$)" value={maxCost} onChange={setMaxCost} min={1} max={200} step={1} />
             </Section>
 
-            {/* Roadmap — Fase 2/3 */}
-            <Section title="Em breve" desc="Recursos das próximas fases.">
+            {/* Inteligência comercial (Fase 2) */}
+            <Section
+              title="Inteligência comercial"
+              desc="A IA usa esses sinais pra escolher o que empurrar e como falar."
+            >
+              <div className="grid gap-2">
+                <Toggle
+                  label="Priorizar alta margem"
+                  desc="empurra mais os produtos que dão mais lucro"
+                  checked={highMargin}
+                  onChange={setHighMargin}
+                />
+                <Toggle
+                  label="Girar overstock"
+                  desc="cria urgência nos produtos parados no estoque"
+                  checked={overstock}
+                  onChange={setOverstock}
+                />
+                <Toggle
+                  label="Seguir o Radar"
+                  desc="surfa a tendência dos produtos com demanda subindo"
+                  checked={followRadar}
+                  onChange={setFollowRadar}
+                />
+              </div>
+            </Section>
+
+            {/* Influenciador IA (Fase 3) */}
+            <Section
+              title="Influenciador IA"
+              desc="Reels em estilo UGC com um criador apresentando o produto (gerado por Sora/Veo). A legenda recebe o selo 'Conteúdo criado com IA' automaticamente."
+            >
+              <Toggle
+                label="Gerar reels com influenciador IA"
+                desc="experimental — a fidelidade varia; revise antes de publicar"
+                checked={useInfluencer}
+                onChange={setUseInfluencer}
+              />
+            </Section>
+
+            {/* Roadmap */}
+            <Section title="Em breve" desc="Próximos passos do roadmap.">
               <div className="grid gap-2 text-sm text-muted-foreground">
-                <Soon label="Inteligência comercial (priorizar alta margem / queimar overstock / seguir Radar)" />
                 <Soon label="Disparar automaticamente quando um produto novo é cadastrado" />
-                <Soon label="Influenciador IA (avatar/UGC com disclosure)" />
+                <Soon label="Avatar branded dedicado (Creatify) — requer chave de API" />
+                <Soon label="Live commerce (TikTok Shop / IG Live)" />
               </div>
             </Section>
           </div>
@@ -365,5 +417,46 @@ function Soon({ label }: { label: string }) {
       <Lock className="h-3.5 w-3.5 shrink-0 opacity-60" />
       <span className="text-xs">{label}</span>
     </div>
+  );
+}
+
+function Toggle({
+  label,
+  desc,
+  checked,
+  onChange,
+}: {
+  label: string;
+  desc?: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      className={cn(
+        'flex items-center justify-between gap-3 rounded-lg border p-3 text-left transition',
+        checked ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40',
+      )}
+    >
+      <span className="min-w-0">
+        <span className="block text-sm font-medium">{label}</span>
+        {desc && <span className="block text-xs text-muted-foreground">{desc}</span>}
+      </span>
+      <span
+        className={cn(
+          'relative h-5 w-9 shrink-0 rounded-full transition',
+          checked ? 'bg-primary' : 'bg-muted',
+        )}
+      >
+        <span
+          className={cn(
+            'absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all',
+            checked ? 'left-[18px]' : 'left-0.5',
+          )}
+        />
+      </span>
+    </button>
   );
 }

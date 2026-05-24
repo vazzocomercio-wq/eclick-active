@@ -72,6 +72,8 @@ export interface GenerateCampaignDto {
   autonomy_level?: CampaignAutonomy;
   /** Reels multi-cena: anima várias fotos do produto e concatena. */
   multi_scene?: boolean;
+  /** Modo influenciador IA (Fase 3): reels estilo UGC/criador + selo de IA. */
+  use_ai_influencer?: boolean;
 }
 
 /** Geração em lote: a IA escolhe os top-N produtos por estratégia comercial. */
@@ -85,4 +87,5 @@ export interface GenerateBatchDto {
   num_reels?: number;
   num_posts?: number;
   num_carousels?: number;
+  use_ai_influencer?: boolean;
 }
