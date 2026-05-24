@@ -33,6 +33,9 @@ import { SocialApprovalService } from './approval/social-approval.service';
 import { SocialApprovalController } from './approval/social-approval.controller';
 import { SocialApprovalPublicController } from './approval/social-approval-public.controller';
 import { SocialAdBoostService } from './boost/social-ad-boost.service';
+import { SocialCampaignController } from './campaign/social-campaign.controller';
+import { SocialCampaignRecipesService } from './campaign/social-campaign-recipes.service';
+import { SocialCampaignService } from './campaign/social-campaign.service';
 import { AlertsModule } from '../alerts/alerts.module';
 import { ChannelsModule as ChannelDispatcherModule } from '../../common/channels/channels.module';
 import { SlackModule } from '../../common/slack/slack.module';
@@ -55,6 +58,7 @@ import { BridgeModule } from '../bridge/bridge.module';
     SocialController,
     SocialApprovalController,
     SocialApprovalPublicController,
+    SocialCampaignController,
   ],
   providers: [
     SocialBrandsService,
@@ -82,6 +86,8 @@ import { BridgeModule } from '../bridge/bridge.module';
     SocialAbTestService,
     SocialApprovalService,
     SocialAdBoostService,
+    SocialCampaignRecipesService,
+    SocialCampaignService,
   ],
   exports: [
     SocialBrandsService,

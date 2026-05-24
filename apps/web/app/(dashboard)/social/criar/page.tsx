@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Sparkles, Hash, Package, Search, X, Palette, Loader2, Clapperboard } from 'lucide-react';
+import { ArrowLeft, Sparkles, Hash, Package, Search, X, Palette, Loader2, Clapperboard, Rocket } from 'lucide-react';
 import { useBrands } from '@/hooks/use-social';
 import { socialApi, type ContentPillar, type SocialContent } from '@/lib/api/social';
 import { bridgeApi, type SaasProduct, type CanvaDesign } from '@/lib/api/bridge';
@@ -102,9 +102,66 @@ export default function CreateContentPage() {
   // E3: multi-cena (anima várias fotos do produto e concatena)
   const [multiScene, setMultiScene] = useState(false);
 
+  // Autopilot de Campanha — "Gerar campanha completa"
+  const [recipe, setRecipe] = useState<import('@/lib/api/social').SocialCampaignRecipe | null>(null);
+  const [campaignBusy, setCampaignBusy] = useState(false);
+  const [campaignError, setCampaignError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!brandId && brands.length > 0 && brands[0]) setBrandId(brands[0].id);
   }, [brands, brandId]);
+
+  // Carrega a receita default da org (pro botão "Gerar campanha completa")
+  useEffect(() => {
+    const ctrl = new AbortController();
+    socialApi.recipes
+      .getDefault(ctrl.signal)
+      .then(setRecipe)
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, []);
+
+  async function handleGenerateCampaign() {
+    if (!brandId || !selectedProduct?.thumbnail_url || campaignBusy) return;
+    setCampaignBusy(true);
+    setCampaignError(null);
+    try {
+      const styleIds =
+        recipe?.allowed_video_styles?.length
+          ? recipe.allowed_video_styles
+          : ['360', 'cinemagraph', 'hook_payoff', 'storytelling'];
+      const fwIds =
+        recipe?.allowed_frameworks?.length
+          ? recipe.allowed_frameworks
+          : ['dsb', 'aida', 'pas'];
+      const video_styles = styleIds
+        .map(findStyle)
+        .filter((s): s is NonNullable<typeof s> => !!s)
+        .map((s) => ({ id: s.id, label: s.label, prompt: s.hint, camera: s.camera }));
+      const frameworks = fwIds
+        .map(findFramework)
+        .filter((f): f is NonNullable<typeof f> => !!f)
+        .map((f) => ({ id: f.id, label: f.label, prompt: f.hint }));
+      const photo = toHttpsUrl(selectedImageUrl ?? selectedProduct.thumbnail_url ?? '');
+      const photos = (selectedProduct.photos ?? []).map(toHttpsUrl);
+      const campaign = await socialApi.campaigns.generate({
+        brand_id: brandId,
+        recipe_id: recipe?.id ?? null,
+        product_ref: selectedProduct.id,
+        product_name: selectedProduct.title ?? selectedProduct.sku ?? 'Produto',
+        product_photo_url: photo,
+        product_photos: photos.length > 1 ? photos : undefined,
+        product_description: selectedProduct.description ?? undefined,
+        category: selectedProduct.category ?? undefined,
+        video_styles,
+        frameworks,
+      });
+      router.push(`/social/campanhas/${campaign.id}`);
+    } catch (e) {
+      setCampaignError(e instanceof Error ? e.message : 'Falha ao iniciar a campanha');
+      setCampaignBusy(false);
+    }
+  }
 
   // Busca produtos (debounce) quando a lista está aberta
   useEffect(() => {
@@ -500,6 +557,48 @@ export default function CreateContentPage() {
                 </button>
               )}
             </Field>
+
+            {selectedProduct && (
+              <div className="rounded-lg border border-primary/30 bg-gradient-to-br from-primary/5 to-transparent p-3">
+                <div className="flex items-start gap-2">
+                  <Rocket className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold">Gerar campanha completa</p>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                      A IA cria de uma vez{' '}
+                      {recipe
+                        ? `${recipe.num_reels} reels + ${recipe.num_carousels} carrossel + ${recipe.num_posts} posts`
+                        : 'vários reels, carrosséis e posts'}{' '}
+                      sobre este produto — com legendas, hashtags e agenda, tudo na fila de aprovação.
+                    </p>
+                    {campaignError && (
+                      <p className="mt-1 text-[11px] text-red-500">{campaignError}</p>
+                    )}
+                    <div className="mt-2 flex flex-wrap items-center gap-3">
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={handleGenerateCampaign}
+                        disabled={campaignBusy || !brandId}
+                      >
+                        {campaignBusy ? (
+                          <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Rocket className="mr-1 h-3.5 w-3.5" />
+                        )}
+                        {campaignBusy ? 'Iniciando…' : 'Gerar campanha completa'}
+                      </Button>
+                      <Link
+                        href="/social/automacao"
+                        className="text-[11px] text-muted-foreground underline-offset-2 hover:underline"
+                      >
+                        Configurar receita
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {selectedProduct && !(tab === 'video' && multiScene) && (selectedProduct.photos?.length ?? 0) > 1 && (
               <Field label={tab === 'video' ? 'Imagem base do vídeo' : 'Imagem do produto (qual foto usar)'}>

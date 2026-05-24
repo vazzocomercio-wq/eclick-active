@@ -162,6 +162,12 @@ export interface SocialPublishedPayload {
   external_post_url?: string | null;
 }
 
+/** Emitido quando uma campanha (Autopilot) muda de status. */
+export interface SocialCampaignEventPayload {
+  campaign_id: string;
+  status: string;
+}
+
 // ── Active Intelligence — Ad Signals ──
 // Emitido pelo SignalDetector quando insere um ad_signal pending (Camada 1/2/3).
 // Frontend usa pra mostrar toast in-app além da delivery WhatsApp por managers.
@@ -218,6 +224,7 @@ export type EventName =
   | 'social:scheduled-soon'
   | 'social:ready-to-publish'
   | 'social:published'
+  | 'social:campaign-updated'
   | 'cart:abandoned'
   | 'cart:converted'
   | 'order:created'
@@ -254,6 +261,7 @@ export interface EventPayloadMap {
   'social:scheduled-soon': SocialContentEventPayload;
   'social:ready-to-publish': SocialContentEventPayload;
   'social:published': SocialPublishedPayload;
+  'social:campaign-updated': SocialCampaignEventPayload;
   'cart:abandoned': CartEventPayload;
   'cart:converted': CartEventPayload;
   'order:created': OrderEventPayload;
