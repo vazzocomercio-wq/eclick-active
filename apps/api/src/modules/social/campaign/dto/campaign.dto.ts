@@ -76,6 +76,15 @@ export interface GenerateCampaignDto {
   use_ai_influencer?: boolean;
 }
 
+/** Co-piloto de live: gera roteiro de live de vendas + checklist (Fase 4). */
+export interface GenerateLiveScriptDto {
+  brand_id: string;
+  /** Produtos a apresentar (nome basta; vem do product picker). */
+  products: Array<{ name: string; ref?: string; price?: number | null }>;
+  duration_min?: number;
+  objective?: string;
+}
+
 /** Geração em lote: a IA escolhe os top-N produtos por estratégia comercial. */
 export interface GenerateBatchDto {
   brand_id: string;

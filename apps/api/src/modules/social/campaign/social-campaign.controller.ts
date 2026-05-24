@@ -17,6 +17,7 @@ import type {
   UpsertRecipeDto,
   GenerateCampaignDto,
   GenerateBatchDto,
+  GenerateLiveScriptDto,
 } from './dto/campaign.dto';
 
 /**
@@ -106,5 +107,11 @@ export class SocialCampaignController {
   @Post('campaigns/:id/ads')
   createAds(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.campaigns.createAdDrafts(user.org_id, id, null);
+  }
+
+  /** Co-piloto de live: gera roteiro de live de vendas. */
+  @Post('live/script')
+  liveScript(@CurrentUser() user: AuthUser, @Body() dto: GenerateLiveScriptDto) {
+    return this.campaigns.generateLiveScript(user.org_id, dto);
   }
 }

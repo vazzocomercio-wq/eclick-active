@@ -611,6 +611,21 @@ export interface CampaignFrameworkSpec {
   label: string;
   prompt: string;
 }
+export interface LiveScriptSegment {
+  product: string;
+  hook: string;
+  talking_points: string[];
+  offer: string;
+  cta: string;
+}
+export interface LiveScript {
+  intro: string;
+  structure: string;
+  segments: LiveScriptSegment[];
+  engagement_prompts: string[];
+  closing: string;
+}
+
 export type CampaignStrategy = 'high_margin' | 'overstock' | 'radar' | 'mixed';
 export interface GenerateBatchPayload {
   brand_id: string;
@@ -975,5 +990,15 @@ export const socialApi = {
       api.post<SocialCampaign>(`/social/campaigns/${id}/cancel`, {}),
     createAds: (id: string) =>
       api.post<{ created: number }>(`/social/campaigns/${id}/ads`, {}),
+  },
+
+  // Co-piloto de live (Fase 4)
+  live: {
+    script: (body: {
+      brand_id: string;
+      products: Array<{ name: string; ref?: string; price?: number | null }>;
+      duration_min?: number;
+      objective?: string;
+    }) => api.post<LiveScript>('/social/live/script', body),
   },
 };

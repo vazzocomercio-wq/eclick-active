@@ -27,9 +27,25 @@ import type {
 import type {
   GenerateCampaignDto,
   GenerateBatchDto,
+  GenerateLiveScriptDto,
   CampaignStyleSpec,
   CampaignFrameworkSpec,
 } from './dto/campaign.dto';
+
+export interface LiveScriptSegment {
+  product: string;
+  hook: string;
+  talking_points: string[];
+  offer: string;
+  cta: string;
+}
+export interface LiveScript {
+  intro: string;
+  structure: string;
+  segments: LiveScriptSegment[];
+  engagement_prompts: string[];
+  closing: string;
+}
 
 interface PlannedAngle {
   angle: string;
@@ -60,6 +76,12 @@ Dado UM produto e a quantidade de peças desejada, gere ângulos de conteúdo DI
 Responda APENAS um JSON válido no formato:
 {"pieces":[{"angle":"tema curto em pt-BR","hook":"primeira frase de impacto em pt-BR","pillar":"product|promotional|educational|social_proof|engagement|entertainment|institutional|behind_scenes"}]}
 Gere EXATAMENTE o número de peças pedido. Sem texto fora do JSON.`;
+
+const LIVE_SCRIPT_SYSTEM_PROMPT = `Você é coach de live commerce (estilo TikTok Shop / lives de venda no Instagram).
+Dado uma marca e uma lista de produtos, monte um ROTEIRO de live de vendas pronto pra apresentar.
+Responda APENAS JSON válido no formato:
+{"intro":"abertura calorosa + o que vem na live (pt-BR)","structure":"como dividir o tempo (pt-BR)","segments":[{"product":"nome","hook":"frase de abertura do bloco","talking_points":["ponto 1","ponto 2","ponto 3"],"offer":"oferta/condição especial da live","cta":"chamada pra ação (comprar/clicar)"}],"engagement_prompts":["pergunta/enquete pra puxar comentário"],"closing":"encerramento + última chamada"}
+Um segment por produto, na ordem dada. Linguagem falada, animada, persuasiva, honesta. Sem texto fora do JSON.`;
 
 @Injectable()
 export class SocialCampaignService {
@@ -587,6 +609,60 @@ export class SocialCampaignService {
       }
     }
     return { campaigns, skipped };
+  }
+
+  // ─── Co-piloto de live (Fase 4) ──────────────────
+
+  /** Gera um roteiro de live de vendas a partir de uma lista de produtos. */
+  async generateLiveScript(
+    orgId: string,
+    dto: GenerateLiveScriptDto,
+  ): Promise<LiveScript> {
+    if (!dto.brand_id) throw new BadRequestException('brand_id obrigatório');
+    if (!dto.products?.length) {
+      throw new BadRequestException('selecione ao menos 1 produto');
+    }
+    const { data: brand } = await this.supabase.adminClient
+      .from('social_brands')
+      .select('name, niche, value_proposition, main_cta, tone_of_voice')
+      .eq('id', dto.brand_id)
+      .eq('org_id', orgId)
+      .maybeSingle();
+    const b = (brand ?? {}) as Record<string, string | null>;
+    const productList = dto.products
+      .slice(0, 20)
+      .map(
+        (p, i) =>
+          `${i + 1}. ${p.name}${p.price != null ? ` (R$ ${Number(p.price).toFixed(2)})` : ''}`,
+      )
+      .join('\n');
+    const user = [
+      `MARCA: ${b.name ?? ''}${b.niche ? ` — ${b.niche}` : ''}`,
+      b.value_proposition ? `PROPOSTA: ${b.value_proposition}` : '',
+      b.main_cta ? `CTA da marca: ${b.main_cta}` : '',
+      `DURAÇÃO ALVO: ${dto.duration_min ?? 30} min`,
+      `OBJETIVO: ${dto.objective ?? 'vender e engajar'}`,
+      '',
+      'PRODUTOS (nesta ordem):',
+      productList,
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    const result = await this.llm.chat({
+      orgId,
+      feature: 'social_live_script',
+      system: LIVE_SCRIPT_SYSTEM_PROMPT,
+      user,
+      json_mode: true,
+      max_tokens: 2500,
+      temperature: 0.7,
+    });
+    const parsed = parseJson<LiveScript>(result.text);
+    if (!parsed?.segments?.length) {
+      throw new BadRequestException('IA não retornou um roteiro válido');
+    }
+    return parsed;
   }
 
   // ─── Fan-out de anúncios (Ad Boost) ──────────────
