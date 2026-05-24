@@ -417,6 +417,8 @@ export class SocialAiGeneratorService {
       buildBrandContextBlock(ctx),
       '',
       `PRODUTO: ${dto.product_title ?? dto.theme}`,
+      dto.category ? `CATEGORIA: ${dto.category}` : '',
+      dto.product_description ? `DESCRIÇÃO DO PRODUTO: ${dto.product_description.slice(0, 800)}` : '',
       `TEMA: ${dto.theme}`,
       dto.video_mode === 'ai_scene'
         ? 'MODO: cena gerada por IA (produto inserido num ambiente)'

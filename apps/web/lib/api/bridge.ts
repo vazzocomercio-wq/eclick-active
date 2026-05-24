@@ -39,6 +39,10 @@ export interface SaasProduct {
   thumbnail_url: string | null;
   status: string | null;
   marketplace: string | null;
+  /** Todas as fotos (https) — pra escolher a base do reel. */
+  photos?: string[] | null;
+  /** Descrição do produto — enriquece o roteiro. */
+  description?: string | null;
 }
 
 export interface CanvaDesign {

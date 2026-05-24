@@ -49,6 +49,10 @@ export interface SaasProduct {
   metadata: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
+  /** Todas as fotos do produto (https). Pra escolher a base do reel. */
+  photos?: string[] | null;
+  /** Descrição do produto — enriquece o roteiro do reel. */
+  description?: string | null;
 }
 
 export interface SaasOrderStats {

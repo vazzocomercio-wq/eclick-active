@@ -761,6 +761,7 @@ export const socialApi = {
       product_title?: string;
       product_photo_url: string;
       category?: string;
+      product_description?: string;
       video_mode: 'product_photo' | 'ai_scene';
       style?: string;
       style_label?: string;

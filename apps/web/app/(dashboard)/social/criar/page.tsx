@@ -96,6 +96,8 @@ export default function CreateContentPage() {
   const [duration, setDuration] = useState<number>(10);
   const [reelStatus, setReelStatus] = useState<string>('idle');
   const [pollId, setPollId] = useState<string | null>(null);
+  // E1: qual foto do produto vira a base do vídeo (null = capa)
+  const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!brandId && brands.length > 0 && brands[0]) setBrandId(brands[0].id);
@@ -116,6 +118,7 @@ export default function CreateContentPage() {
 
   const pickProduct = (p: SaasProduct) => {
     setSelectedProduct(p);
+    setSelectedImageUrl(null); // volta pra capa ao trocar de produto
     setShowProductList(false);
     setProductSearch('');
     setPillar('product');
@@ -210,8 +213,9 @@ export default function CreateContentPage() {
         cta: cta.trim() || undefined,
         catalog_product_id: selectedProduct.id,
         product_title: selectedProduct.title ?? undefined,
-        product_photo_url: toHttpsUrl(selectedProduct.thumbnail_url),
+        product_photo_url: toHttpsUrl(selectedImageUrl ?? selectedProduct.thumbnail_url ?? ''),
         category: selectedProduct.category ?? undefined,
+        product_description: selectedProduct.description ?? undefined,
         video_mode: videoMode,
         style: style?.id,
         style_label: style?.label,
@@ -512,6 +516,33 @@ export default function CreateContentPage() {
                     ))}
                   </div>
                 </Field>
+
+                {selectedProduct && (selectedProduct.photos?.length ?? 0) > 1 && (
+                  <Field label="Imagem base do vídeo">
+                    <div className="flex gap-2 overflow-x-auto pb-1">
+                      {selectedProduct.photos!.map((url) => {
+                        const active = (selectedImageUrl ?? selectedProduct.thumbnail_url) === url;
+                        return (
+                          <button
+                            key={url}
+                            type="button"
+                            onClick={() => setSelectedImageUrl(url)}
+                            className={cn(
+                              'h-16 w-16 shrink-0 overflow-hidden rounded-md border-2 transition',
+                              active ? 'border-primary' : 'border-transparent opacity-60 hover:opacity-100',
+                            )}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={url} alt="" className="h-full w-full object-cover" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="mt-1 text-[10px] text-muted-foreground">
+                      Escolha qual foto vira o 1º quadro do vídeo (padrão: a capa).
+                    </p>
+                  </Field>
+                )}
 
                 <Field label="Estilo do vídeo">
                   <select

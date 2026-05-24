@@ -73,6 +73,8 @@ export interface GenerateReelDto {
   product_title?: string;
   product_photo_url: string;
   category?: string;
+  /** Descrição do produto (E2) — enriquece o roteiro/legenda. */
+  product_description?: string;
   /** product_photo = anima a foto real; ai_scene = gera cena por IA e anima. */
   video_mode: 'product_photo' | 'ai_scene';
   /** Estilo do vídeo (catálogo do front): id + rótulo + dica de prompt. */

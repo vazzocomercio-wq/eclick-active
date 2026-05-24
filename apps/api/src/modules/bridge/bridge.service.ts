@@ -188,7 +188,7 @@ export class BridgeService {
       let q = this.supabase.adminClient
         .from('v_saas_products')
         .select(
-          'id,organization_id,ml_listing_id,title,sku,price,cost,stock_quantity,category,thumbnail_url,status,marketplace,margin_percent,metadata,created_at,updated_at',
+          'id,organization_id,ml_listing_id,title,sku,price,cost,stock_quantity,category,thumbnail_url,status,marketplace,margin_percent,metadata,created_at,updated_at,photos,description',
         )
         .eq('organization_id', saasOrgId)
         .not('thumbnail_url', 'is', null)
