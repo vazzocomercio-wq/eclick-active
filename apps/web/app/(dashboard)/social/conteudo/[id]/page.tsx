@@ -19,6 +19,7 @@ import {
   Megaphone,
 } from 'lucide-react';
 import { useContent, useBrand } from '@/hooks/use-social';
+import { useSocialPublished } from '@/hooks/use-social-published';
 import { socialApi } from '@/lib/api/social';
 import { InstagramMockup } from '@/components/social/instagram-mockup';
 import { StatusBadge, PillarBadge, TypeBadge } from '@/components/social/social-badges';
@@ -44,6 +45,12 @@ export default function ContentDetailPage() {
   const [rewriteInstr, setRewriteInstr] = useState('');
   const [suggestions, setSuggestions] = useState<string[] | null>(null);
   const [boostOpen, setBoostOpen] = useState(false);
+
+  // Refresh em tempo real: quando o publisher (manual ou agendado) finaliza,
+  // o backend emite `social:published` → recarrega sem precisar F5.
+  useSocialPublished((p) => {
+    if (id && p.content_id === id) refresh();
+  });
 
   if (loading || !content) {
     return (

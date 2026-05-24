@@ -154,6 +154,16 @@ export class SocialPublishingService {
           title: content.title,
         },
       );
+      // Evento dedicado pro editor aberto dar refresh em tempo real
+      // (cobre tanto "Publicar agora" quanto o publisher agendado).
+      const firstSuccess = outcomes.find((o) => o.result.success);
+      this.events.emitToOrg(orgId, 'social:published', {
+        content_id: contentId,
+        status: anySuccess ? 'published' : 'failed',
+        any_success: anySuccess,
+        channels: outcomes.map((o) => o.channel),
+        external_post_url: firstSuccess?.result.external_post_url ?? null,
+      });
     } catch {
       /* best-effort */
     }

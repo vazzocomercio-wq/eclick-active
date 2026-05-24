@@ -152,6 +152,16 @@ export interface SocialContentEventPayload {
   scheduled_for?: string;
 }
 
+/** Emitido após o publisher (manual OU agendado) finalizar a publicação.
+ *  O editor aberto escuta e dá refresh — sem precisar F5. */
+export interface SocialPublishedPayload {
+  content_id: string;
+  status: 'published' | 'failed';
+  any_success: boolean;
+  channels: string[];
+  external_post_url?: string | null;
+}
+
 // ── Active Intelligence — Ad Signals ──
 // Emitido pelo SignalDetector quando insere um ad_signal pending (Camada 1/2/3).
 // Frontend usa pra mostrar toast in-app além da delivery WhatsApp por managers.
@@ -207,6 +217,7 @@ export type EventName =
   | 'social:content-ready'
   | 'social:scheduled-soon'
   | 'social:ready-to-publish'
+  | 'social:published'
   | 'cart:abandoned'
   | 'cart:converted'
   | 'order:created'
@@ -242,6 +253,7 @@ export interface EventPayloadMap {
   'social:content-ready': SocialContentEventPayload;
   'social:scheduled-soon': SocialContentEventPayload;
   'social:ready-to-publish': SocialContentEventPayload;
+  'social:published': SocialPublishedPayload;
   'cart:abandoned': CartEventPayload;
   'cart:converted': CartEventPayload;
   'order:created': OrderEventPayload;
