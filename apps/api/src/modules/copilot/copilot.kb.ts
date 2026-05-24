@@ -412,6 +412,21 @@ export const KB: KbEntry[] = [
     ].join('\n'),
     tags: ['social', 'criar', 'canva', 'catalogo', 'produto', 'imagem', 'instagram'],
   },
+  {
+    routes: ['/social/criar', '/social'],
+    category: 'SOCIAL',
+    title: 'Criar Reel/vídeo com IA (estilo + roteiro)',
+    content: [
+      'Na aba **Vídeo/Reel** (`/social/criar`) a IA gera um **Reel** a partir de um produto do catálogo:',
+      '',
+      '**Passo a passo:** escolha o **produto** (a foto dele é a base do vídeo) → escolha **como gerar** (Animar a foto real OU Cena por IA com o produto) → escolha o **estilo** (360°, Cinemagraph, Loop, Unboxing, UGC… — os marcados "experimental" dependem de pessoa/áudio e a qualidade varia) → a **estrutura do roteiro** (Dor+Solução+Benefício, AIDA, PAS…) → duração → **Gerar Reel**.',
+      '',
+      'A IA escreve o **roteiro + legenda** seguindo o estilo/estrutura e gera o **vídeo** no motor (Kling) — é **assíncrono**, leva de **1 a 3 minutos**. Pode deixar a tela aberta; o preview aparece quando fica pronto. Depois é só **aprovar e publicar** (vai como Reel no Instagram).',
+      '',
+      '**Custo:** geração de vídeo consome créditos (vídeo é caro). **Dica:** os estilos 🟢 recomendados (produto em movimento) saem melhor que os 🟡 experimentais.',
+    ].join('\n'),
+    tags: ['social', 'reel', 'video', 'criar', 'instagram', 'kling', 'produto'],
+  },
 
   // ── CONFIG ────────────────────────────────────────────
   {

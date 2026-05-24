@@ -3,10 +3,11 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Sparkles, Lock, Hash, Package, Search, X, Palette, Loader2 } from 'lucide-react';
+import { ArrowLeft, Sparkles, Hash, Package, Search, X, Palette, Loader2, Clapperboard } from 'lucide-react';
 import { useBrands } from '@/hooks/use-social';
 import { socialApi, type ContentPillar, type SocialContent } from '@/lib/api/social';
 import { bridgeApi, type SaasProduct, type CanvaDesign } from '@/lib/api/bridge';
+import { VIDEO_STYLES, SCRIPT_FRAMEWORKS, findStyle, findFramework } from '@/lib/social/video-styles';
 import { Button } from '@/components/ui/button';
 import { InstagramMockup } from '@/components/social/instagram-mockup';
 import { cn } from '@/lib/utils';
@@ -88,6 +89,14 @@ export default function CreateContentPage() {
     { design: CanvaDesign; exportedUrl: string } | null
   >(null);
 
+  // Reel / vídeo (tab 'video')
+  const [videoMode, setVideoMode] = useState<'product_photo' | 'ai_scene'>('product_photo');
+  const [styleId, setStyleId] = useState<string>('ficha');
+  const [frameworkId, setFrameworkId] = useState<string>('dsb');
+  const [duration, setDuration] = useState<number>(10);
+  const [reelStatus, setReelStatus] = useState<string>('idle');
+  const [pollId, setPollId] = useState<string | null>(null);
+
   useEffect(() => {
     if (!brandId && brands.length > 0 && brands[0]) setBrandId(brands[0].id);
   }, [brands, brandId]);
@@ -158,6 +167,84 @@ export default function CreateContentPage() {
   };
 
   const clearCanva = () => setSelectedCanva(null);
+
+  // Poll do vídeo do reel (motor do SaaS é assíncrono — minutos). Quando o
+  // backend anexa o vídeo, o conteúdo vem com media[] e status pending_approval.
+  useEffect(() => {
+    if (!pollId) return;
+    let active = true;
+    const tick = async () => {
+      try {
+        const r = await socialApi.reelStatus(pollId);
+        if (!active) return;
+        setReelStatus(r.video_status);
+        if (r.video_status === 'completed' || r.video_status === 'failed') {
+          setResult(r.content);
+          setPollId(null);
+        }
+      } catch {
+        /* mantém tentando no próximo tick */
+      }
+    };
+    void tick();
+    const iv = setInterval(tick, 6000);
+    return () => {
+      active = false;
+      clearInterval(iv);
+    };
+  }, [pollId]);
+
+  const generateReel = async () => {
+    if (!brandId || !selectedProduct?.thumbnail_url) return;
+    setGenerating(true);
+    setResult(null);
+    setReelStatus('generating');
+    try {
+      const style = findStyle(styleId);
+      const framework = findFramework(frameworkId);
+      const r = await socialApi.generate.reel({
+        brand_id: brandId,
+        theme: theme.trim() || (selectedProduct.title ?? 'produto'),
+        pillar: 'product',
+        hook: hook.trim() || undefined,
+        cta: cta.trim() || undefined,
+        catalog_product_id: selectedProduct.id,
+        product_title: selectedProduct.title ?? undefined,
+        product_photo_url: toHttpsUrl(selectedProduct.thumbnail_url),
+        category: selectedProduct.category ?? undefined,
+        video_mode: videoMode,
+        style: style?.id,
+        style_label: style?.label,
+        style_prompt: style?.hint,
+        framework: framework?.id,
+        framework_label: framework?.label,
+        framework_prompt: framework?.hint,
+        aspect_ratio: '9:16',
+        duration_seconds: duration,
+        camera_motion: style?.camera,
+      });
+      setResult(r);
+      // status='generating' → começa o poll; se já veio failed (motor off), mostra erro
+      const meta = (r.metadata ?? {}) as { video_job_id?: string | null };
+      if (r.status === 'failed' || !meta.video_job_id) {
+        setReelStatus('failed');
+      } else {
+        setReelStatus('generating');
+        setPollId(r.id);
+      }
+    } catch (err) {
+      alert(`Erro ao gerar reel: ${err instanceof Error ? err.message : 'desconhecido'}`);
+      setReelStatus('failed');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const clearResult = () => {
+    setResult(null);
+    setPollId(null);
+    setReelStatus('idle');
+  };
 
   const generate = async () => {
     if (!brandId || !theme.trim()) return;
@@ -270,28 +357,20 @@ export default function CreateContentPage() {
           {([
             ['post', '📸 Post estático'],
             ['carousel', '🎴 Carrossel'],
-            ['video', '🔒 Vídeo/Reel'],
+            ['video', '🎬 Vídeo/Reel'],
           ] as Array<[Tab, string]>).map(([k, l]) => (
             <button
               key={k}
               type="button"
-              disabled={k === 'video'}
               onClick={() => setTab(k)}
               className={cn(
                 '-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors',
                 tab === k
                   ? 'border-primary text-foreground'
-                  : 'border-transparent text-muted-foreground',
-                k === 'video' ? 'cursor-not-allowed opacity-60' : 'hover:text-foreground',
+                  : 'border-transparent text-muted-foreground hover:text-foreground',
               )}
             >
               {l}
-              {k === 'video' && (
-                <span className="ml-1 inline-flex items-center gap-0.5 rounded-md bg-muted px-1 text-[9px] uppercase">
-                  <Lock className="h-2.5 w-2.5" />
-                  Em breve
-                </span>
-              )}
             </button>
           ))}
         </div>
@@ -317,21 +396,23 @@ export default function CreateContentPage() {
               </select>
             </Field>
 
-            <Field label="Pilar">
-              <select
-                value={pillar}
-                onChange={(e) => setPillar(e.target.value as ContentPillar)}
-                className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-              >
-                {PILLARS.map(([k, l]) => (
-                  <option key={k} value={k}>
-                    {l}
-                  </option>
-                ))}
-              </select>
-            </Field>
+            {tab !== 'video' && (
+              <Field label="Pilar">
+                <select
+                  value={pillar}
+                  onChange={(e) => setPillar(e.target.value as ContentPillar)}
+                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                >
+                  {PILLARS.map(([k, l]) => (
+                    <option key={k} value={k}>
+                      {l}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
 
-            <Field label="Produto do catálogo (opcional)">
+            <Field label={tab === 'video' ? 'Produto do catálogo (obrigatório)' : 'Produto do catálogo (opcional)'}>
               {selectedProduct ? (
                 <div className="flex items-center gap-2 rounded-md border border-primary/40 bg-primary/5 p-2">
                   {selectedProduct.thumbnail_url && (
@@ -406,6 +487,89 @@ export default function CreateContentPage() {
               )}
             </Field>
 
+            {tab === 'video' && (
+              <>
+                <Field label="Como gerar o vídeo">
+                  <div className="grid grid-cols-2 gap-2">
+                    {([
+                      ['product_photo', 'Animar a foto', 'Dá movimento na foto real do produto'],
+                      ['ai_scene', 'Cena por IA', 'Cria uma cena nova com o produto'],
+                    ] as Array<['product_photo' | 'ai_scene', string, string]>).map(([k, l, d]) => (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => setVideoMode(k)}
+                        className={cn(
+                          'rounded-md border p-2 text-left transition-colors',
+                          videoMode === k
+                            ? 'border-primary bg-primary/5'
+                            : 'border-border hover:border-primary/40',
+                        )}
+                      >
+                        <span className="block text-xs font-medium">{l}</span>
+                        <span className="block text-[10px] text-muted-foreground">{d}</span>
+                      </button>
+                    ))}
+                  </div>
+                </Field>
+
+                <Field label="Estilo do vídeo">
+                  <select
+                    value={styleId}
+                    onChange={(e) => setStyleId(e.target.value)}
+                    className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                  >
+                    <optgroup label="🟢 Recomendados (saem bem)">
+                      {VIDEO_STYLES.filter((s) => s.tier === 'strong').map((s) => (
+                        <option key={s.id} value={s.id}>{s.label}</option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="🟡 Experimentais (qualidade varia)">
+                      {VIDEO_STYLES.filter((s) => s.tier === 'experimental').map((s) => (
+                        <option key={s.id} value={s.id}>{s.label} — experimental</option>
+                      ))}
+                    </optgroup>
+                  </select>
+                  {findStyle(styleId)?.tier === 'experimental' && (
+                    <p className="mt-1 text-[10px] text-amber-600 dark:text-amber-400">
+                      ⚠️ Estilo experimental: depende de pessoa/áudio/cena — a fidelidade ao produto pode variar.
+                    </p>
+                  )}
+                </Field>
+
+                <Field label="Estrutura do roteiro (legenda)">
+                  <select
+                    value={frameworkId}
+                    onChange={(e) => setFrameworkId(e.target.value)}
+                    className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                  >
+                    {SCRIPT_FRAMEWORKS.map((f) => (
+                      <option key={f.id} value={f.id}>{f.label}</option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label={`Duração: ${duration}s`}>
+                  <input
+                    type="range"
+                    min={5}
+                    max={20}
+                    step={5}
+                    value={duration}
+                    onChange={(e) => setDuration(Number(e.target.value))}
+                    className="w-full"
+                  />
+                </Field>
+
+                {!selectedProduct && (
+                  <p className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-[11px] text-amber-600 dark:text-amber-400">
+                    Escolha um produto acima — a foto dele é a base do vídeo.
+                  </p>
+                )}
+              </>
+            )}
+
+            {tab !== 'video' && (
             <Field label="Imagem do post (opcional)">
               {selectedCanva ? (
                 <div className="flex items-center gap-2 rounded-md border border-primary/40 bg-primary/5 p-2">
@@ -488,8 +652,9 @@ export default function CreateContentPage() {
                 </button>
               )}
             </Field>
+            )}
 
-            <Field label="Tema (sobre o que é o post?)" required>
+            <Field label={tab === 'video' ? 'Tema (opcional — a IA usa o produto)' : 'Tema (sobre o que é o post?)'} required={tab !== 'video'}>
               <textarea
                 value={theme}
                 onChange={(e) => setTheme(e.target.value)}
@@ -517,19 +682,21 @@ export default function CreateContentPage() {
               />
             </Field>
 
-            <Field label="Estilo visual">
-              <select
-                value={visualStyle}
-                onChange={(e) => setVisualStyle(e.target.value)}
-                className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-              >
-                {STYLES.map(([k, l]) => (
-                  <option key={k} value={k}>
-                    {l}
-                  </option>
-                ))}
-              </select>
-            </Field>
+            {tab !== 'video' && (
+              <Field label="Estilo visual">
+                <select
+                  value={visualStyle}
+                  onChange={(e) => setVisualStyle(e.target.value)}
+                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                >
+                  {STYLES.map(([k, l]) => (
+                    <option key={k} value={k}>
+                      {l}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
 
             {tab === 'carousel' && (
               <>
@@ -596,17 +763,34 @@ export default function CreateContentPage() {
               </div>
             )}
 
-            <Button onClick={generate} disabled={generating || !theme.trim()}>
-              <Sparkles className="h-3.5 w-3.5" />
+            <Button
+              onClick={tab === 'video' ? generateReel : generate}
+              disabled={
+                tab === 'video'
+                  ? generating || !selectedProduct || pollId !== null
+                  : generating || !theme.trim()
+              }
+            >
+              {tab === 'video' ? <Clapperboard className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />}
               <span className="ml-1">
-                {generating
-                  ? `Gerando ${tab === 'carousel' ? 'carrossel' : 'post'}…`
-                  : 'Gerar agora'}
+                {tab === 'video'
+                  ? generating || pollId !== null
+                    ? 'Gerando vídeo…'
+                    : 'Gerar Reel'
+                  : generating
+                    ? `Gerando ${tab === 'carousel' ? 'carrossel' : 'post'}…`
+                    : 'Gerar agora'}
               </span>
             </Button>
-            {generating && (
+            {generating && tab !== 'video' && (
               <p className="text-xs text-muted-foreground">
                 A IA está pensando, escrevendo e gerando imagens. Pode levar 15-45s.
+              </p>
+            )}
+            {tab === 'video' && (
+              <p className="text-xs text-muted-foreground">
+                A IA escreve o roteiro e gera o vídeo no motor (Kling). O vídeo é
+                assíncrono — pode levar de 1 a 3 minutos. Consome créditos de geração.
               </p>
             )}
           </div>
@@ -616,12 +800,49 @@ export default function CreateContentPage() {
             <h2 className="text-sm font-semibold">Preview</h2>
             {result ? (
               <>
-                <InstagramMockup
-                  content={result}
-                  brand={brands.find((b) => b.id === result.brand_id)}
-                />
+                {result.content_type === 'reel' ? (
+                  reelStatus === 'completed' && result.media?.[0]?.url ? (
+                    <div className="mx-auto w-full max-w-[320px]">
+                      <video
+                        src={result.media[0].url}
+                        poster={result.cover_image_url ?? undefined}
+                        controls
+                        playsInline
+                        className="aspect-[9/16] w-full rounded-xl bg-black object-contain"
+                      />
+                      {result.caption && (
+                        <p className="mt-2 whitespace-pre-line text-xs text-muted-foreground">
+                          {result.caption}
+                        </p>
+                      )}
+                    </div>
+                  ) : reelStatus === 'failed' ? (
+                    <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 text-center text-sm">
+                      <p className="font-medium text-red-700 dark:text-red-300">
+                        Falha ao gerar o vídeo
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {(result.metadata as { video_error?: string } | null)?.video_error ??
+                          'O motor de vídeo não respondeu. O worker pode estar desligado — tente de novo em instantes.'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="mx-auto flex aspect-[9/16] w-full max-w-[320px] flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-muted/20 p-6 text-center">
+                      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                      <p className="text-sm font-medium">🎬 Gerando o vídeo…</p>
+                      <p className="text-xs text-muted-foreground">
+                        Roteiro pronto. O motor está renderizando (1-3 min). Pode deixar a tela aberta.
+                      </p>
+                    </div>
+                  )
+                ) : (
+                  <InstagramMockup
+                    content={result}
+                    brand={brands.find((b) => b.id === result.brand_id)}
+                  />
+                )}
                 <div className="flex justify-end gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setResult(null)}>
+                  <Button variant="outline" size="sm" onClick={clearResult}>
                     Limpar
                   </Button>
                   <Button size="sm" onClick={goToDetail}>
@@ -631,9 +852,11 @@ export default function CreateContentPage() {
               </>
             ) : (
               <div className="flex aspect-square items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 p-6 text-center text-sm text-muted-foreground">
-                {generating
-                  ? '✨ Gerando conteúdo… imagens em alguns segundos'
-                  : 'Preencha o brief e clique em "Gerar agora"'}
+                {tab === 'video'
+                  ? 'Escolha o produto e o estilo, e clique em "Gerar Reel"'
+                  : generating
+                    ? '✨ Gerando conteúdo… imagens em alguns segundos'
+                    : 'Preencha o brief e clique em "Gerar agora"'}
               </div>
             )}
           </div>

@@ -199,6 +199,23 @@ export class SocialPublishingService {
     if (content.cta) captionParts.push('', `→ ${content.cta}`);
     const caption = captionParts.join('\n');
 
+    // Reel/TikTok: publica VÍDEO (mp4) — não imagem. O mp4 está em media[];
+    // a cover_image_url é só o poster.
+    const isReel =
+      content.content_type === 'reel' || content.content_type === 'tiktok';
+    if (isReel) {
+      const videoUrl =
+        content.media.find((m) => /\.mp4(\?|$)/i.test(m.url))?.url ??
+        content.media[0]?.url;
+      return {
+        caption,
+        image_urls: [],
+        is_carousel: false,
+        video_url: videoUrl,
+        alt_text: content.media[0]?.alt_text,
+      };
+    }
+
     const isCarousel = content.content_type === 'carousel';
     let imageUrls: string[] = [];
 

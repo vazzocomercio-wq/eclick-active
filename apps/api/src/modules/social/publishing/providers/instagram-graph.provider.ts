@@ -86,8 +86,20 @@ export class InstagramGraphProvider implements PublishingProvider {
 
     try {
       let creationId: string;
+      let isVideo = false;
 
-      if (input.is_carousel && input.image_urls.length > 1) {
+      if (input.video_url) {
+        // REEL / vídeo: container media_type=REELS + video_url. share_to_feed
+        // pra aparecer também no feed (não só na aba Reels).
+        isVideo = true;
+        const container = await this.createMediaContainer(igUserId, access_token, {
+          media_type: 'REELS',
+          video_url: input.video_url,
+          caption,
+          share_to_feed: 'true',
+        });
+        creationId = container.id;
+      } else if (input.is_carousel && input.image_urls.length > 1) {
         const slides = input.image_urls.slice(0, 10);
         const childIds: string[] = [];
         for (const url of slides) {
@@ -130,7 +142,8 @@ export class InstagramGraphProvider implements PublishingProvider {
       // (IN_PROGRESS → FINISHED). Publicar antes do FINISHED retorna
       // "Media ID is not available" — causa real do bug intermitente (o retry
       // funcionava só porque o container já tinha terminado de processar).
-      await this.waitForContainerReady(creationId, access_token);
+      // Vídeo processa MUITO mais devagar que imagem → janela maior.
+      await this.waitForContainerReady(creationId, access_token, isVideo);
 
       // Publica
       const publishRes = await this.fetchGraph(
@@ -192,10 +205,13 @@ export class InstagramGraphProvider implements PublishingProvider {
   private async waitForContainerReady(
     creationId: string,
     token: string,
+    isVideo = false,
   ): Promise<void> {
-    const maxAttempts = 10;
+    // Imagem finaliza em segundos; vídeo (REELS) pode levar 1-3min processando.
+    const maxAttempts = isVideo ? 40 : 10;
+    const intervalMs = isVideo ? 5000 : 2500;
     for (let i = 0; i < maxAttempts; i++) {
-      await new Promise((r) => setTimeout(r, i === 0 ? 1000 : 2500));
+      await new Promise((r) => setTimeout(r, i === 0 ? 1000 : intervalMs));
       let statusCode: string | undefined;
       try {
         const res = await this.fetchGraph(
