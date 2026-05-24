@@ -13,6 +13,14 @@ import { cn } from '@/lib/utils';
 
 type Tab = 'post' | 'carousel' | 'video';
 
+/** Instagram recusa imagens http:// (exige https). Fotos do ML vêm em http. */
+function toHttpsUrl(url: string): string {
+  const u = (url ?? '').trim();
+  if (u.startsWith('http://')) return 'https://' + u.slice('http://'.length);
+  if (u.startsWith('//')) return 'https:' + u;
+  return u;
+}
+
 const PILLARS: Array<[ContentPillar, string]> = [
   ['educational', 'Educacional'],
   ['promotional', 'Promocional'],
@@ -127,13 +135,25 @@ export default function CreateContentPage() {
           : await socialApi.generate.post(body);
 
       // Catalog-aware: se um produto foi selecionado, usa a FOTO REAL do
-      // produto como imagem do post (em vez da imagem gerada por IA) +
-      // vincula o produto. A legenda já saiu sobre o produto (tema).
+      // produto como imagem do post (em vez da imagem gerada por IA, que no
+      // Active cai num SVG placeholder não-publicável). Força https — o
+      // Instagram recusa http e SVG ("Media ID is not available"). Seta
+      // cover + media pra sobrescrever o placeholder.
       if (selectedProduct?.thumbnail_url) {
+        const photo = toHttpsUrl(selectedProduct.thumbnail_url);
         try {
           r = await socialApi.contents.update(r.id, {
-            cover_image_url: selectedProduct.thumbnail_url,
+            cover_image_url: photo,
             related_product_id: selectedProduct.id,
+            media: [
+              {
+                url: photo,
+                width: 1080,
+                height: 1080,
+                source: 'catalog',
+                alt_text: selectedProduct.title ?? '',
+              },
+            ],
           });
         } catch { /* mantém a imagem gerada se o PATCH falhar */ }
       }

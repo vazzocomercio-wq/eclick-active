@@ -23,7 +23,11 @@ BEGIN
         p.cost_price                                          AS cost,
         p.stock                                               AS stock_quantity,
         p.category,
-        COALESCE(p.photo_urls[1], NULLIF((p.images->>0), '')) AS thumbnail_url,
+        -- força https: Instagram recusa imagens http (fotos do ML vêm http)
+        regexp_replace(
+          COALESCE(p.photo_urls[1], NULLIF((p.images->>0), '')),
+          '^http://', 'https://'
+        )                                                     AS thumbnail_url,
         p.status,
         p.platform                                            AS marketplace,
         NULL::numeric                                         AS margin_percent,
