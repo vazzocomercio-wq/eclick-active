@@ -3,10 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Sparkles, Lock, Hash, Package, Search, X } from 'lucide-react';
+import { ArrowLeft, Sparkles, Lock, Hash, Package, Search, X, Palette, Loader2 } from 'lucide-react';
 import { useBrands } from '@/hooks/use-social';
 import { socialApi, type ContentPillar, type SocialContent } from '@/lib/api/social';
-import { bridgeApi, type SaasProduct } from '@/lib/api/bridge';
+import { bridgeApi, type SaasProduct, type CanvaDesign } from '@/lib/api/bridge';
 import { Button } from '@/components/ui/button';
 import { InstagramMockup } from '@/components/social/instagram-mockup';
 import { cn } from '@/lib/utils';
@@ -78,6 +78,16 @@ export default function CreateContentPage() {
   const [selectedProduct, setSelectedProduct] = useState<SaasProduct | null>(null);
   const [showProductList, setShowProductList] = useState(false);
 
+  // Canva como imagem do post (via bridge → SaaS exporta o design pra https)
+  const [canvaDesigns, setCanvaDesigns] = useState<CanvaDesign[]>([]);
+  const [canvaSearch, setCanvaSearch] = useState('');
+  const [showCanvaList, setShowCanvaList] = useState(false);
+  const [canvaLoading, setCanvaLoading] = useState(false);
+  const [canvaExportingId, setCanvaExportingId] = useState<string | null>(null);
+  const [selectedCanva, setSelectedCanva] = useState<
+    { design: CanvaDesign; exportedUrl: string } | null
+  >(null);
+
   useEffect(() => {
     if (!brandId && brands.length > 0 && brands[0]) setBrandId(brands[0].id);
   }, [brands, brandId]);
@@ -112,6 +122,43 @@ export default function CreateContentPage() {
     setTheme('');
   };
 
+  // Busca designs do Canva (debounce) quando a lista está aberta
+  useEffect(() => {
+    if (!showCanvaList) return;
+    const ctrl = new AbortController();
+    setCanvaLoading(true);
+    const t = setTimeout(() => {
+      bridgeApi
+        .listCanvaDesigns(canvaSearch.trim() || undefined, ctrl.signal)
+        .then((r) => setCanvaDesigns(r.designs ?? []))
+        .catch(() => { /* fallback vazio */ })
+        .finally(() => setCanvaLoading(false));
+    }, 300);
+    return () => { clearTimeout(t); ctrl.abort(); };
+  }, [canvaSearch, showCanvaList]);
+
+  // Exportar o design escolhido pra https estável é lento (job do Canva).
+  // Faz na hora do pick, com spinner; só fixa quando a URL chega.
+  const pickCanva = async (d: CanvaDesign) => {
+    setCanvaExportingId(d.id);
+    try {
+      const { url } = await bridgeApi.exportCanvaDesign(d.id);
+      if (!url) {
+        alert('Não foi possível exportar este design do Canva. Tente outro.');
+        return;
+      }
+      setSelectedCanva({ design: d, exportedUrl: url });
+      setShowCanvaList(false);
+      setCanvaSearch('');
+    } catch (err) {
+      alert(`Erro ao exportar do Canva: ${err instanceof Error ? err.message : 'desconhecido'}`);
+    } finally {
+      setCanvaExportingId(null);
+    }
+  };
+
+  const clearCanva = () => setSelectedCanva(null);
+
   const generate = async () => {
     if (!brandId || !theme.trim()) return;
     setGenerating(true);
@@ -134,24 +181,29 @@ export default function CreateContentPage() {
             })
           : await socialApi.generate.post(body);
 
-      // Catalog-aware: se um produto foi selecionado, usa a FOTO REAL do
-      // produto como imagem do post (em vez da imagem gerada por IA, que no
-      // Active cai num SVG placeholder não-publicável). Força https — o
-      // Instagram recusa http e SVG ("Media ID is not available"). Seta
-      // cover + media pra sobrescrever o placeholder.
-      if (selectedProduct?.thumbnail_url) {
-        const photo = toHttpsUrl(selectedProduct.thumbnail_url);
+      // Imagem do post: a IA do Active cai num SVG placeholder não-publicável.
+      // Sobrescrevemos por uma imagem real https (o Instagram recusa http/SVG
+      // → "Media ID is not available"). Precedência:
+      //   1. design do Canva escolhido (visual branded do usuário)
+      //   2. foto real do produto do catálogo
+      const override =
+        selectedCanva
+          ? { url: selectedCanva.exportedUrl, source: 'canva' as const, alt: selectedCanva.design.title }
+          : selectedProduct?.thumbnail_url
+            ? { url: toHttpsUrl(selectedProduct.thumbnail_url), source: 'catalog' as const, alt: selectedProduct.title ?? '' }
+            : null;
+      if (override) {
         try {
           r = await socialApi.contents.update(r.id, {
-            cover_image_url: photo,
-            related_product_id: selectedProduct.id,
+            cover_image_url: override.url,
+            ...(selectedProduct ? { related_product_id: selectedProduct.id } : {}),
             media: [
               {
-                url: photo,
+                url: override.url,
                 width: 1080,
                 height: 1080,
-                source: 'catalog',
-                alt_text: selectedProduct.title ?? '',
+                source: override.source,
+                alt_text: override.alt,
               },
             ],
           });
@@ -350,6 +402,89 @@ export default function CreateContentPage() {
                 >
                   <Package className="h-4 w-4" />
                   Escolher um produto pra IA criar o post (usa a foto real)
+                </button>
+              )}
+            </Field>
+
+            <Field label="Imagem do post (opcional)">
+              {selectedCanva ? (
+                <div className="flex items-center gap-2 rounded-md border border-primary/40 bg-primary/5 p-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={selectedCanva.design.thumbnailUrl ?? selectedCanva.exportedUrl}
+                    alt=""
+                    className="h-10 w-10 rounded object-cover"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-medium">{selectedCanva.design.title}</p>
+                    <p className="text-[10px] text-muted-foreground">Design do Canva</p>
+                  </div>
+                  <button type="button" onClick={clearCanva} className="p-1 text-muted-foreground hover:text-foreground">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ) : showCanvaList ? (
+                <div className="rounded-md border border-border bg-background">
+                  <div className="relative border-b border-border">
+                    <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      autoFocus
+                      value={canvaSearch}
+                      onChange={(e) => setCanvaSearch(e.target.value)}
+                      placeholder="Buscar design no Canva…"
+                      className="w-full bg-transparent py-1.5 pl-7 pr-2 text-sm outline-none"
+                    />
+                  </div>
+                  <div className="max-h-52 overflow-y-auto">
+                    {canvaLoading ? (
+                      <p className="flex items-center justify-center gap-1.5 px-2 py-3 text-center text-[11px] text-muted-foreground">
+                        <Loader2 className="h-3 w-3 animate-spin" /> Carregando designs…
+                      </p>
+                    ) : canvaDesigns.length === 0 ? (
+                      <p className="px-2 py-3 text-center text-[11px] text-muted-foreground">
+                        {canvaSearch ? 'Nada encontrado.' : 'Nenhum design encontrado. Conecte o Canva no SaaS.'}
+                      </p>
+                    ) : (
+                      canvaDesigns.map((d) => (
+                        <button
+                          key={d.id}
+                          type="button"
+                          disabled={canvaExportingId !== null}
+                          onClick={() => pickCanva(d)}
+                          className="flex w-full items-center gap-2 px-2 py-1.5 text-left hover:bg-muted disabled:opacity-50"
+                        >
+                          {d.thumbnailUrl ? (
+                            /* eslint-disable-next-line @next/next/no-img-element */
+                            <img src={d.thumbnailUrl} alt="" className="h-8 w-8 rounded object-cover" />
+                          ) : (
+                            <span className="flex h-8 w-8 items-center justify-center rounded bg-muted">
+                              <Palette className="h-3.5 w-3.5 text-muted-foreground" />
+                            </span>
+                          )}
+                          <span className="min-w-0 flex-1 truncate text-xs">{d.title}</span>
+                          {canvaExportingId === d.id && (
+                            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
+                          )}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setShowCanvaList(false); setCanvaSearch(''); }}
+                    className="w-full border-t border-border py-1 text-[11px] text-muted-foreground hover:bg-muted"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowCanvaList(true)}
+                  className="flex w-full items-center gap-2 rounded-md border border-dashed border-border bg-background px-2 py-2 text-sm text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                >
+                  <Palette className="h-4 w-4" />
+                  Usar um design do Canva como imagem do post
                 </button>
               )}
             </Field>

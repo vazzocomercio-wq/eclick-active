@@ -206,6 +206,83 @@ export class BridgeService {
     }
   }
 
+  // ── Ponte Canva (proxy HTTP pro SaaS) ──────────────────────────────────
+  //
+  // O token Canva + lógica de export (OAuth refresh, job polling) vivem no
+  // SaaS (fonte única — refresh_token rotation não pode ter 2 donos). O Active
+  // só proxia via `/internal/canva/*` autenticado por X-Internal-Key. O web
+  // chama o Active normal (JWT) → secret nunca toca o browser.
+
+  private saasInternalConfig(): { baseUrl: string; key: string } | null {
+    const baseUrl = (process.env.SAAS_API_URL ?? '').replace(/\/+$/, '');
+    const key = process.env.SAAS_INTERNAL_KEY ?? process.env.INTERNAL_API_KEY;
+    if (!baseUrl || !key) {
+      this.log.warn('ponte Canva: SAAS_API_URL/SAAS_INTERNAL_KEY ausentes');
+      return null;
+    }
+    return { baseUrl, key };
+  }
+
+  /** Lista designs do Canva da org (via SaaS). Vazio se sem config/erro. */
+  async listCanvaDesigns(
+    activeOrgId: string,
+    q?: string,
+  ): Promise<Array<{ id: string; title: string; thumbnailUrl: string | null }>> {
+    const cfg = this.saasInternalConfig();
+    if (!cfg) return [];
+    const saasOrgId = await this.resolveSaasOrgId(activeOrgId);
+    if (!saasOrgId) return [];
+    try {
+      const url = new URL(`${cfg.baseUrl}/internal/canva/designs`);
+      url.searchParams.set('org_id', saasOrgId);
+      if (q?.trim()) url.searchParams.set('q', q.trim());
+      const res = await fetch(url.toString(), {
+        method: 'GET',
+        headers: { 'X-Internal-Key': cfg.key },
+        signal: AbortSignal.timeout(25_000),
+      });
+      if (!res.ok) {
+        this.log.warn(`listCanvaDesigns SaaS ${res.status}`);
+        return [];
+      }
+      const json = (await res.json()) as {
+        designs?: Array<{ id: string; title: string; thumbnailUrl: string | null }>;
+      };
+      return json.designs ?? [];
+    } catch (err) {
+      this.log.warn(`listCanvaDesigns falhou para ${activeOrgId}: ${String(err)}`);
+      return [];
+    }
+  }
+
+  /** Exporta um design do Canva como imagem https estável (via SaaS). */
+  async exportCanvaDesign(
+    activeOrgId: string,
+    designId: string,
+  ): Promise<{ url: string } | null> {
+    const cfg = this.saasInternalConfig();
+    if (!cfg) return null;
+    const saasOrgId = await this.resolveSaasOrgId(activeOrgId);
+    if (!saasOrgId) return null;
+    try {
+      const res = await fetch(`${cfg.baseUrl}/internal/canva/export`, {
+        method: 'POST',
+        headers: { 'X-Internal-Key': cfg.key, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ org_id: saasOrgId, design_id: designId }),
+        signal: AbortSignal.timeout(60_000),
+      });
+      if (!res.ok) {
+        this.log.warn(`exportCanvaDesign SaaS ${res.status}`);
+        return null;
+      }
+      const json = (await res.json()) as { url?: string };
+      return json.url ? { url: json.url } : null;
+    } catch (err) {
+      this.log.warn(`exportCanvaDesign falhou para ${activeOrgId}: ${String(err)}`);
+      return null;
+    }
+  }
+
   /** Produto por SKU ou ml_listing_id. */
   async getProduct(
     orgId: string,

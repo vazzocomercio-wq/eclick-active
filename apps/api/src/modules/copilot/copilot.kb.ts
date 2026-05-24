@@ -397,6 +397,21 @@ export const KB: KbEntry[] = [
     ].join('\n'),
     tags: ['social', 'conteudo', 'criativos'],
   },
+  {
+    routes: ['/social/criar', '/social'],
+    category: 'SOCIAL',
+    title: 'Criar post: produto do catálogo + design do Canva como imagem',
+    content: [
+      'Na tela **Criar conteúdo** (`/social/criar`) você tem dois jeitos de dar uma **imagem real** pro post (a imagem gerada por IA no Active ainda cai num placeholder não-publicável):',
+      '',
+      '**1. Produto do catálogo (SaaS):** escolha um produto no seletor "Produto do catálogo" → a IA escreve o post sobre ele e usa a **foto real** do produto como imagem. Puxa do catálogo do e-Click (ponte SaaS→Active).',
+      '',
+      '**2. Design do Canva:** no seletor "Imagem do post" clique em **Usar um design do Canva** → busque e escolha um design → o e-Click **exporta** o design como imagem e usa no post (visual branded seu). Precisa ter o **Canva conectado** no e-Click (SaaS → Integrações). A exportação leva alguns segundos.',
+      '',
+      'Se você escolher os dois, o **Canva tem prioridade** sobre a foto do produto. Toda imagem vira **https** automaticamente — o Instagram recusa imagens http.',
+    ].join('\n'),
+    tags: ['social', 'criar', 'canva', 'catalogo', 'produto', 'imagem', 'instagram'],
+  },
 
   // ── CONFIG ────────────────────────────────────────────
   {

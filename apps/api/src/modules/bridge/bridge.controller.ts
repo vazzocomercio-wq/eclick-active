@@ -1,4 +1,12 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { BridgeService } from './bridge.service';
 import { CurrentUser } from '../../common/auth/current-user.decorator';
 import { AuthGuard } from '../../common/auth/auth.guard';
@@ -70,5 +78,27 @@ export class BridgeController {
   @Get('products/:sku')
   productBySku(@CurrentUser() user: AuthUser, @Param('sku') sku: string) {
     return this.bridge.getProduct(user.org_id, { sku });
+  }
+
+  /** Lista designs do Canva da org (proxy pro SaaS, pra imagem do post). */
+  @Get('canva/designs')
+  async canvaDesigns(
+    @CurrentUser() user: AuthUser,
+    @Query('q') q?: string,
+  ) {
+    const designs = await this.bridge.listCanvaDesigns(user.org_id, q);
+    return { designs };
+  }
+
+  /** Exporta um design do Canva como imagem https (proxy pro SaaS). */
+  @Post('canva/export')
+  async canvaExport(
+    @CurrentUser() user: AuthUser,
+    @Body() body: { design_id?: string },
+  ) {
+    const result = body?.design_id
+      ? await this.bridge.exportCanvaDesign(user.org_id, body.design_id)
+      : null;
+    return result ?? { url: null };
   }
 }

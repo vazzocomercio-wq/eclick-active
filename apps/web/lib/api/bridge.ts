@@ -41,6 +41,12 @@ export interface SaasProduct {
   marketplace: string | null;
 }
 
+export interface CanvaDesign {
+  id: string;
+  title: string;
+  thumbnailUrl: string | null;
+}
+
 export interface SaasOrderStats {
   total_orders: number;
   delayed_orders: number;
@@ -108,4 +114,19 @@ export const bridgeApi = {
       query: { search: params.search, limit: params.limit },
       signal,
     }),
+
+  /** Lista designs do Canva da org (pra usar como imagem do post). */
+  listCanvaDesigns: (q?: string, signal?: AbortSignal) =>
+    api.get<{ designs: CanvaDesign[] }>('/bridge/canva/designs', {
+      query: { q },
+      signal,
+    }),
+
+  /** Exporta um design do Canva como imagem https estável. */
+  exportCanvaDesign: (designId: string, signal?: AbortSignal) =>
+    api.post<{ url: string | null }>(
+      '/bridge/canva/export',
+      { design_id: designId },
+      { signal },
+    ),
 };
