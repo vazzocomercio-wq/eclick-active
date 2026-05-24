@@ -112,13 +112,17 @@ export interface VideoModel {
   ready: boolean;
 }
 export const VIDEO_MODELS: VideoModel[] = [
+  // Recomendados pra reel: 9:16 nativo / sem texto chinês.
+  { id: 'sora-2',            label: 'Sora 2 (OpenAI) — 9:16 nativo, sem texto chinês · recomendado', ready: true },
+  { id: 'veo-3.1-fast-generate-preview', label: 'Veo 3.1 Fast (Google) — áudio nativo, sem texto chinês', ready: true },
+  { id: 'veo-3.1-generate-preview',      label: 'Veo 3.1 Standard (Google) — premium', ready: true },
+  { id: 'sora-2-pro',        label: 'Sora 2 Pro (OpenAI) — premium', ready: true },
+  // Kling: mais barato, mas às vezes crava texto/legenda chinesa.
   { id: 'kling-v2-5',        label: 'Kling 2.5 Turbo — mais barato (~US$0,35/5s)', ready: true },
-  { id: 'kling-v2-6',        label: 'Kling 2.6 — com áudio (~US$0,70/5s) · recomendado', ready: true },
+  { id: 'kling-v2-6',        label: 'Kling 2.6 — com áudio (~US$0,70/5s)', ready: true },
   { id: 'kling-v2-1',        label: 'Kling 2.1 (~US$0,49/5s)', ready: true },
   { id: 'kling-v1-6',        label: 'Kling 1.6 — controle de câmera (~US$0,49/5s)', ready: true },
   { id: 'kling-v2-1-master', label: 'Kling 2.1 Master — premium (~US$1,40/5s)', ready: true },
-  { id: 'veo-3.1-fast-generate-preview', label: 'Google Veo 3.1 Fast (precisa configurar)', ready: false },
-  { id: 'sora-2',            label: 'OpenAI Sora 2 (precisa configurar)', ready: false },
 ];
 
 export function findStyle(id?: string | null): VideoStyle | undefined {

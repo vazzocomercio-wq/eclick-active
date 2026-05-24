@@ -94,7 +94,7 @@ export default function CreateContentPage() {
   const [styleId, setStyleId] = useState<string>('ficha');
   const [frameworkId, setFrameworkId] = useState<string>('dsb');
   const [duration, setDuration] = useState<number>(10);
-  const [model, setModel] = useState<string>('kling-v2-6');
+  const [model, setModel] = useState<string>('sora-2');
   const [reelStatus, setReelStatus] = useState<string>('idle');
   const [pollId, setPollId] = useState<string | null>(null);
   // E1: qual foto do produto vira a base do vídeo (null = capa)
@@ -624,13 +624,13 @@ export default function CreateContentPage() {
                     onChange={(e) => setModel(e.target.value)}
                     className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
                   >
-                    <optgroup label="✅ Prontos (Kling)">
-                      {VIDEO_MODELS.filter((m) => m.ready).map((m) => (
+                    <optgroup label="🎬 Recomendados (sem texto chinês)">
+                      {VIDEO_MODELS.filter((m) => !m.id.startsWith('kling')).map((m) => (
                         <option key={m.id} value={m.id}>{m.label}</option>
                       ))}
                     </optgroup>
-                    <optgroup label="⚙️ Precisam de configuração">
-                      {VIDEO_MODELS.filter((m) => !m.ready).map((m) => (
+                    <optgroup label="💲 Kling (mais barato, pode ter texto chinês)">
+                      {VIDEO_MODELS.filter((m) => m.id.startsWith('kling')).map((m) => (
                         <option key={m.id} value={m.id}>{m.label}</option>
                       ))}
                     </optgroup>
