@@ -282,11 +282,14 @@ export default function CreateContentPage() {
       // → "Media ID is not available"). Precedência:
       //   1. design do Canva escolhido (visual branded do usuário)
       //   2. foto real do produto do catálogo
+      const productImg = selectedProduct
+        ? toHttpsUrl(selectedImageUrl ?? selectedProduct.thumbnail_url ?? '')
+        : '';
       const override =
         selectedCanva
           ? { url: selectedCanva.exportedUrl, source: 'canva' as const, alt: selectedCanva.design.title }
-          : selectedProduct?.thumbnail_url
-            ? { url: toHttpsUrl(selectedProduct.thumbnail_url), source: 'catalog' as const, alt: selectedProduct.title ?? '' }
+          : productImg
+            ? { url: productImg, source: 'catalog' as const, alt: selectedProduct?.title ?? '' }
             : null;
       if (override) {
         try {
@@ -496,6 +499,35 @@ export default function CreateContentPage() {
               )}
             </Field>
 
+            {selectedProduct && !(tab === 'video' && multiScene) && (selectedProduct.photos?.length ?? 0) > 1 && (
+              <Field label={tab === 'video' ? 'Imagem base do vídeo' : 'Imagem do produto (qual foto usar)'}>
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {selectedProduct.photos!.map((url) => {
+                    const active = (selectedImageUrl ?? selectedProduct.thumbnail_url) === url;
+                    return (
+                      <button
+                        key={url}
+                        type="button"
+                        onClick={() => setSelectedImageUrl(url)}
+                        className={cn(
+                          'h-16 w-16 shrink-0 overflow-hidden rounded-md border-2 transition',
+                          active ? 'border-primary' : 'border-transparent opacity-60 hover:opacity-100',
+                        )}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={url} alt="" className="h-full w-full object-cover" />
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  {tab === 'video'
+                    ? 'Escolha qual foto vira o 1º quadro do vídeo (padrão: a capa).'
+                    : 'Escolha qual foto do produto usar no post (padrão: a capa).'}
+                </p>
+              </Field>
+            )}
+
             {tab === 'video' && (
               <>
                 <Field label="Como gerar o vídeo">
@@ -534,33 +566,6 @@ export default function CreateContentPage() {
                       🎬 <strong>Multi-cena</strong> — anima {Math.min(selectedProduct.photos!.length, 4)} fotos do produto e junta num reel só.
                     </span>
                   </label>
-                )}
-
-                {selectedProduct && !multiScene && (selectedProduct.photos?.length ?? 0) > 1 && (
-                  <Field label="Imagem base do vídeo">
-                    <div className="flex gap-2 overflow-x-auto pb-1">
-                      {selectedProduct.photos!.map((url) => {
-                        const active = (selectedImageUrl ?? selectedProduct.thumbnail_url) === url;
-                        return (
-                          <button
-                            key={url}
-                            type="button"
-                            onClick={() => setSelectedImageUrl(url)}
-                            className={cn(
-                              'h-16 w-16 shrink-0 overflow-hidden rounded-md border-2 transition',
-                              active ? 'border-primary' : 'border-transparent opacity-60 hover:opacity-100',
-                            )}
-                          >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={url} alt="" className="h-full w-full object-cover" />
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <p className="mt-1 text-[10px] text-muted-foreground">
-                      Escolha qual foto vira o 1º quadro do vídeo (padrão: a capa).
-                    </p>
-                  </Field>
                 )}
 
                 <Field label="Estilo do vídeo">
