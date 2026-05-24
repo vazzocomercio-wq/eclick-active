@@ -126,6 +126,12 @@ export class InstagramGraphProvider implements PublishingProvider {
         creationId = container.id;
       }
 
+      // Instagram processa o container de forma ASSÍNCRONA
+      // (IN_PROGRESS → FINISHED). Publicar antes do FINISHED retorna
+      // "Media ID is not available" — causa real do bug intermitente (o retry
+      // funcionava só porque o container já tinha terminado de processar).
+      await this.waitForContainerReady(creationId, access_token);
+
       // Publica
       const publishRes = await this.fetchGraph(
         `/${igUserId}/media_publish`,
@@ -176,6 +182,50 @@ export class InstagramGraphProvider implements PublishingProvider {
   }
 
   // ─── helpers ────────────────────────────────────
+
+  /**
+   * Espera o container de mídia sair de IN_PROGRESS pra FINISHED antes de
+   * publicar. Sem isso o media_publish dispara cedo demais e o Graph responde
+   * "Media ID is not available". Poll curto (happy path ~1-3s); teto ~25s.
+   * Cobre post simples e o container-pai do carrossel.
+   */
+  private async waitForContainerReady(
+    creationId: string,
+    token: string,
+  ): Promise<void> {
+    const maxAttempts = 10;
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise((r) => setTimeout(r, i === 0 ? 1000 : 2500));
+      let statusCode: string | undefined;
+      try {
+        const res = await this.fetchGraph(
+          `/${creationId}?fields=status_code`,
+          token,
+          { method: 'GET' },
+        );
+        statusCode = (res as { status_code?: string }).status_code;
+      } catch (err) {
+        // erro transitório no GET de status — tenta de novo na próxima volta
+        this.log.warn(
+          `status_code check falhou (tentativa ${i + 1}): ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+        continue;
+      }
+      if (statusCode === 'FINISHED') return;
+      if (statusCode === 'ERROR' || statusCode === 'EXPIRED') {
+        throw new Error(
+          `Instagram não processou a imagem (status=${statusCode}). ` +
+            'Confira se é JPG/PNG, https e com proporção entre 4:5 e 1.91:1.',
+        );
+      }
+      // IN_PROGRESS → continua aguardando
+    }
+    throw new Error(
+      'Tempo esgotado aguardando o Instagram processar a imagem (container IN_PROGRESS). Tente publicar de novo.',
+    );
+  }
 
   private async createMediaContainer(
     igUserId: string,
