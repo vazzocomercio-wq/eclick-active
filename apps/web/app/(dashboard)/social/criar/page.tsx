@@ -7,7 +7,7 @@ import { ArrowLeft, Sparkles, Hash, Package, Search, X, Palette, Loader2, Clappe
 import { useBrands } from '@/hooks/use-social';
 import { socialApi, type ContentPillar, type SocialContent } from '@/lib/api/social';
 import { bridgeApi, type SaasProduct, type CanvaDesign } from '@/lib/api/bridge';
-import { VIDEO_STYLES, SCRIPT_FRAMEWORKS, findStyle, findFramework } from '@/lib/social/video-styles';
+import { VIDEO_STYLES, SCRIPT_FRAMEWORKS, VIDEO_MODELS, findStyle, findFramework } from '@/lib/social/video-styles';
 import { Button } from '@/components/ui/button';
 import { InstagramMockup } from '@/components/social/instagram-mockup';
 import { cn } from '@/lib/utils';
@@ -94,6 +94,7 @@ export default function CreateContentPage() {
   const [styleId, setStyleId] = useState<string>('ficha');
   const [frameworkId, setFrameworkId] = useState<string>('dsb');
   const [duration, setDuration] = useState<number>(10);
+  const [model, setModel] = useState<string>('kling-v2-6');
   const [reelStatus, setReelStatus] = useState<string>('idle');
   const [pollId, setPollId] = useState<string | null>(null);
   // E1: qual foto do produto vira a base do vídeo (null = capa)
@@ -228,6 +229,7 @@ export default function CreateContentPage() {
         framework_prompt: framework?.hint,
         aspect_ratio: '9:16',
         duration_seconds: duration,
+        model_name: model,
         camera_motion: style?.camera,
         multi_scene: multiScene && (selectedProduct.photos?.length ?? 0) > 1,
         photo_urls: multiScene ? (selectedProduct.photos ?? []).slice(0, 4) : undefined,
@@ -614,6 +616,30 @@ export default function CreateContentPage() {
                     onChange={(e) => setDuration(Number(e.target.value))}
                     className="w-full"
                   />
+                </Field>
+
+                <Field label="Modelo de IA">
+                  <select
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                  >
+                    <optgroup label="✅ Prontos (Kling)">
+                      {VIDEO_MODELS.filter((m) => m.ready).map((m) => (
+                        <option key={m.id} value={m.id}>{m.label}</option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="⚙️ Precisam de configuração">
+                      {VIDEO_MODELS.filter((m) => !m.ready).map((m) => (
+                        <option key={m.id} value={m.id}>{m.label}</option>
+                      ))}
+                    </optgroup>
+                  </select>
+                  {!VIDEO_MODELS.find((m) => m.id === model)?.ready && (
+                    <p className="mt-1 text-[10px] text-amber-600 dark:text-amber-400">
+                      ⚠️ Esse modelo ainda não está configurado no servidor — a geração vai falhar até conectarmos a chave dele.
+                    </p>
+                  )}
                 </Field>
 
                 {!selectedProduct && (
