@@ -15,6 +15,7 @@ import {
   Image as ImageIcon,
   AlertTriangle,
   ExternalLink,
+  Megaphone,
 } from 'lucide-react';
 import {
   socialApi,
@@ -70,6 +71,8 @@ export default function CampaignDetailPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [adsBusy, setAdsBusy] = useState(false);
+  const [adsMsg, setAdsMsg] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(
@@ -125,6 +128,23 @@ export default function CampaignDetailPage() {
     }
   }
 
+  async function createAds() {
+    setAdsBusy(true);
+    setAdsMsg(null);
+    try {
+      const r = await socialApi.campaigns.createAds(id);
+      setAdsMsg(
+        r.created > 0
+          ? `${r.created} rascunho(s) de anúncio criados — veja em Ad Boost.`
+          : 'Nenhuma peça elegível pra anúncio ainda.',
+      );
+    } catch (e) {
+      setAdsMsg(e instanceof Error ? e.message : 'Erro ao criar anúncios');
+    } finally {
+      setAdsBusy(false);
+    }
+  }
+
   async function cancelCampaign() {
     setBusy(true);
     try {
@@ -146,6 +166,9 @@ export default function CampaignDetailPage() {
   const readyCount = assets.filter((a) => a.status === 'ready').length;
   const canApprove = campaign?.status === 'ready_for_review' && readyCount > 0;
   const isGenerating = campaign?.status === 'generating';
+  const hasContent = assets.some((a) =>
+    ['ready', 'scheduled', 'approved', 'published'].includes(a.status),
+  );
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -182,6 +205,22 @@ export default function CampaignDetailPage() {
                 Cancelar
               </Button>
             )}
+            {hasContent && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={createAds}
+                disabled={adsBusy}
+                title="Cria rascunhos de anúncio (Meta) pras peças prontas"
+              >
+                {adsBusy ? (
+                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Megaphone className="mr-1 h-3.5 w-3.5" />
+                )}
+                Gerar anúncios
+              </Button>
+            )}
             {canApprove && (
               <Button size="sm" onClick={approveAll} disabled={busy}>
                 {busy ? (
@@ -210,6 +249,11 @@ export default function CampaignDetailPage() {
             {error && (
               <div className="mb-4 rounded-md border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-600">
                 {error}
+              </div>
+            )}
+            {adsMsg && (
+              <div className="mb-4 rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
+                {adsMsg}
               </div>
             )}
 

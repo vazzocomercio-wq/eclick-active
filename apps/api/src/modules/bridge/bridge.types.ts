@@ -67,3 +67,23 @@ export interface BridgeStatus {
   checked_at: string;
   cache_ttl_ms: number;
 }
+
+/** Sinais comerciais por produto (Social Commerce AI Fase 2). */
+export type DemandTrend = 'rising' | 'stable' | 'unknown';
+export interface CommercialSignal {
+  product_id: string;
+  margin_pct: number | null;
+  stock: number;
+  is_overstock: boolean;
+  days_since_movement: number | null;
+  demand_trend: DemandTrend;
+}
+
+export interface CampaignCandidate extends CommercialSignal {
+  product_name: string;
+  product_photo_url: string | null;
+  product_photos: string[];
+  product_description: string | null;
+  category: string | null;
+  score: number;
+}

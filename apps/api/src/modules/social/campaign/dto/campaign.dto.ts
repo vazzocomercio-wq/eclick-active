@@ -73,3 +73,16 @@ export interface GenerateCampaignDto {
   /** Reels multi-cena: anima várias fotos do produto e concatena. */
   multi_scene?: boolean;
 }
+
+/** Geração em lote: a IA escolhe os top-N produtos por estratégia comercial. */
+export interface GenerateBatchDto {
+  brand_id: string;
+  recipe_id?: string | null;
+  strategy?: 'high_margin' | 'overstock' | 'radar' | 'mixed';
+  count?: number;
+  video_styles?: CampaignStyleSpec[];
+  frameworks?: CampaignFrameworkSpec[];
+  num_reels?: number;
+  num_posts?: number;
+  num_carousels?: number;
+}

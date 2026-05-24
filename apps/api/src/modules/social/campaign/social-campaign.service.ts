@@ -8,6 +8,9 @@ import { SupabaseService } from '../../../common/supabase/supabase.service';
 import { EventsGateway } from '../../../gateways/events.gateway';
 import { LlmService } from '../../../common/llm/llm.service';
 import { SocialAiGeneratorService } from '../social-ai/social-ai-generator.service';
+import { BridgeService } from '../../bridge/bridge.service';
+import type { CommercialSignal } from '../../bridge/bridge.types';
+import { SocialAdBoostService } from '../boost/social-ad-boost.service';
 import { SocialCampaignRecipesService } from './social-campaign-recipes.service';
 import type {
   SocialContent,
@@ -19,9 +22,11 @@ import type {
   CampaignAssetType,
   SocialCampaign,
   SocialCampaignAsset,
+  SocialCampaignRecipe,
 } from './social-campaign.types';
 import type {
   GenerateCampaignDto,
+  GenerateBatchDto,
   CampaignStyleSpec,
   CampaignFrameworkSpec,
 } from './dto/campaign.dto';
@@ -66,6 +71,8 @@ export class SocialCampaignService {
     private readonly llm: LlmService,
     private readonly ai: SocialAiGeneratorService,
     private readonly recipes: SocialCampaignRecipesService,
+    private readonly bridge: BridgeService,
+    private readonly boost: SocialAdBoostService,
   ) {}
 
   // ─── Disparo ────────────────────────────────────
@@ -119,6 +126,13 @@ export class SocialCampaignService {
     const frameworks = dto.frameworks ?? [];
     const maxCost = recipe?.max_cost_usd ?? 10;
 
+    // Sinal comercial do produto (best-effort) → tempera o roteiro conforme
+    // as flags da receita (margem/overstock/Radar).
+    const signal =
+      (await this.bridge.getCommercialSignals(orgId, [dto.product_ref]))[0] ??
+      null;
+    const commercialEmphasis = buildCommercialEmphasis(recipe, signal);
+
     // Estimativa de custo
     const reelCost = videoCostUsd(videoModel, videoDuration);
     const estimated = +(
@@ -159,6 +173,7 @@ export class SocialCampaignService {
           cadence_days: cadenceDays,
           preferred_hour: preferredHour,
           multi_scene: !!dto.multi_scene,
+          commercial_signal: signal,
         },
       })
       .select('*')
@@ -220,6 +235,7 @@ export class SocialCampaignService {
       channels,
       videoModel,
       videoDuration,
+      commercialEmphasis,
     }).catch((e) => {
       this.log.error(`runCampaign falhou: ${(e as Error).message}`);
       void this.supabase.adminClient
@@ -240,9 +256,19 @@ export class SocialCampaignService {
     dto: GenerateCampaignDto,
     specs: AssetSpec[],
     assetIds: string[],
-    cfg: { channels: string[]; videoModel: string; videoDuration: number },
+    cfg: {
+      channels: string[];
+      videoModel: string;
+      videoDuration: number;
+      commercialEmphasis?: string;
+    },
   ): Promise<void> {
-    const angles = await this.planAngles(orgId, dto, specs.length);
+    const angles = await this.planAngles(
+      orgId,
+      dto,
+      specs.length,
+      cfg.commercialEmphasis,
+    );
     let actualCost = 0;
 
     for (let i = 0; i < specs.length; i++) {
@@ -391,6 +417,7 @@ export class SocialCampaignService {
     orgId: string,
     dto: GenerateCampaignDto,
     count: number,
+    commercialEmphasis?: string,
   ): Promise<PlannedAngle[]> {
     try {
       const { data: brand } = await this.supabase.adminClient
@@ -411,6 +438,7 @@ export class SocialCampaignService {
         dto.product_description
           ? `DESCRIÇÃO: ${dto.product_description.slice(0, 800)}`
           : '',
+        commercialEmphasis ? `\nDIREÇÃO COMERCIAL: ${commercialEmphasis}` : '',
         '',
         `Gere EXATAMENTE ${count} peças (ângulos distintos).`,
       ]
@@ -497,6 +525,85 @@ export class SocialCampaignService {
       .limit(50);
     if (error) throw error;
     return (data ?? []) as SocialCampaign[];
+  }
+
+  // ─── Geração em lote ("tudo sozinho" em escala) ──
+
+  /** Pega os top-N produtos por estratégia comercial e dispara 1 campanha
+   *  por produto. A IA escolhe O QUE empurrar (margem/overstock/Radar). */
+  async generateBatch(
+    orgId: string,
+    dto: GenerateBatchDto,
+  ): Promise<{ campaigns: SocialCampaign[]; skipped: number }> {
+    if (!dto.brand_id) throw new BadRequestException('brand_id obrigatório');
+    const count = clamp(dto.count ?? 3, 1, 10);
+    const candidates = await this.bridge.getCampaignCandidates(
+      orgId,
+      dto.strategy ?? 'mixed',
+      count,
+    );
+    if (!candidates.length) {
+      throw new BadRequestException(
+        'Nenhum produto candidato encontrado (catálogo sem produtos com foto/preço?).',
+      );
+    }
+    const campaigns: SocialCampaign[] = [];
+    let skipped = 0;
+    for (const c of candidates) {
+      if (!c.product_photo_url) {
+        skipped++;
+        continue;
+      }
+      try {
+        const camp = await this.generateCampaign(orgId, {
+          brand_id: dto.brand_id,
+          recipe_id: dto.recipe_id,
+          product_ref: c.product_id,
+          product_name: c.product_name,
+          product_photo_url: c.product_photo_url,
+          product_photos: c.product_photos,
+          product_description: c.product_description ?? undefined,
+          category: c.category ?? undefined,
+          video_styles: dto.video_styles,
+          frameworks: dto.frameworks,
+          num_reels: dto.num_reels,
+          num_posts: dto.num_posts,
+          num_carousels: dto.num_carousels,
+        });
+        campaigns.push(camp);
+      } catch (e) {
+        this.log.warn(`batch produto ${c.product_id}: ${(e as Error).message}`);
+        skipped++;
+      }
+    }
+    return { campaigns, skipped };
+  }
+
+  // ─── Fan-out de anúncios (Ad Boost) ──────────────
+
+  /** Cria rascunhos de anúncio (Meta) pras peças prontas da campanha. */
+  async createAdDrafts(
+    orgId: string,
+    id: string,
+    actorId: string | null,
+  ): Promise<{ created: number }> {
+    const assets = await this.fetchAssets(orgId, id);
+    let created = 0;
+    for (const a of assets) {
+      if (!a.content_id) continue;
+      if (!['ready', 'scheduled', 'approved', 'published'].includes(a.status)) {
+        continue;
+      }
+      try {
+        await this.boost.createDraft(orgId, a.content_id, {
+          user_id: actorId ?? undefined,
+        });
+        created++;
+      } catch (e) {
+        this.log.warn(`ad draft p/ ${a.content_id}: ${(e as Error).message}`);
+      }
+    }
+    return { created };
   }
 
   // ─── Aprovação em lote ──────────────────────────
@@ -702,6 +809,31 @@ export class SocialCampaignService {
 function clamp(n: number, min: number, max: number): number {
   if (Number.isNaN(n)) return min;
   return Math.max(min, Math.min(max, Math.round(n)));
+}
+
+/** Monta a "direção comercial" pro roteiro conforme flags da receita + sinal. */
+function buildCommercialEmphasis(
+  recipe: SocialCampaignRecipe | null,
+  signal: CommercialSignal | null,
+): string {
+  if (!recipe || !signal) return '';
+  const parts: string[] = [];
+  if (recipe.prioritize_overstock && signal.is_overstock) {
+    parts.push(
+      `produto parado no estoque há ${signal.days_since_movement ?? '30+'} dias — crie senso de urgência/oferta pra girar`,
+    );
+  }
+  if (recipe.prioritize_high_margin && (signal.margin_pct ?? 0) >= 40) {
+    parts.push(
+      'produto de boa margem — pode investir em ângulos premium/aspiracionais',
+    );
+  }
+  if (recipe.follow_radar && signal.demand_trend === 'rising') {
+    parts.push(
+      'demanda em alta no mercado (Radar) — surfe a tendência, senso de oportunidade',
+    );
+  }
+  return parts.join('; ');
 }
 
 /** Custo aproximado de um clipe de vídeo (US$) por modelo + duração. */

@@ -13,7 +13,11 @@ import { CurrentUser } from '../../../common/auth/current-user.decorator';
 import type { AuthUser } from '../../../common/auth/auth.types';
 import { SocialCampaignRecipesService } from './social-campaign-recipes.service';
 import { SocialCampaignService } from './social-campaign.service';
-import type { UpsertRecipeDto, GenerateCampaignDto } from './dto/campaign.dto';
+import type {
+  UpsertRecipeDto,
+  GenerateCampaignDto,
+  GenerateBatchDto,
+} from './dto/campaign.dto';
 
 /**
  * Autopilot de Campanha (Social Commerce AI — Fase 1).
@@ -71,6 +75,12 @@ export class SocialCampaignController {
     return this.campaigns.generateCampaign(user.org_id, dto);
   }
 
+  /** Geração em lote: a IA escolhe os top-N produtos por estratégia comercial. */
+  @Post('campaigns/generate-batch')
+  generateBatch(@CurrentUser() user: AuthUser, @Body() dto: GenerateBatchDto) {
+    return this.campaigns.generateBatch(user.org_id, dto);
+  }
+
   @Get('campaigns')
   listCampaigns(@CurrentUser() user: AuthUser) {
     return this.campaigns.list(user.org_id);
@@ -90,5 +100,11 @@ export class SocialCampaignController {
   @Post('campaigns/:id/cancel')
   cancel(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.campaigns.cancelCampaign(user.org_id, id);
+  }
+
+  /** Fan-out: cria rascunhos de anúncio (Meta) pras peças prontas. */
+  @Post('campaigns/:id/ads')
+  createAds(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.campaigns.createAdDrafts(user.org_id, id, null);
   }
 }

@@ -5,6 +5,8 @@ import {
   SaasProduct,
   SaasOrderStats,
   BridgeStatus,
+  CommercialSignal,
+  CampaignCandidate,
 } from './bridge.types';
 
 /**
@@ -441,6 +443,68 @@ export class BridgeService {
     } catch (err) {
       this.log.warn(`getMultiSceneVideo falhou para ${activeOrgId}: ${String(err)}`);
       return null;
+    }
+  }
+
+  // ─── Sinais comerciais (Social Commerce AI Fase 2) ──────────────────────
+
+  /** Sinais comerciais (margem/estoque/overstock/demanda) de produtos. */
+  async getCommercialSignals(
+    activeOrgId: string,
+    productIds: string[],
+  ): Promise<CommercialSignal[]> {
+    const cfg = this.saasInternalConfig();
+    if (!cfg || !productIds.length) return [];
+    const saasOrgId = await this.resolveSaasOrgId(activeOrgId);
+    if (!saasOrgId) return [];
+    try {
+      const res = await fetch(`${cfg.baseUrl}/internal/products/commercial-signals`, {
+        method: 'POST',
+        headers: { 'X-Internal-Key': cfg.key, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ org_id: saasOrgId, product_ids: productIds }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!res.ok) {
+        this.log.warn(`getCommercialSignals SaaS ${res.status}`);
+        return [];
+      }
+      const json = (await res.json()) as { signals?: CommercialSignal[] };
+      return json.signals ?? [];
+    } catch (err) {
+      this.log.warn(`getCommercialSignals falhou para ${activeOrgId}: ${String(err)}`);
+      return [];
+    }
+  }
+
+  /** Produtos candidatos a campanha, rankeados por estratégia comercial. */
+  async getCampaignCandidates(
+    activeOrgId: string,
+    strategy: string,
+    limit: number,
+  ): Promise<CampaignCandidate[]> {
+    const cfg = this.saasInternalConfig();
+    if (!cfg) return [];
+    const saasOrgId = await this.resolveSaasOrgId(activeOrgId);
+    if (!saasOrgId) return [];
+    try {
+      const url = new URL(`${cfg.baseUrl}/internal/products/campaign-candidates`);
+      url.searchParams.set('org_id', saasOrgId);
+      url.searchParams.set('strategy', strategy);
+      url.searchParams.set('limit', String(limit));
+      const res = await fetch(url.toString(), {
+        method: 'GET',
+        headers: { 'X-Internal-Key': cfg.key },
+        signal: AbortSignal.timeout(25_000),
+      });
+      if (!res.ok) {
+        this.log.warn(`getCampaignCandidates SaaS ${res.status}`);
+        return [];
+      }
+      const json = (await res.json()) as { candidates?: CampaignCandidate[] };
+      return json.candidates ?? [];
+    } catch (err) {
+      this.log.warn(`getCampaignCandidates falhou para ${activeOrgId}: ${String(err)}`);
+      return [];
     }
   }
 

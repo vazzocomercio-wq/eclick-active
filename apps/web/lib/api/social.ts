@@ -611,6 +611,18 @@ export interface CampaignFrameworkSpec {
   label: string;
   prompt: string;
 }
+export type CampaignStrategy = 'high_margin' | 'overstock' | 'radar' | 'mixed';
+export interface GenerateBatchPayload {
+  brand_id: string;
+  recipe_id?: string | null;
+  strategy?: CampaignStrategy;
+  count?: number;
+  video_styles?: CampaignStyleSpec[];
+  frameworks?: CampaignFrameworkSpec[];
+  num_reels?: number;
+  num_posts?: number;
+  num_carousels?: number;
+}
 export interface GenerateCampaignPayload {
   brand_id: string;
   recipe_id?: string | null;
@@ -948,6 +960,11 @@ export const socialApi = {
   campaigns: {
     generate: (body: GenerateCampaignPayload) =>
       api.post<SocialCampaign>('/social/campaigns/generate', body),
+    generateBatch: (body: GenerateBatchPayload) =>
+      api.post<{ campaigns: SocialCampaign[]; skipped: number }>(
+        '/social/campaigns/generate-batch',
+        body,
+      ),
     list: (signal?: AbortSignal) =>
       api.get<SocialCampaign[]>('/social/campaigns', { signal }),
     get: (id: string, signal?: AbortSignal) =>
@@ -956,5 +973,7 @@ export const socialApi = {
       api.post<CampaignDetail>(`/social/campaigns/${id}/approve`, {}),
     cancel: (id: string) =>
       api.post<SocialCampaign>(`/social/campaigns/${id}/cancel`, {}),
+    createAds: (id: string) =>
+      api.post<{ created: number }>(`/social/campaigns/${id}/ads`, {}),
   },
 };
