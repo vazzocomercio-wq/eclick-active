@@ -88,6 +88,18 @@ async function request<T>(
   }
 
   if (!res.ok) {
+    // BYOK: 402 ai_key_required → avisa o guard global (modal "Conecte sua
+    // chave de IA"). Sem precisar migrar call-sites.
+    if (
+      res.status === 402 &&
+      typeof body === 'object' &&
+      body &&
+      (body as { error?: unknown }).error === 'ai_key_required' &&
+      typeof window !== 'undefined'
+    ) {
+      const detail = body as { provider?: string; message?: string };
+      window.dispatchEvent(new CustomEvent('eclick:ai-key-required', { detail }));
+    }
     const message =
       typeof body === 'object' && body && 'message' in body
         ? String((body as { message: unknown }).message)

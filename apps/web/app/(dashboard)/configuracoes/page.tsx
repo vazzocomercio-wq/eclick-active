@@ -11,6 +11,7 @@ import {
   Cable,
   CalendarClock,
   ChevronRight,
+  KeyRound,
   Plug,
   Receipt,
   Settings,
@@ -25,6 +26,7 @@ import { ApiError } from '@/lib/api/client';
 import { OrgSection } from '@/components/configuracoes/org-section';
 import { ChannelsSection } from '@/components/configuracoes/channels-section';
 import { AiFeaturesSection } from '@/components/configuracoes/ai-features-section';
+import { LlmCredentialsSection } from '@/components/configuracoes/llm-credentials-section';
 import { CustomFieldsAdminSection } from '@/components/configuracoes/custom-fields-section';
 import { AutoLeadSection } from '@/components/configuracoes/auto-lead-section';
 import { WebhooksSection } from '@/components/configuracoes/webhooks-section';
@@ -43,6 +45,7 @@ type Section =
   | 'org'
   | 'channels'
   | 'ai'
+  | 'llm-keys'
   | 'ai-usage'
   | 'agente-ia'
   | 'concierge'
@@ -64,6 +67,12 @@ const SECTIONS: Array<{
   { id: 'org', label: 'Organização', icon: Building2, description: 'Nome, slug, plano' },
   { id: 'channels', label: 'Canais', icon: Cable, description: 'WhatsApp e outros' },
   { id: 'ai', label: 'Inteligência Artificial', icon: Bot, description: 'Features de IA' },
+  {
+    id: 'llm-keys',
+    label: 'Chaves de IA',
+    icon: KeyRound,
+    description: 'Conecte suas próprias chaves (BYOK)',
+  },
   {
     id: 'ai-usage',
     label: 'Uso de IA',
@@ -242,6 +251,8 @@ export default function ConfiguracoesPage() {
             {section === 'channels' && <ChannelsSection />}
 
             {section === 'ai' && <AiFeaturesSection />}
+
+            {section === 'llm-keys' && <LlmCredentialsSection />}
 
             {section === 'ai-usage' && <AiUsageSection />}
 

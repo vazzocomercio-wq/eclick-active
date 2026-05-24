@@ -5,6 +5,7 @@ import { Sidebar } from '@/components/sidebar';
 import { MobileTopBar } from '@/components/mobile-top-bar';
 import FloatingCopilot from '@/components/copilot/FloatingCopilot';
 import { AdSignalToastListener } from '@/components/intelligence/ad-signal-toast-listener';
+import { AiKeyGuard } from '@/components/ai/ai-key-guard';
 
 export default function DashboardLayout({
   children,
@@ -30,6 +31,8 @@ export default function DashboardLayout({
       <FloatingCopilot />
       {/* Listener global de signals do Active Intelligence — toast in-app. */}
       <AdSignalToastListener />
+      {/* Guard global BYOK — modal "Conecte sua chave de IA" em 402. */}
+      <AiKeyGuard />
     </div>
   );
 }

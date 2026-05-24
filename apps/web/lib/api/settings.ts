@@ -75,6 +75,32 @@ export interface UpdateAiFeatureInput {
   config?: Record<string, unknown>;
 }
 
+export type LlmProviderName = 'anthropic' | 'openai' | 'google';
+
+export interface LlmCredentials {
+  configured: boolean;
+  provider: LlmProviderName;
+  model: string;
+  api_key_last4: string | null;
+  /** Chave OpenAI dedicada (Whisper/embeddings/DALL·E) configurada? */
+  openai_configured: boolean;
+  openai_api_key_last4: string | null;
+  /** Modo BYOK: 'own' = exige chave própria; 'platform' = chave do servidor. */
+  ai_keys_mode: 'platform' | 'own';
+  available_providers: LlmProviderName[];
+  available_models: Record<LlmProviderName, string[]>;
+  updated_at: string | null;
+}
+
+export interface UpdateLlmCredentialsInput {
+  provider?: LlmProviderName;
+  model?: string;
+  api_key?: string;
+  /** Chave OpenAI dedicada (só quando provider de chat não é openai). */
+  openai_api_key?: string;
+  ai_keys_mode?: 'platform' | 'own';
+}
+
 export interface AiBudget {
   configured: boolean;
   monthly_budget_usd: number | null;
@@ -129,6 +155,12 @@ export const settingsApi = {
   },
   getAi(signal?: AbortSignal): Promise<AiFeature[]> {
     return api.get<AiFeature[]>('/settings/ai', { signal });
+  },
+  getLlm(signal?: AbortSignal): Promise<LlmCredentials> {
+    return api.get<LlmCredentials>('/settings/llm', { signal });
+  },
+  updateLlm(input: UpdateLlmCredentialsInput): Promise<LlmCredentials> {
+    return api.patch<LlmCredentials>('/settings/llm', input);
   },
   updateAi(featureName: AIFeatureName, input: UpdateAiFeatureInput): Promise<AiFeature> {
     return api.patch<AiFeature>(`/settings/ai/${featureName}`, input);
