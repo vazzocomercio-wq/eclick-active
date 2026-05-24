@@ -749,5 +749,35 @@ export const socialApi = {
       channels?: string[];
       calendar_id?: string;
     }) => api.post<SocialContent>('/social/generate/carousel', body),
+    reel: (body: {
+      brand_id: string;
+      theme: string;
+      pillar?: ContentPillar;
+      hook?: string;
+      cta?: string;
+      channels?: string[];
+      calendar_id?: string;
+      catalog_product_id?: string;
+      product_title?: string;
+      product_photo_url: string;
+      category?: string;
+      video_mode: 'product_photo' | 'ai_scene';
+      style?: string;
+      style_label?: string;
+      style_prompt?: string;
+      framework?: string;
+      framework_label?: string;
+      framework_prompt?: string;
+      aspect_ratio?: '1:1' | '16:9' | '9:16';
+      duration_seconds?: number;
+      model_name?: string;
+      camera_motion?: string;
+    }) => api.post<SocialContent>('/social/generate/reel', body),
   },
+
+  /** Poll do vídeo do reel (até video_status='completed'). */
+  reelStatus: (id: string) =>
+    api.get<{ content: SocialContent; video_status: string }>(
+      `/social/contents/${id}/reel-status`,
+    ),
 };

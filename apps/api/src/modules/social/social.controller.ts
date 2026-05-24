@@ -40,6 +40,7 @@ import type {
   UpdateContentDto,
   GeneratePostDto,
   GenerateCarouselDto,
+  GenerateReelDto,
   ScheduleContentDto,
   RejectContentDto,
   RegenerateContentDto,
@@ -306,6 +307,20 @@ export class SocialController {
     @Body() dto: GenerateCarouselDto,
   ) {
     return this.ai.createAndGenerateCarousel(user.org_id, dto);
+  }
+
+  @Post('generate/reel')
+  generateReelQuick(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: GenerateReelDto,
+  ) {
+    return this.ai.createAndGenerateReel(user.org_id, dto);
+  }
+
+  /** Poll do vídeo do reel — anexa quando o motor do SaaS terminar. */
+  @Get('contents/:id/reel-status')
+  reelStatus(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.ai.pollReel(user.org_id, id);
   }
 
   // ─── Publishing — credentials ───────────────────

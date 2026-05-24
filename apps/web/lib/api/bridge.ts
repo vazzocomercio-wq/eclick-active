@@ -47,6 +47,28 @@ export interface CanvaDesign {
   thumbnailUrl: string | null;
 }
 
+export interface StartVideoParams {
+  product_photo_url: string;
+  prompt: string;
+  mode: 'product_photo' | 'ai_scene';
+  catalog_product_id?: string;
+  product_title?: string;
+  category?: string;
+  scene_prompt?: string;
+  aspect_ratio?: '1:1' | '16:9' | '9:16';
+  duration_seconds?: number;
+  model_name?: string;
+  camera_motion?: string;
+  max_cost_usd?: number;
+}
+
+export interface VideoStatus {
+  status: string;
+  public_url: string | null;
+  preview_url: string | null;
+  error: string | null;
+}
+
 export interface SaasOrderStats {
   total_orders: number;
   delayed_orders: number;
@@ -129,4 +151,12 @@ export const bridgeApi = {
       { design_id: designId },
       { signal },
     ),
+
+  /** Dispara a geração de um Reel pelo motor de vídeo do SaaS. */
+  startVideo: (params: StartVideoParams, signal?: AbortSignal) =>
+    api.post<{ job_id: string | null }>('/bridge/video/start', params, { signal }),
+
+  /** Status do job de Reel (poll até status='completed'). */
+  videoStatus: (jobId: string, signal?: AbortSignal) =>
+    api.get<VideoStatus>(`/bridge/video/${encodeURIComponent(jobId)}`, { signal }),
 };

@@ -60,6 +60,35 @@ export interface GenerateCarouselDto extends GeneratePostDto {
     | 'free';
 }
 
+export interface GenerateReelDto {
+  brand_id: string;
+  theme: string;
+  pillar?: ContentPillar;
+  hook?: string;
+  cta?: string;
+  channels?: string[];
+  calendar_id?: string;
+  /** Produto do catálogo (foto vira 1º quadro do vídeo). */
+  catalog_product_id?: string;
+  product_title?: string;
+  product_photo_url: string;
+  category?: string;
+  /** product_photo = anima a foto real; ai_scene = gera cena por IA e anima. */
+  video_mode: 'product_photo' | 'ai_scene';
+  /** Estilo do vídeo (catálogo do front): id + rótulo + dica de prompt. */
+  style?: string;
+  style_label?: string;
+  style_prompt?: string;
+  /** Estrutura de roteiro (D+S+B, AIDA, PAS…): id + rótulo + dica. */
+  framework?: string;
+  framework_label?: string;
+  framework_prompt?: string;
+  aspect_ratio?: '1:1' | '16:9' | '9:16';
+  duration_seconds?: number;
+  model_name?: string;
+  camera_motion?: string;
+}
+
 export interface ScheduleContentDto {
   scheduled_for: string;
   channels?: string[];

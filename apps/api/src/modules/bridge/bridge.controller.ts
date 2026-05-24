@@ -101,4 +101,54 @@ export class BridgeController {
       : null;
     return result ?? { url: null };
   }
+
+  /** Dispara a geração de um Reel pelo motor de vídeo do SaaS (proxy). */
+  @Post('video/start')
+  async startVideo(
+    @CurrentUser() user: AuthUser,
+    @Body()
+    body: {
+      catalog_product_id?: string;
+      product_title?: string;
+      product_photo_url?: string;
+      category?: string;
+      mode?: 'product_photo' | 'ai_scene';
+      prompt?: string;
+      scene_prompt?: string;
+      aspect_ratio?: '1:1' | '16:9' | '9:16';
+      duration_seconds?: number;
+      model_name?: string;
+      camera_motion?: string;
+      max_cost_usd?: number;
+    },
+  ) {
+    if (!body?.product_photo_url || !body?.prompt) {
+      return { job_id: null };
+    }
+    const result = await this.bridge.startSocialVideo(user.org_id, {
+      product_photo_url: body.product_photo_url,
+      prompt: body.prompt,
+      mode: body.mode ?? 'product_photo',
+      catalog_product_id: body.catalog_product_id,
+      product_title: body.product_title,
+      category: body.category,
+      scene_prompt: body.scene_prompt,
+      aspect_ratio: body.aspect_ratio,
+      duration_seconds: body.duration_seconds,
+      model_name: body.model_name,
+      camera_motion: body.camera_motion,
+      max_cost_usd: body.max_cost_usd,
+    });
+    return result ?? { job_id: null };
+  }
+
+  /** Status do job de Reel (poll). */
+  @Get('video/:jobId')
+  async videoStatus(
+    @CurrentUser() user: AuthUser,
+    @Param('jobId') jobId: string,
+  ) {
+    const result = await this.bridge.getSocialVideo(user.org_id, jobId);
+    return result ?? { status: 'unknown', public_url: null, preview_url: null, error: null };
+  }
 }

@@ -36,6 +36,7 @@ import { SocialAdBoostService } from './boost/social-ad-boost.service';
 import { AlertsModule } from '../alerts/alerts.module';
 import { ChannelsModule as ChannelDispatcherModule } from '../../common/channels/channels.module';
 import { SlackModule } from '../../common/slack/slack.module';
+import { BridgeModule } from '../bridge/bridge.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { SlackModule } from '../../common/slack/slack.module';
     AlertsModule,
     ChannelDispatcherModule,
     SlackModule,
+    BridgeModule,
   ],
   controllers: [
     SocialController,

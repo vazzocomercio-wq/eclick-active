@@ -4,10 +4,12 @@ import { LlmService } from '../../../common/llm/llm.service';
 import { SocialBrandsService } from '../social-brands.service';
 import { SocialCalendarsService } from '../social-calendars.service';
 import { ImageGenerationService } from '../image-generation/image-generation.service';
+import { BridgeService } from '../../bridge/bridge.service';
 import {
   CALENDAR_SYSTEM_PROMPT,
   POST_SYSTEM_PROMPT,
   CAROUSEL_SYSTEM_PROMPT,
+  REEL_SCRIPT_SYSTEM_PROMPT,
   buildBrandContextBlock,
 } from './prompts';
 import type {
@@ -20,8 +22,17 @@ import type { GenerateCalendarDto } from '../dto/calendar.dto';
 import type {
   GeneratePostDto,
   GenerateCarouselDto,
+  GenerateReelDto,
   RegenerateContentDto,
 } from '../dto/content.dto';
+
+interface GeneratedReel {
+  caption: string;
+  hashtags: string[];
+  video_prompt: string;
+  scene_prompt?: string;
+  alt_text?: string;
+}
 
 interface GeneratedPost {
   caption: string;
@@ -57,6 +68,7 @@ export class SocialAiGeneratorService {
     private readonly brands: SocialBrandsService,
     private readonly calendars: SocialCalendarsService,
     private readonly images: ImageGenerationService,
+    private readonly bridge: BridgeService,
   ) {}
 
   // ─── Calendário ──────────────────────────────────
@@ -357,6 +369,162 @@ export class SocialAiGeneratorService {
     });
 
     return updated;
+  }
+
+  // ─── Reel / vídeo curto ──────────────────────────
+
+  /**
+   * Cria o conteúdo (content_type='reel'), gera o roteiro+legenda via Claude
+   * (estilo + framework escolhidos) e DISPARA o vídeo no motor do SaaS (ponte).
+   * NÃO bloqueia esperando o vídeo (é assíncrono, minutos) — devolve o conteúdo
+   * com status='generating' e metadata.video_job_id. O front faz poll em
+   * `pollReel` até o vídeo ficar pronto.
+   */
+  async createAndGenerateReel(
+    orgId: string,
+    dto: GenerateReelDto,
+  ): Promise<SocialContent> {
+    const t0 = Date.now();
+    const { data, error } = await this.supabase.adminClient
+      .from('social_contents')
+      .insert({
+        org_id: orgId,
+        brand_id: dto.brand_id,
+        calendar_id: dto.calendar_id ?? null,
+        content_type: 'reel',
+        pillar: dto.pillar ?? 'product',
+        title: dto.theme,
+        channels: dto.channels ?? ['instagram'],
+        related_product_id: dto.catalog_product_id ?? null,
+        status: 'generating',
+        metadata: {
+          brief: dto.theme,
+          hook: dto.hook,
+          cta_suggested: dto.cta,
+          video_mode: dto.video_mode,
+          style: dto.style,
+          framework: dto.framework,
+          product_photo_url: dto.product_photo_url,
+        },
+      })
+      .select('id')
+      .single();
+    if (error) throw error;
+    const contentId = (data as { id: string }).id;
+
+    const ctx = await this.brands.getContext(orgId, dto.brand_id);
+    const userPrompt = [
+      buildBrandContextBlock(ctx),
+      '',
+      `PRODUTO: ${dto.product_title ?? dto.theme}`,
+      `TEMA: ${dto.theme}`,
+      dto.video_mode === 'ai_scene'
+        ? 'MODO: cena gerada por IA (produto inserido num ambiente)'
+        : 'MODO: animar a foto real do produto',
+      dto.style_label ? `ESTILO DE VÍDEO: ${dto.style_label}${dto.style_prompt ? ` — ${dto.style_prompt}` : ''}` : '',
+      dto.framework_label ? `ESTRUTURA DE ROTEIRO: ${dto.framework_label}${dto.framework_prompt ? ` — ${dto.framework_prompt}` : ''}` : '',
+      dto.hook ? `HOOK SUGERIDO: ${dto.hook}` : '',
+      dto.cta ? `CTA: ${dto.cta}` : ctx.business.main_cta ? `CTA: ${ctx.business.main_cta}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    const result = await this.llm.chat({
+      orgId,
+      feature: 'social_reel',
+      system: REEL_SCRIPT_SYSTEM_PROMPT,
+      user: userPrompt,
+      json_mode: true,
+      max_tokens: 1500,
+      temperature: 0.7,
+    });
+    const parsed = this.parseJson<GeneratedReel>(result.text);
+    if (!parsed?.video_prompt) {
+      await this.markFailed(contentId, 'IA não retornou roteiro de vídeo');
+      throw new Error('Geração de reel falhou — JSON inválido');
+    }
+
+    // Dispara o vídeo no SaaS (assíncrono)
+    const started = await this.bridge.startSocialVideo(orgId, {
+      product_photo_url: dto.product_photo_url,
+      prompt: parsed.video_prompt,
+      mode: dto.video_mode,
+      scene_prompt:
+        dto.video_mode === 'ai_scene'
+          ? parsed.scene_prompt || parsed.video_prompt
+          : undefined,
+      catalog_product_id: dto.catalog_product_id,
+      product_title: dto.product_title,
+      category: dto.category,
+      aspect_ratio: dto.aspect_ratio ?? '9:16',
+      duration_seconds: dto.duration_seconds ?? 10,
+      model_name: dto.model_name,
+      camera_motion: dto.camera_motion,
+    });
+
+    const content = await this.fetchContent(orgId, contentId);
+    return this.updateContentAfterGeneration(orgId, contentId, {
+      caption: parsed.caption,
+      hashtags: parsed.hashtags ?? [],
+      ai_model: 'claude+video',
+      ai_prompt: parsed.video_prompt,
+      ai_generation_time_ms: Date.now() - t0,
+      status: started?.job_id ? 'generating' : 'failed',
+      metadata: {
+        ...(content.metadata as Record<string, unknown>),
+        video_job_id: started?.job_id ?? null,
+        scene_prompt: parsed.scene_prompt ?? null,
+        video_error: started?.job_id ? null : 'motor de vídeo indisponível (worker desligado?)',
+      },
+    });
+  }
+
+  /**
+   * Poll do job de vídeo do reel. Quando o SaaS termina, anexa o vídeo
+   * (media + capa) ao conteúdo e move pra pending_approval.
+   */
+  async pollReel(
+    orgId: string,
+    contentId: string,
+  ): Promise<{ content: SocialContent; video_status: string }> {
+    const content = await this.fetchContent(orgId, contentId);
+    const meta = (content.metadata ?? {}) as { video_job_id?: string };
+
+    // Já anexado (não é mais generating) → completed
+    if (content.media?.length && content.status !== 'generating') {
+      return { content, video_status: 'completed' };
+    }
+    if (!meta.video_job_id) {
+      return { content, video_status: content.status === 'failed' ? 'failed' : 'unknown' };
+    }
+
+    const st = await this.bridge.getSocialVideo(orgId, meta.video_job_id);
+    if (!st) return { content, video_status: 'unknown' };
+
+    if (st.status === 'completed' && st.public_url) {
+      const updated = await this.updateContentAfterGeneration(orgId, contentId, {
+        cover_image_url: st.preview_url ?? st.public_url,
+        media: [
+          {
+            url: st.public_url,
+            thumbnail_url: st.preview_url ?? undefined,
+            width: 1080,
+            height: 1920,
+            source: 'generated_ai' as const,
+          },
+        ],
+        status: 'pending_approval',
+      });
+      return { content: updated, video_status: 'completed' };
+    }
+    if (st.status === 'failed') {
+      const updated = await this.updateContentAfterGeneration(orgId, contentId, {
+        status: 'failed',
+        metadata: { ...(content.metadata as Record<string, unknown>), video_error: st.error },
+      });
+      return { content: updated, video_status: 'failed' };
+    }
+    return { content, video_status: st.status };
   }
 
   // ─── Geração ad-hoc (sem calendário) ─────────────

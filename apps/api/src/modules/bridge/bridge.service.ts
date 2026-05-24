@@ -283,6 +283,89 @@ export class BridgeService {
     }
   }
 
+  // ── Ponte de vídeo / Reel (proxy HTTP pro pipeline do SaaS) ────────────
+  //
+  // O motor de vídeo (Kling/Veo/Sora, jobs assíncronos) vive no SaaS. O Active
+  // só dispara e faz poll via `/internal/creative/social-video`. Mesma config
+  // (SAAS_API_URL + SAAS_INTERNAL_KEY) da ponte Canva.
+
+  async startSocialVideo(
+    activeOrgId: string,
+    dto: {
+      catalog_product_id?: string;
+      product_title?: string;
+      product_photo_url: string;
+      category?: string;
+      mode: 'product_photo' | 'ai_scene';
+      prompt: string;
+      scene_prompt?: string;
+      aspect_ratio?: '1:1' | '16:9' | '9:16';
+      duration_seconds?: number;
+      model_name?: string;
+      camera_motion?: string;
+      max_cost_usd?: number;
+    },
+  ): Promise<{ job_id: string } | null> {
+    const cfg = this.saasInternalConfig();
+    if (!cfg) return null;
+    const saasOrgId = await this.resolveSaasOrgId(activeOrgId);
+    if (!saasOrgId) return null;
+    try {
+      const res = await fetch(`${cfg.baseUrl}/internal/creative/social-video`, {
+        method: 'POST',
+        headers: { 'X-Internal-Key': cfg.key, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ org_id: saasOrgId, ...dto }),
+        signal: AbortSignal.timeout(60_000),
+      });
+      if (!res.ok) {
+        this.log.warn(`startSocialVideo SaaS ${res.status}`);
+        return null;
+      }
+      const json = (await res.json()) as { job_id?: string };
+      return json.job_id ? { job_id: json.job_id } : null;
+    } catch (err) {
+      this.log.warn(`startSocialVideo falhou para ${activeOrgId}: ${String(err)}`);
+      return null;
+    }
+  }
+
+  async getSocialVideo(
+    activeOrgId: string,
+    jobId: string,
+  ): Promise<{
+    status: string;
+    public_url: string | null;
+    preview_url: string | null;
+    error: string | null;
+  } | null> {
+    const cfg = this.saasInternalConfig();
+    if (!cfg) return null;
+    const saasOrgId = await this.resolveSaasOrgId(activeOrgId);
+    if (!saasOrgId) return null;
+    try {
+      const url = new URL(`${cfg.baseUrl}/internal/creative/social-video/${encodeURIComponent(jobId)}`);
+      url.searchParams.set('org_id', saasOrgId);
+      const res = await fetch(url.toString(), {
+        method: 'GET',
+        headers: { 'X-Internal-Key': cfg.key },
+        signal: AbortSignal.timeout(25_000),
+      });
+      if (!res.ok) {
+        this.log.warn(`getSocialVideo SaaS ${res.status}`);
+        return null;
+      }
+      return (await res.json()) as {
+        status: string;
+        public_url: string | null;
+        preview_url: string | null;
+        error: string | null;
+      };
+    } catch (err) {
+      this.log.warn(`getSocialVideo falhou para ${activeOrgId}: ${String(err)}`);
+      return null;
+    }
+  }
+
   /** Produto por SKU ou ml_listing_id. */
   async getProduct(
     orgId: string,
