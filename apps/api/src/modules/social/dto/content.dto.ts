@@ -89,6 +89,9 @@ export interface GenerateReelDto {
   duration_seconds?: number;
   model_name?: string;
   camera_motion?: string;
+  /** E3 — multi-cena: anima várias fotos e concatena num reel só. */
+  multi_scene?: boolean;
+  photo_urls?: string[];
 }
 
 export interface ScheduleContentDto {

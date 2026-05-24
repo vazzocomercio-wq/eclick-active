@@ -142,6 +142,53 @@ export class BridgeController {
     return result ?? { job_id: null };
   }
 
+  /** E3 — dispara reel multi-cena (N fotos → 1 vídeo). */
+  @Post('video-multi/start')
+  async startVideoMulti(
+    @CurrentUser() user: AuthUser,
+    @Body()
+    body: {
+      photo_urls?: string[];
+      prompt?: string;
+      catalog_product_id?: string;
+      product_title?: string;
+      category?: string;
+      aspect_ratio?: '1:1' | '16:9' | '9:16';
+      duration_seconds?: number;
+      model_name?: string;
+      camera_motion?: string;
+      max_cost_usd?: number;
+    },
+  ) {
+    if (!body?.photo_urls?.length || !body?.prompt) {
+      return { job_ids: null };
+    }
+    const result = await this.bridge.startMultiSceneVideo(user.org_id, {
+      photo_urls: body.photo_urls,
+      prompt: body.prompt,
+      catalog_product_id: body.catalog_product_id,
+      product_title: body.product_title,
+      category: body.category,
+      aspect_ratio: body.aspect_ratio,
+      duration_seconds: body.duration_seconds,
+      model_name: body.model_name,
+      camera_motion: body.camera_motion,
+      max_cost_usd: body.max_cost_usd,
+    });
+    return result ?? { job_ids: null };
+  }
+
+  /** E3 — status do multi-cena (job_ids separados por vírgula). */
+  @Get('video-multi')
+  async videoMultiStatus(
+    @CurrentUser() user: AuthUser,
+    @Query('job_ids') jobIds: string,
+  ) {
+    const ids = (jobIds ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+    const result = await this.bridge.getMultiSceneVideo(user.org_id, ids);
+    return result ?? { status: 'unknown', public_url: null, preview_url: null, error: null };
+  }
+
   /** Status do job de Reel (poll). */
   @Get('video/:jobId')
   async videoStatus(

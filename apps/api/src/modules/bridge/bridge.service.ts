@@ -366,6 +366,84 @@ export class BridgeService {
     }
   }
 
+  /** E3 — dispara reel multi-cena (N fotos → N clipes → 1 vídeo). */
+  async startMultiSceneVideo(
+    activeOrgId: string,
+    dto: {
+      photo_urls: string[];
+      prompt: string;
+      catalog_product_id?: string;
+      product_title?: string;
+      category?: string;
+      aspect_ratio?: '1:1' | '16:9' | '9:16';
+      duration_seconds?: number;
+      model_name?: string;
+      camera_motion?: string;
+      max_cost_usd?: number;
+    },
+  ): Promise<{ job_ids: string[] } | null> {
+    const cfg = this.saasInternalConfig();
+    if (!cfg) return null;
+    const saasOrgId = await this.resolveSaasOrgId(activeOrgId);
+    if (!saasOrgId) return null;
+    try {
+      const res = await fetch(`${cfg.baseUrl}/internal/creative/social-video-multi`, {
+        method: 'POST',
+        headers: { 'X-Internal-Key': cfg.key, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ org_id: saasOrgId, mode: 'product_photo', ...dto }),
+        signal: AbortSignal.timeout(90_000),
+      });
+      if (!res.ok) {
+        this.log.warn(`startMultiSceneVideo SaaS ${res.status}`);
+        return null;
+      }
+      const json = (await res.json()) as { job_ids?: string[] };
+      return json.job_ids?.length ? { job_ids: json.job_ids } : null;
+    } catch (err) {
+      this.log.warn(`startMultiSceneVideo falhou para ${activeOrgId}: ${String(err)}`);
+      return null;
+    }
+  }
+
+  /** E3 — status do multi-cena (concatena quando todos prontos). */
+  async getMultiSceneVideo(
+    activeOrgId: string,
+    jobIds: string[],
+  ): Promise<{
+    status: string;
+    public_url: string | null;
+    preview_url: string | null;
+    error: string | null;
+  } | null> {
+    const cfg = this.saasInternalConfig();
+    if (!cfg || !jobIds.length) return null;
+    const saasOrgId = await this.resolveSaasOrgId(activeOrgId);
+    if (!saasOrgId) return null;
+    try {
+      const url = new URL(`${cfg.baseUrl}/internal/creative/social-video-multi`);
+      url.searchParams.set('org_id', saasOrgId);
+      url.searchParams.set('job_ids', jobIds.join(','));
+      const res = await fetch(url.toString(), {
+        method: 'GET',
+        headers: { 'X-Internal-Key': cfg.key },
+        signal: AbortSignal.timeout(40_000),
+      });
+      if (!res.ok) {
+        this.log.warn(`getMultiSceneVideo SaaS ${res.status}`);
+        return null;
+      }
+      return (await res.json()) as {
+        status: string;
+        public_url: string | null;
+        preview_url: string | null;
+        error: string | null;
+      };
+    } catch (err) {
+      this.log.warn(`getMultiSceneVideo falhou para ${activeOrgId}: ${String(err)}`);
+      return null;
+    }
+  }
+
   /** Produto por SKU ou ml_listing_id. */
   async getProduct(
     orgId: string,

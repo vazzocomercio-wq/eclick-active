@@ -163,4 +163,27 @@ export const bridgeApi = {
   /** Status do job de Reel (poll até status='completed'). */
   videoStatus: (jobId: string, signal?: AbortSignal) =>
     api.get<VideoStatus>(`/bridge/video/${encodeURIComponent(jobId)}`, { signal }),
+
+  /** E3 — dispara reel multi-cena (N fotos → 1 vídeo). */
+  startVideoMulti: (
+    params: {
+      photo_urls: string[];
+      prompt: string;
+      catalog_product_id?: string;
+      product_title?: string;
+      category?: string;
+      aspect_ratio?: '1:1' | '16:9' | '9:16';
+      duration_seconds?: number;
+      model_name?: string;
+      camera_motion?: string;
+    },
+    signal?: AbortSignal,
+  ) => api.post<{ job_ids: string[] | null }>('/bridge/video-multi/start', params, { signal }),
+
+  /** E3 — status do multi-cena (poll). */
+  videoMultiStatus: (jobIds: string[], signal?: AbortSignal) =>
+    api.get<VideoStatus>('/bridge/video-multi', {
+      query: { job_ids: jobIds.join(',') },
+      signal,
+    }),
 };

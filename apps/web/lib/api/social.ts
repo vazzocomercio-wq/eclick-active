@@ -773,6 +773,8 @@ export const socialApi = {
       duration_seconds?: number;
       model_name?: string;
       camera_motion?: string;
+      multi_scene?: boolean;
+      photo_urls?: string[];
     }) => api.post<SocialContent>('/social/generate/reel', body),
   },
 

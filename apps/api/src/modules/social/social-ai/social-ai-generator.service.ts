@@ -446,23 +446,43 @@ export class SocialAiGeneratorService {
       throw new Error('Geração de reel falhou — JSON inválido');
     }
 
-    // Dispara o vídeo no SaaS (assíncrono)
-    const started = await this.bridge.startSocialVideo(orgId, {
-      product_photo_url: dto.product_photo_url,
-      prompt: parsed.video_prompt,
-      mode: dto.video_mode,
-      scene_prompt:
-        dto.video_mode === 'ai_scene'
-          ? parsed.scene_prompt || parsed.video_prompt
-          : undefined,
-      catalog_product_id: dto.catalog_product_id,
-      product_title: dto.product_title,
-      category: dto.category,
-      aspect_ratio: dto.aspect_ratio ?? '9:16',
-      duration_seconds: dto.duration_seconds ?? 10,
-      model_name: dto.model_name,
-      camera_motion: dto.camera_motion,
-    });
+    // Dispara o vídeo no SaaS (assíncrono). Multi-cena = N fotos → N clipes.
+    const multi = !!dto.multi_scene && (dto.photo_urls?.length ?? 0) > 1;
+    let singleJobId: string | null = null;
+    let jobIds: string[] = [];
+    if (multi) {
+      const r = await this.bridge.startMultiSceneVideo(orgId, {
+        photo_urls: dto.photo_urls!.slice(0, 4),
+        prompt: parsed.video_prompt,
+        catalog_product_id: dto.catalog_product_id,
+        product_title: dto.product_title,
+        category: dto.category,
+        aspect_ratio: dto.aspect_ratio ?? '9:16',
+        duration_seconds: dto.duration_seconds ?? 5,
+        model_name: dto.model_name,
+        camera_motion: dto.camera_motion,
+      });
+      jobIds = r?.job_ids ?? [];
+    } else {
+      const started = await this.bridge.startSocialVideo(orgId, {
+        product_photo_url: dto.product_photo_url,
+        prompt: parsed.video_prompt,
+        mode: dto.video_mode,
+        scene_prompt:
+          dto.video_mode === 'ai_scene'
+            ? parsed.scene_prompt || parsed.video_prompt
+            : undefined,
+        catalog_product_id: dto.catalog_product_id,
+        product_title: dto.product_title,
+        category: dto.category,
+        aspect_ratio: dto.aspect_ratio ?? '9:16',
+        duration_seconds: dto.duration_seconds ?? 10,
+        model_name: dto.model_name,
+        camera_motion: dto.camera_motion,
+      });
+      singleJobId = started?.job_id ?? null;
+    }
+    const ok = multi ? jobIds.length > 0 : !!singleJobId;
 
     const content = await this.fetchContent(orgId, contentId);
     return this.updateContentAfterGeneration(orgId, contentId, {
@@ -471,12 +491,13 @@ export class SocialAiGeneratorService {
       ai_model: 'claude+video',
       ai_prompt: parsed.video_prompt,
       ai_generation_time_ms: Date.now() - t0,
-      status: started?.job_id ? 'generating' : 'failed',
+      status: ok ? 'generating' : 'failed',
       metadata: {
         ...(content.metadata as Record<string, unknown>),
-        video_job_id: started?.job_id ?? null,
+        video_job_id: singleJobId,
+        video_job_ids: multi ? jobIds : null,
         scene_prompt: parsed.scene_prompt ?? null,
-        video_error: started?.job_id ? null : 'motor de vídeo indisponível (worker desligado?)',
+        video_error: ok ? null : 'motor de vídeo indisponível (worker desligado?)',
       },
     });
   }
@@ -490,17 +511,23 @@ export class SocialAiGeneratorService {
     contentId: string,
   ): Promise<{ content: SocialContent; video_status: string }> {
     const content = await this.fetchContent(orgId, contentId);
-    const meta = (content.metadata ?? {}) as { video_job_id?: string };
+    const meta = (content.metadata ?? {}) as {
+      video_job_id?: string;
+      video_job_ids?: string[];
+    };
 
     // Já anexado (não é mais generating) → completed
     if (content.media?.length && content.status !== 'generating') {
       return { content, video_status: 'completed' };
     }
-    if (!meta.video_job_id) {
+    const hasJob = !!meta.video_job_id || (meta.video_job_ids?.length ?? 0) > 0;
+    if (!hasJob) {
       return { content, video_status: content.status === 'failed' ? 'failed' : 'unknown' };
     }
 
-    const st = await this.bridge.getSocialVideo(orgId, meta.video_job_id);
+    const st = meta.video_job_ids?.length
+      ? await this.bridge.getMultiSceneVideo(orgId, meta.video_job_ids)
+      : await this.bridge.getSocialVideo(orgId, meta.video_job_id as string);
     if (!st) return { content, video_status: 'unknown' };
 
     if (st.status === 'completed' && st.public_url) {

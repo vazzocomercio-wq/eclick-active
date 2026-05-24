@@ -98,6 +98,8 @@ export default function CreateContentPage() {
   const [pollId, setPollId] = useState<string | null>(null);
   // E1: qual foto do produto vira a base do vídeo (null = capa)
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
+  // E3: multi-cena (anima várias fotos do produto e concatena)
+  const [multiScene, setMultiScene] = useState(false);
 
   useEffect(() => {
     if (!brandId && brands.length > 0 && brands[0]) setBrandId(brands[0].id);
@@ -119,6 +121,7 @@ export default function CreateContentPage() {
   const pickProduct = (p: SaasProduct) => {
     setSelectedProduct(p);
     setSelectedImageUrl(null); // volta pra capa ao trocar de produto
+    setMultiScene(false);
     setShowProductList(false);
     setProductSearch('');
     setPillar('product');
@@ -226,6 +229,8 @@ export default function CreateContentPage() {
         aspect_ratio: '9:16',
         duration_seconds: duration,
         camera_motion: style?.camera,
+        multi_scene: multiScene && (selectedProduct.photos?.length ?? 0) > 1,
+        photo_urls: multiScene ? (selectedProduct.photos ?? []).slice(0, 4) : undefined,
       });
       setResult(r);
       // status='generating' → começa o poll; se já veio failed (motor off), mostra erro
@@ -518,6 +523,20 @@ export default function CreateContentPage() {
                 </Field>
 
                 {selectedProduct && (selectedProduct.photos?.length ?? 0) > 1 && (
+                  <label className="flex cursor-pointer items-start gap-2 rounded-md border border-border bg-background p-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={multiScene}
+                      onChange={(e) => setMultiScene(e.target.checked)}
+                      className="mt-0.5"
+                    />
+                    <span>
+                      🎬 <strong>Multi-cena</strong> — anima {Math.min(selectedProduct.photos!.length, 4)} fotos do produto e junta num reel só.
+                    </span>
+                  </label>
+                )}
+
+                {selectedProduct && !multiScene && (selectedProduct.photos?.length ?? 0) > 1 && (
                   <Field label="Imagem base do vídeo">
                     <div className="flex gap-2 overflow-x-auto pb-1">
                       {selectedProduct.photos!.map((url) => {
