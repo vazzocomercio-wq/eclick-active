@@ -13,6 +13,7 @@ import type {
   SocialContent,
   ContentPillar,
 } from '../social.types';
+import type { GenerateReelDto } from '../dto/content.dto';
 import type {
   CampaignDetail,
   CampaignAssetType,
@@ -262,7 +263,7 @@ export class SocialCampaignService {
       try {
         let content: SocialContent;
         if (spec.asset_type === 'reel') {
-          content = await this.ai.createAndGenerateReel(orgId, {
+          content = await this.genReelWithRetry(orgId, {
             brand_id: dto.brand_id,
             theme: angle.angle,
             pillar,
@@ -360,6 +361,28 @@ export class SocialCampaignService {
     if (campaign.autonomy_level === 'full_auto') {
       await this.approveCampaign(orgId, campaign.id, null).catch(() => null);
     }
+  }
+
+  /** Reel é o mais frágil (roteiro via LLM json_mode às vezes volta inválido).
+   *  Tenta 2x antes de desistir. */
+  private async genReelWithRetry(
+    orgId: string,
+    reelDto: GenerateReelDto,
+  ): Promise<SocialContent> {
+    let last: unknown;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const c = await this.ai.createAndGenerateReel(orgId, reelDto);
+        if (c.status !== 'failed') return c;
+        last = new Error(
+          (c.metadata as { video_error?: string })?.video_error ??
+            'reel retornou failed',
+        );
+      } catch (e) {
+        last = e;
+      }
+    }
+    throw last instanceof Error ? last : new Error('falha ao gerar reel');
   }
 
   // ─── Planejamento de ângulos (1 chamada de IA) ──
