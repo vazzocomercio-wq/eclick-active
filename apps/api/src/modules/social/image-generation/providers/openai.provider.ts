@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { LlmService } from '../../../../common/llm/llm.service';
 import type {
   GeneratedImage,
   GenerateImageInput,
@@ -23,14 +24,20 @@ export class OpenAIImageProvider implements ImageProvider {
   private readonly log = new Logger(OpenAIImageProvider.name);
   readonly name = 'openai' as const;
 
-  async isAvailable(): Promise<boolean> {
-    return Boolean(process.env.OPENAI_API_KEY);
+  constructor(private readonly llm: LlmService) {}
+
+  async isAvailable(orgId: string): Promise<boolean> {
+    // BYOK: disponível se a org tem chave OpenAI resolvível (chat openai →
+    // slot dedicado → env no modo platform). Org 'own' sem chave → false →
+    // pipeline cai no PlaceholderProvider (degrada gracioso, sem hard-block).
+    const key = await this.llm.resolveOpenAiKey(orgId, { allowNull: true });
+    return Boolean(key);
   }
 
   async generate(orgId: string, input: GenerateImageInput): Promise<GeneratedImage> {
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey = await this.llm.resolveOpenAiKey(orgId, { allowNull: true });
     if (!apiKey) {
-      throw new Error('OPENAI_API_KEY não configurada');
+      throw new Error('Sem chave OpenAI configurada pra esta org (BYOK)');
     }
 
     const width = input.width ?? 1024;

@@ -52,6 +52,11 @@ export interface LlmCredentials {
   provider: LlmProviderName;
   model: string;
   api_key_last4: string | null;
+  /** Chave OpenAI dedicada (Whisper/embeddings/DALL·E) configurada? */
+  openai_configured: boolean;
+  openai_api_key_last4: string | null;
+  /** Modo BYOK da org. 'own' = exige chave própria; 'platform' = chave do servidor. */
+  ai_keys_mode: 'platform' | 'own';
   available_providers: LlmProviderName[];
   available_models: Record<LlmProviderName, readonly string[]>;
   updated_at: string | null;
@@ -307,11 +312,18 @@ export class SettingsService {
   // ────────────────────────────────────────────
 
   async getLlmCredentials(orgId: string): Promise<LlmCredentials> {
-    const { data, error } = await this.supabase.adminClient
-      .from('org_llm_credentials')
-      .select('provider, model_default, api_key_last4, updated_at')
-      .eq('org_id', orgId)
-      .maybeSingle();
+    const [{ data, error }, { data: orgData }] = await Promise.all([
+      this.supabase.adminClient
+        .from('org_llm_credentials')
+        .select('provider, model_default, api_key_last4, openai_api_key_last4, updated_at')
+        .eq('org_id', orgId)
+        .maybeSingle(),
+      this.supabase.adminClient
+        .from('organizations')
+        .select('ai_keys_mode')
+        .eq('id', orgId)
+        .maybeSingle(),
+    ]);
 
     if (error) {
       this.logger.error(`getLlmCredentials failed: ${error.message}`);
@@ -322,14 +334,20 @@ export class SettingsService {
       provider: LlmProviderName;
       model_default: string;
       api_key_last4: string;
+      openai_api_key_last4: string | null;
       updated_at: string;
     } | null;
+
+    const mode = (orgData as { ai_keys_mode?: string | null } | null)?.ai_keys_mode;
 
     return {
       configured: !!row,
       provider: row?.provider ?? 'anthropic',
       model: row?.model_default ?? LLM_DEFAULT_MODEL.anthropic,
       api_key_last4: row?.api_key_last4 ?? null,
+      openai_configured: !!row?.openai_api_key_last4,
+      openai_api_key_last4: row?.openai_api_key_last4 ?? null,
+      ai_keys_mode: mode === 'own' ? 'own' : 'platform',
       available_providers: ['anthropic', 'openai', 'google'],
       available_models: LLM_CATALOG,
       updated_at: row?.updated_at ?? null,
@@ -360,49 +378,89 @@ export class SettingsService {
       api_key_last4: string;
     } | null;
 
-    const nextProvider: LlmProviderName = dto.provider ?? existing?.provider ?? 'anthropic';
-    const nextModel = dto.model ?? existing?.model_default ?? LLM_DEFAULT_MODEL[nextProvider];
+    // Vamos ter linha de cred de chat após este update? (existente ou nova).
+    const willHaveChatRow = !!existing || !!dto.api_key;
 
-    if (!LLM_CATALOG[nextProvider].includes(nextModel)) {
+    // Guard de lockout: ativar modo 'own' sem nenhuma chave de chat trava
+    // toda a IA da org. Exige configurar a chave antes.
+    if (dto.ai_keys_mode === 'own' && !willHaveChatRow) {
       throw new BadRequestException(
-        `Modelo "${nextModel}" não é suportado para o provider ${nextProvider}.`,
+        'Configure uma chave de IA antes de ativar o modo "usar minhas próprias chaves".',
       );
     }
 
-    // API key: nova ou mantém a atual. Se provider mudou e não há key nova, exigir.
-    let api_key_ciphertext: string;
-    let api_key_last4: string;
-    if (dto.api_key) {
-      api_key_ciphertext = encryptApiKey(dto.api_key);
-      api_key_last4 = lastFour(dto.api_key);
-    } else if (existing && existing.provider === nextProvider) {
-      api_key_ciphertext = existing.api_key_ciphertext;
-      api_key_last4 = existing.api_key_last4;
-    } else {
+    // Chave OpenAI dedicada mora na MESMA linha da cred de chat — precisa
+    // existir uma linha pra anexá-la.
+    if (dto.openai_api_key && !willHaveChatRow) {
       throw new BadRequestException(
-        'Ao trocar de provider você precisa enviar a nova api_key.',
+        'Configure o provider de chat (com a chave) antes de adicionar uma chave OpenAI dedicada.',
       );
     }
 
-    const { error } = await this.supabase.adminClient
-      .from('org_llm_credentials')
-      .upsert(
-        {
-          org_id: orgId,
-          provider: nextProvider,
-          model_default: nextModel,
-          api_key_ciphertext,
-          api_key_last4,
-        },
-        { onConflict: 'org_id' },
-      );
+    // Upsert da cred de chat só quando há linha (existente) ou estamos criando.
+    if (willHaveChatRow) {
+      const nextProvider: LlmProviderName = dto.provider ?? existing?.provider ?? 'anthropic';
+      const nextModel = dto.model ?? existing?.model_default ?? LLM_DEFAULT_MODEL[nextProvider];
 
-    if (error) {
-      this.logger.error(`updateLlmCredentials upsert failed: ${error.message}`);
-      throw new InternalServerErrorException(error.message);
+      if (!LLM_CATALOG[nextProvider].includes(nextModel)) {
+        throw new BadRequestException(
+          `Modelo "${nextModel}" não é suportado para o provider ${nextProvider}.`,
+        );
+      }
+
+      // API key: nova ou mantém a atual. Se provider mudou e não há key nova, exigir.
+      let api_key_ciphertext: string;
+      let api_key_last4: string;
+      if (dto.api_key) {
+        api_key_ciphertext = encryptApiKey(dto.api_key);
+        api_key_last4 = lastFour(dto.api_key);
+      } else if (existing && existing.provider === nextProvider) {
+        api_key_ciphertext = existing.api_key_ciphertext;
+        api_key_last4 = existing.api_key_last4;
+      } else {
+        throw new BadRequestException(
+          'Ao trocar de provider você precisa enviar a nova api_key.',
+        );
+      }
+
+      // Slot OpenAI dedicado — só incluído no payload quando enviado (omitir
+      // preserva o valor atual no upsert; PostgREST só faz SET das keys do JSON).
+      const payload: Record<string, unknown> = {
+        org_id: orgId,
+        provider: nextProvider,
+        model_default: nextModel,
+        api_key_ciphertext,
+        api_key_last4,
+      };
+      if (dto.openai_api_key) {
+        payload.openai_api_key_ciphertext = encryptApiKey(dto.openai_api_key);
+        payload.openai_api_key_last4 = lastFour(dto.openai_api_key);
+      }
+
+      const { error } = await this.supabase.adminClient
+        .from('org_llm_credentials')
+        .upsert(payload, { onConflict: 'org_id' });
+
+      if (error) {
+        this.logger.error(`updateLlmCredentials upsert failed: ${error.message}`);
+        throw new InternalServerErrorException(error.message);
+      }
     }
 
-    // Invalida cache do LlmService pra essa org pegar a nova cred no próximo call
+    // Modo BYOK da org (active.organizations.ai_keys_mode).
+    if (dto.ai_keys_mode) {
+      const { error: modeErr } = await this.supabase.adminClient
+        .from('organizations')
+        .update({ ai_keys_mode: dto.ai_keys_mode })
+        .eq('id', orgId);
+      if (modeErr) {
+        this.logger.error(`updateLlmCredentials ai_keys_mode failed: ${modeErr.message}`);
+        throw new InternalServerErrorException(modeErr.message);
+      }
+    }
+
+    // Invalida cache do LlmService pra essa org pegar a nova cred + modo no
+    // próximo call.
     this.llm.invalidateCache(orgId);
 
     return this.getLlmCredentials(orgId);

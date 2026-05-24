@@ -305,12 +305,14 @@ export class AttachmentsService {
     buffer: Buffer,
     startTs: number,
   ): Promise<void> {
-    const apiKey = process.env.OPENAI_API_KEY;
+    // BYOK: resolve a chave OpenAI da org (chat openai → slot dedicado → env
+    // no modo platform). Org em 'own' sem chave → null → pula gracioso.
+    const apiKey = await this.llm.resolveOpenAiKey(att.org_id, { allowNull: true });
     if (!apiKey) {
-      this.logger.warn(`att ${att.id} audio: OPENAI_API_KEY ausente — skip`);
+      this.logger.warn(`att ${att.id} audio: sem chave OpenAI pra org ${att.org_id} — skip`);
       await this.markProcessed(att.id, {
         ai_summary: null,
-        ai_extracted: { skipped: true, reason: 'OPENAI_API_KEY not configured' },
+        ai_extracted: { skipped: true, reason: 'OpenAI key not configured for org (BYOK)' },
       });
       return;
     }

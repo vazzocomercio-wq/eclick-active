@@ -17,6 +17,10 @@ import { AnthropicProvider } from './providers/anthropic.provider';
 import { OpenAIProvider } from './providers/openai.provider';
 import { GoogleProvider } from './providers/google.provider';
 import { decryptApiKey } from './crypto.util';
+import { AiKeyRequiredException } from './ai-key-required.exception';
+
+/** Modo de chaves de IA da org (active.organizations.ai_keys_mode). */
+type AiKeysMode = 'platform' | 'own';
 
 interface ChatRequest {
   /** Org dona da chamada — resolve credencial + escopa o tracking. */
@@ -60,6 +64,7 @@ interface OrgCredRow {
   provider: LlmProviderName;
   model_default: string;
   api_key_ciphertext: string;
+  openai_api_key_ciphertext?: string | null;
 }
 
 interface CachedProvider {
@@ -140,6 +145,13 @@ export class LlmService implements OnModuleInit {
       return { provider, providerName: row.provider, model: row.model_default };
     }
 
+    // BYOK: org sem cred própria. Em modo 'own', bloqueia (exige chave da org)
+    // em vez de cair na chave do servidor. Em 'platform', usa o fallback env.
+    const mode = await this.getOrgAiKeysMode(orgId);
+    if (mode === 'own') {
+      throw new AiKeyRequiredException('IA');
+    }
+
     // Fallback: ANTHROPIC_API_KEY env, claude-sonnet-4-6.
     const fallbackKey = process.env.ANTHROPIC_API_KEY;
     if (!fallbackKey) {
@@ -169,6 +181,79 @@ export class LlmService implements OnModuleInit {
   invalidateCache(orgId: string): void {
     this.cache.delete(orgId);
     this.cache.delete(`__fallback__${orgId}`);
+    this.modeCache.delete(orgId);
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // BYOK — ai_keys_mode + resolução de chave OpenAI por org
+  // ──────────────────────────────────────────────────────────
+
+  private modeCache = new Map<string, { mode: AiKeysMode; expiresAt: number }>();
+  private static readonly MODE_CACHE_TTL_MS = 60_000;
+
+  /**
+   * Lê active.organizations.ai_keys_mode. 'platform' (usa chave do servidor)
+   * ou 'own' (exige chave própria → bloqueia IA sem chave). Default 'platform'
+   * se a coluna estiver ausente/null (ex: pré-migração) pra não quebrar nada.
+   * Cacheado 60s.
+   */
+  async getOrgAiKeysMode(orgId: string): Promise<AiKeysMode> {
+    const cached = this.modeCache.get(orgId);
+    if (cached && cached.expiresAt > Date.now()) return cached.mode;
+
+    const { data } = await this.supabase.adminClient
+      .from('organizations')
+      .select('ai_keys_mode')
+      .eq('id', orgId)
+      .maybeSingle();
+
+    const raw = (data as { ai_keys_mode?: string | null } | null)?.ai_keys_mode;
+    const mode: AiKeysMode = raw === 'own' ? 'own' : 'platform';
+    this.modeCache.set(orgId, { mode, expiresAt: Date.now() + LlmService.MODE_CACHE_TTL_MS });
+    return mode;
+  }
+
+  /**
+   * Resolve a chave OpenAI pros serviços auxiliares (Whisper, embeddings,
+   * DALL·E) — que são OpenAI-only, independentes do provider de chat.
+   *
+   * Ordem:
+   *   1. Se o provider de chat da org JÁ é openai → reusa api_key_ciphertext.
+   *   2. Senão, slot dedicado openai_api_key_ciphertext (se configurado).
+   *   3. Senão: modo 'platform' → env OPENAI_API_KEY.
+   *   4. Senão (modo 'own' sem chave): se `allowNull` → retorna null (worker
+   *      pula graciosamente); senão lança AiKeyRequiredException.
+   */
+  async resolveOpenAiKey(
+    orgId: string,
+    opts: { allowNull?: boolean } = {},
+  ): Promise<string | null> {
+    const { data } = await this.supabase.adminClient
+      .from('org_llm_credentials')
+      .select('provider, api_key_ciphertext, openai_api_key_ciphertext')
+      .eq('org_id', orgId)
+      .maybeSingle();
+
+    const row = data as {
+      provider: LlmProviderName;
+      api_key_ciphertext: string;
+      openai_api_key_ciphertext: string | null;
+    } | null;
+
+    if (row?.provider === 'openai' && row.api_key_ciphertext) {
+      return decryptApiKey(row.api_key_ciphertext);
+    }
+    if (row?.openai_api_key_ciphertext) {
+      return decryptApiKey(row.openai_api_key_ciphertext);
+    }
+
+    const mode = await this.getOrgAiKeysMode(orgId);
+    if (mode === 'platform') {
+      return process.env.OPENAI_API_KEY ?? null;
+    }
+    // modo 'own' sem chave OpenAI
+    if (opts.allowNull) return null;
+    throw new AiKeyRequiredException('OpenAI');
   }
 
   /**
@@ -202,6 +287,15 @@ export class LlmService implements OnModuleInit {
       this.logger.warn(
         `[copilot/anthropic-direct] org=${orgId} configurada com ${row.provider} mas feature exige Anthropic — caindo no fallback env`,
       );
+    }
+
+    // BYOK: sem cred Anthropic da org e modo 'own' → bloqueia em vez de usar
+    // a chave do servidor.
+    if (!row) {
+      const mode = await this.getOrgAiKeysMode(orgId);
+      if (mode === 'own') {
+        throw new AiKeyRequiredException('Anthropic');
+      }
     }
 
     const fallbackKey = process.env.ANTHROPIC_API_KEY;

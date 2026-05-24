@@ -62,7 +62,7 @@ export class KnowledgeService {
     createdBy: string | null,
   ): Promise<KnowledgeDocumentListItem> {
     const tokens = this.embeddings.estimateTokens(args.content);
-    const embedding = await this.embeddings.embed(this.embedInput(args.title, args.content));
+    const embedding = await this.embeddings.embed(this.embedInput(args.title, args.content), orgId);
 
     const { data, error } = await this.supabase.adminClient
       .from('knowledge_documents')
@@ -193,7 +193,7 @@ export class KnowledgeService {
     if (contentChanged) {
       updates.content = scraped.content;
       updates.tokens = this.embeddings.estimateTokens(scraped.content);
-      const embedding = await this.embeddings.embed(this.embedInput(scraped.title, scraped.content));
+      const embedding = await this.embeddings.embed(this.embedInput(scraped.title, scraped.content), orgId);
       if (embedding) updates.embedding = embedding;
     }
 
@@ -321,7 +321,7 @@ export class KnowledgeService {
     },
   ): Promise<KnowledgeDocumentListItem> {
     const tokens = this.embeddings.estimateTokens(args.content);
-    const embedding = await this.embeddings.embed(`${args.title}\n\n${args.content}`);
+    const embedding = await this.embeddings.embed(`${args.title}\n\n${args.content}`, orgId);
 
     const { data, error } = await this.supabase.adminClient
       .from('knowledge_documents')
@@ -359,7 +359,7 @@ export class KnowledgeService {
     createdBy: string | null,
   ): Promise<KnowledgeDocumentListItem> {
     const tokens = this.embeddings.estimateTokens(dto.content);
-    const embedding = await this.embeddings.embed(this.embedInput(dto.title, dto.content));
+    const embedding = await this.embeddings.embed(this.embedInput(dto.title, dto.content), orgId);
 
     const { data, error } = await this.supabase.adminClient
       .from('knowledge_documents')
@@ -477,6 +477,7 @@ export class KnowledgeService {
       const nextContent = dto.content ?? existing.content;
       patch.embedding = await this.embeddings.embed(
         this.embedInput(nextTitle, nextContent),
+        orgId,
       );
     }
 
@@ -528,7 +529,7 @@ export class KnowledgeService {
     const trimmed = query.trim();
     if (!trimmed) return [];
 
-    const queryEmbedding = await this.embeddings.embed(trimmed);
+    const queryEmbedding = await this.embeddings.embed(trimmed, orgId);
     if (!queryEmbedding) {
       this.logger.warn('Sem OPENAI_API_KEY — searchSemantic retorna vazio.');
       return [];

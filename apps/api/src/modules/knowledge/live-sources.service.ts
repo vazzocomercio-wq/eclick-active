@@ -194,14 +194,14 @@ export class LiveSourcesService {
     // Decide quais fontes são relevantes via similaridade entre query e
     // description. Sem OPENAI_API_KEY, cai pra "todas as ativas" limitadas
     // por MAX_SOURCES_PER_QUERY.
-    const queryEmbedding = await this.embeddings.embed(trimmed).catch(() => null);
+    const queryEmbedding = await this.embeddings.embed(trimmed, orgId).catch(() => null);
     let relevant: KnowledgeLiveSource[];
     if (queryEmbedding) {
       const scored = await Promise.all(
         sources.map(async (s) => {
           const desc = (s.description ?? s.name).trim();
           if (!desc) return { source: s, score: 0 };
-          const descEmb = await this.embeddings.embed(desc).catch(() => null);
+          const descEmb = await this.embeddings.embed(desc, orgId).catch(() => null);
           if (!descEmb) return { source: s, score: 0 };
           return { source: s, score: cosineSim(queryEmbedding, descEmb) };
         }),

@@ -76,6 +76,24 @@ export class UpdateLlmCredentialsDto {
   @IsString()
   @Length(10, 500)
   api_key?: string;
+
+  /**
+   * Chave OpenAI dedicada pros serviços auxiliares (Whisper/embeddings/DALL·E)
+   * quando o provider de chat NÃO é openai. Opcional.
+   */
+  @IsOptional()
+  @IsString()
+  @Length(10, 500)
+  openai_api_key?: string;
+
+  /**
+   * Modo de chaves de IA da org. 'own' = BYOK obrigatório (bloqueia IA sem
+   * chave); 'platform' = usa a chave do servidor.
+   */
+  @IsOptional()
+  @IsString()
+  @IsIn(['platform', 'own'])
+  ai_keys_mode?: 'platform' | 'own';
 }
 
 /**

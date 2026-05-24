@@ -501,6 +501,29 @@ export const KB: KbEntry[] = [
     ].join('\n'),
     tags: ['ia', 'custos', 'budget', 'cap', 'observabilidade'],
   },
+  {
+    routes: ['/configuracoes', '/configuracoes/:tab'],
+    category: 'CONFIG',
+    title: 'Chaves de IA (BYOK) — use seus próprios créditos',
+    content: [
+      'A aba **Chaves de IA** deixa cada org conectar as **próprias chaves** de IA',
+      'pra consumir os créditos dela (não os da plataforma).',
+      '',
+      '- **Provedor de chat** (Anthropic / OpenAI / Google) + modelo + chave de API.',
+      '  A chave fica criptografada (AES-GCM) e só os últimos 4 dígitos aparecem.',
+      '- **Chave OpenAI dedicada**: aparece quando o provedor de chat NÃO é OpenAI.',
+      '  Necessária pra transcrição de áudio (Whisper), busca semântica (embeddings)',
+      '  e geração de imagens (DALL·E) — recursos OpenAI-only.',
+      '- **Usar minhas próprias chaves** (modo `own`): quando ligado, a IA usa só as',
+      '  chaves da org. **Sem chave, os recursos de IA ficam bloqueados** com um aviso',
+      '  "Conecte sua chave de IA" (BYOK obrigatório). Em modo `platform`, usa a chave',
+      '  do servidor (default).',
+      '',
+      '⚠ Ao ligar o modo próprio você precisa salvar a chave de chat antes, senão a IA',
+      'trava. Trocar de provedor exige enviar a nova chave.',
+    ].join('\n'),
+    tags: ['ia', 'byok', 'chave', 'api key', 'openai', 'anthropic', 'gemini', 'creditos'],
+  },
 
   // ── GENERAL fallback ──────────────────────────────────
   {

@@ -76,7 +76,7 @@ export class AiSkillsService {
     dto: CreateSkillDto,
     createdBy: string | null,
   ): Promise<AiSkill> {
-    const conditions = await this.enrichConditionsWithEmbeddings(dto.trigger_conditions ?? {});
+    const conditions = await this.enrichConditionsWithEmbeddings(orgId, dto.trigger_conditions ?? {});
 
     const { data, error } = await this.supabase.adminClient
       .from('ai_skills')
@@ -119,7 +119,7 @@ export class AiSkillsService {
 
     const conditions =
       dto.trigger_conditions !== undefined
-        ? await this.enrichConditionsWithEmbeddings(dto.trigger_conditions)
+        ? await this.enrichConditionsWithEmbeddings(orgId, dto.trigger_conditions)
         : undefined;
 
     const { data, error } = await this.supabase.adminClient
@@ -183,7 +183,7 @@ export class AiSkillsService {
         skipped++;
         continue;
       }
-      const conditions = await this.enrichConditionsWithEmbeddings(seed.trigger_conditions);
+      const conditions = await this.enrichConditionsWithEmbeddings(orgId, seed.trigger_conditions);
       const { error } = await this.supabase.adminClient.from('ai_skills').insert({
         org_id: orgId,
         name: seed.name,
@@ -352,7 +352,7 @@ export class AiSkillsService {
 
     // Embedding da mensagem (uma vez só) pra match semântico
     const text = (args.message.plain_text ?? '').trim();
-    const messageEmbedding = text ? await this.embeddings.embed(text).catch(() => null) : null;
+    const messageEmbedding = text ? await this.embeddings.embed(text, args.orgId).catch(() => null) : null;
 
     // Itera por priority desc (já ordenado pelo listForPersona)
     for (const skill of active) {
@@ -457,6 +457,7 @@ export class AiSkillsService {
    * Falha gracefully se OpenAI não estiver disponível — match cai pra substring.
    */
   private async enrichConditionsWithEmbeddings(
+    orgId: string,
     rawConditions: Record<string, unknown> | AiSkillTriggerConditions,
   ): Promise<AiSkillTriggerConditions> {
     const c = (rawConditions ?? {}) as AiSkillTriggerConditions;
@@ -470,7 +471,7 @@ export class AiSkillsService {
 
     const embeddings: AiSkillTriggerConditions['phrase_embeddings'] = [];
     for (const phrase of phrases) {
-      const emb = await this.embeddings.embed(phrase).catch(() => null);
+      const emb = await this.embeddings.embed(phrase, orgId).catch(() => null);
       if (emb) embeddings.push({ phrase, embedding: emb });
     }
     return { ...c, phrase_embeddings: embeddings };
