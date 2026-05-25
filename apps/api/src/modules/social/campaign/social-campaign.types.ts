@@ -46,7 +46,11 @@ export interface SocialCampaignRecipe {
   max_cost_usd: number;
   is_default: boolean;
   is_active: boolean;
-  metadata: Record<string, unknown>;
+  metadata: Record<string, unknown> & {
+    influencer_engine?: 'scene' | 'avatar';
+    influencer_avatar_url?: string;
+    influencer_voice?: string;
+  };
   created_at: string;
   updated_at: string;
 }

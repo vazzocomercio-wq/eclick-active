@@ -508,6 +508,73 @@ export class BridgeService {
     }
   }
 
+  // ─── Avatar D-ID (Influenciador IA — Fase 3) ────────────────────────────
+
+  async startAvatarVideo(
+    activeOrgId: string,
+    dto: {
+      script: string;
+      presenter_image_url?: string;
+      voice_id?: string;
+      name?: string;
+    },
+  ): Promise<{ job_id: string } | null> {
+    const cfg = this.saasInternalConfig();
+    if (!cfg) return null;
+    const saasOrgId = await this.resolveSaasOrgId(activeOrgId);
+    if (!saasOrgId) return null;
+    try {
+      const res = await fetch(`${cfg.baseUrl}/internal/creative/avatar-video`, {
+        method: 'POST',
+        headers: { 'X-Internal-Key': cfg.key, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ org_id: saasOrgId, ...dto }),
+        signal: AbortSignal.timeout(40_000),
+      });
+      if (!res.ok) {
+        this.log.warn(`startAvatarVideo SaaS ${res.status}`);
+        return null;
+      }
+      const json = (await res.json()) as { job_id?: string };
+      return json.job_id ? { job_id: json.job_id } : null;
+    } catch (err) {
+      this.log.warn(`startAvatarVideo falhou para ${activeOrgId}: ${String(err)}`);
+      return null;
+    }
+  }
+
+  async getAvatarVideo(
+    activeOrgId: string,
+    jobId: string,
+  ): Promise<{ status: string; public_url: string | null; error: string | null } | null> {
+    const cfg = this.saasInternalConfig();
+    if (!cfg) return null;
+    const saasOrgId = await this.resolveSaasOrgId(activeOrgId);
+    if (!saasOrgId) return null;
+    try {
+      const url = new URL(
+        `${cfg.baseUrl}/internal/creative/avatar-video/${encodeURIComponent(jobId)}`,
+      );
+      url.searchParams.set('org_id', saasOrgId);
+      const res = await fetch(url.toString(), {
+        method: 'GET',
+        headers: { 'X-Internal-Key': cfg.key },
+        signal: AbortSignal.timeout(25_000),
+      });
+      if (!res.ok) {
+        this.log.warn(`getAvatarVideo SaaS ${res.status}`);
+        return null;
+      }
+      return (await res.json()) as {
+        status: string;
+        public_url: string | null;
+        error: string | null;
+      };
+    } catch (err) {
+      this.log.warn(`getAvatarVideo falhou para ${activeOrgId}: ${String(err)}`);
+      return null;
+    }
+  }
+
   /** Produto por SKU ou ml_listing_id. */
   async getProduct(
     orgId: string,

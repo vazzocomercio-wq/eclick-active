@@ -23,6 +23,8 @@ export interface UpsertRecipeDto {
   max_cost_usd?: number;
   is_default?: boolean;
   is_active?: boolean;
+  /** Config do influenciador IA: { influencer_engine, influencer_avatar_url, influencer_voice }. */
+  metadata?: Record<string, unknown>;
 }
 
 /** Estilo de vídeo resolvido pelo front (catálogo video-styles.ts). */

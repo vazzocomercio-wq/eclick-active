@@ -83,6 +83,11 @@ Responda APENAS JSON válido no formato:
 {"intro":"abertura calorosa + o que vem na live (pt-BR)","structure":"como dividir o tempo (pt-BR)","segments":[{"product":"nome","hook":"frase de abertura do bloco","talking_points":["ponto 1","ponto 2","ponto 3"],"offer":"oferta/condição especial da live","cta":"chamada pra ação (comprar/clicar)"}],"engagement_prompts":["pergunta/enquete pra puxar comentário"],"closing":"encerramento + última chamada"}
 Um segment por produto, na ordem dada. Linguagem falada, animada, persuasiva, honesta. Sem texto fora do JSON.`;
 
+const AVATAR_SCRIPT_SYSTEM_PROMPT = `Você escreve roteiros FALADOS curtos para um avatar/criador apresentar um produto num reel (estilo UGC).
+Dado um produto e um ângulo, escreva o que o avatar vai FALAR (~20-25s, ~55 palavras), natural e persuasivo, em pt-BR. Sem hashtags ou emojis no texto falado.
+Responda APENAS JSON: {"spoken":"texto falado pt-BR","caption":"legenda curta pro post","hashtags":["#tag1","#tag2"]}
+Sem texto fora do JSON.`;
+
 @Injectable()
 export class SocialCampaignService {
   private readonly log = new Logger(SocialCampaignService.name);
@@ -156,6 +161,11 @@ export class SocialCampaignService {
     const commercialEmphasis = buildCommercialEmphasis(recipe, signal);
     const useInfluencer =
       dto.use_ai_influencer ?? recipe?.use_ai_influencer ?? false;
+    const recipeMeta = recipe?.metadata ?? {};
+    const influencerEngine =
+      recipeMeta.influencer_engine === 'avatar' ? 'avatar' : 'scene';
+    const avatarUrl = recipeMeta.influencer_avatar_url || undefined;
+    const avatarVoice = recipeMeta.influencer_voice || undefined;
 
     // Estimativa de custo
     const reelCost = videoCostUsd(videoModel, videoDuration);
@@ -261,6 +271,9 @@ export class SocialCampaignService {
       videoDuration,
       commercialEmphasis,
       useInfluencer,
+      influencerEngine,
+      avatarUrl,
+      avatarVoice,
     }).catch((e) => {
       this.log.error(`runCampaign falhou: ${(e as Error).message}`);
       void this.supabase.adminClient
@@ -287,6 +300,9 @@ export class SocialCampaignService {
       videoDuration: number;
       commercialEmphasis?: string;
       useInfluencer?: boolean;
+      influencerEngine?: 'scene' | 'avatar';
+      avatarUrl?: string;
+      avatarVoice?: string;
     },
   ): Promise<void> {
     const angles = await this.planAngles(
@@ -314,9 +330,16 @@ export class SocialCampaignService {
 
       try {
         let content: SocialContent;
-        if (spec.asset_type === 'reel') {
-          // Modo influenciador IA: gera cena com um criador apresentando o
-          // produto (UGC), em vez de só animar a foto.
+        const avatarMode =
+          spec.asset_type === 'reel' &&
+          cfg.useInfluencer &&
+          cfg.influencerEngine === 'avatar';
+        if (avatarMode) {
+          content = await this.genAvatarReel(orgId, dto, angle, pillar, cfg);
+          actualCost += 0.15; // ~custo D-ID por talk curto
+        } else if (spec.asset_type === 'reel') {
+          // Modo influenciador IA (cena): gera cena com um criador apresentando
+          // o produto (UGC), em vez de só animar a foto.
           const stylePrompt = cfg.useInfluencer
             ? `${spec.style?.prompt ?? ''} — estilo UGC de criador: uma pessoa real/criador(a) apresentando e falando do produto, vibe selfie handheld, autêntico, luz natural`.trim()
             : spec.style?.prompt;
@@ -443,6 +466,144 @@ export class SocialCampaignService {
     throw last instanceof Error ? last : new Error('falha ao gerar reel');
   }
 
+  /** Reel via avatar falante (D-ID): roteiro falado → talk → mp4. */
+  private async genAvatarReel(
+    orgId: string,
+    dto: GenerateCampaignDto,
+    angle: PlannedAngle,
+    pillar: ContentPillar,
+    cfg: { channels: string[]; avatarUrl?: string; avatarVoice?: string },
+  ): Promise<SocialContent> {
+    let spoken = angle.angle;
+    let caption = angle.angle;
+    let hashtags: string[] = [];
+    try {
+      const r = await this.llm.chat({
+        orgId,
+        feature: 'social_avatar_script',
+        system: AVATAR_SCRIPT_SYSTEM_PROMPT,
+        user: [
+          `PRODUTO: ${dto.product_name}`,
+          dto.product_description
+            ? `DESCRIÇÃO: ${dto.product_description.slice(0, 600)}`
+            : '',
+          `ÂNGULO: ${angle.angle}`,
+          angle.hook ? `HOOK: ${angle.hook}` : '',
+        ]
+          .filter(Boolean)
+          .join('\n'),
+        json_mode: true,
+        max_tokens: 600,
+        temperature: 0.7,
+      });
+      const p = parseJson<{
+        spoken?: string;
+        caption?: string;
+        hashtags?: string[];
+      }>(r.text);
+      if (p?.spoken) {
+        spoken = p.spoken;
+        caption = p.caption || p.spoken;
+        hashtags = p.hashtags ?? [];
+      }
+    } catch (e) {
+      this.log.warn(`avatar script fallback: ${(e as Error).message}`);
+    }
+
+    const { data, error } = await this.supabase.adminClient
+      .from('social_contents')
+      .insert({
+        org_id: orgId,
+        brand_id: dto.brand_id,
+        content_type: 'reel',
+        pillar,
+        title: angle.angle,
+        channels: cfg.channels,
+        related_product_id: dto.product_ref,
+        status: 'generating',
+        metadata: { brief: angle.angle, video_engine: 'avatar' },
+      })
+      .select('id')
+      .single();
+    if (error) throw error;
+    const contentId = (data as { id: string }).id;
+
+    const started = await this.bridge.startAvatarVideo(orgId, {
+      script: spoken,
+      presenter_image_url: cfg.avatarUrl,
+      voice_id: cfg.avatarVoice,
+      name: dto.product_name,
+    });
+    const ok = !!started?.job_id;
+
+    const { data: upd } = await this.supabase.adminClient
+      .from('social_contents')
+      .update({
+        caption,
+        hashtags,
+        ai_model: 'd-id',
+        status: ok ? 'generating' : 'failed',
+        metadata: {
+          brief: angle.angle,
+          video_engine: 'avatar',
+          avatar_job_id: started?.job_id ?? null,
+          video_error: ok ? null : 'D-ID indisponível (sem chave/créditos?)',
+        },
+      })
+      .eq('id', contentId)
+      .eq('org_id', orgId)
+      .select('*')
+      .single();
+    const content = upd as SocialContent;
+    if (ok) await this.appendAiDisclosure(orgId, content);
+    return content;
+  }
+
+  /** Poll do talk D-ID; quando pronto, anexa o mp4 ao conteúdo. */
+  private async pollAvatarReel(
+    orgId: string,
+    content: SocialContent,
+  ): Promise<'completed' | 'failed' | 'generating'> {
+    const jobId = (content.metadata as { avatar_job_id?: string })?.avatar_job_id;
+    if (!jobId) return content.status === 'failed' ? 'failed' : 'generating';
+    const st = await this.bridge.getAvatarVideo(orgId, jobId);
+    if (!st) return 'generating';
+    if (st.status === 'completed' && st.public_url) {
+      await this.supabase.adminClient
+        .from('social_contents')
+        .update({
+          cover_image_url: st.public_url,
+          media: [
+            {
+              url: st.public_url,
+              width: 1080,
+              height: 1920,
+              source: 'generated_ai' as const,
+            },
+          ],
+          status: 'pending_approval',
+        })
+        .eq('id', content.id)
+        .eq('org_id', orgId);
+      return 'completed';
+    }
+    if (st.status === 'failed') {
+      await this.supabase.adminClient
+        .from('social_contents')
+        .update({
+          status: 'failed',
+          metadata: {
+            ...(content.metadata as Record<string, unknown>),
+            video_error: st.error,
+          },
+        })
+        .eq('id', content.id)
+        .eq('org_id', orgId);
+      return 'failed';
+    }
+    return 'generating';
+  }
+
   // ─── Planejamento de ângulos (1 chamada de IA) ──
 
   private async planAngles(
@@ -519,16 +680,27 @@ export class SocialCampaignService {
   async getCampaign(orgId: string, id: string): Promise<CampaignDetail> {
     const campaign = await this.fetchCampaign(orgId, id);
     const assets = await this.fetchAssets(orgId, id);
+    const byId = new Map(
+      (await this.fetchContents(orgId, assets)).map((c) => [c.id, c]),
+    );
 
-    // Avança os reels que ainda estão gerando vídeo
+    // Avança os reels que ainda estão gerando vídeo (Kling/Sora vs avatar D-ID)
     for (const a of assets) {
       if (a.status === 'generating' && a.asset_type === 'reel' && a.content_id) {
+        const c = byId.get(a.content_id);
+        const isAvatar =
+          (c?.metadata as { video_engine?: string })?.video_engine === 'avatar';
         try {
-          const { video_status } = await this.ai.pollReel(orgId, a.content_id);
-          if (video_status === 'completed') {
+          let status: string;
+          if (isAvatar && c) {
+            status = await this.pollAvatarReel(orgId, c);
+          } else {
+            status = (await this.ai.pollReel(orgId, a.content_id)).video_status;
+          }
+          if (status === 'completed') {
             await this.patchAsset(orgId, a.id, { status: 'ready' });
             a.status = 'ready';
-          } else if (video_status === 'failed') {
+          } else if (status === 'failed') {
             await this.patchAsset(orgId, a.id, {
               status: 'failed',
               error_message: 'motor de vídeo falhou',
@@ -536,7 +708,7 @@ export class SocialCampaignService {
             a.status = 'failed';
           }
         } catch (e) {
-          this.log.warn(`pollReel ${a.content_id}: ${(e as Error).message}`);
+          this.log.warn(`poll reel ${a.content_id}: ${(e as Error).message}`);
         }
       }
     }

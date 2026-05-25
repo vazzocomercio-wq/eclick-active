@@ -48,6 +48,9 @@ export default function AutomacaoPage() {
   const [styles, setStyles] = useState<string[]>([]);
   const [frameworks, setFrameworks] = useState<string[]>([]);
   const [useInfluencer, setUseInfluencer] = useState(false);
+  const [influencerEngine, setInfluencerEngine] = useState<'scene' | 'avatar'>('scene');
+  const [avatarUrl, setAvatarUrl] = useState('');
+  const [avatarVoice, setAvatarVoice] = useState('pt-BR-FranciscaNeural');
   const [highMargin, setHighMargin] = useState(false);
   const [overstock, setOverstock] = useState(false);
   const [followRadar, setFollowRadar] = useState(false);
@@ -70,6 +73,9 @@ export default function AutomacaoPage() {
         setStyles(r.allowed_video_styles ?? []);
         setFrameworks(r.allowed_frameworks ?? []);
         setUseInfluencer(r.use_ai_influencer ?? false);
+        setInfluencerEngine(r.metadata?.influencer_engine === 'avatar' ? 'avatar' : 'scene');
+        setAvatarUrl(r.metadata?.influencer_avatar_url ?? '');
+        setAvatarVoice(r.metadata?.influencer_voice ?? 'pt-BR-FranciscaNeural');
         setHighMargin(r.prioritize_high_margin ?? false);
         setOverstock(r.prioritize_overstock ?? false);
         setFollowRadar(r.follow_radar ?? false);
@@ -105,6 +111,12 @@ export default function AutomacaoPage() {
         prioritize_high_margin: highMargin,
         prioritize_overstock: overstock,
         follow_radar: followRadar,
+        metadata: {
+          ...(recipe.metadata ?? {}),
+          influencer_engine: influencerEngine,
+          influencer_avatar_url: avatarUrl.trim() || undefined,
+          influencer_voice: avatarVoice,
+        },
       });
       setRecipe(updated);
       setSaved(true);
@@ -301,6 +313,57 @@ export default function AutomacaoPage() {
                 checked={useInfluencer}
                 onChange={setUseInfluencer}
               />
+              {useInfluencer && (
+                <div className="mt-3 grid gap-3 rounded-lg border border-border p-3">
+                  <div>
+                    <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                      Motor do influenciador
+                    </span>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <EngineOpt
+                        label="Cena (Kling/Sora)"
+                        desc="criador na cena animando a foto — mais barato"
+                        active={influencerEngine === 'scene'}
+                        onClick={() => setInfluencerEngine('scene')}
+                      />
+                      <EngineOpt
+                        label="Avatar falante (D-ID)"
+                        desc="um rosto fala sobre o produto — usa créditos D-ID"
+                        active={influencerEngine === 'avatar'}
+                        onClick={() => setInfluencerEngine('avatar')}
+                      />
+                    </div>
+                  </div>
+                  {influencerEngine === 'avatar' && (
+                    <>
+                      <label className="text-sm">
+                        <span className="mb-1 block text-xs font-medium text-muted-foreground">
+                          Foto do apresentador (URL https, rosto frontal — opcional)
+                        </span>
+                        <input
+                          value={avatarUrl}
+                          onChange={(e) => setAvatarUrl(e.target.value)}
+                          placeholder="https://…  (vazio = apresentador padrão do D-ID)"
+                          className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                        />
+                      </label>
+                      <label className="text-sm">
+                        <span className="mb-1 block text-xs font-medium text-muted-foreground">
+                          Voz
+                        </span>
+                        <select
+                          value={avatarVoice}
+                          onChange={(e) => setAvatarVoice(e.target.value)}
+                          className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                        >
+                          <option value="pt-BR-FranciscaNeural">Francisca (feminina, pt-BR)</option>
+                          <option value="pt-BR-AntonioNeural">Antônio (masculina, pt-BR)</option>
+                        </select>
+                      </label>
+                    </>
+                  )}
+                </div>
+              )}
             </Section>
 
             {/* Roadmap */}
@@ -417,6 +480,32 @@ function Soon({ label }: { label: string }) {
       <Lock className="h-3.5 w-3.5 shrink-0 opacity-60" />
       <span className="text-xs">{label}</span>
     </div>
+  );
+}
+
+function EngineOpt({
+  label,
+  desc,
+  active,
+  onClick,
+}: {
+  label: string;
+  desc: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'rounded-lg border p-2.5 text-left transition',
+        active ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40',
+      )}
+    >
+      <span className="block text-sm font-medium">{label}</span>
+      <span className="block text-[11px] text-muted-foreground">{desc}</span>
+    </button>
   );
 }
 

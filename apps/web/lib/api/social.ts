@@ -527,6 +527,11 @@ export interface SocialCampaignRecipe {
   max_cost_usd: number;
   is_default: boolean;
   is_active: boolean;
+  metadata?: {
+    influencer_engine?: 'scene' | 'avatar';
+    influencer_avatar_url?: string;
+    influencer_voice?: string;
+  } & Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }
@@ -598,6 +603,7 @@ export interface UpsertRecipePayload {
   max_cost_usd?: number;
   is_default?: boolean;
   is_active?: boolean;
+  metadata?: Record<string, unknown>;
 }
 
 export interface CampaignStyleSpec {
