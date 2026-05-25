@@ -54,6 +54,7 @@ export default function AutomacaoPage() {
   const [highMargin, setHighMargin] = useState(false);
   const [overstock, setOverstock] = useState(false);
   const [followRadar, setFollowRadar] = useState(false);
+  const [useProductKb, setUseProductKb] = useState(false);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -79,6 +80,7 @@ export default function AutomacaoPage() {
         setHighMargin(r.prioritize_high_margin ?? false);
         setOverstock(r.prioritize_overstock ?? false);
         setFollowRadar(r.follow_radar ?? false);
+        setUseProductKb(!!(r.metadata as Record<string, unknown>)?.use_product_data_kb);
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Erro ao carregar'))
       .finally(() => setLoading(false));
@@ -116,6 +118,7 @@ export default function AutomacaoPage() {
           influencer_engine: influencerEngine,
           influencer_avatar_url: avatarUrl.trim() || undefined,
           influencer_voice: avatarVoice,
+          use_product_data_kb: useProductKb,
         },
       });
       setRecipe(updated);
@@ -364,6 +367,27 @@ export default function AutomacaoPage() {
                   )}
                 </div>
               )}
+            </Section>
+
+            {/* Base de conhecimento (Estúdio B2) */}
+            <Section
+              title="Base de conhecimento"
+              desc="O que a IA usa como referência ao gerar o conteúdo."
+            >
+              <Toggle
+                label="Usar dados do produto"
+                desc="nome, descrição e atributos do produto do catálogo viram contexto da geração"
+                checked={useProductKb}
+                onChange={setUseProductKb}
+              />
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Imagens de referência e URLs externas (site/loja/produto) você
+                gerencia por estilo em{' '}
+                <Link href="/social/estilos" className="text-primary underline-offset-2 hover:underline">
+                  Estilos
+                </Link>{' '}
+                → “Base de conhecimento”.
+              </p>
             </Section>
 
             {/* Roadmap */}

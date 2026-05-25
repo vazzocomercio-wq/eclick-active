@@ -640,6 +640,19 @@ export interface UpsertOverridePayload {
   camera?: string | null;
   is_active?: boolean;
 }
+export interface KnowledgeSource {
+  id: string;
+  org_id: string;
+  scope: string;
+  source_type: 'image' | 'url';
+  value: string;
+  title: string | null;
+  extracted_text: string | null;
+  is_active: boolean;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
 
 export interface LiveScriptSegment {
   product: string;
@@ -1020,6 +1033,23 @@ export const socialApi = {
       api.post<SocialCampaign>(`/social/campaigns/${id}/cancel`, {}),
     createAds: (id: string) =>
       api.post<{ created: number }>(`/social/campaigns/${id}/ads`, {}),
+  },
+
+  // Estúdio de Estilos — base de conhecimento (B2)
+  knowledge: {
+    list: (scope?: string, signal?: AbortSignal) =>
+      api.get<KnowledgeSource[]>('/social/knowledge', {
+        query: scope ? { scope } : undefined,
+        signal,
+      }),
+    add: (body: {
+      scope?: string;
+      source_type: 'image' | 'url';
+      value: string;
+      title?: string;
+    }) => api.post<KnowledgeSource>('/social/knowledge', body),
+    remove: (id: string) =>
+      api.delete<{ ok: boolean }>(`/social/knowledge/${id}`),
   },
 
   // Estúdio de Estilos — overrides de prompts (B1)

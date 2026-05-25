@@ -38,6 +38,7 @@ import { SocialCampaignRecipesService } from './campaign/social-campaign-recipes
 import { SocialCampaignService } from './campaign/social-campaign.service';
 import { SocialPromptsController } from './prompts/social-prompts.controller';
 import { SocialPromptsService } from './prompts/social-prompts.service';
+import { SocialKnowledgeService } from './prompts/social-knowledge.service';
 import { AlertsModule } from '../alerts/alerts.module';
 import { ChannelsModule as ChannelDispatcherModule } from '../../common/channels/channels.module';
 import { SlackModule } from '../../common/slack/slack.module';
@@ -92,6 +93,7 @@ import { BridgeModule } from '../bridge/bridge.module';
     SocialCampaignRecipesService,
     SocialCampaignService,
     SocialPromptsService,
+    SocialKnowledgeService,
   ],
   exports: [
     SocialBrandsService,

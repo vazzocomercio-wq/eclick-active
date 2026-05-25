@@ -5,6 +5,7 @@ import {
   Delete,
   Post,
   Param,
+  Query,
   Body,
   UseGuards,
 } from '@nestjs/common';
@@ -17,12 +18,16 @@ import {
   UpsertOverrideDto,
   GeneratePromptDto,
 } from './social-prompts.service';
+import { SocialKnowledgeService } from './social-knowledge.service';
 
-/** Estúdio de Estilos — editor de prompts (estilos/frameworks/system prompts). */
+/** Estúdio de Estilos — editor de prompts + base de conhecimento. */
 @UseGuards(AuthGuard)
 @Controller('social')
 export class SocialPromptsController {
-  constructor(private readonly prompts: SocialPromptsService) {}
+  constructor(
+    private readonly prompts: SocialPromptsService,
+    private readonly knowledge: SocialKnowledgeService,
+  ) {}
 
   @Get('prompts')
   list(@CurrentUser() user: AuthUser) {
@@ -48,5 +53,25 @@ export class SocialPromptsController {
     return this.prompts
       .reset(user.org_id, kind, decodeURIComponent(key))
       .then(() => ({ ok: true }));
+  }
+
+  // ─── Base de conhecimento (B2) ──────────────────
+
+  @Get('knowledge')
+  listKnowledge(@CurrentUser() user: AuthUser, @Query('scope') scope?: string) {
+    return this.knowledge.list(user.org_id, scope);
+  }
+
+  @Post('knowledge')
+  addKnowledge(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: { scope?: string; source_type: 'image' | 'url'; value: string; title?: string },
+  ) {
+    return this.knowledge.add(user.org_id, dto);
+  }
+
+  @Delete('knowledge/:id')
+  removeKnowledge(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.knowledge.remove(user.org_id, id).then(() => ({ ok: true }));
   }
 }

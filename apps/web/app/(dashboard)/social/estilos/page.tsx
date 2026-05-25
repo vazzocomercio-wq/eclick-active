@@ -2,11 +2,25 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Palette, Loader2, Check, RotateCcw, Sparkles } from 'lucide-react';
+import {
+  ArrowLeft,
+  Palette,
+  Loader2,
+  Check,
+  RotateCcw,
+  Sparkles,
+  Plus,
+  X,
+  Link2,
+  Image as ImageIcon,
+  Database,
+  ChevronDown,
+} from 'lucide-react';
 import {
   socialApi,
   type PromptOverride,
   type PromptKind,
+  type KnowledgeSource,
 } from '@/lib/api/social';
 import { VIDEO_STYLES, SCRIPT_FRAMEWORKS } from '@/lib/social/video-styles';
 import { Button } from '@/components/ui/button';
@@ -272,6 +286,133 @@ function PromptRow({
           </Button>
         )}
       </div>
+
+      {kind !== 'system_prompt' && <KnowledgeBox scope={itemKey} />}
+    </div>
+  );
+}
+
+function KnowledgeBox({ scope }: { scope: string }) {
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<KnowledgeSource[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [type, setType] = useState<'image' | 'url'>('image');
+  const [value, setValue] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function load() {
+    const d = await socialApi.knowledge.list(scope).catch(() => []);
+    setItems(d);
+    setLoaded(true);
+  }
+  function toggle() {
+    const next = !open;
+    setOpen(next);
+    if (next && !loaded) void load();
+  }
+  async function add() {
+    if (!value.trim() || busy) return;
+    setBusy(true);
+    try {
+      await socialApi.knowledge.add({ scope, source_type: type, value: value.trim() });
+      setValue('');
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function remove(id: string) {
+    await socialApi.knowledge.remove(id).catch(() => {});
+    setItems((prev) => prev.filter((i) => i.id !== id));
+  }
+
+  return (
+    <div className="mt-2 border-t border-border pt-2">
+      <button
+        type="button"
+        onClick={toggle}
+        className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+      >
+        <Database className="h-3 w-3" />
+        Base de conhecimento{loaded ? ` (${items.length})` : ''}
+        <ChevronDown className={cn('h-3 w-3 transition', open && 'rotate-180')} />
+      </button>
+
+      {open && (
+        <div className="mt-2 space-y-2">
+          {!loaded ? (
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          ) : (
+            <>
+              {items.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {items.map((it) =>
+                    it.source_type === 'image' ? (
+                      <span key={it.id} className="relative h-14 w-14 overflow-hidden rounded border border-border">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={it.value} alt="" className="h-full w-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => remove(it.id)}
+                          className="absolute right-0 top-0 bg-black/60 p-0.5 text-white"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ) : (
+                      <span
+                        key={it.id}
+                        className="inline-flex max-w-[220px] items-center gap-1 rounded-full border border-border px-2 py-1 text-[11px]"
+                        title={it.value}
+                      >
+                        <Link2 className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{it.title || it.value}</span>
+                        {it.metadata?.scrape_error ? (
+                          <span className="shrink-0 text-amber-500" title="não consegui ler o texto">⚠</span>
+                        ) : null}
+                        <button
+                          type="button"
+                          onClick={() => remove(it.id)}
+                          className="shrink-0 text-muted-foreground hover:text-foreground"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ),
+                  )}
+                </div>
+              )}
+              <div className="flex items-center gap-1">
+                <div className="flex overflow-hidden rounded-md border border-border">
+                  <button
+                    type="button"
+                    onClick={() => setType('image')}
+                    className={cn('px-2 py-1 text-[11px]', type === 'image' ? 'bg-primary/15 text-primary' : 'text-muted-foreground')}
+                  >
+                    <ImageIcon className="h-3 w-3" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setType('url')}
+                    className={cn('px-2 py-1 text-[11px]', type === 'url' ? 'bg-primary/15 text-primary' : 'text-muted-foreground')}
+                  >
+                    <Link2 className="h-3 w-3" />
+                  </button>
+                </div>
+                <input
+                  value={value}
+                  onChange={(e) => setValue(e.target.value)}
+                  placeholder={type === 'image' ? 'URL da imagem de referência' : 'URL de site/loja/produto'}
+                  className="flex-1 rounded-md border border-border bg-background px-2 py-1 text-[11px] outline-none"
+                />
+                <Button size="sm" onClick={add} disabled={busy || !value.trim()}>
+                  {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

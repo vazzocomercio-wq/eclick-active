@@ -19,6 +19,6 @@ import { LiveSourcesService } from './live-sources.service';
     FileExtractorService,
     LiveSourcesService,
   ],
-  exports: [KnowledgeService, EmbeddingsClient, LiveSourcesService],
+  exports: [KnowledgeService, EmbeddingsClient, LiveSourcesService, UrlScraperService],
 })
 export class KnowledgeModule {}
