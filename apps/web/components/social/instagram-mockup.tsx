@@ -31,9 +31,22 @@ export function InstagramMockup({
   const isCarousel = content.content_type === 'carousel' && content.slides.length > 0;
   const totalSlides = isCarousel ? content.slides.length : 1;
 
+  // Reels: a "capa" costuma ser o próprio mp4 → o <img> falha e mostra o alt
+  // (o título). Detecta vídeo e renderiza <video>.
+  const isVid = (u?: string | null) => !!u && /\.(mp4|mov|webm)(\?|#|$)/i.test(u);
+  const videoUrl = !isCarousel
+    ? isVid(content.media[0]?.url)
+      ? (content.media[0]!.url as string)
+      : isVid(content.cover_image_url)
+        ? (content.cover_image_url as string)
+        : null
+    : null;
+
   const currentImage = isCarousel
     ? content.slides[slideIdx]?.image_url ?? null
-    : content.cover_image_url ?? content.media[0]?.url ?? null;
+    : videoUrl
+      ? null
+      : content.cover_image_url ?? content.media[0]?.url ?? null;
 
   const captionPreview = (content.caption ?? '').split('\n');
   const firstLines = captionPreview.slice(0, 2).join('\n');
@@ -77,7 +90,17 @@ export function InstagramMockup({
 
       {/* Mídia */}
       <div className="relative aspect-square w-full bg-muted">
-        {currentImage ? (
+        {videoUrl ? (
+          // eslint-disable-next-line jsx-a11y/media-has-caption
+          <video
+            src={`${videoUrl}#t=0.5`}
+            controls
+            muted
+            playsInline
+            preload="metadata"
+            className="absolute inset-0 h-full w-full object-contain bg-black"
+          />
+        ) : currentImage ? (
           // SVG vem inline; outros mostram via <img>
           currentImage.endsWith('.svg') || currentImage.includes('image/svg') ? (
             <object
