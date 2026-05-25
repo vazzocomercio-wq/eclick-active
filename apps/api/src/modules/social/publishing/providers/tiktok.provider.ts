@@ -10,18 +10,17 @@ import type {
 /**
  * Provider TikTok Business — Content Posting API (Direct Post).
  *
- * Publica VÍDEO (reel) via PULL_FROM_URL: o TikTok baixa o mp4 da nossa URL
- * pública (bucket storefront-assets) e posta. Fluxo assíncrono: init → recebe
- * publish_id → poll do status até PUBLISH_COMPLETE.
+ * Publica VÍDEO (reel) via FILE_UPLOAD: baixa o mp4 da nossa URL pública e
+ * ENVIA os bytes direto pro TikTok (1 chunk). Não usa PULL_FROM_URL — assim
+ * não precisa verificar o domínio do vídeo (os reels saem do bucket Supabase).
+ * Fluxo assíncrono: init → upload (PUT) → poll do status até PUBLISH_COMPLETE.
  *
  * ⚠️ Pré-requisitos (setup externo do cliente):
  *   1. App no TikTok for Developers com Content Posting API + Login Kit,
  *      scopes video.publish + video.upload, e Direct Post habilitado.
- *   2. Domínio da URL do vídeo VERIFICADO no portal (URL ownership) — exigido
- *      pelo PULL_FROM_URL.
- *   3. Token de acesso do usuário salvo em social_channel_credentials
+ *   2. Token de acesso do usuário salvo em social_channel_credentials
  *      (channel='tiktok_business').
- *   4. Enquanto o app não passa pela auditoria do TikTok, só dá pra postar
+ *   3. Enquanto o app não passa pela auditoria do TikTok, só dá pra postar
  *      como privado → privacy_level default = SELF_ONLY. Depois de auditado,
  *      setar metadata.privacy_level = 'PUBLIC_TO_EVERYONE'.
  *
@@ -73,7 +72,29 @@ export class TikTokBusinessProvider implements PublishingProvider {
     };
 
     try {
-      // 1) init — TikTok puxa o vídeo da URL pública
+      // 1) baixa o mp4 da nossa URL pública pra enviar DIRETO (FILE_UPLOAD).
+      //    Evita o PULL_FROM_URL, que exigiria verificar o domínio do vídeo
+      //    (nossos reels saem do bucket Supabase, não verificável).
+      let videoBytes: Buffer;
+      try {
+        const vidRes = await fetch(input.video_url, {
+          signal: AbortSignal.timeout(60_000),
+        });
+        if (!vidRes.ok) throw new Error(`HTTP ${vidRes.status}`);
+        videoBytes = Buffer.from(await vidRes.arrayBuffer());
+      } catch (e) {
+        return {
+          success: false,
+          error_code: 'video_download_failed',
+          error_message: `Não consegui baixar o vídeo pra enviar ao TikTok: ${
+            e instanceof Error ? e.message : String(e)
+          }`,
+          provider_response: {},
+        };
+      }
+      const videoSize = videoBytes.byteLength;
+
+      // 2) init FILE_UPLOAD — reel curto cabe em 1 chunk (limite 64MB/chunk).
       const initRes = await fetch(`${TIKTOK_API}/post/publish/video/init/`, {
         method: 'POST',
         headers,
@@ -86,14 +107,16 @@ export class TikTokBusinessProvider implements PublishingProvider {
             disable_stitch: false,
           },
           source_info: {
-            source: 'PULL_FROM_URL',
-            video_url: input.video_url,
+            source: 'FILE_UPLOAD',
+            video_size: videoSize,
+            chunk_size: videoSize,
+            total_chunk_count: 1,
           },
         }),
         signal: AbortSignal.timeout(30_000),
       });
       const initJson = (await initRes.json()) as {
-        data?: { publish_id?: string };
+        data?: { publish_id?: string; upload_url?: string };
         error?: { code?: string; message?: string };
       };
       if (initJson.error && initJson.error.code !== 'ok') {
@@ -105,16 +128,46 @@ export class TikTokBusinessProvider implements PublishingProvider {
         };
       }
       const publishId = initJson.data?.publish_id;
-      if (!publishId) {
+      const uploadUrl = initJson.data?.upload_url;
+      if (!publishId || !uploadUrl) {
         return {
           success: false,
           error_code: 'no_publish_id',
-          error_message: 'TikTok não retornou publish_id.',
+          error_message: 'TikTok não retornou publish_id/upload_url.',
           provider_response: initJson as Record<string, unknown>,
         };
       }
 
-      // 2) poll do status (processamento assíncrono; teto ~60s)
+      // 3) envia os bytes do vídeo pro upload_url (PUT, 1 chunk único).
+      try {
+        const putRes = await fetch(uploadUrl, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'video/mp4',
+            'Content-Range': `bytes 0-${videoSize - 1}/${videoSize}`,
+          },
+          body: videoBytes,
+          signal: AbortSignal.timeout(120_000),
+        });
+        if (!putRes.ok) {
+          const t = await putRes.text().catch(() => '');
+          return {
+            success: false,
+            error_code: 'tiktok_upload_failed',
+            error_message: `Upload do vídeo falhou (HTTP ${putRes.status}) ${t.slice(0, 200)}`,
+            provider_response: { status: putRes.status },
+          };
+        }
+      } catch (e) {
+        return {
+          success: false,
+          error_code: 'tiktok_upload_exception',
+          error_message: e instanceof Error ? e.message : String(e),
+          provider_response: {},
+        };
+      }
+
+      // 4) poll do status (processamento assíncrono; teto ~60s)
       let finalPostId: string | undefined;
       let lastStatus = 'PROCESSING_UPLOAD';
       for (let i = 0; i < 12; i++) {
