@@ -118,7 +118,7 @@ export const VIDEO_MODELS: VideoModel[] = [
   { id: 'veo-3.1-generate-preview',      label: 'Veo 3.1 Standard (Google) — premium', ready: true },
   { id: 'sora-2-pro',        label: 'Sora 2 Pro (OpenAI) — premium', ready: true },
   // Kling: mais barato, mas às vezes crava texto/legenda chinesa.
-  { id: 'kling-v2-5',        label: 'Kling 2.5 Turbo — mais barato (~US$0,35/5s)', ready: true },
+  { id: 'kling-v2-5-turbo',  label: 'Kling 2.5 Turbo — mais barato (~US$0,35/5s)', ready: true },
   { id: 'kling-v2-6',        label: 'Kling 2.6 — com áudio (~US$0,70/5s)', ready: true },
   { id: 'kling-v2-1',        label: 'Kling 2.1 (~US$0,49/5s)', ready: true },
   { id: 'kling-v1-6',        label: 'Kling 1.6 — controle de câmera (~US$0,49/5s)', ready: true },
