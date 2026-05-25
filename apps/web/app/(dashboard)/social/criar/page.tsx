@@ -7,7 +7,8 @@ import { ArrowLeft, Sparkles, Hash, Package, Search, X, Palette, Loader2, Clappe
 import { useBrands } from '@/hooks/use-social';
 import { socialApi, type ContentPillar, type SocialContent } from '@/lib/api/social';
 import { bridgeApi, type SaasProduct, type CanvaDesign } from '@/lib/api/bridge';
-import { VIDEO_STYLES, SCRIPT_FRAMEWORKS, VIDEO_MODELS, findStyle, findFramework } from '@/lib/social/video-styles';
+import { VIDEO_STYLES, SCRIPT_FRAMEWORKS, VIDEO_MODELS } from '@/lib/social/video-styles';
+import { useStyleCatalog } from '@/lib/social/use-style-catalog';
 import { Button } from '@/components/ui/button';
 import { InstagramMockup } from '@/components/social/instagram-mockup';
 import { cn } from '@/lib/utils';
@@ -54,6 +55,7 @@ const STRUCTURES: Array<[string, string]> = [
 export default function CreateContentPage() {
   const router = useRouter();
   const { brands } = useBrands();
+  const { findStyle, findFramework } = useStyleCatalog();
   const [tab, setTab] = useState<Tab>('post');
 
   const [brandId, setBrandId] = useState<string>('');

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Megaphone, Sparkles, Plus, Calendar, Image as ImageIcon, ChevronRight, BarChart3, GitCompareArrows, Rocket, SlidersHorizontal, Radio } from 'lucide-react';
+import { Megaphone, Sparkles, Plus, Calendar, Image as ImageIcon, ChevronRight, BarChart3, GitCompareArrows, Rocket, SlidersHorizontal, Radio, Palette } from 'lucide-react';
 import { useSocialDashboard, useContents, useBrands } from '@/hooks/use-social';
 import { ContentCard } from '@/components/social/content-card';
 import { Button } from '@/components/ui/button';
@@ -70,6 +70,12 @@ export default function SocialDashboardPage() {
             <Link href="/social/automacao">
               <SlidersHorizontal className="h-3.5 w-3.5" />
               <span className="hidden md:inline ml-1">Automação</span>
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/social/estilos">
+              <Palette className="h-3.5 w-3.5" />
+              <span className="hidden md:inline ml-1">Estilos</span>
             </Link>
           </Button>
           {brands.length > 1 && (

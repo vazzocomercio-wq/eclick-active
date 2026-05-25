@@ -5,6 +5,7 @@ import { SocialBrandsService } from '../social-brands.service';
 import { SocialCalendarsService } from '../social-calendars.service';
 import { ImageGenerationService } from '../image-generation/image-generation.service';
 import { BridgeService } from '../../bridge/bridge.service';
+import { SocialPromptsService } from '../prompts/social-prompts.service';
 import {
   CALENDAR_SYSTEM_PROMPT,
   POST_SYSTEM_PROMPT,
@@ -69,6 +70,7 @@ export class SocialAiGeneratorService {
     private readonly calendars: SocialCalendarsService,
     private readonly images: ImageGenerationService,
     private readonly bridge: BridgeService,
+    private readonly prompts: SocialPromptsService,
   ) {}
 
   // ─── Calendário ──────────────────────────────────
@@ -108,7 +110,7 @@ export class SocialAiGeneratorService {
     const result = await this.llm.chat({
       orgId,
       feature: 'social_calendar',
-      system: CALENDAR_SYSTEM_PROMPT,
+      system: await this.prompts.getSystemPrompt(orgId, 'CALENDAR_SYSTEM_PROMPT', CALENDAR_SYSTEM_PROMPT),
       user: userPrompt,
       json_mode: true,
       max_tokens: 4000,
@@ -208,7 +210,7 @@ export class SocialAiGeneratorService {
     const result = await this.llm.chat({
       orgId,
       feature: 'social_post',
-      system: POST_SYSTEM_PROMPT,
+      system: await this.prompts.getSystemPrompt(orgId, 'POST_SYSTEM_PROMPT', POST_SYSTEM_PROMPT),
       user: userPrompt,
       json_mode: true,
       max_tokens: 1500,
@@ -310,7 +312,7 @@ export class SocialAiGeneratorService {
     const result = await this.llm.chat({
       orgId,
       feature: 'social_carousel',
-      system: CAROUSEL_SYSTEM_PROMPT,
+      system: await this.prompts.getSystemPrompt(orgId, 'CAROUSEL_SYSTEM_PROMPT', CAROUSEL_SYSTEM_PROMPT),
       user: userPrompt,
       json_mode: true,
       max_tokens: 3500,
@@ -434,7 +436,7 @@ export class SocialAiGeneratorService {
     const result = await this.llm.chat({
       orgId,
       feature: 'social_reel',
-      system: REEL_SCRIPT_SYSTEM_PROMPT,
+      system: await this.prompts.getSystemPrompt(orgId, 'REEL_SCRIPT_SYSTEM_PROMPT', REEL_SCRIPT_SYSTEM_PROMPT),
       user: userPrompt,
       json_mode: true,
       max_tokens: 1500,
@@ -692,7 +694,7 @@ export class SocialAiGeneratorService {
     const result = await this.llm.chat({
       orgId,
       feature: 'social_rewrite_caption',
-      system: POST_SYSTEM_PROMPT,
+      system: await this.prompts.getSystemPrompt(orgId, 'POST_SYSTEM_PROMPT', POST_SYSTEM_PROMPT),
       user: userPrompt,
       json_mode: true,
       max_tokens: 1000,

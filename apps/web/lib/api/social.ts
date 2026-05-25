@@ -617,6 +617,30 @@ export interface CampaignFrameworkSpec {
   label: string;
   prompt: string;
 }
+// ─── Estúdio de Estilos — overrides de prompts (B1) ───
+export type PromptKind = 'video_style' | 'framework' | 'system_prompt';
+export interface PromptOverride {
+  id: string;
+  org_id: string;
+  kind: PromptKind;
+  key: string;
+  label: string | null;
+  prompt: string;
+  camera: string | null;
+  is_active: boolean;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+export interface UpsertOverridePayload {
+  kind: PromptKind;
+  key: string;
+  label?: string | null;
+  prompt: string;
+  camera?: string | null;
+  is_active?: boolean;
+}
+
 export interface LiveScriptSegment {
   product: string;
   hook: string;
@@ -996,6 +1020,25 @@ export const socialApi = {
       api.post<SocialCampaign>(`/social/campaigns/${id}/cancel`, {}),
     createAds: (id: string) =>
       api.post<{ created: number }>(`/social/campaigns/${id}/ads`, {}),
+  },
+
+  // Estúdio de Estilos — overrides de prompts (B1)
+  prompts: {
+    list: (signal?: AbortSignal) =>
+      api.get<PromptOverride[]>('/social/prompts', { signal }),
+    upsert: (body: UpsertOverridePayload) =>
+      api.put<PromptOverride>('/social/prompts', body),
+    reset: (kind: PromptKind, key: string) =>
+      api.delete<{ ok: boolean }>(
+        `/social/prompts/${kind}/${encodeURIComponent(key)}`,
+      ),
+    generate: (body: {
+      kind: PromptKind;
+      key: string;
+      instruction: string;
+      current_prompt?: string;
+      label?: string;
+    }) => api.post<{ prompt: string }>('/social/prompts/generate', body),
   },
 
   // Co-piloto de live (Fase 4)

@@ -17,7 +17,7 @@ import {
   type CampaignStrategy,
 } from '@/lib/api/social';
 import { useBrands } from '@/hooks/use-social';
-import { findStyle, findFramework } from '@/lib/social/video-styles';
+import { useStyleCatalog } from '@/lib/social/use-style-catalog';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -50,6 +50,7 @@ export default function CampanhasPage() {
   const [campaigns, setCampaigns] = useState<SocialCampaign[]>([]);
   const [loading, setLoading] = useState(true);
   const { brands } = useBrands();
+  const { findStyle, findFramework } = useStyleCatalog();
 
   // Geração em lote
   const [recipe, setRecipe] = useState<SocialCampaignRecipe | null>(null);
