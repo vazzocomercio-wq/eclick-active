@@ -17,6 +17,7 @@ import { CanvaImageProvider } from './image-generation/providers/canva.provider'
 import { OpenAIImageProvider } from './image-generation/providers/openai.provider';
 import { PlaceholderImageProvider } from './image-generation/providers/placeholder.provider';
 import { SocialChannelCredentialsService } from './publishing/social-channel-credentials.service';
+import { TikTokConnectController } from './publishing/tiktok-connect.controller';
 import { SocialPublishingService } from './publishing/social-publishing.service';
 import { SocialPublisherWorkerService } from './publishing/social-publisher-worker.service';
 import { InstagramGraphProvider } from './publishing/providers/instagram-graph.provider';
@@ -63,6 +64,7 @@ import { BridgeModule } from '../bridge/bridge.module';
     SocialApprovalPublicController,
     SocialCampaignController,
     SocialPromptsController,
+    TikTokConnectController,
   ],
   providers: [
     SocialBrandsService,

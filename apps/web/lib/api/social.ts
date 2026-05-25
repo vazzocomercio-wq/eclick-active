@@ -815,6 +815,13 @@ export const socialApi = {
       api.post<void>(`/social/credentials/${id}/deactivate`, {}),
   },
 
+  // Publishing — conexão OAuth (TikTok rede social / Content Posting API)
+  connect: {
+    /** Retorna a URL do TikTok pra iniciar o OAuth de publicação. */
+    tiktokAuthUrl: () =>
+      api.get<{ url: string }>('/social/connect/tiktok/auth'),
+  },
+
   // Publishing — actions
   publish: {
     now: (id: string) =>

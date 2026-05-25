@@ -29,6 +29,8 @@ export default function SocialCredentialsPage() {
   const [creds, setCreds] = useState<SocialChannelCredential[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [banner, setBanner] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
 
   const refresh = async () => {
     try {
@@ -42,6 +44,45 @@ export default function SocialCredentialsPage() {
   useEffect(() => {
     void refresh();
   }, []);
+
+  // Feedback do retorno do OAuth do TikTok (?tiktok=success|error)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tk = params.get('tiktok');
+    if (!tk) return;
+    if (tk === 'success') {
+      const user = params.get('user');
+      setBanner({
+        kind: 'success',
+        text: user ? `TikTok conectado: @${user}` : 'TikTok conectado com sucesso',
+      });
+    } else {
+      setBanner({
+        kind: 'error',
+        text: `Falha ao conectar o TikTok: ${params.get('reason') ?? 'erro desconhecido'}`,
+      });
+    }
+    // limpa a query da URL sem recarregar
+    window.history.replaceState({}, '', window.location.pathname);
+  }, []);
+
+  const connectTikTok = async () => {
+    setConnecting(true);
+    setBanner(null);
+    try {
+      const { url } = await socialApi.connect.tiktokAuthUrl();
+      window.location.href = url;
+    } catch (err) {
+      setConnecting(false);
+      setBanner({
+        kind: 'error',
+        text:
+          err instanceof Error
+            ? err.message
+            : 'Não consegui iniciar a conexão. O app TikTok já foi configurado?',
+      });
+    }
+  };
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -60,13 +101,38 @@ export default function SocialCredentialsPage() {
             </p>
           </div>
         </div>
-        <Button size="sm" onClick={() => setShowForm(true)}>
-          <Plug className="h-3.5 w-3.5" />
-          <span className="ml-1">Conectar canal</span>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={connectTikTok}
+            disabled={connecting}
+          >
+            <Music2 className="h-3.5 w-3.5" />
+            <span className="ml-1">
+              {connecting ? 'Abrindo TikTok…' : 'Conectar TikTok'}
+            </span>
+          </Button>
+          <Button size="sm" onClick={() => setShowForm(true)}>
+            <Plug className="h-3.5 w-3.5" />
+            <span className="ml-1">Conectar canal</span>
+          </Button>
+        </div>
       </header>
 
       <div className="flex-1 overflow-y-auto p-4 md:p-6">
+        {banner && (
+          <div
+            className={cn(
+              'mb-4 rounded-lg border p-3 text-sm',
+              banner.kind === 'success'
+                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                : 'border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300',
+            )}
+          >
+            {banner.text}
+          </div>
+        )}
         {loading ? (
           <p className="text-sm text-muted-foreground">Carregando…</p>
         ) : creds.length === 0 ? (
@@ -160,6 +226,20 @@ export default function SocialCredentialsPage() {
             <li>Pegue o Instagram Business User ID via <code className="rounded bg-muted px-1">/me/accounts</code> → instagram_business_account.id</li>
             <li>Cole abaixo</li>
           </ol>
+        </div>
+
+        <div className="mt-3 rounded-lg border border-fuchsia-500/30 bg-fuchsia-500/5 p-3 text-xs">
+          <p className="mb-1 font-medium">TikTok (rede social — postar reels):</p>
+          <p className="text-foreground/80">
+            Use o botão{' '}
+            <span className="font-medium">&ldquo;Conectar TikTok&rdquo;</span> acima
+            (OAuth). Requer um app no TikTok for Developers com Login Kit +
+            Content Posting API e os scopes{' '}
+            <code className="rounded bg-muted px-1">video.publish</code> +{' '}
+            <code className="rounded bg-muted px-1">video.upload</code>. Enquanto o
+            app não passa pela auditoria do TikTok, as publicações saem como
+            privadas (SELF_ONLY).
+          </p>
         </div>
       </div>
     </div>
