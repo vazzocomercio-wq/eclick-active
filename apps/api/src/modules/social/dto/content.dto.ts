@@ -92,6 +92,13 @@ export interface GenerateReelDto {
   /** E3 — multi-cena: anima várias fotos e concatena num reel só. */
   multi_scene?: boolean;
   photo_urls?: string[];
+  /** UGC com avatar (D-ID): produto no fundo + avatar pequeno falando o texto.
+   *  Gera o vídeo do produto E o avatar; o SaaS faz o overlay (picture-in-picture). */
+  avatar_overlay?: boolean;
+  avatar_voice?: string;
+  avatar_image_url?: string;
+  avatar_position?: 'br' | 'bl' | 'tr' | 'tl';
+  avatar_size_pct?: number;
 }
 
 export interface ScheduleContentDto {

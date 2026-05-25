@@ -575,6 +575,39 @@ export class BridgeService {
     }
   }
 
+  /** UGC com avatar: pede ao SaaS pra compor produto (fundo) + avatar (PiP). */
+  async composeOverlayVideo(
+    activeOrgId: string,
+    dto: {
+      product_url: string;
+      avatar_url: string;
+      corner?: 'br' | 'bl' | 'tr' | 'tl';
+      size_pct?: number;
+    },
+  ): Promise<{ public_url: string } | null> {
+    const cfg = this.saasInternalConfig();
+    if (!cfg) return null;
+    const saasOrgId = await this.resolveSaasOrgId(activeOrgId);
+    if (!saasOrgId) return null;
+    try {
+      const res = await fetch(`${cfg.baseUrl}/internal/creative/social-video-compose`, {
+        method: 'POST',
+        headers: { 'X-Internal-Key': cfg.key, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ org_id: saasOrgId, ...dto }),
+        signal: AbortSignal.timeout(180_000),
+      });
+      if (!res.ok) {
+        this.log.warn(`composeOverlayVideo SaaS ${res.status}`);
+        return null;
+      }
+      const json = (await res.json()) as { public_url?: string };
+      return json.public_url ? { public_url: json.public_url } : null;
+    } catch (err) {
+      this.log.warn(`composeOverlayVideo falhou para ${activeOrgId}: ${String(err)}`);
+      return null;
+    }
+  }
+
   /** Produto por SKU ou ml_listing_id. */
   async getProduct(
     orgId: string,

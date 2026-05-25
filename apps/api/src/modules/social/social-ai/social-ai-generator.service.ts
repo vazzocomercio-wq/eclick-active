@@ -484,7 +484,23 @@ export class SocialAiGeneratorService {
       });
       singleJobId = started?.job_id ?? null;
     }
-    const ok = multi ? jobIds.length > 0 : !!singleJobId;
+    // UGC com avatar (D-ID): gera TAMBÉM o avatar falando o texto; o overlay
+    // (picture-in-picture) é composto quando ambos os vídeos terminam (pollReel).
+    const wantsAvatar = !!dto.avatar_overlay && !multi;
+    let avatarJobId: string | null = null;
+    if (wantsAvatar) {
+      const av = await this.bridge.startAvatarVideo(orgId, {
+        script: this.toSpokenScript(parsed.caption || parsed.video_prompt),
+        presenter_image_url: dto.avatar_image_url,
+        voice_id: dto.avatar_voice,
+        name: dto.product_title ?? dto.theme,
+      });
+      avatarJobId = av?.job_id ?? null;
+    }
+
+    const ok =
+      (multi ? jobIds.length > 0 : !!singleJobId) &&
+      (wantsAvatar ? !!avatarJobId : true);
 
     const content = await this.fetchContent(orgId, contentId);
     return this.updateContentAfterGeneration(orgId, contentId, {
@@ -498,6 +514,10 @@ export class SocialAiGeneratorService {
         ...(content.metadata as Record<string, unknown>),
         video_job_id: singleJobId,
         video_job_ids: multi ? jobIds : null,
+        avatar_overlay: wantsAvatar || undefined,
+        avatar_job_id: avatarJobId,
+        avatar_corner: wantsAvatar ? dto.avatar_position ?? 'br' : undefined,
+        avatar_size_pct: wantsAvatar ? dto.avatar_size_pct ?? 30 : undefined,
         scene_prompt: parsed.scene_prompt ?? null,
         video_error: ok ? null : 'motor de vídeo indisponível (worker desligado?)',
       },
@@ -516,11 +536,16 @@ export class SocialAiGeneratorService {
     const meta = (content.metadata ?? {}) as {
       video_job_id?: string;
       video_job_ids?: string[];
+      avatar_overlay?: boolean;
     };
 
     // Já anexado (não é mais generating) → completed
     if (content.media?.length && content.status !== 'generating') {
       return { content, video_status: 'completed' };
+    }
+    // UGC com avatar: caminho próprio (produto + avatar → overlay PiP).
+    if (meta.avatar_overlay) {
+      return this.pollAvatarOverlay(orgId, content);
     }
     const hasJob = !!meta.video_job_id || (meta.video_job_ids?.length ?? 0) > 0;
     if (!hasJob) {
@@ -556,6 +581,149 @@ export class SocialAiGeneratorService {
       return { content: updated, video_status: 'failed' };
     }
     return { content, video_status: st.status };
+  }
+
+  /**
+   * Poll do modo "UGC com avatar": espera o vídeo do PRODUTO e o do AVATAR
+   * (D-ID). Quando ambos terminam, dispara (uma vez) a composição PiP no SaaS;
+   * o overlay final é anexado quando a composição volta. Guarda `pip_started`
+   * pra não compor em duplicidade entre polls.
+   */
+  private async pollAvatarOverlay(
+    orgId: string,
+    content: SocialContent,
+  ): Promise<{ content: SocialContent; video_status: string }> {
+    const meta = (content.metadata ?? {}) as {
+      video_job_id?: string;
+      avatar_job_id?: string;
+      avatar_corner?: 'br' | 'bl' | 'tr' | 'tl';
+      avatar_size_pct?: number;
+      product_url?: string;
+      avatar_url?: string;
+      pip_started?: boolean;
+    };
+    if (content.media?.length && content.status !== 'generating') {
+      return { content, video_status: 'completed' };
+    }
+    if (!meta.video_job_id || !meta.avatar_job_id) {
+      return {
+        content,
+        video_status: content.status === 'failed' ? 'failed' : 'unknown',
+      };
+    }
+
+    let productUrl = meta.product_url ?? null;
+    let avatarUrl = meta.avatar_url ?? null;
+    let failed = false;
+    if (!productUrl) {
+      const ps = await this.bridge.getSocialVideo(orgId, meta.video_job_id);
+      if (ps?.status === 'failed') failed = true;
+      else if (ps?.status === 'completed' && ps.public_url) productUrl = ps.public_url;
+    }
+    if (!avatarUrl) {
+      const as = await this.bridge.getAvatarVideo(orgId, meta.avatar_job_id);
+      if (as?.status === 'failed') failed = true;
+      else if (as?.status === 'completed' && as.public_url) avatarUrl = as.public_url;
+    }
+
+    if (failed) {
+      const updated = await this.updateContentAfterGeneration(orgId, content.id, {
+        status: 'failed',
+        metadata: {
+          ...(content.metadata as Record<string, unknown>),
+          video_error: 'produto ou avatar falhou na geração',
+        },
+      });
+      return { content: updated, video_status: 'failed' };
+    }
+
+    // Cacheia URLs prontas no metadata (evita repollar o que já terminou).
+    if ((productUrl && !meta.product_url) || (avatarUrl && !meta.avatar_url)) {
+      await this.supabase.adminClient
+        .from('social_contents')
+        .update({
+          metadata: {
+            ...(content.metadata as Record<string, unknown>),
+            product_url: productUrl,
+            avatar_url: avatarUrl,
+          },
+        } as never)
+        .eq('id', content.id)
+        .eq('org_id', orgId);
+    }
+
+    // Ambos prontos → compõe (uma única vez, em background).
+    if (productUrl && avatarUrl && !meta.pip_started) {
+      await this.supabase.adminClient
+        .from('social_contents')
+        .update({
+          metadata: {
+            ...(content.metadata as Record<string, unknown>),
+            product_url: productUrl,
+            avatar_url: avatarUrl,
+            pip_started: true,
+          },
+        } as never)
+        .eq('id', content.id)
+        .eq('org_id', orgId);
+      void this.composeAndAttachOverlay(
+        orgId,
+        content.id,
+        productUrl,
+        avatarUrl,
+        meta.avatar_corner ?? 'br',
+        meta.avatar_size_pct ?? 30,
+      );
+    }
+
+    return { content, video_status: 'generating' };
+  }
+
+  /** Chama o SaaS pra compor o PiP e anexa o mp4 final ao conteúdo. */
+  private async composeAndAttachOverlay(
+    orgId: string,
+    contentId: string,
+    productUrl: string,
+    avatarUrl: string,
+    corner: 'br' | 'bl' | 'tr' | 'tl',
+    sizePct: number,
+  ): Promise<void> {
+    try {
+      const r = await this.bridge.composeOverlayVideo(orgId, {
+        product_url: productUrl,
+        avatar_url: avatarUrl,
+        corner,
+        size_pct: sizePct,
+      });
+      if (r?.public_url) {
+        await this.updateContentAfterGeneration(orgId, contentId, {
+          cover_image_url: r.public_url,
+          media: [
+            {
+              url: r.public_url,
+              width: 1080,
+              height: 1920,
+              source: 'generated_ai' as const,
+            },
+          ],
+          status: 'pending_approval',
+        });
+      } else {
+        await this.markFailed(contentId, 'falha ao compor avatar + produto (PiP)');
+      }
+    } catch (e) {
+      await this.markFailed(contentId, `compose PiP: ${(e as Error).message}`);
+    }
+  }
+
+  /** Limpa hashtags/URLs e corta pro tamanho de fala do avatar. */
+  private toSpokenScript(text: string): string {
+    return (text || '')
+      .replace(/#[\p{L}\p{N}_]+/gu, '')
+      .replace(/https?:\/\/\S+/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 600);
   }
 
   // ─── Geração ad-hoc (sem calendário) ─────────────

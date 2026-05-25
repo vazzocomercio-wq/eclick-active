@@ -994,6 +994,11 @@ export const socialApi = {
       camera_motion?: string;
       multi_scene?: boolean;
       photo_urls?: string[];
+      avatar_overlay?: boolean;
+      avatar_voice?: string;
+      avatar_image_url?: string;
+      avatar_position?: 'br' | 'bl' | 'tr' | 'tl';
+      avatar_size_pct?: number;
     }) => api.post<SocialContent>('/social/generate/reel', body),
   },
 

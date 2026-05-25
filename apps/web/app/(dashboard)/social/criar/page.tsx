@@ -103,6 +103,10 @@ export default function CreateContentPage() {
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
   // E3: multi-cena (anima várias fotos do produto e concatena)
   const [multiScene, setMultiScene] = useState(false);
+  // UGC com avatar (D-ID): produto no fundo + avatar pequeno falando o texto
+  const [avatarOverlay, setAvatarOverlay] = useState(false);
+  const [avatarCorner, setAvatarCorner] = useState<'br' | 'bl' | 'tr' | 'tl'>('br');
+  const [avatarSizePct, setAvatarSizePct] = useState<number>(30);
 
   // Autopilot de Campanha — "Gerar campanha completa"
   const [recipe, setRecipe] = useState<import('@/lib/api/social').SocialCampaignRecipe | null>(null);
@@ -292,6 +296,9 @@ export default function CreateContentPage() {
         camera_motion: style?.camera,
         multi_scene: multiScene && (selectedProduct.photos?.length ?? 0) > 1,
         photo_urls: multiScene ? (selectedProduct.photos ?? []).slice(0, 4) : undefined,
+        avatar_overlay: avatarOverlay && !multiScene ? true : undefined,
+        avatar_position: avatarOverlay ? avatarCorner : undefined,
+        avatar_size_pct: avatarOverlay ? avatarSizePct : undefined,
       });
       setResult(r);
       // status='generating' → começa o poll; se já veio failed (motor off), mostra erro
@@ -740,6 +747,60 @@ export default function CreateContentPage() {
                     <p className="mt-1 text-[10px] text-amber-600 dark:text-amber-400">
                       ⚠️ Esse modelo ainda não está configurado no servidor — a geração vai falhar até conectarmos a chave dele.
                     </p>
+                  )}
+                </Field>
+
+                <Field label="UGC com avatar (D-ID)">
+                  <label className="flex items-start gap-2 text-xs text-foreground/80">
+                    <input
+                      type="checkbox"
+                      checked={avatarOverlay}
+                      onChange={(e) => setAvatarOverlay(e.target.checked)}
+                      disabled={multiScene}
+                      className="mt-0.5"
+                    />
+                    <span>
+                      Avatar pequeno falando o texto sobre o vídeo do produto
+                      (picture-in-picture).
+                      {multiScene && ' Desative o multi-cena pra usar.'}
+                    </span>
+                  </label>
+                  {avatarOverlay && (
+                    <>
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        <label className="text-[11px] text-muted-foreground">
+                          Posição
+                          <select
+                            value={avatarCorner}
+                            onChange={(e) =>
+                              setAvatarCorner(e.target.value as 'br' | 'bl' | 'tr' | 'tl')
+                            }
+                            className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
+                          >
+                            <option value="br">Inferior direito</option>
+                            <option value="bl">Inferior esquerdo</option>
+                            <option value="tr">Superior direito</option>
+                            <option value="tl">Superior esquerdo</option>
+                          </select>
+                        </label>
+                        <label className="text-[11px] text-muted-foreground">
+                          Tamanho: {avatarSizePct}%
+                          <input
+                            type="range"
+                            min={18}
+                            max={40}
+                            step={2}
+                            value={avatarSizePct}
+                            onChange={(e) => setAvatarSizePct(Number(e.target.value))}
+                            className="mt-1 w-full"
+                          />
+                        </label>
+                      </div>
+                      <p className="mt-1 text-[10px] text-muted-foreground">
+                        Gera 2 vídeos (produto + avatar) e compõe — leva ~1-3 min.
+                        Requer o avatar D-ID configurado.
+                      </p>
+                    </>
                   )}
                 </Field>
 
