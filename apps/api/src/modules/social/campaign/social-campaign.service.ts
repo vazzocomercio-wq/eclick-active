@@ -11,6 +11,7 @@ import { SocialAiGeneratorService } from '../social-ai/social-ai-generator.servi
 import { BridgeService } from '../../bridge/bridge.service';
 import type { CommercialSignal } from '../../bridge/bridge.types';
 import { SocialAdBoostService } from '../boost/social-ad-boost.service';
+import { SocialKnowledgeService } from '../prompts/social-knowledge.service';
 import { SocialCampaignRecipesService } from './social-campaign-recipes.service';
 import type {
   SocialContent,
@@ -100,6 +101,7 @@ export class SocialCampaignService {
     private readonly recipes: SocialCampaignRecipesService,
     private readonly bridge: BridgeService,
     private readonly boost: SocialAdBoostService,
+    private readonly knowledge: SocialKnowledgeService,
   ) {}
 
   // ─── Disparo ────────────────────────────────────
@@ -166,6 +168,7 @@ export class SocialCampaignService {
       recipeMeta.influencer_engine === 'avatar' ? 'avatar' : 'scene';
     const avatarUrl = recipeMeta.influencer_avatar_url || undefined;
     const avatarVoice = recipeMeta.influencer_voice || undefined;
+    const knowledgeContext = await this.buildKnowledgeContext(orgId, recipe, dto);
 
     // Estimativa de custo
     const reelCost = videoCostUsd(videoModel, videoDuration);
@@ -274,6 +277,7 @@ export class SocialCampaignService {
       influencerEngine,
       avatarUrl,
       avatarVoice,
+      knowledgeContext,
     }).catch((e) => {
       this.log.error(`runCampaign falhou: ${(e as Error).message}`);
       void this.supabase.adminClient
@@ -303,6 +307,7 @@ export class SocialCampaignService {
       influencerEngine?: 'scene' | 'avatar';
       avatarUrl?: string;
       avatarVoice?: string;
+      knowledgeContext?: string;
     },
   ): Promise<void> {
     const angles = await this.planAngles(
@@ -310,6 +315,7 @@ export class SocialCampaignService {
       dto,
       specs.length,
       cfg.commercialEmphasis,
+      cfg.knowledgeContext,
     );
     let actualCost = 0;
 
@@ -606,11 +612,42 @@ export class SocialCampaignService {
 
   // ─── Planejamento de ângulos (1 chamada de IA) ──
 
+  /** Monta o contexto da base de conhecimento (produto + URLs + imagens). */
+  private async buildKnowledgeContext(
+    orgId: string,
+    recipe: SocialCampaignRecipe | null,
+    dto: GenerateCampaignDto,
+  ): Promise<string> {
+    const parts: string[] = [];
+    if ((recipe?.metadata as { use_product_data_kb?: boolean })?.use_product_data_kb) {
+      parts.push(
+        `DADOS DO PRODUTO (base forte): ${dto.product_name}${dto.category ? ` · categoria ${dto.category}` : ''}${dto.product_description ? ` — ${dto.product_description.slice(0, 600)}` : ''}`,
+      );
+    }
+    try {
+      const sources = await this.knowledge.getForScope(orgId, 'global');
+      const urls = sources.filter((s) => s.source_type === 'url' && s.extracted_text);
+      const imgs = sources.filter((s) => s.source_type === 'image');
+      for (const u of urls.slice(0, 3)) {
+        parts.push(`REFERÊNCIA (${u.title || u.value}): ${(u.extracted_text ?? '').slice(0, 800)}`);
+      }
+      if (imgs.length) {
+        parts.push(
+          `Há ${imgs.length} imagem(ns) de referência visual — siga a estética delas (mood, cores, composição).`,
+        );
+      }
+    } catch (e) {
+      this.log.warn(`buildKnowledgeContext: ${(e as Error).message}`);
+    }
+    return parts.join('\n');
+  }
+
   private async planAngles(
     orgId: string,
     dto: GenerateCampaignDto,
     count: number,
     commercialEmphasis?: string,
+    knowledgeContext?: string,
   ): Promise<PlannedAngle[]> {
     try {
       const { data: brand } = await this.supabase.adminClient
@@ -632,6 +669,7 @@ export class SocialCampaignService {
           ? `DESCRIÇÃO: ${dto.product_description.slice(0, 800)}`
           : '',
         commercialEmphasis ? `\nDIREÇÃO COMERCIAL: ${commercialEmphasis}` : '',
+        knowledgeContext ? `\nBASE DE CONHECIMENTO:\n${knowledgeContext}` : '',
         '',
         `Gere EXATAMENTE ${count} peças (ângulos distintos).`,
       ]

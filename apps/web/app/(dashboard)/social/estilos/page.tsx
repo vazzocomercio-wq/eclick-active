@@ -26,7 +26,14 @@ import { VIDEO_STYLES, SCRIPT_FRAMEWORKS } from '@/lib/social/video-styles';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-type Tab = 'video_style' | 'framework' | 'system_prompt';
+type Tab = 'video_style' | 'framework' | 'system_prompt' | 'canva';
+
+const CANVA_CATEGORIES: Array<{ label: string; url: string; emoji: string }> = [
+  { label: 'Reels (Instagram)', emoji: '🎬', url: 'https://www.canva.com/instagram-reels/templates/' },
+  { label: 'Vídeo TikTok', emoji: '🎵', url: 'https://www.canva.com/tiktok-videos/templates/' },
+  { label: 'Post Instagram', emoji: '📸', url: 'https://www.canva.com/instagram-posts/templates/' },
+  { label: 'Story Instagram', emoji: '📲', url: 'https://www.canva.com/instagram-stories/templates/' },
+];
 
 const SYSTEM_PROMPTS: Array<{ key: string; label: string; desc: string }> = [
   { key: 'POST_SYSTEM_PROMPT', label: 'Post (copy)', desc: 'instrução central pra gerar posts estáticos' },
@@ -78,6 +85,7 @@ export default function EstilosPage() {
             ['video_style', 'Estilos de vídeo'],
             ['framework', 'Frameworks de roteiro'],
             ['system_prompt', 'System prompts'],
+            ['canva', 'Inspiração Canva'],
           ] as Array<[Tab, string]>).map(([k, l]) => (
             <button
               key={k}
@@ -130,6 +138,33 @@ export default function EstilosPage() {
                 {SYSTEM_PROMPTS.map((sp) => (
                   <PromptRow key={sp.key} kind="system_prompt" itemKey={sp.key} defaultLabel={sp.label} defaultDesc={sp.desc} defaultPrompt="" override={ovMap.get(`system_prompt:${sp.key}`)} onChanged={reload} />
                 ))}
+              </>
+            )}
+            {tab === 'canva' && (
+              <>
+                <p className="rounded-md border border-dashed border-border p-2 text-[11px] text-muted-foreground">
+                  Abra o Canva já na categoria certa pra se inspirar e criar.
+                  Os designs que você criar aparecem em{' '}
+                  <Link href="/social/criar" className="text-primary underline-offset-2 hover:underline">
+                    Criar conteúdo
+                  </Link>{' '}
+                  → “Imagem do post” pra virar a arte.
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {CANVA_CATEGORIES.map((c) => (
+                    <a
+                      key={c.url}
+                      href={c.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 rounded-lg border border-border bg-card p-3 transition hover:border-primary/40"
+                    >
+                      <span className="text-xl">{c.emoji}</span>
+                      <span className="flex-1 text-sm font-medium">{c.label}</span>
+                      <Link2 className="h-4 w-4 text-muted-foreground" />
+                    </a>
+                  ))}
+                </div>
               </>
             )}
           </div>
