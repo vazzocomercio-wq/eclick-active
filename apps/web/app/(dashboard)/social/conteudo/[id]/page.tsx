@@ -25,6 +25,8 @@ import { InstagramMockup } from '@/components/social/instagram-mockup';
 import { StatusBadge, PillarBadge, TypeBadge } from '@/components/social/social-badges';
 import { BoostDialog } from '@/components/social/boost-dialog';
 import { Button } from '@/components/ui/button';
+import { useConfirm } from '@/components/ui/confirm-provider';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 type Tab = 'content' | 'schedule' | 'publish' | 'ai' | 'versions';
@@ -35,6 +37,7 @@ export default function ContentDetailPage() {
   const id = params?.id ?? null;
   const { content, refresh, loading } = useContent(id);
   const { brand } = useBrand(content?.brand_id ?? null);
+  const confirm = useConfirm();
 
   const [tab, setTab] = useState<Tab>('content');
   const [busy, setBusy] = useState(false);
@@ -103,8 +106,18 @@ export default function ContentDetailPage() {
 
   const remove = async () => {
     if (!id) return;
-    if (!confirm('Excluir este conteúdo permanentemente?')) return;
+    const ok = await confirm({
+      title: 'Excluir conteúdo?',
+      description:
+        'Esta ação é permanente e não pode ser desfeita. O conteúdo sairá da biblioteca.',
+      confirmLabel: 'Excluir',
+      cancelLabel: 'Cancelar',
+      variant: 'destructive',
+      icon: Trash2,
+    });
+    if (!ok) return;
     await socialApi.contents.delete(id);
+    toast.success('Conteúdo excluído');
     router.push('/social/biblioteca');
   };
 
@@ -156,22 +169,33 @@ export default function ContentDetailPage() {
 
   const publishNow = async () => {
     if (!id) return;
-    if (!confirm('Publicar agora nos canais selecionados? Isso é definitivo.')) return;
+    const ok = await confirm({
+      title: 'Publicar agora?',
+      description:
+        'O conteúdo será publicado nos canais selecionados imediatamente. Esta ação é definitiva.',
+      confirmLabel: 'Publicar',
+      cancelLabel: 'Cancelar',
+      icon: Send,
+    });
+    if (!ok) return;
     setBusy(true);
     try {
       const r = await socialApi.publish.now(id);
       const successes = r.outcomes.filter((o) => o.result.success).length;
       const failures = r.outcomes.filter((o) => !o.result.success);
+      const failDetail = failures
+        .map((f) => `${f.channel}: ${f.result.error_message}`)
+        .join(' · ');
       if (successes > 0 && failures.length === 0) {
-        alert(`✅ Publicado em ${successes} canal(is)`);
+        toast.success(`Publicado em ${successes} canal(is)`);
       } else if (successes > 0) {
-        alert(
-          `Parcial: ${successes} OK, ${failures.length} falhou:\n${failures.map((f) => `${f.channel}: ${f.result.error_message}`).join('\n')}`,
-        );
+        toast.warning(`Publicado em ${successes}, ${failures.length} falhou`, {
+          description: failDetail,
+        });
       } else {
-        alert(
-          `❌ Falhou em todos:\n${failures.map((f) => `${f.channel}: ${f.result.error_message}`).join('\n')}`,
-        );
+        toast.error('Falha ao publicar em todos os canais', {
+          description: failDetail,
+        });
       }
       refresh();
     } finally {
