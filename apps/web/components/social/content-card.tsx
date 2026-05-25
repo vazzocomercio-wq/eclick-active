@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Calendar, Image as ImageIcon } from 'lucide-react';
+import { Calendar, Image as ImageIcon, Play } from 'lucide-react';
 import type { SocialContent } from '@/lib/api/social';
 import { StatusBadge, PillarBadge, TypeBadge } from './social-badges';
 import { cn } from '@/lib/utils';
@@ -13,7 +13,22 @@ interface ContentCardProps {
 }
 
 export function ContentCard({ content, className, compact }: ContentCardProps) {
-  const cover = content.cover_image_url ?? content.media[0]?.url ?? null;
+  // Reels: o "cover" costuma ser o próprio mp4 (sem poster) → o <img> não
+  // renderiza. Detecta vídeo e usa <video> (mostra o frame).
+  const media0 = content.media?.[0];
+  const isVid = (u?: string | null) => !!u && /\.(mp4|mov|webm)(\?|#|$)/i.test(u);
+  const videoUrl = isVid(media0?.url)
+    ? (media0!.url as string)
+    : isVid(content.cover_image_url)
+      ? (content.cover_image_url as string)
+      : null;
+  const poster =
+    media0?.thumbnail_url && !isVid(media0.thumbnail_url)
+      ? media0.thumbnail_url
+      : undefined;
+  const imgCover = videoUrl
+    ? null
+    : (content.cover_image_url ?? media0?.url ?? null);
   const titleText = content.title ?? content.caption?.slice(0, 60) ?? 'Sem título';
   const scheduled = content.scheduled_for
     ? new Date(content.scheduled_for).toLocaleString('pt-BR', {
@@ -33,10 +48,27 @@ export function ContentCard({ content, className, compact }: ContentCardProps) {
       )}
     >
       <div className="relative aspect-square w-full overflow-hidden bg-muted">
-        {cover ? (
-          cover.endsWith('.svg') || cover.includes('image/svg') ? (
+        {videoUrl ? (
+          <>
+            {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+            <video
+              src={`${videoUrl}#t=0.5`}
+              poster={poster}
+              muted
+              playsInline
+              preload="metadata"
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+            <span className="absolute inset-0 flex items-center justify-center">
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/50 backdrop-blur-sm">
+                <Play className="h-4 w-4 fill-white text-white" />
+              </span>
+            </span>
+          </>
+        ) : imgCover ? (
+          imgCover.endsWith('.svg') || imgCover.includes('image/svg') ? (
             <object
-              data={cover}
+              data={imgCover}
               type="image/svg+xml"
               className="absolute inset-0 h-full w-full"
               aria-label="Preview"
@@ -44,7 +76,7 @@ export function ContentCard({ content, className, compact }: ContentCardProps) {
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={cover}
+              src={imgCover}
               alt=""
               loading="lazy"
               className="absolute inset-0 h-full w-full object-cover transition-transform group-hover:scale-105"
