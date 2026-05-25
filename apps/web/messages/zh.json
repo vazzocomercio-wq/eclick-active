@@ -1202,61 +1202,59 @@
     }
   },
   "ai": {
-    "ai": {
-      "feedback": {
-        "helpful": "有用的回复",
-        "notHelpful": "回复不佳",
-        "sendFailed": "发送反馈失败",
-        "saveCommentFailed": "保存评论失败",
-        "thanks": "感谢您的反馈！",
-        "unknownError": "未知错误",
-        "whatCouldBeBetter": "哪里可以改进？",
-        "close": "关闭",
-        "commentPlaceholder": "回答不准确、上下文错误、格式不佳……",
-        "send": "发送"
-      },
-      "fillButton": {
-        "fillWithAi": "用 AI 填充",
-        "filledWithAi": "已用 AI 填充",
-        "generateFailed": "AI 生成失败",
-        "unknownError": "未知错误"
-      },
-      "gaps": {
-        "title": "缺口和待办",
-        "askClient": "询问客户",
-        "answerNow": "立即回复",
-        "emptyMessage": "（无文本消息）",
-        "empty": "未检测到缺口。数据覆盖良好。",
-        "fetchError": "获取待办事项错误",
-        "suggestionCopied": "建议已复制",
-        "suggestionReady": "建议已就绪",
-        "suggestionForQuestion": "好问题！关于这个： ",
-        "suggestionForComment": "关于您提到的： ",
-        "gap": {
-          "contactEmail": {
-            "label": "缺少联系人邮箱",
-            "message": "我可以问您要个邮箱以便书面发送提案吗？有助于保持一切井井有条。"
-          },
-          "contactPhone": {
-            "label": "电话未确认",
-            "message": "为了在一切准备就绪时给您打电话，我可以确认最佳的 WhatsApp/手机号码吗？"
-          },
-          "contactCompany": {
-            "label": "未关联公司",
-            "message": "您是为哪家公司查看这个？我想确保正确理解场景。"
-          },
-          "contactSegment": {
-            "label": "客户无细分/标签",
-            "message": "为了向您推荐正确的方向，您从事哪个行业或运营类型？"
-          },
-          "dealValue": {
-            "label": "未定义交易价值",
-            "message": "为了给您最好的建议，您大致预算是多少？"
-          },
-          "dealCloseDate": {
-            "label": "无预期成交日期",
-            "message": "您心中有完成此交易的日期或截止日期吗？有助于我在这边排优先级。"
-          }
+    "feedback": {
+      "helpful": "有用的回复",
+      "notHelpful": "回复不佳",
+      "sendFailed": "发送反馈失败",
+      "saveCommentFailed": "保存评论失败",
+      "thanks": "感谢您的反馈！",
+      "unknownError": "未知错误",
+      "whatCouldBeBetter": "哪里可以改进？",
+      "close": "关闭",
+      "commentPlaceholder": "回答不准确、上下文错误、格式不佳……",
+      "send": "发送"
+    },
+    "fillButton": {
+      "fillWithAi": "用 AI 填充",
+      "filledWithAi": "已用 AI 填充",
+      "generateFailed": "AI 生成失败",
+      "unknownError": "未知错误"
+    },
+    "gaps": {
+      "title": "缺口和待办",
+      "askClient": "询问客户",
+      "answerNow": "立即回复",
+      "emptyMessage": "（无文本消息）",
+      "empty": "未检测到缺口。数据覆盖良好。",
+      "fetchError": "获取待办事项错误",
+      "suggestionCopied": "建议已复制",
+      "suggestionReady": "建议已就绪",
+      "suggestionForQuestion": "好问题！关于这个： ",
+      "suggestionForComment": "关于您提到的： ",
+      "gap": {
+        "contactEmail": {
+          "label": "缺少联系人邮箱",
+          "message": "我可以问您要个邮箱以便书面发送提案吗？有助于保持一切井井有条。"
+        },
+        "contactPhone": {
+          "label": "电话未确认",
+          "message": "为了在一切准备就绪时给您打电话，我可以确认最佳的 WhatsApp/手机号码吗？"
+        },
+        "contactCompany": {
+          "label": "未关联公司",
+          "message": "您是为哪家公司查看这个？我想确保正确理解场景。"
+        },
+        "contactSegment": {
+          "label": "客户无细分/标签",
+          "message": "为了向您推荐正确的方向，您从事哪个行业或运营类型？"
+        },
+        "dealValue": {
+          "label": "未定义交易价值",
+          "message": "为了给您最好的建议，您大致预算是多少？"
+        },
+        "dealCloseDate": {
+          "label": "无预期成交日期",
+          "message": "您心中有完成此交易的日期或截止日期吗？有助于我在这边排优先级。"
         }
       }
     }
@@ -1364,66 +1362,64 @@
     }
   },
   "centralAcao": {
-    "centralAcao": {
-      "page": {
-        "title": "行动中心",
-        "subtitle": "现在需要您关注的事项。",
-        "refresh": "刷新",
-        "attentionTitle": "现在需要您关注",
-        "topN": "前 {n}",
-        "recentActivityTitle": "最近活动",
-        "metrics": {
-          "unreadConversations": "未回复的对话",
-          "hotLeads": "热门线索",
-          "pipelineValue": "管道价值",
-          "tasksToday": "今天的任务"
-        }
-      },
-      "activity": {
-        "empty": "无最近活动"
-      },
-      "attention": {
-        "emptyTitle": "全部完成！🎯",
-        "emptyDescription": "目前没有紧急事项。干得好。",
-        "severity": {
-          "urgent": "紧急",
-          "high": "高",
-          "medium": "中"
-        }
-      },
-      "metric": {
-        "urgent": "紧急"
-      },
-      "hotLeads": {
-        "title": "最热线索",
-        "noName": "无姓名",
-        "noMessages": "无消息",
-        "emptyTitle": "还没有热门线索",
-        "connectWhatsapp": "连接您的 WhatsApp →"
-      },
-      "sac": {
-        "title": "客服 — 立即关注",
-        "loading": "加载中…",
-        "allClear": "一切受控 🎯 — 没有关键工单，SLA 准时。",
-        "critical": "关键",
-        "slaDueSoon": "SLA <1小时",
-        "slaBreached": "SLA 超时",
-        "reputationRisk": "声誉风险"
-      },
-      "social": {
-        "title": "社交 AI — 注意",
-        "loading": "加载中…",
-        "empty": "没有等待处理的内容 🎯",
-        "pendingApproval": "等待批准",
-        "scheduled7d": "已排期（7天）",
-        "drafts": "草稿"
-      },
-      "topDeals": {
-        "title": "即将成交",
-        "noContact": "无联系人",
-        "emptyTitle": "暂无概率交易",
-        "createFirst": "创建您的第一笔交易 →"
+    "page": {
+      "title": "行动中心",
+      "subtitle": "现在需要您关注的事项。",
+      "refresh": "刷新",
+      "attentionTitle": "现在需要您关注",
+      "topN": "前 {n}",
+      "recentActivityTitle": "最近活动",
+      "metrics": {
+        "unreadConversations": "未回复的对话",
+        "hotLeads": "热门线索",
+        "pipelineValue": "管道价值",
+        "tasksToday": "今天的任务"
       }
+    },
+    "activity": {
+      "empty": "无最近活动"
+    },
+    "attention": {
+      "emptyTitle": "全部完成！🎯",
+      "emptyDescription": "目前没有紧急事项。干得好。",
+      "severity": {
+        "urgent": "紧急",
+        "high": "高",
+        "medium": "中"
+      }
+    },
+    "metric": {
+      "urgent": "紧急"
+    },
+    "hotLeads": {
+      "title": "最热线索",
+      "noName": "无姓名",
+      "noMessages": "无消息",
+      "emptyTitle": "还没有热门线索",
+      "connectWhatsapp": "连接您的 WhatsApp →"
+    },
+    "sac": {
+      "title": "客服 — 立即关注",
+      "loading": "加载中…",
+      "allClear": "一切受控 🎯 — 没有关键工单，SLA 准时。",
+      "critical": "关键",
+      "slaDueSoon": "SLA <1小时",
+      "slaBreached": "SLA 超时",
+      "reputationRisk": "声誉风险"
+    },
+    "social": {
+      "title": "社交 AI — 注意",
+      "loading": "加载中…",
+      "empty": "没有等待处理的内容 🎯",
+      "pendingApproval": "等待批准",
+      "scheduled7d": "已排期（7天）",
+      "drafts": "草稿"
+    },
+    "topDeals": {
+      "title": "即将成交",
+      "noContact": "无联系人",
+      "emptyTitle": "暂无概率交易",
+      "createFirst": "创建您的第一笔交易 →"
     }
   },
   "chat": {
@@ -1578,131 +1574,129 @@
     }
   },
   "conhecimento": {
-    "conhecimento": {
-      "category": {
-        "general": "通用",
-        "products": "产品",
-        "pricing": "定价",
-        "policies": "政策",
-        "faq": "常见问题",
-        "scripts": "脚本",
-        "objections": "异议",
-        "procedures": "程序"
-      },
-      "page": {
-        "title": "知识库",
-        "subtitle": "AI 用于回复线索并生成建议所参考的文档和产品。",
-        "tabs": {
-          "documents": "文档",
-          "live": "实时来源",
-          "catalog": "目录"
-        }
-      },
-      "docs": {
-        "loadError": "加载文档错误",
-        "searchPlaceholder": "按标题或内容搜索……",
-        "allCategories": "所有类别",
-        "allSources": "所有来源",
-        "sources": {
-          "manual": "手动",
-          "url": "URL",
-          "file": "文件",
-          "integration": "集成",
-          "auto": "AI"
-        },
-        "refresh": "刷新",
-        "uploadFile": "上传文件",
-        "multipleUrls": "多个 URL",
-        "importFromUrl": "从 URL 导入",
-        "newDocument": "新建文档",
-        "updatedTitle": "文档已更新",
-        "updatedDesc": "URL 内容已更改 — 嵌入已重新生成。",
-        "noChangesTitle": "无变化",
-        "noChangesDesc": "URL 内容相同。",
-        "refreshFailed": "刷新失败",
-        "error": "错误",
-        "pages": "{n} 页",
-        "tokensWord": "tokens",
-        "updatedAt": "更新于 {when}",
-        "syncAt": "同步 {when}",
-        "part": "第 {i}/{n} 部分",
-        "refetchUrl": "重新获取 URL 并更新内容",
-        "active": "活跃",
-        "inactive": "未活跃",
-        "emptyTitle": "您的知识库为空",
-        "emptySubtitle": "创建包含常见问题、脚本、政策的文档 — AI 使用此内容回复线索。",
-        "createFirst": "创建第一个文档"
-      },
-      "live": {
-        "loadError": "加载来源错误",
-        "respondingTitle": "\"{name}\" 响应中",
-        "charsExtracted": "提取了 {n} 个字符。",
-        "problemTitle": "\"{name}\" 有问题",
-        "error": "错误",
-        "testFailed": "测试失败",
-        "refresh": "刷新",
-        "newLiveSource": "新建实时来源",
-        "description": "<strong>实时来源</strong>是 AI 需要更新信息时实时查询的 URL（库存、当日价格、状态）。与导入不同，内容不会保存 — 每次查询都获取新数据。内存缓存减少重复访问。",
-        "typeWeb": "Web",
-        "typeApi": "API",
-        "typeRss": "RSS",
-        "cacheLabel": "缓存 {min} 分钟",
-        "lastQuery": "上次查询 {when}",
-        "neverQueried": "从未查询",
-        "testConnection": "立即测试连接并提取内容",
-        "active": "活跃",
-        "inactive": "未活跃",
-        "emptyTitle": "未注册实时来源",
-        "emptySubtitle": "注册 AI 实时查询的 URL 以获取最新数据（库存、当日价格等）。",
-        "createFirst": "创建第一个来源"
-      },
-      "products": {
-        "loadError": "加载产品错误",
-        "searchPlaceholder": "按名称或 SKU 搜索……",
-        "refresh": "刷新",
-        "newProduct": "新产品",
-        "inactive": "未活跃",
-        "skuPrefix": "SKU：{sku}",
-        "noSku": "无 SKU",
-        "emptyTitle": "未注册产品",
-        "emptySubtitle": "注册您的目录，让 AI 能回答关于价格和属性的问题。",
-        "createFirst": "创建第一个产品"
-      },
-      "newDocument": {
-        "title": "新建文档",
-        "description": "AI 使用此基础来回复线索并提供建议。内容越好，回复越好。",
-        "startFromTemplate": "从模板开始：",
-        "titleLabel": "标题",
-        "titlePlaceholder": "例如：常见问题 — 产品和定价",
-        "categoryLabel": "类别",
-        "contentLabel": "内容",
-        "contentPlaceholder": "支持 Markdown。越具体，语义搜索越好……",
-        "tokens": "~{n, number} 个 token",
-        "cancel": "取消",
-        "submit": "创建文档",
-        "submitting": "正在创建 + 索引……",
-        "createError": "创建文档错误"
-      },
-      "editDocument": {
-        "title": "编辑文档",
-        "updatedAt": "更新于 {when}",
-        "embeddingWillRegenerate": "保存时将重新生成嵌入",
-        "saveError": "保存错误",
-        "deleteError": "删除错误",
-        "titleLabel": "标题",
-        "categoryLabel": "类别",
-        "contentLabel": "内容",
-        "tokens": "~{n, number} 个 token",
-        "activeForAi": "活跃（对 AI 可见）",
-        "deleteConfirm": "永久删除？",
-        "yesDelete": "是，删除",
-        "cancel": "取消",
-        "delete": "删除",
-        "close": "关闭",
-        "save": "保存",
-        "saving": "正在保存……",
-        "saveReindex": "保存 + 重建索引"
+    "category": {
+      "general": "通用",
+      "products": "产品",
+      "pricing": "定价",
+      "policies": "政策",
+      "faq": "常见问题",
+      "scripts": "脚本",
+      "objections": "异议",
+      "procedures": "程序"
+    },
+    "page": {
+      "title": "知识库",
+      "subtitle": "AI 用于回复线索并生成建议所参考的文档和产品。",
+      "tabs": {
+        "documents": "文档",
+        "live": "实时来源",
+        "catalog": "目录"
       }
+    },
+    "docs": {
+      "loadError": "加载文档错误",
+      "searchPlaceholder": "按标题或内容搜索……",
+      "allCategories": "所有类别",
+      "allSources": "所有来源",
+      "sources": {
+        "manual": "手动",
+        "url": "URL",
+        "file": "文件",
+        "integration": "集成",
+        "auto": "AI"
+      },
+      "refresh": "刷新",
+      "uploadFile": "上传文件",
+      "multipleUrls": "多个 URL",
+      "importFromUrl": "从 URL 导入",
+      "newDocument": "新建文档",
+      "updatedTitle": "文档已更新",
+      "updatedDesc": "URL 内容已更改 — 嵌入已重新生成。",
+      "noChangesTitle": "无变化",
+      "noChangesDesc": "URL 内容相同。",
+      "refreshFailed": "刷新失败",
+      "error": "错误",
+      "pages": "{n} 页",
+      "tokensWord": "tokens",
+      "updatedAt": "更新于 {when}",
+      "syncAt": "同步 {when}",
+      "part": "第 {i}/{n} 部分",
+      "refetchUrl": "重新获取 URL 并更新内容",
+      "active": "活跃",
+      "inactive": "未活跃",
+      "emptyTitle": "您的知识库为空",
+      "emptySubtitle": "创建包含常见问题、脚本、政策的文档 — AI 使用此内容回复线索。",
+      "createFirst": "创建第一个文档"
+    },
+    "live": {
+      "loadError": "加载来源错误",
+      "respondingTitle": "\"{name}\" 响应中",
+      "charsExtracted": "提取了 {n} 个字符。",
+      "problemTitle": "\"{name}\" 有问题",
+      "error": "错误",
+      "testFailed": "测试失败",
+      "refresh": "刷新",
+      "newLiveSource": "新建实时来源",
+      "description": "<strong>实时来源</strong>是 AI 需要更新信息时实时查询的 URL（库存、当日价格、状态）。与导入不同，内容不会保存 — 每次查询都获取新数据。内存缓存减少重复访问。",
+      "typeWeb": "Web",
+      "typeApi": "API",
+      "typeRss": "RSS",
+      "cacheLabel": "缓存 {min} 分钟",
+      "lastQuery": "上次查询 {when}",
+      "neverQueried": "从未查询",
+      "testConnection": "立即测试连接并提取内容",
+      "active": "活跃",
+      "inactive": "未活跃",
+      "emptyTitle": "未注册实时来源",
+      "emptySubtitle": "注册 AI 实时查询的 URL 以获取最新数据（库存、当日价格等）。",
+      "createFirst": "创建第一个来源"
+    },
+    "products": {
+      "loadError": "加载产品错误",
+      "searchPlaceholder": "按名称或 SKU 搜索……",
+      "refresh": "刷新",
+      "newProduct": "新产品",
+      "inactive": "未活跃",
+      "skuPrefix": "SKU：{sku}",
+      "noSku": "无 SKU",
+      "emptyTitle": "未注册产品",
+      "emptySubtitle": "注册您的目录，让 AI 能回答关于价格和属性的问题。",
+      "createFirst": "创建第一个产品"
+    },
+    "newDocument": {
+      "title": "新建文档",
+      "description": "AI 使用此基础来回复线索并提供建议。内容越好，回复越好。",
+      "startFromTemplate": "从模板开始：",
+      "titleLabel": "标题",
+      "titlePlaceholder": "例如：常见问题 — 产品和定价",
+      "categoryLabel": "类别",
+      "contentLabel": "内容",
+      "contentPlaceholder": "支持 Markdown。越具体，语义搜索越好……",
+      "tokens": "~{n, number} 个 token",
+      "cancel": "取消",
+      "submit": "创建文档",
+      "submitting": "正在创建 + 索引……",
+      "createError": "创建文档错误"
+    },
+    "editDocument": {
+      "title": "编辑文档",
+      "updatedAt": "更新于 {when}",
+      "embeddingWillRegenerate": "保存时将重新生成嵌入",
+      "saveError": "保存错误",
+      "deleteError": "删除错误",
+      "titleLabel": "标题",
+      "categoryLabel": "类别",
+      "contentLabel": "内容",
+      "tokens": "~{n, number} 个 token",
+      "activeForAi": "活跃（对 AI 可见）",
+      "deleteConfirm": "永久删除？",
+      "yesDelete": "是，删除",
+      "cancel": "取消",
+      "delete": "删除",
+      "close": "关闭",
+      "save": "保存",
+      "saving": "正在保存……",
+      "saveReindex": "保存 + 重建索引"
     }
   },
   "contentCalendar": {
@@ -1834,289 +1828,281 @@
     }
   },
   "copilot": {
-    "copilot": {
-      "panel": {
-        "title": "AI 副驾驶",
-        "aiBadge": "AI",
-        "description": "您的智能销售助手。可询问关于您的 CRM 的任何问题。",
-        "clear": "清除",
-        "enterHint": "Enter 发送 · Shift+Enter 换行"
+    "panel": {
+      "title": "AI 副驾驶",
+      "aiBadge": "AI",
+      "description": "您的智能销售助手。可询问关于您的 CRM 的任何问题。",
+      "clear": "清除",
+      "enterHint": "Enter 发送 · Shift+Enter 换行"
+    },
+    "placeholder": {
+      "general": "询问您的线索、交易、表现……",
+      "deal": "询问此交易……",
+      "contact": "询问此联系人……",
+      "conversation": "询问此对话……"
+    },
+    "contextBadge": {
+      "deal": "交易",
+      "contact": "联系人",
+      "conversation": "对话"
+    },
+    "empty": {
+      "title": "我如何帮助您？",
+      "hint": {
+        "general": "询问线索、交易、表现、对话，或让我直接通过聊天创建任务和机会。",
+        "deal": "询问此交易 — 风险、下一步、提案生成或跟进。",
+        "contact": "询问此联系人 — 摘要、历史异议、最佳方法。",
+        "conversation": "询问此对话 — 摘要、建议回复、客户意图。"
+      }
+    },
+    "suggestions": {
+      "general": [
+        "今天应优先处理哪些线索？",
+        "我的管道摘要",
+        "待办任务",
+        "本周为何丢失销售？",
+        "为未回复的线索创建跟进",
+        "哪些客户超过 5 天未回复？",
+        "本周团队表现",
+        "经常性异议分析",
+        "提高转化率的建议",
+        "未服务的热门线索",
+        "下一个关键任务",
+        "我在哪里失去交易？",
+        "现在有哪些关键工单？",
+        "今天的客服摘要",
+        "本周客服表现",
+        "SLA 超时的工单",
+        "无工单的延迟订单",
+        "哪些产品投诉最多？",
+        "创建发布帖子",
+        "制作社会证明轮播",
+        "等待批准的内容",
+        "今天的社交 AI 摘要"
+      ],
+      "deal": [
+        "下一步行动？",
+        "丢失风险？",
+        "生成提案",
+        "创建跟进",
+        "谈判分析",
+        "成交建议",
+        "互动历史",
+        "与类似交易比较",
+        "注意要点"
+      ],
+      "contact": [
+        "客户摘要",
+        "异议历史",
+        "最佳方法",
+        "行为概况",
+        "购买概率",
+        "兴趣主题",
+        "建议的下一步",
+        "参与度分析",
+        "以前的交易"
+      ],
+      "conversation": [
+        "总结对话",
+        "建议回复",
+        "客户想要什么？",
+        "识别紧急程度",
+        "下一个要问的问题",
+        "客户情绪",
+        "未回答的要点",
+        "总结已发送的文档",
+        "路由建议"
+      ]
+    },
+    "floating": {
+      "title": "AI 副驾驶",
+      "openAria": "打开 AI 副驾驶 (Cmd/Ctrl+K)",
+      "clearChat": "清除对话",
+      "disable": "禁用副驾驶",
+      "close": "关闭 (Esc)",
+      "inputPlaceholder": "询问关于此屏幕……",
+      "send": "发送",
+      "atPath": "在 <code>{pathname}</code>",
+      "errorTalking": "与副驾驶通信失败",
+      "explain": "解释 \"{title}\"",
+      "allKbTopics": "所有 KB 主题（{count}）：",
+      "greeting": "您好！我如何帮助您？",
+      "topicsForScreen": "{count, plural, one {关于此屏幕的 # 个主题。} other {关于此屏幕的 # 个主题。}}",
+      "noTopicsForScreen": "此屏幕没有特定主题。",
+      "orAskBelow": "或在下方询问任何问题",
+      "noEntriesYet": "此屏幕在我的 KB 中尚无专门条目。",
+      "seeAllTopics": "查看所有可用主题",
+      "copy": "复制",
+      "helpful": "有用",
+      "notHelpful": "无用"
+    },
+    "baseSuggestions": {
+      "whatIDoHere": {
+        "text": "我在此屏幕上做什么？",
+        "label": "我在这里做什么？"
       },
-      "placeholder": {
-        "general": "询问您的线索、交易、表现……",
-        "deal": "询问此交易……",
-        "contact": "询问此联系人……",
-        "conversation": "询问此对话……"
+      "whatsappSetup": {
+        "text": "如何在此处设置 WhatsApp？",
+        "label": "WhatsApp 设置"
       },
-      "contextBadge": {
-        "deal": "交易",
-        "contact": "联系人",
-        "conversation": "对话"
+      "commonErrors": {
+        "text": "此屏幕的常见错误是什么？",
+        "label": "常见错误"
       },
-      "empty": {
-        "title": "我如何帮助您？",
-        "hint": {
-          "general": "询问线索、交易、表现、对话，或让我直接通过聊天创建任务和机会。",
-          "deal": "询问此交易 — 风险、下一步、提案生成或跟进。",
-          "contact": "询问此联系人 — 摘要、历史异议、最佳方法。",
-          "conversation": "询问此对话 — 摘要、建议回复、客户意图。"
-        }
+      "bestPractices": {
+        "text": "自动化最佳实践",
+        "label": "最佳实践"
       },
-      "suggestions": {
-        "general": [
-          "今天应优先处理哪些线索？",
-          "我的管道摘要",
-          "待办任务",
-          "本周为何丢失销售？",
-          "为未回复的线索创建跟进",
-          "哪些客户超过 5 天未回复？",
-          "本周团队表现",
-          "经常性异议分析",
-          "提高转化率的建议",
-          "未服务的热门线索",
-          "下一个关键任务",
-          "我在哪里失去交易？",
-          "现在有哪些关键工单？",
-          "今天的客服摘要",
-          "本周客服表现",
-          "SLA 超时的工单",
-          "无工单的延迟订单",
-          "哪些产品投诉最多？",
-          "创建发布帖子",
-          "制作社会证明轮播",
-          "等待批准的内容",
-          "今天的社交 AI 摘要"
-        ],
-        "deal": [
-          "下一步行动？",
-          "丢失风险？",
-          "生成提案",
-          "创建跟进",
-          "谈判分析",
-          "成交建议",
-          "互动历史",
-          "与类似交易比较",
-          "注意要点"
-        ],
-        "contact": [
-          "客户摘要",
-          "异议历史",
-          "最佳方法",
-          "行为概况",
-          "购买概率",
-          "兴趣主题",
-          "建议的下一步",
-          "参与度分析",
-          "以前的交易"
-        ],
-        "conversation": [
-          "总结对话",
-          "建议回复",
-          "客户想要什么？",
-          "识别紧急程度",
-          "下一个要问的问题",
-          "客户情绪",
-          "未回答的要点",
-          "总结已发送的文档",
-          "路由建议"
-        ]
+      "stepByStep": {
+        "text": "给我分步说明",
+        "label": "分步说明"
       },
-      "floating": {
-        "title": "AI 副驾驶",
-        "openAria": "打开 AI 副驾驶 (Cmd/Ctrl+K)",
-        "clearChat": "清除对话",
-        "disable": "禁用副驾驶",
-        "close": "关闭 (Esc)",
-        "inputPlaceholder": "询问关于此屏幕……",
-        "send": "发送",
-        "atPath": "在 <code>{pathname}</code>",
-        "errorTalking": "与副驾驶通信失败",
-        "explain": "解释 \"{title}\"",
-        "allKbTopics": "所有 KB 主题（{count}）：",
-        "greeting": "您好！我如何帮助您？",
-        "topicsForScreen": "{count, plural, one {关于此屏幕的 # 个主题。} other {关于此屏幕的 # 个主题。}}",
-        "noTopicsForScreen": "此屏幕没有特定主题。",
-        "orAskBelow": "或在下方询问任何问题",
-        "noEntriesYet": "此屏幕在我的 KB 中尚无专门条目。",
-        "seeAllTopics": "查看所有可用主题",
-        "copy": "复制",
-        "helpful": "有用",
-        "notHelpful": "无用"
+      "shortcuts": {
+        "text": "有用的快捷键",
+        "label": "快捷键"
       },
-      "baseSuggestions": {
-        "whatIDoHere": {
-          "text": "我在此屏幕上做什么？",
-          "label": "我在这里做什么？"
-        },
-        "whatsappSetup": {
-          "text": "如何在此处设置 WhatsApp？",
-          "label": "WhatsApp 设置"
-        },
-        "commonErrors": {
-          "text": "此屏幕的常见错误是什么？",
-          "label": "常见错误"
-        },
-        "bestPractices": {
-          "text": "自动化最佳实践",
-          "label": "最佳实践"
-        },
-        "stepByStep": {
-          "text": "给我分步说明",
-          "label": "分步说明"
-        },
-        "shortcuts": {
-          "text": "有用的快捷键",
-          "label": "快捷键"
-        },
-        "quickStart": {
-          "text": "如何快速开始？",
-          "label": "快速开始"
-        },
-        "importantConfigs": {
-          "text": "重要设置",
-          "label": "设置"
-        },
-        "screenSummary": {
-          "text": "总结我在此处可做的事",
-          "label": "屏幕摘要"
-        }
+      "quickStart": {
+        "text": "如何快速开始？",
+        "label": "快速开始"
+      },
+      "importantConfigs": {
+        "text": "重要设置",
+        "label": "设置"
+      },
+      "screenSummary": {
+        "text": "总结我在此处可做的事",
+        "label": "屏幕摘要"
       }
     }
   },
   "copiloto": {
-    "copiloto": {
-      "chatInput": {
-        "placeholder": "询问您的线索、交易、表现……",
-        "send": "发送"
-      }
+    "chatInput": {
+      "placeholder": "询问您的线索、交易、表现……",
+      "send": "发送"
     }
   },
   "customFields": {
-    "customFields": {
-      "label": {
-        "aiCanFill": "AI 可以自动填写",
-        "apiReadOnly": "只读 — 通过 API 更新"
-      },
-      "input": {
-        "selectPlaceholder": "— 选择 —",
-        "urlPlaceholder": "https://example.com",
-        "addressShortPlaceholder": "街道、号码、社区、城市",
-        "unknownType": "未知字段类型：{type}"
-      },
-      "url": {
-        "copied": "URL 已复制",
-        "copyFailed": "复制失败",
-        "visit": "访问",
-        "visitAria": "访问 URL",
-        "copy": "复制",
-        "copyAria": "复制 URL"
-      },
-      "address": {
-        "viewOnMap": "在地图上查看",
-        "viewOnGoogleMaps": "在 Google 地图上查看",
-        "cepNotFound": "未找到邮政编码",
-        "cepInvalid": "邮政编码无效",
-        "countryDefault": "巴西",
-        "addressAutoFilled": "地址已自动填充",
-        "cepLookupFailed": "邮政编码查询失败",
-        "cep": "邮政编码",
-        "country": "国家",
-        "street": "街道",
-        "streetPlaceholder": "花街 123 号",
-        "line2": "补充 / 区",
-        "line2Placeholder": "101 室，市中心",
-        "city": "城市",
-        "state": "州/省"
-      },
-      "section": {
-        "loadError": "加载字段错误",
-        "saveError": "保存自定义字段失败",
-        "unknownError": "未知错误",
-        "mainSection": "主要"
-      }
+    "label": {
+      "aiCanFill": "AI 可以自动填写",
+      "apiReadOnly": "只读 — 通过 API 更新"
+    },
+    "input": {
+      "selectPlaceholder": "— 选择 —",
+      "urlPlaceholder": "https://example.com",
+      "addressShortPlaceholder": "街道、号码、社区、城市",
+      "unknownType": "未知字段类型：{type}"
+    },
+    "url": {
+      "copied": "URL 已复制",
+      "copyFailed": "复制失败",
+      "visit": "访问",
+      "visitAria": "访问 URL",
+      "copy": "复制",
+      "copyAria": "复制 URL"
+    },
+    "address": {
+      "viewOnMap": "在地图上查看",
+      "viewOnGoogleMaps": "在 Google 地图上查看",
+      "cepNotFound": "未找到邮政编码",
+      "cepInvalid": "邮政编码无效",
+      "countryDefault": "巴西",
+      "addressAutoFilled": "地址已自动填充",
+      "cepLookupFailed": "邮政编码查询失败",
+      "cep": "邮政编码",
+      "country": "国家",
+      "street": "街道",
+      "streetPlaceholder": "花街 123 号",
+      "line2": "补充 / 区",
+      "line2Placeholder": "101 室，市中心",
+      "city": "城市",
+      "state": "州/省"
+    },
+    "section": {
+      "loadError": "加载字段错误",
+      "saveError": "保存自定义字段失败",
+      "unknownError": "未知错误",
+      "mainSection": "主要"
     }
   },
   "equipe": {
-    "equipe": {
-      "role": {
-        "owner": "所有者",
-        "admin": "管理员",
-        "manager": "经理",
-        "agent": "代理",
-        "viewer": "查看者"
+    "role": {
+      "owner": "所有者",
+      "admin": "管理员",
+      "manager": "经理",
+      "agent": "代理",
+      "viewer": "查看者"
+    },
+    "status": {
+      "active": "活跃",
+      "invited": "已邀请",
+      "suspended": "已暂停"
+    },
+    "page": {
+      "title": "团队",
+      "subtitle": "管理组织的成员、角色和权限。",
+      "memberCount": "{count, plural, one {# 名成员} other {# 名成员}}",
+      "refresh": "刷新",
+      "inviteMember": "邀请成员",
+      "loadError": "加载团队错误",
+      "noName": "无姓名",
+      "you": "您",
+      "seen": "{when} 看到",
+      "neverSeen": "从未访问",
+      "emptyTitle": "团队为空",
+      "emptySubtitle": "邀请同事协作运营。",
+      "inviteFirst": "邀请第一位成员"
+    },
+    "invite": {
+      "title": "邀请成员",
+      "description": "用户将收到访问组织的电子邮件 magic link。",
+      "emailLabel": "邮箱",
+      "emailPlaceholder": "agent@company.com",
+      "nameLabel": "姓名（可选）",
+      "namePlaceholder": "张三",
+      "roleLabel": "角色",
+      "ownerOnlyHint": "只有所有者可以稍后提升为管理员。",
+      "cancel": "取消",
+      "submit": "邀请",
+      "submitting": "正在发送邀请……",
+      "inviteError": "邀请错误"
+    },
+    "detail": {
+      "title": "成员详情",
+      "memberSince": "自 {date} 加入",
+      "saveError": "保存错误",
+      "removeError": "删除错误",
+      "noName": "无姓名",
+      "you": "您",
+      "noEmail": "（无邮箱）",
+      "currentActivity": "当前活动",
+      "stats": {
+        "conversations": "对话",
+        "deals": "交易",
+        "tasks": "任务"
       },
-      "status": {
-        "active": "活跃",
-        "invited": "已邀请",
-        "suspended": "已暂停"
-      },
-      "page": {
-        "title": "团队",
-        "subtitle": "管理组织的成员、角色和权限。",
-        "memberCount": "{count, plural, one {# 名成员} other {# 名成员}}",
-        "refresh": "刷新",
-        "inviteMember": "邀请成员",
-        "loadError": "加载团队错误",
-        "noName": "无姓名",
-        "you": "您",
-        "seen": "{when} 看到",
-        "neverSeen": "从未访问",
-        "emptyTitle": "团队为空",
-        "emptySubtitle": "邀请同事协作运营。",
-        "inviteFirst": "邀请第一位成员"
-      },
-      "invite": {
-        "title": "邀请成员",
-        "description": "用户将收到访问组织的电子邮件 magic link。",
-        "emailLabel": "邮箱",
-        "emailPlaceholder": "agent@company.com",
-        "nameLabel": "姓名（可选）",
-        "namePlaceholder": "张三",
-        "roleLabel": "角色",
-        "ownerOnlyHint": "只有所有者可以稍后提升为管理员。",
-        "cancel": "取消",
-        "submit": "邀请",
-        "submitting": "正在发送邀请……",
-        "inviteError": "邀请错误"
-      },
-      "detail": {
-        "title": "成员详情",
-        "memberSince": "自 {date} 加入",
-        "saveError": "保存错误",
-        "removeError": "删除错误",
-        "noName": "无姓名",
-        "you": "您",
-        "noEmail": "（无邮箱）",
-        "currentActivity": "当前活动",
-        "stats": {
-          "conversations": "对话",
-          "deals": "交易",
-          "tasks": "任务"
-        },
-        "lastSeen": "最后访问 {when}",
-        "neverSeen": "从未访问",
-        "orgRole": "组织角色",
-        "ownerOnly": "（仅所有者）",
-        "ownerCantEdit": "所有者无法编辑。",
-        "noPermissionToEdit": "您无权编辑此成员。",
-        "scheduling": "调度",
-        "defaultDuration": "默认时长（分钟）",
-        "durationPlaceholder": "例如 30, 60",
-        "durationHint": "每个服务的时间。系统计算空闲时段。",
-        "buffer": "间隔（分钟）",
-        "bufferHint": "服务之间的暂停。",
-        "specialties": "专业 / 服务",
-        "specialtiesPlaceholder": "例如 营养师、剪发、引擎、销售……",
-        "removeAria": "删除 {item}",
-        "noSpecialties": "无专业。AI 不会为此专业人员匹配预约，直到至少设置一个。",
-        "specialtiesHint": "按细分行业的自由文本。例如：诊所 = [\"营养师\"]，沙龙 = [\"剪发\"，\"美甲\"]，车间 = [\"引擎\"，\"电路\"]。AI 礼宾使用此项来路由预约请求。",
-        "removeConfirm": "删除此成员？",
-        "yes": "是",
-        "no": "否",
-        "remove": "删除",
-        "close": "关闭",
-        "save": "保存"
-      }
+      "lastSeen": "最后访问 {when}",
+      "neverSeen": "从未访问",
+      "orgRole": "组织角色",
+      "ownerOnly": "（仅所有者）",
+      "ownerCantEdit": "所有者无法编辑。",
+      "noPermissionToEdit": "您无权编辑此成员。",
+      "scheduling": "调度",
+      "defaultDuration": "默认时长（分钟）",
+      "durationPlaceholder": "例如 30, 60",
+      "durationHint": "每个服务的时间。系统计算空闲时段。",
+      "buffer": "间隔（分钟）",
+      "bufferHint": "服务之间的暂停。",
+      "specialties": "专业 / 服务",
+      "specialtiesPlaceholder": "例如 营养师、剪发、引擎、销售……",
+      "removeAria": "删除 {item}",
+      "noSpecialties": "无专业。AI 不会为此专业人员匹配预约，直到至少设置一个。",
+      "specialtiesHint": "按细分行业的自由文本。例如：诊所 = [\"营养师\"]，沙龙 = [\"剪发\"，\"美甲\"]，车间 = [\"引擎\"，\"电路\"]。AI 礼宾使用此项来路由预约请求。",
+      "removeConfirm": "删除此成员？",
+      "yes": "是",
+      "no": "否",
+      "remove": "删除",
+      "close": "关闭",
+      "save": "保存"
     }
   },
   "inbox": {
@@ -2337,21 +2323,17 @@
     }
   },
   "intelligence": {
-    "intelligence": {
-      "adSignalToast": {
-        "critical": "🚨 关键",
-        "warning": "⚠️ 警告",
-        "view": "查看",
-        "fallback": "新信号：{signalType}",
-        "fallbackWithCampaign": "新信号：{signalType} 在 \"{campaign}\""
-      }
+    "adSignalToast": {
+      "critical": "🚨 关键",
+      "warning": "⚠️ 警告",
+      "view": "查看",
+      "fallback": "新信号：{signalType}",
+      "fallbackWithCampaign": "新信号：{signalType} 在 \"{campaign}\""
     }
   },
   "placeholder": {
-    "placeholder": {
-      "inDevelopment": "开发中",
-      "description": "此部分仍在构建中。很快您将能够在此使用 <highlight>{title}</highlight> 的所有功能。"
-    }
+    "inDevelopment": "开发中",
+    "description": "此部分仍在构建中。很快您将能够在此使用 <highlight>{title}</highlight> 的所有功能。"
   },
   "relatorios": {
     "title": "报表",

@@ -1202,61 +1202,59 @@
     }
   },
   "ai": {
-    "ai": {
-      "feedback": {
-        "helpful": "Helpful response",
-        "notHelpful": "Poor response",
-        "sendFailed": "Failed to send feedback",
-        "saveCommentFailed": "Failed to save comment",
-        "thanks": "Thanks for the feedback!",
-        "unknownError": "Unknown error",
-        "whatCouldBeBetter": "What could be better?",
-        "close": "Close",
-        "commentPlaceholder": "Inaccurate answer, wrong context, bad format...",
-        "send": "Send"
-      },
-      "fillButton": {
-        "fillWithAi": "Fill with AI",
-        "filledWithAi": "Filled with AI",
-        "generateFailed": "Failed to generate with AI",
-        "unknownError": "Unknown error"
-      },
-      "gaps": {
-        "title": "Gaps & pending",
-        "askClient": "Ask client",
-        "answerNow": "Answer now",
-        "emptyMessage": "(message with no text)",
-        "empty": "No gaps detected. Good data coverage.",
-        "fetchError": "Error fetching pending items",
-        "suggestionCopied": "Suggestion copied",
-        "suggestionReady": "Suggestion ready",
-        "suggestionForQuestion": "Good question! About that: ",
-        "suggestionForComment": "About what you mentioned: ",
-        "gap": {
-          "contactEmail": {
-            "label": "Contact email missing",
-            "message": "Can I get an email so I can send you the proposal in writing? Helps keep everything organized."
-          },
-          "contactPhone": {
-            "label": "Phone not confirmed",
-            "message": "So I can call you when everything's ready, can I confirm the best WhatsApp/mobile number?"
-          },
-          "contactCompany": {
-            "label": "No linked company",
-            "message": "Which company are you looking at this for? I want to make sure I understand the scenario correctly."
-          },
-          "contactSegment": {
-            "label": "Customer with no segment/tag",
-            "message": "So I can suggest the right path, what sector or type of operation do you work in?"
-          },
-          "dealValue": {
-            "label": "Deal value not set",
-            "message": "To give you the best recommendation, what approximate budget do you have in mind?"
-          },
-          "dealCloseDate": {
-            "label": "No expected close date",
-            "message": "Do you have a date or deadline in mind to close this? Helps me prioritize on my end."
-          }
+    "feedback": {
+      "helpful": "Helpful response",
+      "notHelpful": "Poor response",
+      "sendFailed": "Failed to send feedback",
+      "saveCommentFailed": "Failed to save comment",
+      "thanks": "Thanks for the feedback!",
+      "unknownError": "Unknown error",
+      "whatCouldBeBetter": "What could be better?",
+      "close": "Close",
+      "commentPlaceholder": "Inaccurate answer, wrong context, bad format...",
+      "send": "Send"
+    },
+    "fillButton": {
+      "fillWithAi": "Fill with AI",
+      "filledWithAi": "Filled with AI",
+      "generateFailed": "Failed to generate with AI",
+      "unknownError": "Unknown error"
+    },
+    "gaps": {
+      "title": "Gaps & pending",
+      "askClient": "Ask client",
+      "answerNow": "Answer now",
+      "emptyMessage": "(message with no text)",
+      "empty": "No gaps detected. Good data coverage.",
+      "fetchError": "Error fetching pending items",
+      "suggestionCopied": "Suggestion copied",
+      "suggestionReady": "Suggestion ready",
+      "suggestionForQuestion": "Good question! About that: ",
+      "suggestionForComment": "About what you mentioned: ",
+      "gap": {
+        "contactEmail": {
+          "label": "Contact email missing",
+          "message": "Can I get an email so I can send you the proposal in writing? Helps keep everything organized."
+        },
+        "contactPhone": {
+          "label": "Phone not confirmed",
+          "message": "So I can call you when everything's ready, can I confirm the best WhatsApp/mobile number?"
+        },
+        "contactCompany": {
+          "label": "No linked company",
+          "message": "Which company are you looking at this for? I want to make sure I understand the scenario correctly."
+        },
+        "contactSegment": {
+          "label": "Customer with no segment/tag",
+          "message": "So I can suggest the right path, what sector or type of operation do you work in?"
+        },
+        "dealValue": {
+          "label": "Deal value not set",
+          "message": "To give you the best recommendation, what approximate budget do you have in mind?"
+        },
+        "dealCloseDate": {
+          "label": "No expected close date",
+          "message": "Do you have a date or deadline in mind to close this? Helps me prioritize on my end."
         }
       }
     }
@@ -1364,66 +1362,64 @@
     }
   },
   "centralAcao": {
-    "centralAcao": {
-      "page": {
-        "title": "Action Center",
-        "subtitle": "What needs your attention now.",
-        "refresh": "Refresh",
-        "attentionTitle": "Needs your attention now",
-        "topN": "Top {n}",
-        "recentActivityTitle": "Recent activity",
-        "metrics": {
-          "unreadConversations": "Unanswered conversations",
-          "hotLeads": "Hot leads",
-          "pipelineValue": "Pipeline value",
-          "tasksToday": "Tasks for today"
-        }
-      },
-      "activity": {
-        "empty": "No recent activity"
-      },
-      "attention": {
-        "emptyTitle": "All caught up! 🎯",
-        "emptyDescription": "No urgent items right now. Good work.",
-        "severity": {
-          "urgent": "Urgent",
-          "high": "High",
-          "medium": "Medium"
-        }
-      },
-      "metric": {
-        "urgent": "urgent"
-      },
-      "hotLeads": {
-        "title": "Hottest leads",
-        "noName": "No name",
-        "noMessages": "No messages",
-        "emptyTitle": "No hot leads yet",
-        "connectWhatsapp": "Connect your WhatsApp →"
-      },
-      "sac": {
-        "title": "Support — Immediate attention",
-        "loading": "Loading…",
-        "allClear": "All under control 🎯 — no critical tickets, SLA on time.",
-        "critical": "Critical",
-        "slaDueSoon": "SLA <1h",
-        "slaBreached": "SLA breached",
-        "reputationRisk": "Rep. risk"
-      },
-      "social": {
-        "title": "Social AI — Attention",
-        "loading": "Loading…",
-        "empty": "No content awaiting action 🎯",
-        "pendingApproval": "Awaiting approval",
-        "scheduled7d": "Scheduled (7d)",
-        "drafts": "Drafts"
-      },
-      "topDeals": {
-        "title": "Closest to closing",
-        "noContact": "No contact",
-        "emptyTitle": "No deal with probability yet",
-        "createFirst": "Create your first deal →"
+    "page": {
+      "title": "Action Center",
+      "subtitle": "What needs your attention now.",
+      "refresh": "Refresh",
+      "attentionTitle": "Needs your attention now",
+      "topN": "Top {n}",
+      "recentActivityTitle": "Recent activity",
+      "metrics": {
+        "unreadConversations": "Unanswered conversations",
+        "hotLeads": "Hot leads",
+        "pipelineValue": "Pipeline value",
+        "tasksToday": "Tasks for today"
       }
+    },
+    "activity": {
+      "empty": "No recent activity"
+    },
+    "attention": {
+      "emptyTitle": "All caught up! 🎯",
+      "emptyDescription": "No urgent items right now. Good work.",
+      "severity": {
+        "urgent": "Urgent",
+        "high": "High",
+        "medium": "Medium"
+      }
+    },
+    "metric": {
+      "urgent": "urgent"
+    },
+    "hotLeads": {
+      "title": "Hottest leads",
+      "noName": "No name",
+      "noMessages": "No messages",
+      "emptyTitle": "No hot leads yet",
+      "connectWhatsapp": "Connect your WhatsApp →"
+    },
+    "sac": {
+      "title": "Support — Immediate attention",
+      "loading": "Loading…",
+      "allClear": "All under control 🎯 — no critical tickets, SLA on time.",
+      "critical": "Critical",
+      "slaDueSoon": "SLA <1h",
+      "slaBreached": "SLA breached",
+      "reputationRisk": "Rep. risk"
+    },
+    "social": {
+      "title": "Social AI — Attention",
+      "loading": "Loading…",
+      "empty": "No content awaiting action 🎯",
+      "pendingApproval": "Awaiting approval",
+      "scheduled7d": "Scheduled (7d)",
+      "drafts": "Drafts"
+    },
+    "topDeals": {
+      "title": "Closest to closing",
+      "noContact": "No contact",
+      "emptyTitle": "No deal with probability yet",
+      "createFirst": "Create your first deal →"
     }
   },
   "chat": {
@@ -1578,131 +1574,129 @@
     }
   },
   "conhecimento": {
-    "conhecimento": {
-      "category": {
-        "general": "General",
-        "products": "Products",
-        "pricing": "Pricing",
-        "policies": "Policies",
-        "faq": "FAQ",
-        "scripts": "Scripts",
-        "objections": "Objections",
-        "procedures": "Procedures"
-      },
-      "page": {
-        "title": "Knowledge Base",
-        "subtitle": "Documents and products the AI consults to respond to leads and generate suggestions.",
-        "tabs": {
-          "documents": "Documents",
-          "live": "Live Sources",
-          "catalog": "Catalog"
-        }
-      },
-      "docs": {
-        "loadError": "Error loading documents",
-        "searchPlaceholder": "Search by title or content...",
-        "allCategories": "All categories",
-        "allSources": "All sources",
-        "sources": {
-          "manual": "Manual",
-          "url": "URL",
-          "file": "File",
-          "integration": "Integration",
-          "auto": "AI"
-        },
-        "refresh": "Refresh",
-        "uploadFile": "Upload File",
-        "multipleUrls": "Multiple URLs",
-        "importFromUrl": "Import from URL",
-        "newDocument": "New document",
-        "updatedTitle": "Document updated",
-        "updatedDesc": "URL content changed — embedding regenerated.",
-        "noChangesTitle": "No changes",
-        "noChangesDesc": "The URL content is the same.",
-        "refreshFailed": "Failed to refresh",
-        "error": "Error",
-        "pages": "{n} pages",
-        "tokensWord": "tokens",
-        "updatedAt": "Updated {when}",
-        "syncAt": "Sync {when}",
-        "part": "Part {i}/{n}",
-        "refetchUrl": "Re-fetch URL and update content",
-        "active": "Active",
-        "inactive": "Inactive",
-        "emptyTitle": "Your knowledge base is empty",
-        "emptySubtitle": "Create documents with FAQ, scripts, policies — the AI uses this content to respond to leads.",
-        "createFirst": "Create first document"
-      },
-      "live": {
-        "loadError": "Error loading sources",
-        "respondingTitle": "\"{name}\" responding",
-        "charsExtracted": "{n} chars extracted.",
-        "problemTitle": "\"{name}\" with problem",
-        "error": "Error",
-        "testFailed": "Test failed",
-        "refresh": "Refresh",
-        "newLiveSource": "New live source",
-        "description": "<strong>Live sources</strong> are URLs the AI queries in real time when it needs updated information (stock, daily prices, status). Unlike imports, content is not saved — each query fetches fresh data. In-memory cache reduces repeated hits.",
-        "typeWeb": "Web",
-        "typeApi": "API",
-        "typeRss": "RSS",
-        "cacheLabel": "Cache {min}min",
-        "lastQuery": "Last query {when}",
-        "neverQueried": "Never queried",
-        "testConnection": "Test connection and extract content now",
-        "active": "Active",
-        "inactive": "Inactive",
-        "emptyTitle": "No live sources registered",
-        "emptySubtitle": "Register URLs the AI queries in real time for up-to-date data (stock, daily prices, etc.).",
-        "createFirst": "Create first source"
-      },
-      "products": {
-        "loadError": "Error loading products",
-        "searchPlaceholder": "Search by name or SKU...",
-        "refresh": "Refresh",
-        "newProduct": "New product",
-        "inactive": "Inactive",
-        "skuPrefix": "SKU: {sku}",
-        "noSku": "No SKU",
-        "emptyTitle": "No products registered",
-        "emptySubtitle": "Register your catalog so the AI can answer questions about prices and attributes.",
-        "createFirst": "Create first product"
-      },
-      "newDocument": {
-        "title": "New document",
-        "description": "The AI uses this base to respond to leads and give suggestions. The better the content, the better the responses.",
-        "startFromTemplate": "Start from a template:",
-        "titleLabel": "Title",
-        "titlePlaceholder": "e.g. FAQ — products and pricing",
-        "categoryLabel": "Category",
-        "contentLabel": "Content",
-        "contentPlaceholder": "Markdown supported. The more specific, the better the semantic search...",
-        "tokens": "~{n, number} tokens",
-        "cancel": "Cancel",
-        "submit": "Create document",
-        "submitting": "Creating + indexing...",
-        "createError": "Error creating document"
-      },
-      "editDocument": {
-        "title": "Edit document",
-        "updatedAt": "Updated on {when}",
-        "embeddingWillRegenerate": "embedding will be regenerated on save",
-        "saveError": "Error saving",
-        "deleteError": "Error deleting",
-        "titleLabel": "Title",
-        "categoryLabel": "Category",
-        "contentLabel": "Content",
-        "tokens": "~{n, number} tokens",
-        "activeForAi": "Active (visible to AI)",
-        "deleteConfirm": "Delete permanently?",
-        "yesDelete": "Yes, delete",
-        "cancel": "Cancel",
-        "delete": "Delete",
-        "close": "Close",
-        "save": "Save",
-        "saving": "Saving...",
-        "saveReindex": "Save + reindex"
+    "category": {
+      "general": "General",
+      "products": "Products",
+      "pricing": "Pricing",
+      "policies": "Policies",
+      "faq": "FAQ",
+      "scripts": "Scripts",
+      "objections": "Objections",
+      "procedures": "Procedures"
+    },
+    "page": {
+      "title": "Knowledge Base",
+      "subtitle": "Documents and products the AI consults to respond to leads and generate suggestions.",
+      "tabs": {
+        "documents": "Documents",
+        "live": "Live Sources",
+        "catalog": "Catalog"
       }
+    },
+    "docs": {
+      "loadError": "Error loading documents",
+      "searchPlaceholder": "Search by title or content...",
+      "allCategories": "All categories",
+      "allSources": "All sources",
+      "sources": {
+        "manual": "Manual",
+        "url": "URL",
+        "file": "File",
+        "integration": "Integration",
+        "auto": "AI"
+      },
+      "refresh": "Refresh",
+      "uploadFile": "Upload File",
+      "multipleUrls": "Multiple URLs",
+      "importFromUrl": "Import from URL",
+      "newDocument": "New document",
+      "updatedTitle": "Document updated",
+      "updatedDesc": "URL content changed — embedding regenerated.",
+      "noChangesTitle": "No changes",
+      "noChangesDesc": "The URL content is the same.",
+      "refreshFailed": "Failed to refresh",
+      "error": "Error",
+      "pages": "{n} pages",
+      "tokensWord": "tokens",
+      "updatedAt": "Updated {when}",
+      "syncAt": "Sync {when}",
+      "part": "Part {i}/{n}",
+      "refetchUrl": "Re-fetch URL and update content",
+      "active": "Active",
+      "inactive": "Inactive",
+      "emptyTitle": "Your knowledge base is empty",
+      "emptySubtitle": "Create documents with FAQ, scripts, policies — the AI uses this content to respond to leads.",
+      "createFirst": "Create first document"
+    },
+    "live": {
+      "loadError": "Error loading sources",
+      "respondingTitle": "\"{name}\" responding",
+      "charsExtracted": "{n} chars extracted.",
+      "problemTitle": "\"{name}\" with problem",
+      "error": "Error",
+      "testFailed": "Test failed",
+      "refresh": "Refresh",
+      "newLiveSource": "New live source",
+      "description": "<strong>Live sources</strong> are URLs the AI queries in real time when it needs updated information (stock, daily prices, status). Unlike imports, content is not saved — each query fetches fresh data. In-memory cache reduces repeated hits.",
+      "typeWeb": "Web",
+      "typeApi": "API",
+      "typeRss": "RSS",
+      "cacheLabel": "Cache {min}min",
+      "lastQuery": "Last query {when}",
+      "neverQueried": "Never queried",
+      "testConnection": "Test connection and extract content now",
+      "active": "Active",
+      "inactive": "Inactive",
+      "emptyTitle": "No live sources registered",
+      "emptySubtitle": "Register URLs the AI queries in real time for up-to-date data (stock, daily prices, etc.).",
+      "createFirst": "Create first source"
+    },
+    "products": {
+      "loadError": "Error loading products",
+      "searchPlaceholder": "Search by name or SKU...",
+      "refresh": "Refresh",
+      "newProduct": "New product",
+      "inactive": "Inactive",
+      "skuPrefix": "SKU: {sku}",
+      "noSku": "No SKU",
+      "emptyTitle": "No products registered",
+      "emptySubtitle": "Register your catalog so the AI can answer questions about prices and attributes.",
+      "createFirst": "Create first product"
+    },
+    "newDocument": {
+      "title": "New document",
+      "description": "The AI uses this base to respond to leads and give suggestions. The better the content, the better the responses.",
+      "startFromTemplate": "Start from a template:",
+      "titleLabel": "Title",
+      "titlePlaceholder": "e.g. FAQ — products and pricing",
+      "categoryLabel": "Category",
+      "contentLabel": "Content",
+      "contentPlaceholder": "Markdown supported. The more specific, the better the semantic search...",
+      "tokens": "~{n, number} tokens",
+      "cancel": "Cancel",
+      "submit": "Create document",
+      "submitting": "Creating + indexing...",
+      "createError": "Error creating document"
+    },
+    "editDocument": {
+      "title": "Edit document",
+      "updatedAt": "Updated on {when}",
+      "embeddingWillRegenerate": "embedding will be regenerated on save",
+      "saveError": "Error saving",
+      "deleteError": "Error deleting",
+      "titleLabel": "Title",
+      "categoryLabel": "Category",
+      "contentLabel": "Content",
+      "tokens": "~{n, number} tokens",
+      "activeForAi": "Active (visible to AI)",
+      "deleteConfirm": "Delete permanently?",
+      "yesDelete": "Yes, delete",
+      "cancel": "Cancel",
+      "delete": "Delete",
+      "close": "Close",
+      "save": "Save",
+      "saving": "Saving...",
+      "saveReindex": "Save + reindex"
     }
   },
   "contentCalendar": {
@@ -1834,289 +1828,281 @@
     }
   },
   "copilot": {
-    "copilot": {
-      "panel": {
-        "title": "AI Copilot",
-        "aiBadge": "AI",
-        "description": "Your intelligent sales assistant. Ask anything about your CRM.",
-        "clear": "Clear",
-        "enterHint": "Enter to send · Shift+Enter for new line"
+    "panel": {
+      "title": "AI Copilot",
+      "aiBadge": "AI",
+      "description": "Your intelligent sales assistant. Ask anything about your CRM.",
+      "clear": "Clear",
+      "enterHint": "Enter to send · Shift+Enter for new line"
+    },
+    "placeholder": {
+      "general": "Ask about your leads, deals, performance...",
+      "deal": "Ask about this deal...",
+      "contact": "Ask about this contact...",
+      "conversation": "Ask about this conversation..."
+    },
+    "contextBadge": {
+      "deal": "Deal",
+      "contact": "Contact",
+      "conversation": "Conversation"
+    },
+    "empty": {
+      "title": "How can I help?",
+      "hint": {
+        "general": "Ask about leads, deals, performance, conversations, or have me create tasks and opportunities right from the chat.",
+        "deal": "Ask about this deal — risk, next step, proposal generation, or follow-up.",
+        "contact": "Ask about this contact — summary, historical objections, best approach.",
+        "conversation": "Ask about this conversation — summary, suggested reply, customer intent."
+      }
+    },
+    "suggestions": {
+      "general": [
+        "Which leads should I prioritize today?",
+        "Summary of my pipeline",
+        "Pending tasks",
+        "Why did I lose sales this week?",
+        "Create follow-up for unresponsive leads",
+        "Which customers haven't responded in 5+ days?",
+        "Team performance this week",
+        "Analysis of recurring objections",
+        "Suggestions to increase conversion",
+        "Hot leads without service",
+        "Next critical tasks",
+        "Where am I losing deals?",
+        "What critical tickets do I have now?",
+        "Today's support summary",
+        "Support performance this week",
+        "Tickets with breached SLA",
+        "Late orders without ticket",
+        "Which products get the most complaints?",
+        "Create a launch post",
+        "Make a social proof carousel",
+        "Content awaiting approval",
+        "Today's Social AI summary"
+      ],
+      "deal": [
+        "Next action?",
+        "Loss risk?",
+        "Generate proposal",
+        "Create follow-up",
+        "Negotiation analysis",
+        "Closing suggestions",
+        "Interaction history",
+        "Compare with similar deals",
+        "Points of attention"
+      ],
+      "contact": [
+        "Customer summary",
+        "Objection history",
+        "Best approach",
+        "Behavior profile",
+        "Purchase probability",
+        "Topics of interest",
+        "Suggested next steps",
+        "Engagement analysis",
+        "Previous deals"
+      ],
+      "conversation": [
+        "Summarize conversation",
+        "Suggest reply",
+        "What does the customer want?",
+        "Identify urgency",
+        "Next question to ask",
+        "Customer sentiment",
+        "Unanswered points",
+        "Summarize sent documents",
+        "Routing suggestion"
+      ]
+    },
+    "floating": {
+      "title": "AI Copilot",
+      "openAria": "Open AI Copilot (Cmd/Ctrl+K)",
+      "clearChat": "Clear chat",
+      "disable": "Disable Copilot",
+      "close": "Close (Esc)",
+      "inputPlaceholder": "Ask about this screen…",
+      "send": "Send",
+      "atPath": "On <code>{pathname}</code>",
+      "errorTalking": "Failed to talk to Copilot",
+      "explain": "Explain \"{title}\"",
+      "allKbTopics": "All KB topics ({count}):",
+      "greeting": "Hi! How can I help?",
+      "topicsForScreen": "{count, plural, one {# topic about this screen.} other {# topics about this screen.}}",
+      "noTopicsForScreen": "No specific topics for this screen.",
+      "orAskBelow": "or ask anything below",
+      "noEntriesYet": "This screen doesn't have dedicated entries in my KB yet.",
+      "seeAllTopics": "See all available topics",
+      "copy": "Copy",
+      "helpful": "Helpful",
+      "notHelpful": "Not helpful"
+    },
+    "baseSuggestions": {
+      "whatIDoHere": {
+        "text": "What do I do on this screen?",
+        "label": "What do I do here?"
       },
-      "placeholder": {
-        "general": "Ask about your leads, deals, performance...",
-        "deal": "Ask about this deal...",
-        "contact": "Ask about this contact...",
-        "conversation": "Ask about this conversation..."
+      "whatsappSetup": {
+        "text": "How to set up WhatsApp here?",
+        "label": "WhatsApp setup"
       },
-      "contextBadge": {
-        "deal": "Deal",
-        "contact": "Contact",
-        "conversation": "Conversation"
+      "commonErrors": {
+        "text": "What are common errors on this screen?",
+        "label": "Common errors"
       },
-      "empty": {
-        "title": "How can I help?",
-        "hint": {
-          "general": "Ask about leads, deals, performance, conversations, or have me create tasks and opportunities right from the chat.",
-          "deal": "Ask about this deal — risk, next step, proposal generation, or follow-up.",
-          "contact": "Ask about this contact — summary, historical objections, best approach.",
-          "conversation": "Ask about this conversation — summary, suggested reply, customer intent."
-        }
+      "bestPractices": {
+        "text": "Automation best practices",
+        "label": "Best practices"
       },
-      "suggestions": {
-        "general": [
-          "Which leads should I prioritize today?",
-          "Summary of my pipeline",
-          "Pending tasks",
-          "Why did I lose sales this week?",
-          "Create follow-up for unresponsive leads",
-          "Which customers haven't responded in 5+ days?",
-          "Team performance this week",
-          "Analysis of recurring objections",
-          "Suggestions to increase conversion",
-          "Hot leads without service",
-          "Next critical tasks",
-          "Where am I losing deals?",
-          "What critical tickets do I have now?",
-          "Today's support summary",
-          "Support performance this week",
-          "Tickets with breached SLA",
-          "Late orders without ticket",
-          "Which products get the most complaints?",
-          "Create a launch post",
-          "Make a social proof carousel",
-          "Content awaiting approval",
-          "Today's Social AI summary"
-        ],
-        "deal": [
-          "Next action?",
-          "Loss risk?",
-          "Generate proposal",
-          "Create follow-up",
-          "Negotiation analysis",
-          "Closing suggestions",
-          "Interaction history",
-          "Compare with similar deals",
-          "Points of attention"
-        ],
-        "contact": [
-          "Customer summary",
-          "Objection history",
-          "Best approach",
-          "Behavior profile",
-          "Purchase probability",
-          "Topics of interest",
-          "Suggested next steps",
-          "Engagement analysis",
-          "Previous deals"
-        ],
-        "conversation": [
-          "Summarize conversation",
-          "Suggest reply",
-          "What does the customer want?",
-          "Identify urgency",
-          "Next question to ask",
-          "Customer sentiment",
-          "Unanswered points",
-          "Summarize sent documents",
-          "Routing suggestion"
-        ]
+      "stepByStep": {
+        "text": "Give me a step by step",
+        "label": "Step by step"
       },
-      "floating": {
-        "title": "AI Copilot",
-        "openAria": "Open AI Copilot (Cmd/Ctrl+K)",
-        "clearChat": "Clear chat",
-        "disable": "Disable Copilot",
-        "close": "Close (Esc)",
-        "inputPlaceholder": "Ask about this screen…",
-        "send": "Send",
-        "atPath": "On <code>{pathname}</code>",
-        "errorTalking": "Failed to talk to Copilot",
-        "explain": "Explain \"{title}\"",
-        "allKbTopics": "All KB topics ({count}):",
-        "greeting": "Hi! How can I help?",
-        "topicsForScreen": "{count, plural, one {# topic about this screen.} other {# topics about this screen.}}",
-        "noTopicsForScreen": "No specific topics for this screen.",
-        "orAskBelow": "or ask anything below",
-        "noEntriesYet": "This screen doesn't have dedicated entries in my KB yet.",
-        "seeAllTopics": "See all available topics",
-        "copy": "Copy",
-        "helpful": "Helpful",
-        "notHelpful": "Not helpful"
+      "shortcuts": {
+        "text": "Useful shortcuts",
+        "label": "Shortcuts"
       },
-      "baseSuggestions": {
-        "whatIDoHere": {
-          "text": "What do I do on this screen?",
-          "label": "What do I do here?"
-        },
-        "whatsappSetup": {
-          "text": "How to set up WhatsApp here?",
-          "label": "WhatsApp setup"
-        },
-        "commonErrors": {
-          "text": "What are common errors on this screen?",
-          "label": "Common errors"
-        },
-        "bestPractices": {
-          "text": "Automation best practices",
-          "label": "Best practices"
-        },
-        "stepByStep": {
-          "text": "Give me a step by step",
-          "label": "Step by step"
-        },
-        "shortcuts": {
-          "text": "Useful shortcuts",
-          "label": "Shortcuts"
-        },
-        "quickStart": {
-          "text": "How to get started quickly?",
-          "label": "Quick start"
-        },
-        "importantConfigs": {
-          "text": "Important settings",
-          "label": "Settings"
-        },
-        "screenSummary": {
-          "text": "Summarize what I can do here",
-          "label": "Screen summary"
-        }
+      "quickStart": {
+        "text": "How to get started quickly?",
+        "label": "Quick start"
+      },
+      "importantConfigs": {
+        "text": "Important settings",
+        "label": "Settings"
+      },
+      "screenSummary": {
+        "text": "Summarize what I can do here",
+        "label": "Screen summary"
       }
     }
   },
   "copiloto": {
-    "copiloto": {
-      "chatInput": {
-        "placeholder": "Ask about your leads, deals, performance...",
-        "send": "Send"
-      }
+    "chatInput": {
+      "placeholder": "Ask about your leads, deals, performance...",
+      "send": "Send"
     }
   },
   "customFields": {
-    "customFields": {
-      "label": {
-        "aiCanFill": "AI can fill in automatically",
-        "apiReadOnly": "Read-only — updated via API"
-      },
-      "input": {
-        "selectPlaceholder": "— Select —",
-        "urlPlaceholder": "https://example.com",
-        "addressShortPlaceholder": "Street, number, neighborhood, city",
-        "unknownType": "Unknown field type: {type}"
-      },
-      "url": {
-        "copied": "URL copied",
-        "copyFailed": "Failed to copy",
-        "visit": "Visit",
-        "visitAria": "Visit URL",
-        "copy": "Copy",
-        "copyAria": "Copy URL"
-      },
-      "address": {
-        "viewOnMap": "View on map",
-        "viewOnGoogleMaps": "View on Google Maps",
-        "cepNotFound": "Postal code not found",
-        "cepInvalid": "Invalid postal code",
-        "countryDefault": "Brazil",
-        "addressAutoFilled": "Address auto-filled",
-        "cepLookupFailed": "Failed to look up postal code",
-        "cep": "Postal code",
-        "country": "Country",
-        "street": "Street",
-        "streetPlaceholder": "Flower Street, 123",
-        "line2": "Complement / District",
-        "line2Placeholder": "Apt 101, Downtown",
-        "city": "City",
-        "state": "State"
-      },
-      "section": {
-        "loadError": "Error loading fields",
-        "saveError": "Failed to save custom fields",
-        "unknownError": "Unknown error",
-        "mainSection": "Main"
-      }
+    "label": {
+      "aiCanFill": "AI can fill in automatically",
+      "apiReadOnly": "Read-only — updated via API"
+    },
+    "input": {
+      "selectPlaceholder": "— Select —",
+      "urlPlaceholder": "https://example.com",
+      "addressShortPlaceholder": "Street, number, neighborhood, city",
+      "unknownType": "Unknown field type: {type}"
+    },
+    "url": {
+      "copied": "URL copied",
+      "copyFailed": "Failed to copy",
+      "visit": "Visit",
+      "visitAria": "Visit URL",
+      "copy": "Copy",
+      "copyAria": "Copy URL"
+    },
+    "address": {
+      "viewOnMap": "View on map",
+      "viewOnGoogleMaps": "View on Google Maps",
+      "cepNotFound": "Postal code not found",
+      "cepInvalid": "Invalid postal code",
+      "countryDefault": "Brazil",
+      "addressAutoFilled": "Address auto-filled",
+      "cepLookupFailed": "Failed to look up postal code",
+      "cep": "Postal code",
+      "country": "Country",
+      "street": "Street",
+      "streetPlaceholder": "Flower Street, 123",
+      "line2": "Complement / District",
+      "line2Placeholder": "Apt 101, Downtown",
+      "city": "City",
+      "state": "State"
+    },
+    "section": {
+      "loadError": "Error loading fields",
+      "saveError": "Failed to save custom fields",
+      "unknownError": "Unknown error",
+      "mainSection": "Main"
     }
   },
   "equipe": {
-    "equipe": {
-      "role": {
-        "owner": "Owner",
-        "admin": "Admin",
-        "manager": "Manager",
-        "agent": "Agent",
-        "viewer": "Viewer"
+    "role": {
+      "owner": "Owner",
+      "admin": "Admin",
+      "manager": "Manager",
+      "agent": "Agent",
+      "viewer": "Viewer"
+    },
+    "status": {
+      "active": "Active",
+      "invited": "Invited",
+      "suspended": "Suspended"
+    },
+    "page": {
+      "title": "Team",
+      "subtitle": "Manage members, roles and organization permissions.",
+      "memberCount": "{count, plural, one {# member} other {# members}}",
+      "refresh": "Refresh",
+      "inviteMember": "Invite member",
+      "loadError": "Error loading team",
+      "noName": "No name",
+      "you": "You",
+      "seen": "Seen {when}",
+      "neverSeen": "Never accessed",
+      "emptyTitle": "Empty team",
+      "emptySubtitle": "Invite colleagues to collaborate on operations.",
+      "inviteFirst": "Invite first member"
+    },
+    "invite": {
+      "title": "Invite member",
+      "description": "The user will receive a magic link by email to access the organization.",
+      "emailLabel": "Email",
+      "emailPlaceholder": "agent@company.com",
+      "nameLabel": "Name (optional)",
+      "namePlaceholder": "John Smith",
+      "roleLabel": "Role",
+      "ownerOnlyHint": "Only the owner can promote to admin later.",
+      "cancel": "Cancel",
+      "submit": "Invite",
+      "submitting": "Sending invite...",
+      "inviteError": "Error inviting"
+    },
+    "detail": {
+      "title": "Member details",
+      "memberSince": "Member since {date}",
+      "saveError": "Error saving",
+      "removeError": "Error removing",
+      "noName": "No name",
+      "you": "You",
+      "noEmail": "(no email)",
+      "currentActivity": "Current activity",
+      "stats": {
+        "conversations": "Conversations",
+        "deals": "Deals",
+        "tasks": "Tasks"
       },
-      "status": {
-        "active": "Active",
-        "invited": "Invited",
-        "suspended": "Suspended"
-      },
-      "page": {
-        "title": "Team",
-        "subtitle": "Manage members, roles and organization permissions.",
-        "memberCount": "{count, plural, one {# member} other {# members}}",
-        "refresh": "Refresh",
-        "inviteMember": "Invite member",
-        "loadError": "Error loading team",
-        "noName": "No name",
-        "you": "You",
-        "seen": "Seen {when}",
-        "neverSeen": "Never accessed",
-        "emptyTitle": "Empty team",
-        "emptySubtitle": "Invite colleagues to collaborate on operations.",
-        "inviteFirst": "Invite first member"
-      },
-      "invite": {
-        "title": "Invite member",
-        "description": "The user will receive a magic link by email to access the organization.",
-        "emailLabel": "Email",
-        "emailPlaceholder": "agent@company.com",
-        "nameLabel": "Name (optional)",
-        "namePlaceholder": "John Smith",
-        "roleLabel": "Role",
-        "ownerOnlyHint": "Only the owner can promote to admin later.",
-        "cancel": "Cancel",
-        "submit": "Invite",
-        "submitting": "Sending invite...",
-        "inviteError": "Error inviting"
-      },
-      "detail": {
-        "title": "Member details",
-        "memberSince": "Member since {date}",
-        "saveError": "Error saving",
-        "removeError": "Error removing",
-        "noName": "No name",
-        "you": "You",
-        "noEmail": "(no email)",
-        "currentActivity": "Current activity",
-        "stats": {
-          "conversations": "Conversations",
-          "deals": "Deals",
-          "tasks": "Tasks"
-        },
-        "lastSeen": "Last access {when}",
-        "neverSeen": "Never accessed",
-        "orgRole": "Organization role",
-        "ownerOnly": "(owner only)",
-        "ownerCantEdit": "The owner cannot be edited.",
-        "noPermissionToEdit": "You don't have permission to edit this member.",
-        "scheduling": "Scheduling",
-        "defaultDuration": "Default duration (min)",
-        "durationPlaceholder": "e.g. 30, 60",
-        "durationHint": "Time for each appointment. System calculates free slots.",
-        "buffer": "Buffer (min)",
-        "bufferHint": "Pause between appointments.",
-        "specialties": "Specialties / Services",
-        "specialtiesPlaceholder": "e.g. nutritionist, haircut, engine, sales…",
-        "removeAria": "Remove {item}",
-        "noSpecialties": "No specialties. AI won't match appointments with this professional until you set at least one.",
-        "specialtiesHint": "Free text by niche. E.g. clinic = [\"nutritionist\"], salon = [\"haircut\", \"manicure\"], shop = [\"engine\", \"electrical\"]. AI Concierge uses this to route appointment requests.",
-        "removeConfirm": "Remove this member?",
-        "yes": "Yes",
-        "no": "No",
-        "remove": "Remove",
-        "close": "Close",
-        "save": "Save"
-      }
+      "lastSeen": "Last access {when}",
+      "neverSeen": "Never accessed",
+      "orgRole": "Organization role",
+      "ownerOnly": "(owner only)",
+      "ownerCantEdit": "The owner cannot be edited.",
+      "noPermissionToEdit": "You don't have permission to edit this member.",
+      "scheduling": "Scheduling",
+      "defaultDuration": "Default duration (min)",
+      "durationPlaceholder": "e.g. 30, 60",
+      "durationHint": "Time for each appointment. System calculates free slots.",
+      "buffer": "Buffer (min)",
+      "bufferHint": "Pause between appointments.",
+      "specialties": "Specialties / Services",
+      "specialtiesPlaceholder": "e.g. nutritionist, haircut, engine, sales…",
+      "removeAria": "Remove {item}",
+      "noSpecialties": "No specialties. AI won't match appointments with this professional until you set at least one.",
+      "specialtiesHint": "Free text by niche. E.g. clinic = [\"nutritionist\"], salon = [\"haircut\", \"manicure\"], shop = [\"engine\", \"electrical\"]. AI Concierge uses this to route appointment requests.",
+      "removeConfirm": "Remove this member?",
+      "yes": "Yes",
+      "no": "No",
+      "remove": "Remove",
+      "close": "Close",
+      "save": "Save"
     }
   },
   "inbox": {
@@ -2337,21 +2323,17 @@
     }
   },
   "intelligence": {
-    "intelligence": {
-      "adSignalToast": {
-        "critical": "🚨 Critical",
-        "warning": "⚠️ Warning",
-        "view": "View",
-        "fallback": "New signal: {signalType}",
-        "fallbackWithCampaign": "New signal: {signalType} on \"{campaign}\""
-      }
+    "adSignalToast": {
+      "critical": "🚨 Critical",
+      "warning": "⚠️ Warning",
+      "view": "View",
+      "fallback": "New signal: {signalType}",
+      "fallbackWithCampaign": "New signal: {signalType} on \"{campaign}\""
     }
   },
   "placeholder": {
-    "placeholder": {
-      "inDevelopment": "Under development",
-      "description": "This section is still being built. Soon you'll be able to use all the features of <highlight>{title}</highlight> here."
-    }
+    "inDevelopment": "Under development",
+    "description": "This section is still being built. Soon you'll be able to use all the features of <highlight>{title}</highlight> here."
   },
   "relatorios": {
     "title": "Reports",
