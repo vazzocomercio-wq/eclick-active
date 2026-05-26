@@ -10,6 +10,9 @@ import { ChannelDispatcherService } from '../../common/channels/channel-dispatch
 import { DealsService } from '../deals/deals.service';
 import { TasksService } from '../tasks/tasks.service';
 import { ContactsService } from '../contacts/contacts.service';
+import { AiConciergeService } from '../ai/ai-concierge.service';
+import { ConversationsService } from '../conversations/conversations.service';
+import type { ChannelType } from '@eclick-active/shared';
 import type {
   AutomationExecutionRow,
   AutomationSeverity,
@@ -27,6 +30,8 @@ import type {
   NotifyLojistaInput,
   NotifyLojistaResult,
   OrgAutomationBridgeSettings,
+  RequestSchedulingInput,
+  RequestSchedulingResult,
   SendBroadcastInput,
   SendBroadcastResult,
   SendDirectInput,
@@ -100,6 +105,8 @@ export class AutomationBridgeService {
     private readonly deals: DealsService,
     private readonly tasks: TasksService,
     private readonly contacts: ContactsService,
+    private readonly concierge: AiConciergeService,
+    private readonly conversations: ConversationsService,
   ) {}
 
   // ────────────────────────────────────────────
@@ -713,6 +720,56 @@ export class AutomationBridgeService {
       .limit(1)
       .maybeSingle();
     return (data as AutomationExecutionRow | null) ?? null;
+  }
+
+  // ────────────────────────────────────────────
+  // 2.6) Request Scheduling — SaaS pede 3 horários (Auditoria GEO)
+  //      Acha/cria contato+conversa WA e dispara o Concierge.
+  // ────────────────────────────────────────────
+
+  async requestScheduling(input: RequestSchedulingInput): Promise<RequestSchedulingResult> {
+    const orgId = await this.resolveActiveOrgId(input.organization_id);
+    const phone = (input.phone ?? '').replace(/\D/g, '');
+    if (phone.length < 10) {
+      throw new BadRequestException('phone inválido (mínimo 10 dígitos)');
+    }
+
+    // Canal WhatsApp ativo (id + tipo) pra criar a conversa
+    const { data: chData } = await this.supabase.adminClient
+      .from('channels')
+      .select('id, channel_type')
+      .eq('org_id', orgId)
+      .in('channel_type', ['whatsapp', 'whatsapp_free'])
+      .eq('status', 'active')
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    const channel = chData as { id: string; channel_type: ChannelType } | null;
+    if (!channel) {
+      return { ok: true, proposed: false, reason: 'no_whatsapp_channel' };
+    }
+
+    const contact = await this.contacts.findOrCreateByPhone(orgId, phone, input.name);
+    const conversation = await this.conversations.findOrCreate(
+      orgId, contact.id, channel.id, channel.channel_type,
+    );
+
+    const result = await this.concierge.requestScheduling({
+      orgId,
+      conversationId: conversation.id,
+      conversation: {
+        id: conversation.id,
+        contact_id: contact.id,
+        channel_id: channel.id,
+        metadata: (conversation.metadata as Record<string, unknown> | null) ?? null,
+      },
+      specialty: input.specialty ?? null,
+      introMessage: input.intro_message ?? null,
+      originMessage: input.origin_message ?? undefined,
+    });
+
+    this.log.log(`[request-scheduling] org=${orgId} proposed=${result.proposed} reason=${result.reason ?? '-'}`);
+    return { ok: true, ...result };
   }
 
   // ────────────────────────────────────────────

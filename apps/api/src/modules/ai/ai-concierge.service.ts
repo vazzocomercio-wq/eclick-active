@@ -1287,6 +1287,41 @@ Decida o roteamento.`;
   // ──────────────────────────────────────────────────────────
 
   /**
+   * Ponto de entrada server-to-server (bridge/SaaS): dispara a proposta de
+   * horários pra um contato — usado pela Auditoria GEO pública quando o lead
+   * pede demo. Reusa proposeSlotsAndPersist + seta awaiting_slot_choice, então
+   * a resposta "1/2/3" agenda sozinha pelo fluxo de inbound existente.
+   * Respeita os toggles do Concierge (enabled/auto_reply).
+   */
+  async requestScheduling(args: {
+    orgId: string;
+    conversationId: string;
+    conversation: { id: string; contact_id: string; channel_id: string | null; metadata: Record<string, unknown> | null };
+    specialty?: string | null;
+    introMessage?: string | null;
+    originMessage?: string;
+  }): Promise<{ proposed: boolean; reason?: string }> {
+    const settings = await this.loadSettings(args.orgId);
+    if (!settings.enabled) return { proposed: false, reason: 'concierge_disabled' };
+    if (!settings.auto_reply) return { proposed: false, reason: 'auto_reply_off' };
+    const persona = await this.persona.getDefault(args.orgId).catch(() => null);
+    if (!persona) return { proposed: false, reason: 'no_persona' };
+
+    const ok = await this.proposeSlotsAndPersist({
+      orgId: args.orgId,
+      conversationId: args.conversationId,
+      conversation: args.conversation,
+      persona,
+      specialty: args.specialty ?? null,
+      bridgeMessage: args.introMessage ?? null,
+      originMessage: args.originMessage ?? 'Demo solicitada via Auditoria GEO',
+    });
+    if (!ok) return { proposed: false, reason: 'no_slots' };
+    await this.setConciergeState(args.orgId, args.conversationId, 'awaiting_slot_choice');
+    return { proposed: true };
+  }
+
+  /**
    * Calcula slots disponíveis na org filtrando por specialty (quando
    * informada), pega os 3 melhores (distintos em dia/horário quando
    * possível), monta mensagem friendly numerada e persiste a oferta no

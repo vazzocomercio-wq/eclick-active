@@ -19,6 +19,8 @@ import type {
   MoveCardResult,
   NotifyLojistaInput,
   NotifyLojistaResult,
+  RequestSchedulingInput,
+  RequestSchedulingResult,
   SendBroadcastInput,
   SendBroadcastResult,
   SendDirectInput,
@@ -139,6 +141,23 @@ export class AutomationBridgeController {
   @HttpCode(HttpStatus.OK)
   sendDirect(@Body() body: SendDirectInput): Promise<SendDirectResult> {
     return this.service.sendDirect(body);
+  }
+
+  /**
+   * POST /commerce/automation-bridge/request-scheduling
+   *
+   * Lead pede demo (Auditoria GEO pública do SaaS) → acha/cria contato +
+   * conversa WhatsApp e dispara o Concierge pra propor 3 horários. Quando o
+   * lead responde "1/2/3", o fluxo de inbound existente agenda sozinho.
+   *
+   * Body: RequestSchedulingInput. Retorna { ok, proposed, reason? }.
+   */
+  @Post('request-scheduling')
+  @HttpCode(HttpStatus.OK)
+  requestScheduling(
+    @Body() body: RequestSchedulingInput,
+  ): Promise<RequestSchedulingResult> {
+    return this.service.requestScheduling(body);
   }
 
   /**

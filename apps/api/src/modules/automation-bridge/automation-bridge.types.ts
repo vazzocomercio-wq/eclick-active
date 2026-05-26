@@ -325,6 +325,33 @@ export interface SendDirectResult {
 }
 
 // ──────────────────────────────────────────────────────────
+// Request Scheduling — SaaS pede ao Concierge pra propor 3 horários
+// (usado pela Auditoria GEO pública: lead pede demo → 3 slots no WhatsApp)
+// ──────────────────────────────────────────────────────────
+
+export interface RequestSchedulingInput {
+  organization_id: string;
+  /** Telefone do lead (sanitizado pra digits no backend). */
+  phone: string;
+  /** Nome do lead, pra criar/achar o contato. */
+  name?: string;
+  /** Especialidade/tipo de agenda a filtrar (opcional). */
+  specialty?: string | null;
+  /** Intro custom da mensagem de horários (opcional; default amigável). */
+  intro_message?: string | null;
+  /** Mensagem de origem pra registro (ex: "Demo via Auditoria GEO"). */
+  origin_message?: string | null;
+}
+
+export interface RequestSchedulingResult {
+  ok: true;
+  /** true = 3 horários enviados + conversa em awaiting_slot_choice. */
+  proposed: boolean;
+  /** Motivo quando proposed=false: no_whatsapp_channel|concierge_disabled|auto_reply_off|no_persona|no_slots. */
+  reason?: string;
+}
+
+// ──────────────────────────────────────────────────────────
 // Org settings (chaves dentro de organizations.settings JSONB)
 // ──────────────────────────────────────────────────────────
 
