@@ -96,6 +96,7 @@
       "formularios": "Forms",
       "calendarioConteudo": "Content Calendar",
       "social": "Social AI",
+      "blogIa": "Blog AI",
       "paginas": "Pages",
       "automacoes": "Automations",
       "relatorios": "Reports",
@@ -104,6 +105,27 @@
       "agencia": "Agency",
       "configuracoes": "Settings"
     }
+  },
+  "blogIa": {
+    "title": "Blog AI",
+    "subtitle": "AI writes GEO-optimized articles + cover. You review and publish.",
+    "topicLabel": "Topic / brief",
+    "topicPlaceholder": "e.g. How to structure a listing title so AI cites your product",
+    "pillarLabel": "Pillar",
+    "notesLabel": "Extra direction (optional)",
+    "generate": "Generate article",
+    "generating": "Generating…",
+    "publish": "Publish",
+    "reject": "Archive",
+    "recent": "Recent posts",
+    "empty": "No posts yet. Generate the first one above.",
+    "published": "Published",
+    "review": "In review",
+    "failed": "Failed",
+    "archived": "Archived",
+    "viewLive": "View live",
+    "publishedToast": "Published! Live at eclick.app.br/blog",
+    "errorGeneric": "Something went wrong. Try again."
   },
   "contacts": {
     "page": {

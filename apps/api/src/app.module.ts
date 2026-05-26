@@ -41,6 +41,7 @@ import { ReEngagementModule } from './modules/re-engagement/re-engagement.module
 import { ReportsModule } from './modules/reports/reports.module';
 import { SacModule } from './modules/sac/sac.module';
 import { SocialModule } from './modules/social/social.module';
+import { BlogAiModule } from './modules/blog-ai/blog-ai.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { TagsModule } from './modules/tags/tags.module';
 import { TasksModule } from './modules/tasks/tasks.module';
@@ -93,6 +94,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     BridgeModule,
     SacModule,
     SocialModule,
+    BlogAiModule,
     AgencyModule,
     WhatsAppCommerceModule,
     ContentCalendarModule,

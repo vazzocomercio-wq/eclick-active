@@ -107,6 +107,7 @@ import { BridgeModule } from '../bridge/bridge.module';
     SocialSignalsService,
     SocialHashtagsService,
     SocialAdBoostService,
+    ImageGenerationService,
   ],
 })
 export class SocialModule {}

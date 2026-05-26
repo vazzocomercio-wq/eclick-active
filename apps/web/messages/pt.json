@@ -96,6 +96,7 @@
       "formularios": "Formulários",
       "calendarioConteudo": "Calendário de Conteúdo",
       "social": "Social AI",
+      "blogIa": "Blog IA",
       "paginas": "Páginas",
       "automacoes": "Automações",
       "relatorios": "Relatórios",
@@ -104,6 +105,27 @@
       "agencia": "Agência",
       "configuracoes": "Configurações"
     }
+  },
+  "blogIa": {
+    "title": "Blog IA",
+    "subtitle": "A IA escreve artigos GEO-otimizados + capa. Você revisa e publica.",
+    "topicLabel": "Tema / pauta",
+    "topicPlaceholder": "Ex: Como estruturar o título do anúncio pra IA citar seu produto",
+    "pillarLabel": "Pilar",
+    "notesLabel": "Direções extras (opcional)",
+    "generate": "Gerar artigo",
+    "generating": "Gerando…",
+    "publish": "Publicar",
+    "reject": "Arquivar",
+    "recent": "Posts recentes",
+    "empty": "Nenhum post ainda. Gere o primeiro acima.",
+    "published": "Publicado",
+    "review": "Em revisão",
+    "failed": "Falhou",
+    "archived": "Arquivado",
+    "viewLive": "Ver no ar",
+    "publishedToast": "Publicado! Já está no ar em eclick.app.br/blog",
+    "errorGeneric": "Algo deu errado. Tente de novo."
   },
   "contacts": {
     "page": {

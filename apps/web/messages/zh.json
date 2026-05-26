@@ -96,6 +96,7 @@
       "formularios": "表单",
       "calendarioConteudo": "内容日历",
       "social": "社交 AI",
+      "blogIa": "博客 AI",
       "paginas": "页面",
       "automacoes": "自动化",
       "relatorios": "报表",
@@ -104,6 +105,27 @@
       "agencia": "代理机构",
       "configuracoes": "设置"
     }
+  },
+  "blogIa": {
+    "title": "博客 AI",
+    "subtitle": "AI 撰写 GEO 优化文章 + 封面。你审核并发布。",
+    "topicLabel": "主题 / 选题",
+    "topicPlaceholder": "例如：如何构造商品标题让 AI 引用你的产品",
+    "pillarLabel": "栏目",
+    "notesLabel": "额外说明（可选）",
+    "generate": "生成文章",
+    "generating": "生成中…",
+    "publish": "发布",
+    "reject": "归档",
+    "recent": "最近的文章",
+    "empty": "还没有文章。在上方生成第一篇。",
+    "published": "已发布",
+    "review": "待审核",
+    "failed": "失败",
+    "archived": "已归档",
+    "viewLive": "查看线上",
+    "publishedToast": "已发布！已上线 eclick.app.br/blog",
+    "errorGeneric": "出错了，请重试。"
   },
   "contacts": {
     "page": {
