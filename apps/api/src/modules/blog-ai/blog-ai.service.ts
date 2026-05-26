@@ -180,6 +180,39 @@ export class BlogAiService {
     return data as BlogPostRow;
   }
 
+  // ── Agendamento ──────────────────────────────────────────────────────
+
+  async schedule(orgId: string, id: string, scheduledForIso: string): Promise<BlogPostRow> {
+    const when = new Date(scheduledForIso);
+    if (Number.isNaN(when.getTime())) throw new BadRequestException('Data/hora inválida.');
+    if (when.getTime() < Date.now() - 60_000) throw new BadRequestException('Agende para um horário futuro.');
+    const row = await this.get(orgId, id);
+    if (row.status === 'generating') throw new BadRequestException('Artigo ainda gerando.');
+    if (row.status === 'published') throw new BadRequestException('Post já publicado.');
+    const { data, error } = await this.db
+      .from('blog_posts')
+      .update({ status: 'scheduled', scheduled_for: when.toISOString() })
+      .eq('org_id', orgId)
+      .eq('id', id)
+      .select('*')
+      .single();
+    if (error) throw new BadRequestException(error.message);
+    return data as BlogPostRow;
+  }
+
+  async unschedule(orgId: string, id: string): Promise<BlogPostRow> {
+    const { data, error } = await this.db
+      .from('blog_posts')
+      .update({ status: 'review', scheduled_for: null })
+      .eq('org_id', orgId)
+      .eq('id', id)
+      .eq('status', 'scheduled')
+      .select('*')
+      .single();
+    if (error) throw new BadRequestException(error.message);
+    return data as BlogPostRow;
+  }
+
   // ── Publicação no Sanity ─────────────────────────────────────────────
 
   async publish(orgId: string, id: string): Promise<BlogPostRow> {

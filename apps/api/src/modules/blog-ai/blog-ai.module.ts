@@ -6,6 +6,7 @@ import { SocialModule } from '../social/social.module';
 import { BlogAiController } from './blog-ai.controller';
 import { BlogAiService } from './blog-ai.service';
 import { SanityBlogClient } from './sanity-blog.client';
+import { BlogPublisherWorkerService } from './blog-publisher-worker.service';
 
 /**
  * Blog IA — geração de conteúdo do blog (GEO) por IA, com fila de revisão
@@ -15,7 +16,7 @@ import { SanityBlogClient } from './sanity-blog.client';
 @Module({
   imports: [SupabaseModule, LlmModule, AuthModule, SocialModule],
   controllers: [BlogAiController],
-  providers: [BlogAiService, SanityBlogClient],
+  providers: [BlogAiService, SanityBlogClient, BlogPublisherWorkerService],
   exports: [BlogAiService],
 })
 export class BlogAiModule {}

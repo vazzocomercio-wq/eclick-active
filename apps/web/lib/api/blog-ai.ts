@@ -28,6 +28,7 @@ export interface BlogPost {
   cover_image_url: string | null;
   reading_time_minutes: number | null;
   status: BlogPostStatus;
+  scheduled_for: string | null;
   sanity_doc_id: string | null;
   published_at: string | null;
   rejected_reason: string | null;
@@ -48,6 +49,9 @@ export const blogAiApi = {
   get: (id: string) => api.get<BlogPost>(`/blog-ai/posts/${id}`),
   publish: (id: string) => api.post<BlogPost>(`/blog-ai/posts/${id}/publish`),
   reject: (id: string, reason?: string) => api.post<BlogPost>(`/blog-ai/posts/${id}/reject`, { reason }),
+  schedule: (id: string, scheduledFor: string) =>
+    api.post<BlogPost>(`/blog-ai/posts/${id}/schedule`, { scheduled_for: scheduledFor }),
+  unschedule: (id: string) => api.post<BlogPost>(`/blog-ai/posts/${id}/unschedule`),
 };
 
 /** Pilares editoriais (slug → label PT). Taxonomia de conteúdo (fica em PT). */

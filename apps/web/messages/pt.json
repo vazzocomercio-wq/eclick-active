@@ -124,6 +124,10 @@
     "failed": "Falhou",
     "archived": "Arquivado",
     "viewLive": "Ver no ar",
+    "scheduled": "Agendado",
+    "schedule": "Agendar",
+    "publishNow": "Publicar agora",
+    "unschedule": "Desagendar",
     "publishedToast": "Publicado! Já está no ar em eclick.app.br/blog",
     "errorGeneric": "Algo deu errado. Tente de novo."
   },

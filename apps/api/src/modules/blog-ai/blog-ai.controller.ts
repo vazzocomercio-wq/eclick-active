@@ -38,4 +38,16 @@ export class BlogAiController {
   reject(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: { reason?: string }) {
     return this.svc.reject(user.org_id, id, body?.reason);
   }
+
+  /** Agenda a publicação para uma data/hora (ISO). O worker publica no horário. */
+  @Post('posts/:id/schedule')
+  schedule(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: { scheduled_for: string }) {
+    return this.svc.schedule(user.org_id, id, body?.scheduled_for);
+  }
+
+  /** Desfaz o agendamento (volta pra revisão). */
+  @Post('posts/:id/unschedule')
+  unschedule(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.svc.unschedule(user.org_id, id);
+  }
 }

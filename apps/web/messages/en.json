@@ -124,6 +124,10 @@
     "failed": "Failed",
     "archived": "Archived",
     "viewLive": "View live",
+    "scheduled": "Scheduled",
+    "schedule": "Schedule",
+    "publishNow": "Publish now",
+    "unschedule": "Unschedule",
     "publishedToast": "Published! Live at eclick.app.br/blog",
     "errorGeneric": "Something went wrong. Try again."
   },

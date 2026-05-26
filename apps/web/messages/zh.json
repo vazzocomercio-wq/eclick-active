@@ -124,6 +124,10 @@
     "failed": "失败",
     "archived": "已归档",
     "viewLive": "查看线上",
+    "scheduled": "已排期",
+    "schedule": "排期",
+    "publishNow": "立即发布",
+    "unschedule": "取消排期",
     "publishedToast": "已发布！已上线 eclick.app.br/blog",
     "errorGeneric": "出错了，请重试。"
   },

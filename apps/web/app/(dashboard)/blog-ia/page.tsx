@@ -3,11 +3,25 @@
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { useTranslations } from 'next-intl';
-import { Sparkles, Loader2, Send, Archive, CheckCircle2, ExternalLink, AlertCircle } from 'lucide-react';
+import { Sparkles, Loader2, Send, Archive, CheckCircle2, ExternalLink, AlertCircle, Clock } from 'lucide-react';
 import { blogAiApi, BLOG_PILLARS, type BlogPost } from '@/lib/api/blog-ai';
 import { ApiError } from '@/lib/api/client';
 
 const BLOG_BASE = 'https://eclick.app.br/blog';
+
+function fmtDateTime(iso: string | null): string {
+  if (!iso) return '';
+  try {
+    return new Date(iso).toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return '';
+  }
+}
 
 export default function BlogIaPage() {
   const t = useTranslations('blogIa');
@@ -66,6 +80,31 @@ export default function BlogIaPage() {
     setBusyId(id);
     try {
       const updated = await blogAiApi.reject(id);
+      setPosts((prev) => prev.map((p) => (p.id === id ? updated : p)));
+    } catch {
+      /* ignore */
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function onSchedule(id: string, scheduledFor: string) {
+    setBusyId(id);
+    setError(null);
+    try {
+      const updated = await blogAiApi.schedule(id, scheduledFor);
+      setPosts((prev) => prev.map((p) => (p.id === id ? updated : p)));
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : t('errorGeneric'));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function onUnschedule(id: string) {
+    setBusyId(id);
+    try {
+      const updated = await blogAiApi.unschedule(id);
       setPosts((prev) => prev.map((p) => (p.id === id ? updated : p)));
     } catch {
       /* ignore */
@@ -168,6 +207,8 @@ export default function BlogIaPage() {
               busy={busyId === post.id}
               onPublish={() => onPublish(post.id)}
               onReject={() => onReject(post.id)}
+              onSchedule={(iso) => onSchedule(post.id, iso)}
+              onUnschedule={() => onUnschedule(post.id)}
               t={t}
             />
           ))}
@@ -182,34 +223,35 @@ function PostRow({
   busy,
   onPublish,
   onReject,
+  onSchedule,
+  onUnschedule,
   t,
 }: {
   post: BlogPost;
   busy: boolean;
   onPublish: () => void;
   onReject: () => void;
+  onSchedule: (iso: string) => void;
+  onUnschedule: () => void;
   t: (k: string) => string;
 }) {
-  const statusLabel =
-    post.status === 'published'
-      ? t('published')
-      : post.status === 'review'
-        ? t('review')
-        : post.status === 'failed'
-          ? t('failed')
-          : post.status === 'archived'
-            ? t('archived')
-            : post.status;
-  const statusColor =
-    post.status === 'published'
-      ? 'bg-green-500/15 text-green-500'
-      : post.status === 'failed'
-        ? 'bg-destructive/15 text-destructive'
-        : post.status === 'review'
-          ? 'bg-primary/15 text-primary'
-          : 'bg-muted text-muted-foreground';
+  const [scheduleAt, setScheduleAt] = useState('');
 
-  const canPublish = post.status === 'review' || post.status === 'approved' || post.status === 'scheduled';
+  const statusLabel =
+    post.status === 'published' ? t('published')
+    : post.status === 'review' ? t('review')
+    : post.status === 'scheduled' ? t('scheduled')
+    : post.status === 'failed' ? t('failed')
+    : post.status === 'archived' ? t('archived')
+    : post.status;
+  const statusColor =
+    post.status === 'published' ? 'bg-green-500/15 text-green-500'
+    : post.status === 'failed' ? 'bg-destructive/15 text-destructive'
+    : post.status === 'scheduled' ? 'bg-amber-500/15 text-amber-500'
+    : post.status === 'review' ? 'bg-primary/15 text-primary'
+    : 'bg-muted text-muted-foreground';
+
+  const canPublish = post.status === 'review' || post.status === 'approved';
 
   return (
     <li className="flex gap-3 rounded-xl border border-border bg-card p-3">
@@ -233,7 +275,7 @@ function PostRow({
           <p className="mt-0.5 text-[11px] text-destructive">{post.rejected_reason}</p>
         )}
       </div>
-      <div className="flex shrink-0 flex-col items-end justify-center gap-1.5">
+      <div className="flex w-44 shrink-0 flex-col items-end justify-center gap-1.5">
         {post.status === 'published' ? (
           <a
             href={`${BLOG_BASE}/${post.slug}`}
@@ -243,6 +285,29 @@ function PostRow({
           >
             {t('viewLive')} <ExternalLink className="h-3 w-3" />
           </a>
+        ) : post.status === 'scheduled' ? (
+          <>
+            <span className="flex items-center gap-1 text-[11px] font-medium text-amber-500">
+              <Clock className="h-3 w-3" /> {fmtDateTime(post.scheduled_for)}
+            </span>
+            <button
+              type="button"
+              onClick={onPublish}
+              disabled={busy}
+              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50"
+            >
+              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+              {t('publishNow')}
+            </button>
+            <button
+              type="button"
+              onClick={onUnschedule}
+              disabled={busy}
+              className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+            >
+              {t('unschedule')}
+            </button>
+          </>
         ) : (
           <>
             {canPublish && (
@@ -255,6 +320,25 @@ function PostRow({
                 {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
                 {t('publish')}
               </button>
+            )}
+            {canPublish && (
+              <div className="flex items-center gap-1">
+                <input
+                  type="datetime-local"
+                  value={scheduleAt}
+                  onChange={(e) => setScheduleAt(e.target.value)}
+                  className="w-[8.5rem] rounded border border-border bg-background px-1.5 py-1 text-[11px] outline-none focus:border-primary"
+                />
+                <button
+                  type="button"
+                  disabled={busy || !scheduleAt}
+                  onClick={() => scheduleAt && onSchedule(new Date(scheduleAt).toISOString())}
+                  className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] font-medium text-foreground hover:bg-card disabled:opacity-40"
+                  title={t('schedule')}
+                >
+                  <Clock className="h-3 w-3" /> {t('schedule')}
+                </button>
+              </div>
             )}
             {post.status !== 'archived' && (
               <button
