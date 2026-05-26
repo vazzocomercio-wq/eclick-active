@@ -35,6 +35,14 @@ interface TimeRange {
   end: Date;
 }
 
+/** Data-calendário (no fuso da org), pra construir janelas de horário sem
+ *  depender do fuso do servidor (Railway roda em UTC). */
+interface CalDay {
+  y: number; // ano
+  m: number; // mês 1-12
+  d: number; // dia
+}
+
 @Injectable()
 export class AppointmentsService {
   private readonly logger = new Logger(AppointmentsService.name);
@@ -405,13 +413,13 @@ export class AppointmentsService {
     orgId: string,
     query: GetSlotsQueryDto,
   ): Promise<AvailabilitySlot[]> {
-    const date = new Date(query.date + 'T00:00:00Z');
-    if (Number.isNaN(date.getTime())) throw new BadRequestException('Data inválida');
-
-    const dayStart = new Date(date);
-    dayStart.setUTCHours(0, 0, 0, 0);
-    const dayEnd = new Date(date);
-    dayEnd.setUTCHours(23, 59, 59, 999);
+    const [qy, qm, qd] = (query.date ?? '').split('-').map(Number);
+    if (!qy || !qm || !qd) throw new BadRequestException('Data inválida');
+    const tz = await this.resolveOrgTz(orgId);
+    const cal: CalDay = { y: qy, m: qm, d: qd };
+    const weekday = this.calWeekday(cal);
+    const dayStart = this.zonedToUtc(cal, 0, 0, tz);
+    const dayEnd = this.zonedToUtc(cal, 23, 59, tz);
 
     // Tipo (pra duração + buffer + min_advance)
     let type: AppointmentType | null = null;
@@ -430,7 +438,7 @@ export class AppointmentsService {
     if (agents.length === 0) return [];
 
     // Janela base por org (business_hours)
-    const orgWindow = await this.fetchOrgBusinessHoursForDate(orgId, dayStart);
+    const orgWindow = await this.fetchOrgBusinessHoursForDate(orgId, cal, weekday, tz);
 
     const minStartTime = new Date(Date.now() + minAdvanceHours * 60 * 60 * 1000);
 
@@ -441,7 +449,9 @@ export class AppointmentsService {
       const agentWindows = await this.resolveAgentWindow(
         orgId,
         agent.id,
-        dayStart,
+        cal,
+        weekday,
+        tz,
         orgWindow,
       );
       if (agentWindows.length === 0) continue;
@@ -848,7 +858,9 @@ export class AppointmentsService {
 
   private async fetchOrgBusinessHoursForDate(
     orgId: string,
-    date: Date,
+    cal: CalDay,
+    weekday: number,
+    tz: string,
   ): Promise<TimeRange | null> {
     const { data } = await this.supabase.adminClient
       .from('organizations')
@@ -857,26 +869,28 @@ export class AppointmentsService {
       .maybeSingle();
     const bh = (data as { business_hours: Record<string, unknown> | null } | null)?.business_hours;
     if (!bh || (bh as { enabled?: boolean }).enabled === false) {
-      // Default: 9h-18h
-      return this.timeRangeForDate(date, '09:00', '18:00');
+      // Default: 9h-18h (no fuso da org)
+      return this.timeRangeForDate(cal, '09:00', '18:00', tz);
     }
     const schedule = (bh as { schedule?: Record<string, { start?: string; end?: string; enabled?: boolean }> }).schedule;
-    if (!schedule) return this.timeRangeForDate(date, '09:00', '18:00');
+    if (!schedule) return this.timeRangeForDate(cal, '09:00', '18:00', tz);
 
     const dayKeys: Array<keyof NonNullable<typeof schedule>> = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-    const dayKey = dayKeys[date.getDay()];
+    const dayKey = dayKeys[weekday];
     const day = dayKey ? schedule[dayKey] : undefined;
     if (!day || day.enabled === false || !day.start || !day.end) return null;
-    return this.timeRangeForDate(date, day.start, day.end);
+    return this.timeRangeForDate(cal, day.start, day.end, tz);
   }
 
   private async resolveAgentWindow(
     orgId: string,
     agentId: string,
-    date: Date,
+    cal: CalDay,
+    weekday: number,
+    tz: string,
     orgWindow: TimeRange | null,
   ): Promise<TimeRange[]> {
-    const dateStr = date.toISOString().slice(0, 10);
+    const dateStr = `${cal.y}-${String(cal.m).padStart(2, '0')}-${String(cal.d).padStart(2, '0')}`;
 
     // 1. Override pra data específica?
     const { data: override } = await this.supabase.adminClient
@@ -889,17 +903,16 @@ export class AppointmentsService {
     if (override) {
       const o = override as { is_available: boolean; start_time: string; end_time: string };
       if (!o.is_available) return [];
-      return [this.timeRangeForDate(date, o.start_time, o.end_time)];
+      return [this.timeRangeForDate(cal, o.start_time, o.end_time, tz)];
     }
 
     // 2. Schedule semanal
-    const dow = date.getDay();
     const { data: weekly } = await this.supabase.adminClient
       .from('agent_availability')
       .select('*')
       .eq('org_id', orgId)
       .eq('agent_id', agentId)
-      .eq('day_of_week', dow);
+      .eq('day_of_week', weekday);
     const weeklyRows = ((weekly ?? []) as Array<{
       is_available: boolean;
       start_time: string;
@@ -907,21 +920,62 @@ export class AppointmentsService {
     }>).filter((r) => r.is_available);
 
     if (weeklyRows.length > 0) {
-      return weeklyRows.map((r) => this.timeRangeForDate(date, r.start_time, r.end_time));
+      return weeklyRows.map((r) => this.timeRangeForDate(cal, r.start_time, r.end_time, tz));
     }
 
     // 3. Fallback: business_hours da org
     return orgWindow ? [orgWindow] : [];
   }
 
-  private timeRangeForDate(date: Date, startHHMM: string, endHHMM: string): TimeRange {
+  // ── Fuso horário (Railway roda em UTC; horários de agenda são no fuso da org) ──
+
+  /** Fuso da org pra agenda: business_hours.timezone → settings → America/Sao_Paulo. */
+  private async resolveOrgTz(orgId: string): Promise<string> {
+    const { data } = await this.supabase.adminClient
+      .from('organizations').select('business_hours').eq('id', orgId).maybeSingle();
+    const bhTz = (data as { business_hours?: { timezone?: string } } | null)?.business_hours?.timezone;
+    if (bhTz) return bhTz;
+    return getOrgTimezone(this.supabase.adminClient, orgId);
+  }
+
+  /** Componentes de calendário (ano/mês 1-12/dia) de um instante NO fuso dado. */
+  private calInTz(instant: Date, tz: string): CalDay {
+    const dtf = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' });
+    const p: Record<string, string> = {};
+    for (const x of dtf.formatToParts(instant)) p[x.type] = x.value;
+    return { y: +p.year, m: +p.month, d: +p.day };
+  }
+
+  /** Soma dias a uma data-calendário (aritmética pura, sem fuso). */
+  private addCalDays(cal: CalDay, days: number): CalDay {
+    const nd = new Date(Date.UTC(cal.y, cal.m - 1, cal.d) + days * 86_400_000);
+    return { y: nd.getUTCFullYear(), m: nd.getUTCMonth() + 1, d: nd.getUTCDate() };
+  }
+
+  /** Dia da semana (0=dom..6=sáb) de uma data-calendário. */
+  private calWeekday(cal: CalDay): number {
+    return new Date(Date.UTC(cal.y, cal.m - 1, cal.d)).getUTCDay();
+  }
+
+  /** Instante UTC pra um horário de parede (HH:MM) numa data-calendário, NO fuso dado.
+   *  O Brasil não tem mais horário de verão (2019+), então é exato pra America/Sao_Paulo. */
+  private zonedToUtc(cal: CalDay, hh: number, mm: number, tz: string): Date {
+    const guess = Date.UTC(cal.y, cal.m - 1, cal.d, hh, mm, 0, 0);
+    const dtf = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz, hour12: false,
+      year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+    });
+    const p: Record<string, string> = {};
+    for (const x of dtf.formatToParts(new Date(guess))) p[x.type] = x.value;
+    const hour = +p.hour === 24 ? 0 : +p.hour;
+    const asUtc = Date.UTC(+p.year, +p.month - 1, +p.day, hour, +p.minute, +p.second);
+    return new Date(guess - (asUtc - guess));
+  }
+
+  private timeRangeForDate(cal: CalDay, startHHMM: string, endHHMM: string, tz: string): TimeRange {
     const [sh = 0, sm = 0] = startHHMM.split(':').map(Number);
     const [eh = 23, em = 59] = endHHMM.split(':').map(Number);
-    const start = new Date(date);
-    start.setHours(sh, sm, 0, 0);
-    const end = new Date(date);
-    end.setHours(eh, em, 0, 0);
-    return { start, end };
+    return { start: this.zonedToUtc(cal, sh, sm, tz), end: this.zonedToUtc(cal, eh, em, tz) };
   }
 
   private async fetchBusyRanges(
@@ -1205,28 +1259,25 @@ export class AppointmentsService {
 
     // 2. Janela base por org (business_hours) — usado como fallback quando
     //    agente não tem agent_availability nenhum (override ou semanal).
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const tz = await this.resolveOrgTz(orgId);
+    const todayCal = this.calInTz(new Date(), tz);
 
     const out: AvailabilitySlot[] = [];
 
     // Itera dias (hoje incluído pra slots ainda válidos pelo minStartTime)
     for (let d = 0; d < daysAhead; d++) {
-      const day = new Date(today);
-      day.setDate(today.getDate() + d);
+      const cal = this.addCalDays(todayCal, d);
+      const weekday = this.calWeekday(cal);
+      const dayStart = this.zonedToUtc(cal, 0, 0, tz);
+      const dayEnd = this.zonedToUtc(cal, 23, 59, tz);
 
-      const dayStart = new Date(day);
-      dayStart.setHours(0, 0, 0, 0);
-      const dayEnd = new Date(day);
-      dayEnd.setHours(23, 59, 59, 999);
-
-      const orgWindow = await this.fetchOrgBusinessHoursForDate(orgId, dayStart);
+      const orgWindow = await this.fetchOrgBusinessHoursForDate(orgId, cal, weekday, tz);
 
       for (const agent of agents) {
         const duration = agent.default_duration_minutes ?? fallbackDuration;
         const buffer = agent.default_buffer_minutes ?? 0;
 
-        const windows = await this.resolveAgentWindow(orgId, agent.id, dayStart, orgWindow);
+        const windows = await this.resolveAgentWindow(orgId, agent.id, cal, weekday, tz, orgWindow);
         if (windows.length === 0) continue;
 
         const busy = await this.fetchBusyRanges(orgId, agent.id, dayStart, dayEnd);
