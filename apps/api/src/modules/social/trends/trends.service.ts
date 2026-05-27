@@ -175,8 +175,13 @@ export class TrendsService {
   /** Upsert idempotente de itens coletados (onConflict org_id,source,external_id). */
   async upsertItems(orgId: string, items: NewTrendItem[]): Promise<number> {
     if (!items.length) return 0;
+    // Dedupe por (source, external_id): o upsert é 1 comando; itens duplicados
+    // no mesmo lote fazem o Postgres recusar TUDO ("ON CONFLICT ... cannot affect
+    // row a second time"). Mantém o último de cada chave.
+    const byKey = new Map<string, NewTrendItem>();
+    for (const it of items) byKey.set(`${it.source}|${it.external_id}`, it);
     const now = new Date().toISOString();
-    const rows = items.map((it) => ({
+    const rows = [...byKey.values()].map((it) => ({
       ...it,
       org_id: orgId,
       collected_at: now,

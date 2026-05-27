@@ -1,25 +1,29 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { NewTrendItem, TrendItemKind, TrendMonitor } from '../trends.types';
+import type {
+  NewTrendItem,
+  TrendItemKind,
+  TrendItemMetrics,
+  TrendMonitor,
+} from '../trends.types';
 
 /**
  * Conector TikTok (TR-5) — DUAS estratégias, escolhidas por env
  * `TIKTOK_TRENDS_SOURCE` (default 'apify'):
  *
- *  • 'apify'    → provedor terceiro (Apify), actor automation-lab/tiktok-trends-scraper.
- *                 O actor puxa do TikTok Creative Center público. `trendType` é UM
- *                 por run → fazemos 1 run por tipo (hashtag/sound/video por padrão).
+ *  • 'apify'    → provedor terceiro (Apify), actor automation-lab/tiktok-trends-scraper
+ *                 (puxa do TikTok Creative Center público). `trendType` é UM por run
+ *                 → 1 run por tipo (hashtag/sound/video por padrão). Token via header.
  *                 Env: APIFY_TOKEN, APIFY_TIKTOK_ACTOR, APIFY_TIKTOK_TYPES (csv),
- *                 APIFY_TIKTOK_MAXRESULTS, APIFY_TIKTOK_PERIOD, APIFY_TIKTOK_INPUT (override opcional).
+ *                 APIFY_TIKTOK_MAXRESULTS, APIFY_TIKTOK_PERIOD.
  *  • 'research' → TikTok Research API oficial (gated). client_credentials →
  *                 /v2/research/video/query/. Env: TIKTOK_RESEARCH_CLIENT_KEY,
  *                 TIKTOK_RESEARCH_CLIENT_SECRET.
  *
- * Best-effort: sem a credencial da estratégia ativa, retorna [] sem quebrar a
- * coleta (mesmo padrão do YouTube/Google Trends). A trava de FREQUÊNCIA do Apify
- * (pra segurar custo) fica no collector (collectAll), não aqui.
+ * Best-effort: sem credencial, retorna [] sem quebrar a coleta. A trava de
+ * frequência do Apify (custo) fica no collector (collectAll).
  *
- * ⚠️ Mapeamento do Apify é DEFENSIVO nos nomes de campo (vários aliases) — o `kind`
- * já vem do trendType. Confirmar nomes contra o sample real do actor escolhido.
+ * Mapeamento Apify é PRECISO por tipo (id = soundId/videoId/hashtag-name — garante
+ * external_id único; o `name` do sound é quase sempre "original sound" e colidiria).
  */
 
 type TikTokSource = 'apify' | 'research';
@@ -72,7 +76,6 @@ export class TikTokConnector {
       this.log.warn('APIFY_TOKEN ausente — TikTok/Apify desligado');
       return [];
     }
-    // actorId na URL usa '~' no lugar de '/'
     const actor = (process.env.APIFY_TIKTOK_ACTOR || 'automation-lab/tiktok-trends-scraper').replace('/', '~');
     const types = (process.env.APIFY_TIKTOK_TYPES || 'hashtag,sound,video')
       .split(',')
@@ -82,29 +85,20 @@ export class TikTokConnector {
     const period = Number(monitor.config?.['period'] ?? process.env.APIFY_TIKTOK_PERIOD ?? 7);
     const country = monitor.region || 'BR';
 
-    // override opcional do input (caso o actor ganhe campos novos)
-    let base: Record<string, unknown> = {};
-    if (process.env.APIFY_TIKTOK_INPUT) {
-      try {
-        base = JSON.parse(process.env.APIFY_TIKTOK_INPUT) as Record<string, unknown>;
-      } catch {
-        this.log.warn('APIFY_TIKTOK_INPUT inválido (JSON) — ignorando');
-      }
-    }
-
-    // token vai no header Authorization (nunca em query string).
+    // token no header Authorization (nunca em query string)
     const url = `https://api.apify.com/v2/acts/${actor}/run-sync-get-dataset-items`;
     const out: NewTrendItem[] = [];
 
-    // 1 run por trendType (o actor só aceita um por vez)
+    // 1 run por trendType (o actor só aceita um por vez). Timeout alto pq o 1º
+    // run pega cold start do actor (>120s acontece).
     for (const trendType of types) {
       try {
-        const input = { ...base, countryCode: country, period, maxResults, trendType };
+        const input = { countryCode: country, period, maxResults, trendType };
         const res = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify(input),
-          signal: AbortSignal.timeout(120_000),
+          signal: AbortSignal.timeout(240_000),
         });
         if (!res.ok) {
           this.log.warn(`apify ${actor} [${trendType}] ${res.status}: ${(await res.text()).slice(0, 200)}`);
@@ -123,77 +117,105 @@ export class TikTokConnector {
     return out;
   }
 
-  /** Mapeamento DEFENSIVO nos campos — `kind` vem do trendType. */
+  /** Mapeamento PRECISO por trendType (campos reais do actor automation-lab). */
   private mapApifyItem(
     it: Record<string, unknown>,
     monitor: TrendMonitor,
     trendType: string,
   ): NewTrendItem | null {
-    const str = (...keys: string[]): string | undefined => {
-      for (const k of keys) {
-        const v = it[k];
-        if (typeof v === 'string' && v.trim()) return v.trim();
-      }
-      return undefined;
+    const s = (k: string): string | undefined => {
+      const v = it[k];
+      return typeof v === 'string' && v.trim() ? v.trim() : undefined;
     };
-    const num = (...keys: string[]): number | undefined => {
-      for (const k of keys) {
-        const v = it[k];
-        if (typeof v === 'number') return v;
-        if (typeof v === 'string' && v.trim() && !Number.isNaN(Number(v))) return Number(v);
-      }
+    const n = (k: string): number | undefined => {
+      const v = it[k];
+      if (typeof v === 'number') return v;
+      if (typeof v === 'string' && v.trim() && !Number.isNaN(Number(v))) return Number(v);
       return undefined;
     };
 
-    const kind: TrendItemKind =
-      trendType === 'sound' ? 'sound'
-        : trendType === 'video' ? 'video'
-          : trendType === 'creator' ? 'post'
-            : 'hashtag';
+    const rank = n('rank');
+    const metrics: TrendItemMetrics = {};
+    let kind: TrendItemKind;
+    let mediaType: string;
+    let entityId: string | undefined;
+    let title: string | null = null;
+    let url: string | null = null;
+    let thumbnail: string | null = null;
+    let authorName: string | null = null;
+    let authorHandle: string | null = null;
+    let description: string | null = null;
 
-    const name = str(
-      'hashtagName', 'hashtag', 'name', 'title', 'keyword', 'query',
-      'trendName', 'songTitle', 'musicName', 'nickname', 'authorName',
-    );
-    const externalRaw = str('id', 'hashtagId', 'songId', 'videoId', 'userId', 'url') ?? name;
-    if (!externalRaw && !name) return null;
+    if (trendType === 'sound') {
+      kind = 'sound';
+      mediaType = 'audio';
+      entityId = s('soundId');
+      const nm = s('name') ?? '';
+      const author = s('soundAuthor');
+      title = [nm, author].filter(Boolean).join(' — ') || nm || 'sound';
+      url = s('linkedVideoUrl') ?? null;
+      thumbnail = s('soundCover') ?? null;
+      authorName = author ?? null;
+      metrics.uses = n('publishedVideoCount');
+      metrics.views = n('videoViews');
+      metrics.duration_sec = n('duration');
+    } else if (trendType === 'video') {
+      kind = 'video';
+      mediaType = 'video';
+      entityId = s('videoId');
+      title = (s('name') ?? s('videoDesc') ?? '').slice(0, 200) || null;
+      description = s('videoDesc') ?? null;
+      url = s('videoUrl') ?? null;
+      thumbnail = s('videoCoverUrl') ?? null;
+      authorName = s('authorName') ?? null;
+      authorHandle = s('authorHandle') ?? null;
+      metrics.views = n('playCount');
+      metrics.likes = n('likeCountVideo');
+      metrics.comments = n('commentCount');
+      metrics.shares = n('shareCount');
+    } else {
+      // hashtag (default)
+      kind = 'hashtag';
+      mediaType = 'hashtag';
+      const nm = s('name') ?? '';
+      entityId = nm || undefined;
+      title = nm || null;
+      const clean = nm.replace(/^#/, '');
+      url = clean ? `https://www.tiktok.com/tag/${encodeURIComponent(clean)}` : null;
+      metrics.uses = n('publishedVideoCount');
+      metrics.views = n('videoViews');
+    }
 
-    const views = num('videoViews', 'views', 'viewCount', 'playCount');
-    const uses = num('publishedVideoCount', 'publishCnt', 'postCount', 'posts', 'videoCount');
-    const rank = num('rank', 'ranking');
-    const growth = num('rankDiff', 'trend', 'growth', 'publishCntGrowth');
+    // external_id = entidade real (única). Fallback p/ rank só pra não colidir.
+    const idPart = (entityId ?? title ?? '').toLowerCase().trim();
+    if (!idPart && rank == null) return null;
+    const external_id = `tt:${monitor.region}:${trendType}:${idPart || `r${rank}`}`.slice(0, 200);
 
-    // score: rank (menor = melhor) tem prioridade; senão views/usos em log
-    const baseVal = views ?? uses ?? 0;
+    const views = metrics.views ?? 0;
     const score =
       rank && rank > 0
         ? Math.max(1, 100 - Math.min(rank, 99))
-        : baseVal > 0
-          ? Math.min(100, Math.round(Math.log10(baseVal + 1) * 12))
+        : views > 0
+          ? Math.min(100, Math.round(Math.log10(views + 1) * 12))
           : 50;
-
-    const cleanName = (name ?? '').replace(/^#/, '');
-    const url =
-      str('url', 'shareUrl', 'link') ??
-      (kind === 'hashtag' && cleanName ? `https://www.tiktok.com/tag/${encodeURIComponent(cleanName)}` : null);
 
     return {
       monitor_id: monitor.id,
       source: 'tiktok',
-      external_id: `tt:${monitor.region}:${trendType}:${(externalRaw ?? name ?? '').toLowerCase()}`.slice(0, 200),
+      external_id,
       kind,
       category: monitor.category,
-      title: name ?? externalRaw ?? null,
-      description: str('description', 'desc', 'videoDescription') ?? null,
+      title,
+      description,
       url,
-      thumbnail_url: str('coverUrl', 'cover', 'thumbnail', 'thumbnailUrl', 'avatarThumb') ?? null,
-      author_name: str('authorName', 'author', 'nickname') ?? null,
-      author_handle: str('authorHandle', 'uniqueId', 'username') ?? null,
-      media_type: kind === 'sound' ? 'audio' : kind === 'video' ? 'video' : kind,
+      thumbnail_url: thumbnail,
+      author_name: authorName,
+      author_handle: authorHandle,
+      media_type: mediaType,
       lang: monitor.language,
       region: monitor.region,
       published_at: null,
-      metrics: { views, uses, growth_pct: growth },
+      metrics,
       score,
     };
   }
