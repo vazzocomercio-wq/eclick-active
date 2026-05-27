@@ -139,6 +139,8 @@
     "calendarTitle": "内容日历",
     "viewList": "列表",
     "viewCalendar": "日历",
+    "fontLabel": "字体",
+    "fontDefault": "博客默认",
     "voiceTitle": "品牌语气",
     "voiceActive": "已启用",
     "voiceHelp": "设定语气和编辑准则。AI 在撰写文章和建议选题时会遵循这些设定。",

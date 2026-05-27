@@ -136,4 +136,10 @@ export class BlogAiController {
   unschedule(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.svc.unschedule(user.org_id, id);
   }
+
+  /** Define a fonte de título deste post (override; null = usa o padrão do blog). */
+  @Put('posts/:id/font')
+  setPostFont(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: { display_font: string | null }) {
+    return this.svc.setPostFont(user.org_id, id, body?.display_font ?? null);
+  }
 }

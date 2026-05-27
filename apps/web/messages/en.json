@@ -139,6 +139,8 @@
     "calendarTitle": "Editorial calendar",
     "viewList": "List",
     "viewCalendar": "Calendar",
+    "fontLabel": "Font",
+    "fontDefault": "Blog default",
     "voiceTitle": "Brand voice",
     "voiceActive": "Active",
     "voiceHelp": "Set the tone and editorial guidelines. The AI follows this when writing articles and suggesting topics.",

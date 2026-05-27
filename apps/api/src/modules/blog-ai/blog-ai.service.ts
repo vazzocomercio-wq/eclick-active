@@ -324,6 +324,32 @@ export class BlogAiService {
     return data as BlogPostRow;
   }
 
+  /**
+   * Fonte de título deste post (override; null = usa o padrão do blog). Se o
+   * post já está publicado, repassa pro Sanity + revalida na hora.
+   */
+  async setPostFont(orgId: string, id: string, slug: string | null): Promise<BlogPostRow> {
+    const font = slug ? normalizeFontSlug(slug) : null;
+    const { data, error } = await this.db
+      .from('blog_posts')
+      .update({ display_font: font })
+      .eq('org_id', orgId)
+      .eq('id', id)
+      .select('*')
+      .single();
+    if (error) throw new BadRequestException(error.message);
+    const row = data as BlogPostRow;
+    if (row.sanity_doc_id && this.sanity.isConfigured()) {
+      try {
+        await this.sanity.patchDocument(row.sanity_doc_id, { displayFont: font ?? null });
+        void this.revalidateFront(row.slug);
+      } catch (e) {
+        this.log.warn(`patch fonte do post no Sanity falhou (non-fatal): ${(e as Error).message}`);
+      }
+    }
+    return row;
+  }
+
   // ── Agendamento ──────────────────────────────────────────────────────
 
   async schedule(orgId: string, id: string, scheduledForIso: string): Promise<BlogPostRow> {
@@ -409,6 +435,7 @@ export class BlogAiService {
       seoTitle: row.seo_title ?? undefined,
       metaDescription: row.meta_description ?? undefined,
       focusKeyword: row.focus_keyword ?? undefined,
+      displayFont: row.display_font ?? undefined,
       status: 'published',
       newsletterSendOnPublish: false,
     };

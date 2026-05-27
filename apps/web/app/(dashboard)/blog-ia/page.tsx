@@ -5,7 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { Sparkles, Loader2, Send, Archive, CheckCircle2, ExternalLink, AlertCircle, Clock, Lightbulb, MessageSquareQuote, ChevronDown, Check, Wand2, List, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
-import { blogAiApi, BLOG_PILLARS, type BlogPost, type BlogTopicIdea } from '@/lib/api/blog-ai';
+import { blogAiApi, BLOG_PILLARS, type BlogPost, type BlogTopicIdea, type BlogFontOption } from '@/lib/api/blog-ai';
 import { ApiError } from '@/lib/api/client';
 
 const BLOG_BASE = 'https://eclick.app.br/blog';
@@ -47,6 +47,7 @@ export default function BlogIaPage() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [view, setView] = useState<'list' | 'calendar'>('list');
+  const [fonts, setFonts] = useState<BlogFontOption[]>([]);
 
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [voice, setVoice] = useState('');
@@ -67,6 +68,7 @@ export default function BlogIaPage() {
         setVoiceSaved(s.voice_guidelines ?? '');
       })
       .catch(() => {});
+    blogAiApi.listFonts().then(setFonts).catch(() => {});
   }, []);
 
   async function onSaveVoice() {
@@ -196,6 +198,15 @@ export default function BlogIaPage() {
       /* ignore */
     } finally {
       setBusyId(null);
+    }
+  }
+
+  async function onSetFont(id: string, slug: string | null) {
+    try {
+      const updated = await blogAiApi.setPostFont(id, slug);
+      setPosts((prev) => prev.map((p) => (p.id === id ? updated : p)));
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : t('errorGeneric'));
     }
   }
 
@@ -411,10 +422,12 @@ export default function BlogIaPage() {
               key={post.id}
               post={post}
               busy={busyId === post.id}
+              fonts={fonts}
               onPublish={() => onPublish(post.id)}
               onReject={() => onReject(post.id)}
               onSchedule={(iso) => onSchedule(post.id, iso)}
               onUnschedule={() => onUnschedule(post.id)}
+              onSetFont={(slug) => onSetFont(post.id, slug)}
               t={t}
             />
           ))}
@@ -548,18 +561,22 @@ function EditorialCalendar({ posts, t }: { posts: BlogPost[]; t: (k: string) => 
 function PostRow({
   post,
   busy,
+  fonts,
   onPublish,
   onReject,
   onSchedule,
   onUnschedule,
+  onSetFont,
   t,
 }: {
   post: BlogPost;
   busy: boolean;
+  fonts: BlogFontOption[];
   onPublish: () => void;
   onReject: () => void;
   onSchedule: (iso: string) => void;
   onUnschedule: () => void;
+  onSetFont: (slug: string | null) => void;
   t: (k: string) => string;
 }) {
   const [scheduleAt, setScheduleAt] = useState('');
@@ -600,6 +617,25 @@ function PostRow({
         <p className="line-clamp-1 text-xs text-muted-foreground">{post.excerpt ?? post.source_topic ?? ''}</p>
         {post.status === 'failed' && post.rejected_reason && (
           <p className="mt-0.5 text-[11px] text-destructive">{post.rejected_reason}</p>
+        )}
+        {fonts.length > 0 && post.status !== 'failed' && post.status !== 'generating' && (
+          <div className="mt-1.5 flex items-center gap-1.5">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{t('fontLabel')}</span>
+            <select
+              value={post.display_font ?? ''}
+              onChange={(e) => onSetFont(e.target.value || null)}
+              disabled={busy}
+              className="max-w-[10rem] rounded border border-border bg-background px-1.5 py-0.5 text-[11px] outline-none focus:border-primary disabled:opacity-50"
+              title={t('fontLabel')}
+            >
+              <option value="">{t('fontDefault')}</option>
+              {fonts.map((f) => (
+                <option key={f.slug} value={f.slug}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+          </div>
         )}
       </div>
       <div className="flex w-44 shrink-0 flex-col items-end justify-center gap-1.5">

@@ -33,6 +33,7 @@ export interface BlogPost {
   published_at: string | null;
   rejected_reason: string | null;
   source_topic: string | null;
+  display_font: string | null;
   created_at: string;
 }
 
@@ -113,6 +114,8 @@ export const blogAiApi = {
   schedule: (id: string, scheduledFor: string) =>
     api.post<BlogPost>(`/blog-ai/posts/${id}/schedule`, { scheduled_for: scheduledFor }),
   unschedule: (id: string) => api.post<BlogPost>(`/blog-ai/posts/${id}/unschedule`),
+  setPostFont: (id: string, display_font: string | null) =>
+    api.put<BlogPost>(`/blog-ai/posts/${id}/font`, { display_font }),
 };
 
 /** Pilares editoriais (slug → label PT). Taxonomia de conteúdo (fica em PT). */
