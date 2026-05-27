@@ -61,13 +61,16 @@ export class YouTubeConnector {
 
       const sRes = await fetch(searchUrl.toString(), { signal: AbortSignal.timeout(20_000) });
       if (!sRes.ok) {
-        this.log.warn(`youtube search ${sRes.status}: ${(await sRes.text()).slice(0, 200)}`);
+        this.log.warn(`youtube search ${sRes.status}: ${(await sRes.text()).slice(0, 300)}`);
         return [];
       }
       const sJson = (await sRes.json()) as { items?: YtSearchItem[] };
       const ids = (sJson.items ?? [])
         .map((i) => i.id?.videoId)
         .filter((x): x is string => !!x);
+      this.log.log(
+        `youtube search ok key=${key.length}c q="${q}" raw=${(sJson.items ?? []).length} ids=${ids.length}`,
+      );
       if (!ids.length) return [];
 
       // 2) videos.list — estatísticas + duração
