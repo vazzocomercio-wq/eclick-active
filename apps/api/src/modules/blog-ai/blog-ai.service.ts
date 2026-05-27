@@ -276,11 +276,32 @@ export class BlogAiService {
       .select('*')
       .single();
     if (error) throw new BadRequestException(error.message);
+    void this.revalidateFront(row.slug);
     this.log.log(`[blog-ai] post ${id} publicado no Sanity (${sanityId})`);
     return data as BlogPostRow;
   }
 
   // ── helpers ──────────────────────────────────────────────────────────
+
+  /**
+   * Avisa o site público (eclick-frontend) pra revalidar o blog — assim o post
+   * aparece na home/sitemap na hora, sem esperar o ISR. Best-effort (não
+   * derruba o publish se falhar). Config: BLOG_REVALIDATE_URL + _SECRET.
+   */
+  private async revalidateFront(slug: string): Promise<void> {
+    const url = process.env.BLOG_REVALIDATE_URL;
+    const secret = process.env.BLOG_REVALIDATE_SECRET;
+    if (!url || !secret) return;
+    try {
+      await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ secret, slug }),
+      });
+    } catch (e) {
+      this.log.warn(`revalidate front falhou (non-fatal): ${(e as Error).message}`);
+    }
+  }
 
   private async markFailed(postId: string, reason: string): Promise<void> {
     await this.db.from('blog_posts').update({ status: 'failed', rejected_reason: reason.slice(0, 500) }).eq('id', postId);
