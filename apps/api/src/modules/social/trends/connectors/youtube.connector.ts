@@ -46,36 +46,31 @@ export class YouTubeConnector {
     if (!q) return [];
 
     try {
-      // 1) search.list — busca resiliente. O combo recência+viewCount+idioma
-      //    pode zerar dependendo do IP/região do servidor; então tentamos
-      //    progressivamente mais amplo até obter ids.
-      const publishedAfter = new Date(Date.now() - 30 * 86400000).toISOString();
-      const region = monitor.region || 'BR';
-      const language = monitor.language || 'pt';
+      // 1) search.list — busca resiliente. Mantém SEMPRE regionCode + relevanceLanguage
+      //    (não dropar → evita casar com palavra inglesa tipo "lustre"). Varia só
+      //    ordem/recência. Com proxy BR (YOUTUBE_PROXY_URL) a 1ª já traz resultados certos.
+      const publishedAfter = new Date(Date.now() - 90 * 86400000).toISOString();
       const base: Record<string, string> = {
         part: 'snippet',
         type: 'video',
         maxResults: String(Math.min(max, 50)),
-        regionCode: region,
+        regionCode: monitor.region || 'BR',
+        relevanceLanguage: monitor.language || 'pt',
         q,
         key,
       };
       const attempts: Array<{ label: string; params: Record<string, string> }> = [
-        { label: 'recent+relevance+lang', params: { order: 'relevance', publishedAfter, relevanceLanguage: language } },
+        { label: 'recent+relevance', params: { order: 'relevance', publishedAfter } },
         { label: 'recent+views', params: { order: 'viewCount', publishedAfter } },
         { label: 'alltime+relevance', params: { order: 'relevance' } },
-        { label: 'alltime+views', params: { order: 'viewCount' } },
       ];
 
       let ids: string[] = [];
       let used = '';
       for (const att of attempts) {
         if (ids.length) break;
-        const url = new URL(`${this.API}/search`);
-        for (const [k, v] of Object.entries({ ...base, ...att.params })) {
-          url.searchParams.set(k, v);
-        }
-        const sRes = await fetch(url.toString(), { signal: AbortSignal.timeout(20_000) });
+        const params = new URLSearchParams({ ...base, ...att.params });
+        const sRes = await this.ytFetch('search', params);
         if (!sRes.ok) {
           this.log.warn(`youtube search [${att.label}] ${sRes.status}: ${(await sRes.text()).slice(0, 200)}`);
           continue;
@@ -86,15 +81,18 @@ export class YouTubeConnector {
           .filter((x): x is string => !!x);
         if (ids.length) used = att.label;
       }
-      this.log.log(`youtube q="${q}" key=${key.length}c ids=${ids.length} via=${used || 'none'}`);
+      this.log.log(
+        `youtube q="${q}" proxy=${process.env.YOUTUBE_PROXY_URL ? 'on' : 'off'} ids=${ids.length} via=${used || 'none'}`,
+      );
       if (!ids.length) return [];
 
       // 2) videos.list — estatísticas + duração
-      const vUrl = new URL(`${this.API}/videos`);
-      vUrl.searchParams.set('part', 'snippet,statistics,contentDetails');
-      vUrl.searchParams.set('id', ids.join(','));
-      vUrl.searchParams.set('key', key);
-      const vRes = await fetch(vUrl.toString(), { signal: AbortSignal.timeout(20_000) });
+      const vParams = new URLSearchParams({
+        part: 'snippet,statistics,contentDetails',
+        id: ids.join(','),
+        key,
+      });
+      const vRes = await this.ytFetch('videos', vParams);
       if (!vRes.ok) {
         this.log.warn(`youtube videos ${vRes.status}`);
         return [];
@@ -108,6 +106,29 @@ export class YouTubeConnector {
       this.log.warn(`youtube collect falhou (${monitor.category}): ${(err as Error).message}`);
       return [];
     }
+  }
+
+  /**
+   * Chama a YouTube API direto OU via proxy BR (egress no Brasil) — controlado por
+   * YOUTUBE_PROXY_URL + YOUTUBE_PROXY_KEY. A `search` do YouTube usa o IP do caller
+   * pra decidir resultados; do nosso servidor (US) ela retorna lixo pra buscas BR.
+   * O proxy (função numa região do Brasil) recebe { path, query } e devolve o JSON
+   * do YouTube verbatim — assim a busca enxerga o Brasil de verdade.
+   */
+  private async ytFetch(path: string, params: URLSearchParams): Promise<Response> {
+    const proxyUrl = process.env.YOUTUBE_PROXY_URL;
+    const proxyKey = process.env.YOUTUBE_PROXY_KEY;
+    if (proxyUrl && proxyKey) {
+      return fetch(proxyUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Proxy-Key': proxyKey },
+        body: JSON.stringify({ path, query: params.toString() }),
+        signal: AbortSignal.timeout(25_000),
+      });
+    }
+    return fetch(`${this.API}/${path}?${params.toString()}`, {
+      signal: AbortSignal.timeout(20_000),
+    });
   }
 
   private toItem(v: YtVideo, monitor: TrendMonitor, maxViews: number): NewTrendItem {
