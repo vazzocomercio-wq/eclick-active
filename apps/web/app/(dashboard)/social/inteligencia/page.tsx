@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft, Sparkles, RefreshCw, Eye, TrendingUp, Users, Heart,
-  Flame, Clock, Loader2, Wand2, CalendarDays, Lightbulb, Megaphone, DollarSign,
+  Flame, Clock, Loader2, Wand2, CalendarDays, Lightbulb, Megaphone, DollarSign, MessageCircle,
 } from 'lucide-react';
 import {
   socialApi,
@@ -13,6 +13,7 @@ import {
   type WeekPlan,
   type Recommendation,
   type AdsSummary,
+  type SentimentSummary,
 } from '@/lib/api/social';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -48,23 +49,26 @@ export default function SocialIntelligencePage() {
   const [week, setWeek] = useState<WeekPlan | null>(null);
   const [recs, setRecs] = useState<Recommendation[]>([]);
   const [ads, setAds] = useState<AdsSummary | null>(null);
+  const [sentiment, setSentiment] = useState<SentimentSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = async () => {
     try {
-      const [p, o, w, r, a] = await Promise.all([
+      const [p, o, w, r, a, sent] = await Promise.all([
         socialApi.intelligence.today(),
         socialApi.intelligence.overview(),
         socialApi.intelligence.week(),
         socialApi.intelligence.recommendations(),
         socialApi.intelligence.ads(),
+        socialApi.intelligence.sentiment(),
       ]);
       setPlan(p);
       setOverview(o);
       setWeek(w);
       setRecs(r);
       setAds(a);
+      setSentiment(sent);
     } catch {
       /* silent */
     } finally {
@@ -408,6 +412,49 @@ export default function SocialIntelligencePage() {
                 </div>
               </section>
             </div>
+
+            {/* ── SENTIMENTO DOS CLIENTES ── */}
+            {sentiment && sentiment.analyzed > 0 && (() => {
+              const tot = sentiment.positive + sentiment.neutral + sentiment.negative || 1;
+              const pp = Math.round((sentiment.positive / tot) * 100);
+              const pn = Math.round((sentiment.neutral / tot) * 100);
+              const pneg = Math.round((sentiment.negative / tot) * 100);
+              return (
+                <section className="mt-6">
+                  <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                    <MessageCircle className="h-4 w-4 text-primary" />Sentimento dos clientes
+                    <span className="text-xs font-normal text-muted-foreground">· {sentiment.analyzed} mensagens</span>
+                  </h2>
+                  <div className="rounded-lg border border-border bg-card p-4">
+                    <div className="mb-1.5 flex h-3 overflow-hidden rounded-full bg-muted">
+                      <div style={{ width: `${pp}%` }} className="bg-emerald-500" />
+                      <div style={{ width: `${pn}%` }} className="bg-muted-foreground/30" />
+                      <div style={{ width: `${pneg}%` }} className="bg-red-500" />
+                    </div>
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-emerald-500">Positivo {pp}%</span>
+                      <span className="text-muted-foreground">Neutro {pn}%</span>
+                      <span className="text-red-500">Negativo {pneg}%</span>
+                    </div>
+                    {sentiment.highlights.length > 0 && (
+                      <div className="mt-3 flex flex-col gap-1.5 border-t border-border pt-3">
+                        {sentiment.highlights.map((h, i) => (
+                          <div
+                            key={i}
+                            className={cn(
+                              'border-l-2 pl-2 text-xs',
+                              h.sentiment === 'positive' ? 'border-emerald-500' : h.sentiment === 'negative' ? 'border-red-500' : 'border-border',
+                            )}
+                          >
+                            <span className="text-muted-foreground">{h.theme}:</span> “{h.quote}”
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </section>
+              );
+            })()}
 
             {plan && (
               <p className="mt-6 text-[11px] text-muted-foreground">

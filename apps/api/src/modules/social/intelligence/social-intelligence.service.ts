@@ -69,6 +69,16 @@ export interface AdsSummary {
   top_campaigns: Array<{ name: string; status: string; platform: string; spend: number; clicks: number; ctr: number; conversions: number; roas: number }>;
 }
 
+export interface SentimentSummary {
+  analyzed: number;
+  positive: number;
+  neutral: number;
+  negative: number;
+  highlights: Array<{ sentiment: 'positive' | 'neutral' | 'negative'; theme: string; quote: string }>;
+  generated_at: string;
+  cached: boolean;
+}
+
 const SYSTEM_PROMPT = `Você é o estrategista de conteúdo de uma loja de e-commerce no e-Click.
 Sua missão: decidir O QUE POSTAR HOJE nas redes pra VENDER mais — cruzando a
 OPORTUNIDADE COMERCIAL (margem, estoque, overstock, demanda/tendência) com o que
@@ -124,6 +134,68 @@ export class SocialIntelligenceService {
   async getOverview(orgId: string): Promise<{ organic: unknown; generated_at: string }> {
     const organic = await this.bridge.getOrganicSummary(orgId);
     return { organic, generated_at: new Date().toISOString() };
+  }
+
+  /** Sentimento das conversas — 1 chamada LLM sobre as últimas mensagens INBOUND
+   *  dos clientes (inbox). Cacheia em plan_json.sentiment (read-merge). */
+  async getSentiment(orgId: string, refresh = false): Promise<SentimentSummary> {
+    const today = new Date().toISOString().slice(0, 10);
+    const { data: row } = await this.supabase.adminClient
+      .from('social_intelligence_daily').select('plan_json').eq('org_id', orgId).eq('date', today).maybeSingle();
+    const plan = (row?.plan_json ?? {}) as { sentiment?: SentimentSummary };
+    if (!refresh && plan.sentiment) return { ...plan.sentiment, cached: true };
+
+    const empty: SentimentSummary = { analyzed: 0, positive: 0, neutral: 0, negative: 0, highlights: [], generated_at: new Date().toISOString(), cached: false };
+    const since = new Date(Date.now() - 60 * 86400000).toISOString();
+    const { data: msgs } = await this.supabase.adminClient
+      .from('messages')
+      .select('plain_text')
+      .eq('org_id', orgId).eq('direction', 'inbound').eq('content_type', 'text')
+      .gte('created_at', since).not('plain_text', 'is', null)
+      .order('created_at', { ascending: false }).limit(80);
+    const texts = ((msgs ?? []) as Array<{ plain_text: string | null }>)
+      .map((m) => (m.plain_text ?? '').trim()).filter((t) => t.length > 1);
+    if (texts.length === 0) return empty;
+
+    const numbered = texts.map((t, i) => `${i + 1}. ${t.slice(0, 200)}`).join('\n');
+    try {
+      const r = await this.llm.chat({
+        orgId,
+        feature: 'social_intelligence_today',
+        system: 'Você analisa o sentimento de mensagens de clientes de um e-commerce. Responda só JSON válido.',
+        user:
+          `Classifique cada mensagem em positivo/neutro/negativo e me dê o TOTAL de cada categoria + 3-5 destaques ` +
+          `(frase real + tema curto). ${texts.length} mensagens de clientes:\n\n${numbered}\n\n` +
+          `JSON: {"positive":N,"neutral":N,"negative":N,"highlights":[{"sentiment":"positive|neutral|negative","theme":"...","quote":"..."}]}`,
+        json_mode: true, max_tokens: 1200, temperature: 0.3,
+      });
+      const p = JSON.parse(r.text.replace(/```json/gi, '').replace(/```/g, '').trim()) as {
+        positive?: number; neutral?: number; negative?: number;
+        highlights?: Array<{ sentiment?: string; theme?: string; quote?: string }>;
+      };
+      const result: SentimentSummary = {
+        analyzed: texts.length,
+        positive: Number(p.positive) || 0,
+        neutral: Number(p.neutral) || 0,
+        negative: Number(p.negative) || 0,
+        highlights: (Array.isArray(p.highlights) ? p.highlights : []).slice(0, 5).map((h) => ({
+          sentiment: h.sentiment === 'positive' || h.sentiment === 'negative' ? h.sentiment : 'neutral',
+          theme: String(h.theme ?? '').slice(0, 60),
+          quote: String(h.quote ?? '').slice(0, 160),
+        })),
+        generated_at: new Date().toISOString(),
+        cached: false,
+      };
+      const merged = { ...((row?.plan_json as Record<string, unknown>) ?? {}), sentiment: result };
+      await this.supabase.adminClient.from('social_intelligence_daily').upsert(
+        { org_id: orgId, date: today, plan_json: merged, updated_at: new Date().toISOString() },
+        { onConflict: 'org_id,date' },
+      );
+      return result;
+    } catch (e) {
+      this.log.warn(`[social-intel] sentiment falhou: ${(e as Error).message}`);
+      return { ...empty, analyzed: texts.length };
+    }
   }
 
   /** Resumo de ADS (Meta/Google) dos últimos 30 dias: gasto/CTR/CPM/CPC/conversões/

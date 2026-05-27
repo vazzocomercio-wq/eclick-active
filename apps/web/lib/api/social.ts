@@ -764,6 +764,15 @@ export interface AdsSummary {
   by_platform: Array<{ platform: string; spend: number; conversions: number }>;
   top_campaigns: Array<{ name: string; status: string; platform: string; spend: number; clicks: number; ctr: number; conversions: number; roas: number }>;
 }
+export interface SentimentSummary {
+  analyzed: number;
+  positive: number;
+  neutral: number;
+  negative: number;
+  highlights: Array<{ sentiment: 'positive' | 'neutral' | 'negative'; theme: string; quote: string }>;
+  generated_at: string;
+  cached: boolean;
+}
 
 export const socialApi = {
   // Brands
@@ -964,6 +973,8 @@ export const socialApi = {
       api.get<Recommendation[]>('/social/intelligence/recommendations', { signal }),
     ads: (signal?: AbortSignal) =>
       api.get<AdsSummary>('/social/intelligence/ads', { signal }),
+    sentiment: (signal?: AbortSignal) =>
+      api.get<SentimentSummary>('/social/intelligence/sentiment', { signal }),
   },
 
   // A/B Testing

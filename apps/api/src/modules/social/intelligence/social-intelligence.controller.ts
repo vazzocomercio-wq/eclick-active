@@ -2,7 +2,7 @@ import { Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '../../../common/auth/auth.guard';
 import { CurrentUser } from '../../../common/auth/current-user.decorator';
 import type { AuthUser } from '../../../common/auth/auth.types';
-import { SocialIntelligenceService, type TodaysPlan, type WeekPlan, type Recommendation, type AdsSummary } from './social-intelligence.service';
+import { SocialIntelligenceService, type TodaysPlan, type WeekPlan, type Recommendation, type AdsSummary, type SentimentSummary } from './social-intelligence.service';
 
 /**
  * E-Click Social Intelligence — "O que postar hoje".
@@ -50,5 +50,16 @@ export class SocialIntelligenceController {
   @Get('ads')
   ads(@CurrentUser() user: AuthUser): Promise<AdsSummary> {
     return this.intel.getAdsSummary(user.org_id);
+  }
+
+  /** Sentimento das conversas dos clientes (inbox). */
+  @Get('sentiment')
+  sentiment(@CurrentUser() user: AuthUser): Promise<SentimentSummary> {
+    return this.intel.getSentiment(user.org_id);
+  }
+
+  @Post('sentiment/refresh')
+  sentimentRefresh(@CurrentUser() user: AuthUser): Promise<SentimentSummary> {
+    return this.intel.getSentiment(user.org_id, true);
   }
 }
