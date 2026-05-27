@@ -15,6 +15,7 @@ import { AuthGuard } from '../../../common/auth/auth.guard';
 import { CurrentUser } from '../../../common/auth/current-user.decorator';
 import type { AuthUser } from '../../../common/auth/auth.types';
 import { TrendsService } from './trends.service';
+import { TrendsCollectorService, type CollectResult } from './trends-collector.service';
 import type {
   CreateMonitorDto,
   TrendBrief,
@@ -35,7 +36,10 @@ import type {
 @UseGuards(AuthGuard)
 @Controller('social/trends')
 export class TrendsController {
-  constructor(private readonly trends: TrendsService) {}
+  constructor(
+    private readonly trends: TrendsService,
+    private readonly collector: TrendsCollectorService,
+  ) {}
 
   /** Estado do Radar: contadores + catálogo de fontes (live/planejada). */
   @Get('overview')
@@ -74,6 +78,25 @@ export class TrendsController {
     @Param('id') id: string,
   ): Promise<void> {
     await this.trends.deleteMonitor(user.org_id, id);
+  }
+
+  // ─── Coleta (TR-1) ──────────────────────────────
+
+  /** Dispara coleta de TODOS os monitores ativos da org (síncrono). */
+  @Post('collect')
+  collectAll(@CurrentUser() user: AuthUser): Promise<CollectResult> {
+    return this.collector.collectAll(user.org_id);
+  }
+
+  /** Dispara coleta de 1 monitor específico. */
+  @Post('monitors/:id/collect')
+  async collectMonitor(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ): Promise<{ items: number }> {
+    const monitor = await this.trends.getMonitor(user.org_id, id);
+    const items = await this.collector.collectMonitor(user.org_id, monitor);
+    return { items };
   }
 
   // ─── Itens / Sinais / Briefs ────────────────────

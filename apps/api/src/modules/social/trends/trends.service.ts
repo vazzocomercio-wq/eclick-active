@@ -7,6 +7,7 @@ import {
 import { SupabaseService } from '../../../common/supabase/supabase.service';
 import type {
   CreateMonitorDto,
+  NewTrendItem,
   TrendBrief,
   TrendItem,
   TrendItemFilters,
@@ -155,6 +156,46 @@ export class TrendsService {
       .eq('id', id)
       .eq('org_id', orgId);
     if (error) throw error;
+  }
+
+  async getMonitor(orgId: string, id: string): Promise<TrendMonitor> {
+    const { data, error } = await this.supabase.adminClient
+      .from('trend_monitors')
+      .select('*')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) throw new NotFoundException('Monitor não encontrado');
+    return data as TrendMonitor;
+  }
+
+  // ─── Coleta: upsert de itens (TR-1) ─────────────
+
+  /** Upsert idempotente de itens coletados (onConflict org_id,source,external_id). */
+  async upsertItems(orgId: string, items: NewTrendItem[]): Promise<number> {
+    if (!items.length) return 0;
+    const now = new Date().toISOString();
+    const rows = items.map((it) => ({
+      ...it,
+      org_id: orgId,
+      collected_at: now,
+      updated_at: now,
+    }));
+    const { data, error } = await this.supabase.adminClient
+      .from('trend_items')
+      .upsert(rows, { onConflict: 'org_id,source,external_id' })
+      .select('id');
+    if (error) throw error;
+    return (data ?? []).length;
+  }
+
+  async markCollected(orgId: string, monitorId: string): Promise<void> {
+    await this.supabase.adminClient
+      .from('trend_monitors')
+      .update({ last_collected_at: new Date().toISOString() })
+      .eq('id', monitorId)
+      .eq('org_id', orgId);
   }
 
   // ─── Itens / Sinais / Briefs (leitura) ──────────

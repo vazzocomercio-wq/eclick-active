@@ -1213,6 +1213,13 @@ export const socialApi = {
       api.get<TrendSignal[]>('/social/trends/signals', { signal }),
     briefs: (signal?: AbortSignal) =>
       api.get<TrendBrief[]>('/social/trends/briefs', { signal }),
+    collect: () =>
+      api.post<{ monitors: number; items: number; by_source: Record<string, number> }>(
+        '/social/trends/collect',
+        {},
+      ),
+    collectMonitor: (id: string) =>
+      api.post<{ items: number }>(`/social/trends/monitors/${id}/collect`, {}),
   },
 
   // A/B Testing

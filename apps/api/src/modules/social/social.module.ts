@@ -44,6 +44,10 @@ import { SocialIntelligenceController } from './intelligence/social-intelligence
 import { SocialIntelligenceService } from './intelligence/social-intelligence.service';
 import { TrendsController } from './trends/trends.controller';
 import { TrendsService } from './trends/trends.service';
+import { TrendsCollectorService } from './trends/trends-collector.service';
+import { TrendsCollectorWorker } from './trends/trends-collector.worker';
+import { YouTubeConnector } from './trends/connectors/youtube.connector';
+import { GoogleTrendsConnector } from './trends/connectors/google-trends.connector';
 import { AlertsModule } from '../alerts/alerts.module';
 import { ChannelsModule as ChannelDispatcherModule } from '../../common/channels/channels.module';
 import { SlackModule } from '../../common/slack/slack.module';
@@ -104,6 +108,10 @@ import { BridgeModule } from '../bridge/bridge.module';
     SocialKnowledgeService,
     SocialIntelligenceService,
     TrendsService,
+    TrendsCollectorService,
+    TrendsCollectorWorker,
+    YouTubeConnector,
+    GoogleTrendsConnector,
   ],
   exports: [
     SocialBrandsService,

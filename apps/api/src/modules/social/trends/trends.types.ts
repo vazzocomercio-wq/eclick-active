@@ -92,6 +92,12 @@ export interface TrendItem {
   updated_at: string;
 }
 
+/** Item pronto pra upsert (sem campos gerados pelo banco/coletor). */
+export type NewTrendItem = Omit<
+  TrendItem,
+  'id' | 'org_id' | 'collected_at' | 'created_at' | 'updated_at'
+>;
+
 export interface TrendSignal {
   id: string;
   org_id: string;

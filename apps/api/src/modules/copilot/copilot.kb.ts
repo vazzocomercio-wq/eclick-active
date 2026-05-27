@@ -440,7 +440,7 @@ export const KB: KbEntry[] = [
       '- **O que está bombando** lista os **itens individuais** (cada vídeo, criativo, som) com suas métricas próprias (views, etc.) — não só agregados.',
       '- **Sinais de tendência** destacam formatos/sons/temas em alta; **Briefs de conteúdo** são pautas prontas que a IA monta a partir disso.',
       '',
-      'O Radar evolui em fases: conectores YouTube + Google Trends, depois Meta Ad Library + Instagram, briefs com IA, e TikTok. As fontes só coletam dados reais quando as chaves de API são conectadas.',
+      '**Coletar agora:** o botão no topo (ou o ícone por monitor) puxa os dados na hora. **YouTube** (vídeos mais vistos da categoria, com views/likes/comentários/duração) e **Google Trends** (buscas em ascensão) já coletam dados reais. Meta Ad Library, Instagram e TikTok entram nas próximas fases. A coleta também roda sozinha 1×/dia.',
     ].join('\n'),
     tags: ['social', 'tendencias', 'radar', 'trends', 'youtube', 'tiktok', 'meta', 'conteudo', 'o que postar'],
   },

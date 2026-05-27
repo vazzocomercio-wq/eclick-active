@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft, Radar, RefreshCw, Loader2, Plus, Trash2, Play, TrendingUp,
-  Megaphone, AtSign, Music, Sparkles, CheckCircle2, CircleDashed, Eye,
+  Megaphone, AtSign, Music, Sparkles, CheckCircle2, CircleDashed, Eye, DownloadCloud,
 } from 'lucide-react';
 import {
   socialApi,
@@ -55,6 +55,11 @@ export default function TendenciasPage() {
   const [fKeywords, setFKeywords] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // coleta
+  const [collecting, setCollecting] = useState(false);
+  const [collectingId, setCollectingId] = useState<string | null>(null);
+  const [collectMsg, setCollectMsg] = useState<string | null>(null);
+
   const load = async () => {
     try {
       const [o, m, s, it, b] = await Promise.all([
@@ -103,6 +108,36 @@ export default function TendenciasPage() {
     }
   };
 
+  const collectAll = async () => {
+    setCollecting(true);
+    setCollectMsg(null);
+    try {
+      const r = await socialApi.trends.collect();
+      setCollectMsg(
+        r.monitors === 0
+          ? 'Nenhum monitor de YouTube/Google Trends ativo pra coletar.'
+          : `Coleta concluída: ${r.items} itens de ${r.monitors} monitor(es).`,
+      );
+      await load();
+    } catch {
+      setCollectMsg('Falha na coleta. Tente novamente.');
+    } finally {
+      setCollecting(false);
+    }
+  };
+
+  const collectMonitor = async (id: string) => {
+    setCollectingId(id);
+    try {
+      await socialApi.trends.collectMonitor(id);
+      await load();
+    } catch {
+      /* silent */
+    } finally {
+      setCollectingId(null);
+    }
+  };
+
   const removeMonitor = async (id: string) => {
     if (!confirm('Remover este monitor de tendência?')) return;
     try {
@@ -129,13 +164,24 @@ export default function TendenciasPage() {
             </p>
           </div>
         </div>
-        <Button size="sm" variant="outline" onClick={() => void load()} disabled={loading}>
-          <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
-          <span className="ml-1">Atualizar</span>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => void load()} disabled={loading}>
+            <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
+            <span className="ml-1">Atualizar</span>
+          </Button>
+          <Button size="sm" onClick={() => void collectAll()} disabled={collecting || loading}>
+            {collecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <DownloadCloud className="h-3.5 w-3.5" />}
+            <span className="ml-1">{collecting ? 'Coletando…' : 'Coletar agora'}</span>
+          </Button>
+        </div>
       </header>
 
       <div className="flex-1 overflow-y-auto p-4 md:p-6">
+        {collectMsg && (
+          <div className="mb-4 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-foreground/80">
+            {collectMsg}
+          </div>
+        )}
         {loading ? (
           <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-8">
             <Loader2 className="h-5 w-5 animate-spin text-primary" />
@@ -271,6 +317,21 @@ export default function TendenciasPage() {
                           ? `coletado ${new Date(m.last_collected_at).toLocaleDateString('pt-BR')}`
                           : 'aguardando coleta'}
                       </span>
+                      {(m.network === 'youtube' || m.network === 'google_trends') && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => void collectMonitor(m.id)}
+                          disabled={collectingId === m.id}
+                          title="Coletar agora"
+                        >
+                          {collectingId === m.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <DownloadCloud className="h-3.5 w-3.5" />
+                          )}
+                        </Button>
+                      )}
                       <Button variant="ghost" size="sm" onClick={() => void removeMonitor(m.id)} title="Remover">
                         <Trash2 className="h-3.5 w-3.5 text-destructive" />
                       </Button>
