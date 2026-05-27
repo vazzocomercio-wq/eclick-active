@@ -16,6 +16,7 @@ import { CurrentUser } from '../../../common/auth/current-user.decorator';
 import type { AuthUser } from '../../../common/auth/auth.types';
 import { TrendsService } from './trends.service';
 import { TrendsCollectorService, type CollectResult } from './trends-collector.service';
+import { TrendsBriefService } from './trends-brief.service';
 import type {
   CreateMonitorDto,
   TrendBrief,
@@ -39,6 +40,7 @@ export class TrendsController {
   constructor(
     private readonly trends: TrendsService,
     private readonly collector: TrendsCollectorService,
+    private readonly briefs: TrendsBriefService,
   ) {}
 
   /** Estado do Radar: contadores + catálogo de fontes (live/planejada). */
@@ -135,5 +137,21 @@ export class TrendsController {
   @Get('briefs')
   listBriefs(@CurrentUser() user: AuthUser): Promise<TrendBrief[]> {
     return this.trends.listBriefs(user.org_id);
+  }
+
+  /** TR-3 — gera sinais + pautas (IA) cruzando tendências × engajamento × comércio. */
+  @Post('generate')
+  generate(@CurrentUser() user: AuthUser): Promise<{ signals: number; briefs: number }> {
+    return this.briefs.generate(user.org_id);
+  }
+
+  /** Descarta um brief (sai do feed). */
+  @Post('briefs/:id/dismiss')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async dismissBrief(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ): Promise<void> {
+    await this.briefs.dismissBrief(user.org_id, id);
   }
 }

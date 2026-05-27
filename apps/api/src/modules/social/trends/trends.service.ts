@@ -247,6 +247,7 @@ export class TrendsService {
       .from('trend_briefs')
       .select('*')
       .eq('org_id', orgId)
+      .neq('status', 'dismissed')
       .order('created_at', { ascending: false })
       .limit(Math.min(limit, 100));
     if (error) throw error;

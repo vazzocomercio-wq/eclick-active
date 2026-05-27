@@ -928,6 +928,11 @@ export interface TrendBrief {
   created_at: string;
   updated_at: string;
 }
+export interface TrendBriefProduct {
+  name: string;
+  product_id: string | null;
+  photo_url: string | null;
+}
 export interface TrendSourceStatus {
   source: TrendNetwork;
   label: string;
@@ -1220,6 +1225,10 @@ export const socialApi = {
       ),
     collectMonitor: (id: string) =>
       api.post<{ items: number }>(`/social/trends/monitors/${id}/collect`, {}),
+    generate: () =>
+      api.post<{ signals: number; briefs: number }>('/social/trends/generate', {}),
+    dismissBrief: (id: string) =>
+      api.post<void>(`/social/trends/briefs/${id}/dismiss`, {}),
   },
 
   // A/B Testing

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import {
   ArrowLeft, Radar, RefreshCw, Loader2, Plus, Trash2, Play, TrendingUp,
   Megaphone, AtSign, Music, Sparkles, CheckCircle2, CircleDashed, Eye, DownloadCloud,
+  Wand2, X, Brain, Hash,
 } from 'lucide-react';
 import {
   socialApi,
@@ -13,6 +14,7 @@ import {
   type TrendSignal,
   type TrendItem,
   type TrendBrief,
+  type TrendBriefProduct,
   type TrendNetwork,
 } from '@/lib/api/social';
 import { Button } from '@/components/ui/button';
@@ -28,6 +30,9 @@ const NETWORKS: { value: TrendNetwork; label: string }[] = [
 const NET_LABEL: Record<string, string> = Object.fromEntries(
   NETWORKS.map((n) => [n.value, n.label]),
 );
+const FORMAT_LABEL: Record<string, string> = {
+  reel: 'Reel', post: 'Post', carousel: 'Carrossel', story: 'Story', video: 'Vídeo',
+};
 function NetIcon({ source, className }: { source: TrendNetwork; className?: string }) {
   switch (source) {
     case 'youtube': return <Play className={className} />;
@@ -59,6 +64,7 @@ export default function TendenciasPage() {
   const [collecting, setCollecting] = useState(false);
   const [collectingId, setCollectingId] = useState<string | null>(null);
   const [collectMsg, setCollectMsg] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
 
   const load = async () => {
     try {
@@ -138,6 +144,33 @@ export default function TendenciasPage() {
     }
   };
 
+  const generateBriefs = async () => {
+    setGenerating(true);
+    setCollectMsg(null);
+    try {
+      const r = await socialApi.trends.generate();
+      setCollectMsg(
+        r.briefs > 0
+          ? `IA gerou ${r.briefs} pauta(s) e ${r.signals} sinal(is) a partir das tendências.`
+          : 'Sem dados suficientes pra gerar pautas — colete tendências e conecte produtos primeiro.',
+      );
+      await load();
+    } catch {
+      setCollectMsg('Falha ao gerar pautas. Tente novamente.');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const dismissBrief = async (id: string) => {
+    setBriefs((prev) => prev.filter((b) => b.id !== id));
+    try {
+      await socialApi.trends.dismissBrief(id);
+    } catch {
+      /* silent */
+    }
+  };
+
   const removeMonitor = async (id: string) => {
     if (!confirm('Remover este monitor de tendência?')) return;
     try {
@@ -169,9 +202,13 @@ export default function TendenciasPage() {
             <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
             <span className="ml-1">Atualizar</span>
           </Button>
-          <Button size="sm" onClick={() => void collectAll()} disabled={collecting || loading}>
+          <Button size="sm" variant="outline" onClick={() => void collectAll()} disabled={collecting || loading}>
             {collecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <DownloadCloud className="h-3.5 w-3.5" />}
-            <span className="ml-1">{collecting ? 'Coletando…' : 'Coletar agora'}</span>
+            <span className="ml-1">{collecting ? 'Coletando…' : 'Coletar'}</span>
+          </Button>
+          <Button size="sm" onClick={() => void generateBriefs()} disabled={generating || loading}>
+            {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Brain className="h-3.5 w-3.5" />}
+            <span className="ml-1">{generating ? 'Gerando…' : 'Gerar pautas IA'}</span>
           </Button>
         </div>
       </header>
@@ -407,22 +444,76 @@ export default function TendenciasPage() {
               )}
             </section>
 
-            {/* ── BRIEFS DE CONTEÚDO ── */}
-            {briefs.length > 0 && (
-              <section className="mb-6">
-                <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-                  <Sparkles className="h-4 w-4 text-amber-500" />Briefs de conteúdo
-                </h2>
-                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                  {briefs.map((b) => (
-                    <div key={b.id} className="rounded-lg border border-border bg-card p-3">
-                      <p className="text-[13px] font-medium">{b.title}</p>
-                      {b.hook && <p className="mt-0.5 text-xs text-muted-foreground">{b.hook}</p>}
-                    </div>
-                  ))}
+            {/* ── PAUTAS (BRIEFS) DA IA ── */}
+            <section className="mb-6">
+              <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                <Brain className="h-4 w-4 text-primary" />Pautas da IA
+                <span className="text-xs font-normal text-muted-foreground">· tendência × engajamento × comércio</span>
+              </h2>
+              {briefs.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border bg-muted/20 p-6 text-center text-sm text-muted-foreground">
+                  Sem pautas ainda. Clique em <span className="font-medium">Gerar pautas IA</span> — a IA cruza as
+                  tendências coletadas com o que engaja no seu público e os produtos com boa margem/estoque, e te diz o que postar.
                 </div>
-              </section>
-            )}
+              ) : (
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                  {briefs.map((b) => {
+                    const prods = (b.suggested_products as TrendBriefProduct[]) ?? [];
+                    const prod = prods[0];
+                    return (
+                      <div key={b.id} className="flex flex-col gap-2 rounded-lg border border-border bg-card p-4">
+                        <div className="flex items-start gap-2">
+                          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-primary">
+                            {FORMAT_LABEL[b.format] ?? b.format}
+                          </span>
+                          {b.category && (
+                            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">{b.category}</span>
+                          )}
+                          <button
+                            onClick={() => void dismissBrief(b.id)}
+                            className="ml-auto text-muted-foreground hover:text-foreground"
+                            title="Descartar"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                        <p className="text-[13px] font-semibold leading-snug">{b.title}</p>
+                        {b.hook && <p className="text-xs italic text-foreground/80">“{b.hook}”</p>}
+                        {b.rationale && (
+                          <p className="text-xs leading-relaxed text-muted-foreground">{b.rationale}</p>
+                        )}
+                        {prods.length > 0 && (
+                          <div className="flex items-center gap-2">
+                            {prod?.photo_url ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={prod.photo_url} alt="" className="h-8 w-8 rounded object-cover" />
+                            ) : null}
+                            <span className="truncate text-[11px] text-muted-foreground">
+                              {prods.map((p) => p.name).join(' · ')}
+                            </span>
+                          </div>
+                        )}
+                        {b.hashtags.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {b.hashtags.slice(0, 6).map((h, i) => (
+                              <span key={i} className="flex items-center gap-0.5 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                <Hash className="h-2.5 w-2.5" />{h.replace(/^#/, '')}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        <Button size="sm" className="mt-auto w-full" asChild>
+                          <Link href="/social/criar">
+                            <Wand2 className="h-3.5 w-3.5" />
+                            <span className="ml-1">Gerar conteúdo</span>
+                          </Link>
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
 
             <p className="text-[11px] text-muted-foreground">
               O Radar evolui em fases: conectores YouTube + Google Trends (TR-1), Meta Ad Library + Instagram (TR-2),

@@ -441,6 +441,8 @@ export const KB: KbEntry[] = [
       '- **Sinais de tendência** destacam formatos/sons/temas em alta; **Briefs de conteúdo** são pautas prontas que a IA monta a partir disso.',
       '',
       '**Coletar agora:** o botão no topo (ou o ícone por monitor) puxa os dados na hora. **YouTube** (vídeos mais vistos da categoria, com views/likes/comentários/duração) e **Google Trends** (buscas em ascensão) já coletam dados reais. Meta Ad Library, Instagram e TikTok entram nas próximas fases. A coleta também roda sozinha 1×/dia.',
+      '',
+      '**Gerar pautas IA:** o botão no topo cruza as tendências coletadas + o que mais engaja com seu público (formato/horário) + os produtos com boa margem/estoque (via Radar/comércio) e gera **pautas prontas**: gancho, roteiro, estilo visual, produto sugerido, hashtags e o PORQUÊ (qual tendência + qual produto agora). Cada pauta tem botão "Gerar conteúdo" que leva pro Social AI Studio.',
     ].join('\n'),
     tags: ['social', 'tendencias', 'radar', 'trends', 'youtube', 'tiktok', 'meta', 'conteudo', 'o que postar'],
   },
