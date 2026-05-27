@@ -42,6 +42,8 @@ import { SocialPromptsService } from './prompts/social-prompts.service';
 import { SocialKnowledgeService } from './prompts/social-knowledge.service';
 import { SocialIntelligenceController } from './intelligence/social-intelligence.controller';
 import { SocialIntelligenceService } from './intelligence/social-intelligence.service';
+import { TrendsController } from './trends/trends.controller';
+import { TrendsService } from './trends/trends.service';
 import { AlertsModule } from '../alerts/alerts.module';
 import { ChannelsModule as ChannelDispatcherModule } from '../../common/channels/channels.module';
 import { SlackModule } from '../../common/slack/slack.module';
@@ -68,6 +70,7 @@ import { BridgeModule } from '../bridge/bridge.module';
     SocialPromptsController,
     TikTokConnectController,
     SocialIntelligenceController,
+    TrendsController,
   ],
   providers: [
     SocialBrandsService,
@@ -100,6 +103,7 @@ import { BridgeModule } from '../bridge/bridge.module';
     SocialPromptsService,
     SocialKnowledgeService,
     SocialIntelligenceService,
+    TrendsService,
   ],
   exports: [
     SocialBrandsService,

@@ -427,6 +427,23 @@ export const KB: KbEntry[] = [
     ].join('\n'),
     tags: ['social', 'reel', 'video', 'criar', 'instagram', 'kling', 'produto'],
   },
+  {
+    routes: ['/social/tendencias', '/social'],
+    category: 'SOCIAL',
+    title: 'Radar de Conteúdo: tendências da sua categoria + o que postar',
+    content: [
+      'O **Radar de Conteúdo** (`/social/tendencias`) mostra **o que está bombando na sua categoria** e te ajuda a decidir qual conteúdo criar — cruzando tendências externas com o seu comércio (margem, estoque, Radar de mercado).',
+      '',
+      '**Como usar:**',
+      '- Em **Categorias monitoradas** clique **Monitorar** → escolha a **rede** (YouTube, Google Trends, Meta Ad Library, Instagram, TikTok) + a **categoria** (ex: iluminação) + **palavras-chave**. O radar passa a vigiar essa área.',
+      '- **Fontes de tendência** mostra o estado de cada conector: 🟢 *coletando* ou ⚪ *planejado* (com a fase em que entra).',
+      '- **O que está bombando** lista os **itens individuais** (cada vídeo, criativo, som) com suas métricas próprias (views, etc.) — não só agregados.',
+      '- **Sinais de tendência** destacam formatos/sons/temas em alta; **Briefs de conteúdo** são pautas prontas que a IA monta a partir disso.',
+      '',
+      'O Radar evolui em fases: conectores YouTube + Google Trends, depois Meta Ad Library + Instagram, briefs com IA, e TikTok. As fontes só coletam dados reais quando as chaves de API são conectadas.',
+    ].join('\n'),
+    tags: ['social', 'tendencias', 'radar', 'trends', 'youtube', 'tiktok', 'meta', 'conteudo', 'o que postar'],
+  },
 
   // ── BLOG IA ───────────────────────────────────────────
   {
