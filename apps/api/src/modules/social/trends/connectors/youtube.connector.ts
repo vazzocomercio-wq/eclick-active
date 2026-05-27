@@ -75,8 +75,18 @@ export class YouTubeConnector {
           this.log.warn(`youtube search [${att.label}] ${sRes.status}: ${(await sRes.text()).slice(0, 200)}`);
           continue;
         }
-        const sJson = (await sRes.json()) as { items?: YtSearchItem[] };
-        ids = (sJson.items ?? [])
+        const sText = await sRes.text();
+        let sJson: { items?: YtSearchItem[]; pageInfo?: { totalResults?: number } } = {};
+        try {
+          sJson = JSON.parse(sText) as { items?: YtSearchItem[] };
+        } catch {
+          this.log.warn(`youtube search [${att.label}] body não-JSON: ${sText.slice(0, 200)}`);
+        }
+        const rawItems = sJson.items ?? [];
+        this.log.log(
+          `youtube attempt [${att.label}] status=${sRes.status} itemsRaw=${rawItems.length} total=${sJson.pageInfo?.totalResults ?? '?'}`,
+        );
+        ids = rawItems
           .map((i) => i.id?.videoId)
           .filter((x): x is string => !!x);
         if (ids.length) used = att.label;
