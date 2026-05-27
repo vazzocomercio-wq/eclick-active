@@ -37,7 +37,8 @@ import { AdsSyncService } from '../ads-sync.service';
  * Envs requeridos:
  *   META_APP_ID                  — app id do Meta Developers
  *   META_APP_SECRET              — secret (NUNCA logar)
- *   META_OAUTH_REDIRECT_URI      — default https://active.eclick.app.br/ad-integrations/meta/callback
+ *   API_BASE_URL                 — base do callback (default https://api.active.eclick.app.br)
+ *   META_OAUTH_REDIRECT_URI      — override do callback; senão deriva de API_BASE_URL + /ad-integrations/meta/callback
  *   FRONTEND_BASE_URL            — pra redirect final pós-callback
  */
 @Controller('ad-integrations/meta')
@@ -303,9 +304,12 @@ export class MetaOAuthController {
   }
 
   private getRedirectUri(): string {
+    const apiBase = (
+      process.env.API_BASE_URL ?? 'https://api.active.eclick.app.br'
+    ).replace(/\/+$/, '');
     return (
       process.env.META_OAUTH_REDIRECT_URI ??
-      'https://active.eclick.app.br/ad-integrations/meta/callback'
+      `${apiBase}/ad-integrations/meta/callback`
     );
   }
 }

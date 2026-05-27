@@ -32,7 +32,8 @@ import { AdsSyncService } from '../ads-sync.service';
  *   GOOGLE_ADS_DEVELOPER_TOKEN — header obrigatório em chamadas Ads API
  *   GOOGLE_OAUTH_CLIENT_ID
  *   GOOGLE_OAUTH_CLIENT_SECRET
- *   GOOGLE_OAUTH_REDIRECT_URI (opc — default app.br/ad-integrations/google/callback)
+ *   API_BASE_URL                 — base do callback (default https://api.active.eclick.app.br)
+ *   GOOGLE_OAUTH_REDIRECT_URI (opc — override; senão deriva de API_BASE_URL + /ad-integrations/google/callback)
  */
 @Controller('ad-integrations/google')
 export class GoogleOAuthController {
@@ -277,9 +278,12 @@ export class GoogleOAuthController {
   }
 
   private getRedirectUri(): string {
+    const apiBase = (
+      process.env.API_BASE_URL ?? 'https://api.active.eclick.app.br'
+    ).replace(/\/+$/, '');
     return (
       process.env.GOOGLE_OAUTH_REDIRECT_URI ??
-      'https://active.eclick.app.br/ad-integrations/google/callback'
+      `${apiBase}/ad-integrations/google/callback`
     );
   }
 }
