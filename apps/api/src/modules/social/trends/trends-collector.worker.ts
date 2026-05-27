@@ -58,7 +58,7 @@ export class TrendsCollectorWorker implements OnModuleInit, OnModuleDestroy {
         .from('trend_monitors')
         .select('org_id')
         .eq('is_active', true)
-        .in('network', ['youtube', 'google_trends']);
+        .in('network', ['youtube', 'google_trends', 'tiktok']);
       const orgIds = Array.from(
         new Set((data ?? []).map((r: { org_id: string }) => r.org_id)),
       );

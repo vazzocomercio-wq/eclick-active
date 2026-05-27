@@ -130,7 +130,7 @@ export default function TendenciasPage() {
       const r = await socialApi.trends.collect();
       setCollectMsg(
         r.monitors === 0
-          ? 'Nenhum monitor de YouTube/Google Trends ativo pra coletar.'
+          ? 'Nenhum monitor de YouTube/Google Trends/TikTok ativo pra coletar.'
           : `Coleta concluída: ${r.items} itens de ${r.monitors} monitor(es).`,
       );
       await load();
@@ -363,7 +363,7 @@ export default function TendenciasPage() {
                           ? `coletado ${new Date(m.last_collected_at).toLocaleDateString('pt-BR')}`
                           : 'aguardando coleta'}
                       </span>
-                      {(m.network === 'youtube' || m.network === 'google_trends') && (
+                      {(m.network === 'youtube' || m.network === 'google_trends' || m.network === 'tiktok') && (
                         <Button
                           variant="ghost"
                           size="sm"

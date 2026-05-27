@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { TrendsService } from './trends.service';
 import { YouTubeConnector } from './connectors/youtube.connector';
 import { GoogleTrendsConnector } from './connectors/google-trends.connector';
+import { TikTokConnector } from './connectors/tiktok.connector';
 import type { NewTrendItem, TrendMonitor } from './trends.types';
 
 export interface CollectResult {
@@ -10,8 +11,8 @@ export interface CollectResult {
   by_source: Record<string, number>;
 }
 
-/** Redes com conector implementado na TR-1. */
-const TR1_NETWORKS = new Set(['youtube', 'google_trends']);
+/** Redes com conector implementado (TR-1: youtube/google_trends; TR-5: tiktok). */
+const TR1_NETWORKS = new Set(['youtube', 'google_trends', 'tiktok']);
 
 /**
  * Orquestra a coleta de tendências: pra cada monitor ativo, chama o conector
@@ -25,6 +26,7 @@ export class TrendsCollectorService {
     private readonly trends: TrendsService,
     private readonly youtube: YouTubeConnector,
     private readonly googleTrends: GoogleTrendsConnector,
+    private readonly tiktok: TikTokConnector,
   ) {}
 
   async collectMonitor(orgId: string, monitor: TrendMonitor): Promise<number> {
@@ -33,6 +35,8 @@ export class TrendsCollectorService {
       items = await this.youtube.collect(monitor);
     } else if (monitor.network === 'google_trends') {
       items = await this.googleTrends.collect(monitor);
+    } else if (monitor.network === 'tiktok') {
+      items = await this.tiktok.collect(monitor);
     } else {
       return 0; // rede sem conector nesta fase
     }
@@ -43,9 +47,18 @@ export class TrendsCollectorService {
   }
 
   async collectAll(orgId: string): Promise<CollectResult> {
-    const monitors = (await this.trends.listMonitors(orgId)).filter(
-      (m) => m.is_active && TR1_NETWORKS.has(m.network),
-    );
+    // Trava de custo do Apify: TikTok não coleta no autopilot se foi coletado
+    // há menos de TIKTOK_COLLECT_EVERY_DAYS (default 7). Coleta manual ignora.
+    const everyDays = Number(process.env.TIKTOK_COLLECT_EVERY_DAYS ?? 7);
+    const now = Date.now();
+    const monitors = (await this.trends.listMonitors(orgId)).filter((m) => {
+      if (!m.is_active || !TR1_NETWORKS.has(m.network)) return false;
+      if (m.network === 'tiktok' && m.last_collected_at) {
+        const ageDays = (now - new Date(m.last_collected_at).getTime()) / 86400000;
+        if (ageDays < everyDays) return false;
+      }
+      return true;
+    });
     const by_source: Record<string, number> = {};
     let items = 0;
     for (const m of monitors) {
