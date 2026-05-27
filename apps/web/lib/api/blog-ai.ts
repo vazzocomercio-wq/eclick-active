@@ -55,10 +55,44 @@ export interface BlogSettings {
   voice_guidelines: string | null;
 }
 
+export type BlogPromptKey = 'article' | 'ideate';
+
+export interface BlogPrompt {
+  id: string;
+  key: BlogPromptKey;
+  prompt: string;
+  is_active: boolean;
+  is_default: boolean;
+}
+
+export interface BlogKnowledgeSource {
+  id: string;
+  source_type: 'url' | 'text' | 'image';
+  value: string;
+  title: string | null;
+  extracted_text: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
 export const blogAiApi = {
   getSettings: () => api.get<BlogSettings>('/blog-ai/settings'),
   saveSettings: (voice_guidelines: string | null) =>
     api.put<BlogSettings>('/blog-ai/settings', { voice_guidelines }),
+
+  // Estúdio: prompts editáveis
+  listPrompts: () => api.get<BlogPrompt[]>('/blog-ai/studio/prompts'),
+  savePrompt: (key: BlogPromptKey, prompt: string) =>
+    api.put<BlogPrompt>(`/blog-ai/studio/prompts/${key}`, { prompt }),
+  resetPrompt: (key: BlogPromptKey) => api.delete<void>(`/blog-ai/studio/prompts/${key}`),
+  generatePrompt: (key: BlogPromptKey, instruction: string, current_prompt?: string) =>
+    api.post<{ prompt: string }>(`/blog-ai/studio/prompts/${key}/generate`, { instruction, current_prompt }),
+
+  // Estúdio: base de conhecimento
+  listKnowledge: () => api.get<BlogKnowledgeSource[]>('/blog-ai/studio/knowledge'),
+  addKnowledge: (source_type: 'url' | 'text' | 'image', value: string, title?: string) =>
+    api.post<BlogKnowledgeSource>('/blog-ai/studio/knowledge', { source_type, value, title }),
+  removeKnowledge: (id: string) => api.delete<void>(`/blog-ai/studio/knowledge/${id}`),
   ideate: (seed?: string, count?: number) =>
     api.post<{ topics: BlogTopicIdea[] }>('/blog-ai/ideate', { seed, count }),
   generateBatch: (seed?: string, count?: number) =>

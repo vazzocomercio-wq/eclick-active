@@ -40,7 +40,8 @@ FORMATO DE SAÍDA: responda APENAS com um JSON válido (sem markdown, sem texto 
         { "type": "stat", "value": string, "label": string, "source": string } |
         { "type": "paperQuote", "quote": string, "paperTitle": string, "authors": string, "venue": string, "url": string } |
         { "type": "callout", "variant": "info"|"warning"|"tip"|"science"|"case", "title": string, "body": string } |
-        { "type": "comparison", "leftLabel": string, "rightLabel": string, "rows": [{ "aspect": string, "left": string, "right": string }] }
+        { "type": "comparison", "leftLabel": string, "rightLabel": string, "rows": [{ "aspect": string, "left": string, "right": string }] } |
+        { "type": "image", "prompt": string, "alt": string, "caption": string }   // imagem ilustrativa gerada por IA
       ]
     }
   ],
@@ -55,17 +56,23 @@ FORMATO DE SAÍDA: responda APENAS com um JSON válido (sem markdown, sem texto 
   "coverImagePrompt": string               // prompt em INGLÊS pra gerar a capa (ver regras no user)
 }
 
-Corpo com no mínimo ~800 palavras somando os parágrafos. Inclua pelo menos 1 bloco "stat" ou "paperQuote" e a comparação quando o tema pedir (ex: GEO vs SEO).`;
+Corpo com no mínimo ~800 palavras somando os parágrafos. Inclua pelo menos 1 bloco "stat" ou "paperQuote" e a comparação quando o tema pedir (ex: GEO vs SEO).
+
+IMAGENS INLINE: você PODE incluir 1 ou 2 blocos "image" no corpo (no máximo 2), só quando uma ilustração conceitual ajudar a explicar (ex: um diagrama abstrato de como a IA "lê" o conteúdo). O "prompt" é em INGLÊS, mesma estética da capa: abstrato/conceitual, dark futurista com acento ciano (#00E5FF) sobre fundo quase preto (#09090b), minimalista, SEM texto, SEM pessoas, SEM logos. O "alt" e "caption" em PT-BR (curtos). NÃO force imagens — se não agregar, não inclua.`;
 
 export function buildArticleUserPrompt(input: {
   topic: string;
   pillar?: string;
   notes?: string;
   voice?: string;
+  knowledge?: string;
 }): string {
   const pillar = BLOG_PILLARS.find((p) => p.slug === input.pillar);
   return [
     input.voice ? `VOZ DA MARCA (siga estritamente o tom/diretrizes): ${input.voice}` : '',
+    input.knowledge
+      ? `BASE DE CONHECIMENTO (use como referência factual — não copie literal, cite quando virar fonte):\n${input.knowledge}`
+      : '',
     `TEMA/PAUTA: ${input.topic}`,
     pillar ? `PILAR EDITORIAL: ${pillar.title} (${pillar.desc})` : 'PILAR: escolha o mais adequado entre os 7 pilares.',
     input.notes ? `DIREÇÕES EXTRAS: ${input.notes}` : '',
@@ -109,9 +116,11 @@ export function buildIdeateUserPrompt(input: {
   count: number;
   existingTitles?: string[];
   voice?: string;
+  knowledge?: string;
 }): string {
   return [
     input.voice ? `VOZ DA MARCA: ${input.voice}` : '',
+    input.knowledge ? `BASE DE CONHECIMENTO (use pra ancorar as pautas em fatos reais):\n${input.knowledge}` : '',
     `Proponha ${input.count} pautas.`,
     input.seed ? `FOCO/SEMENTE: ${input.seed}` : 'Sem semente — proponha as mais valiosas para começar/continuar o blog.',
     'Pilares: ' + BLOG_PILLARS.map((p) => `${p.slug} (${p.title})`).join(', '),

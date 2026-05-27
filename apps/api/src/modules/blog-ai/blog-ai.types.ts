@@ -35,7 +35,11 @@ export interface BlogTopicIdea {
 
 // ── Shape cru que a IA retorna ────────────────────────────────────────
 export interface RawArticleBlock {
-  type: 'stat' | 'paperQuote' | 'callout' | 'comparison';
+  type: 'stat' | 'paperQuote' | 'callout' | 'comparison' | 'image';
+  // image (gerada por IA → vira node {_type:'image', url, alt})
+  prompt?: string;
+  alt?: string;
+  caption?: string;
   // stat
   value?: string;
   label?: string;

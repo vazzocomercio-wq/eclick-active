@@ -1,14 +1,18 @@
-import { Body, Controller, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '../../common/auth/auth.guard';
 import { CurrentUser } from '../../common/auth/current-user.decorator';
 import type { AuthUser } from '../../common/auth/auth.types';
 import { BlogAiService } from './blog-ai.service';
+import { BlogStudioService, type BlogPromptKey } from './blog-studio.service';
 import type { GenerateBlogPostDto, IdeateDto } from './blog-ai.types';
 
 @UseGuards(AuthGuard)
 @Controller('blog-ai')
 export class BlogAiController {
-  constructor(private readonly svc: BlogAiService) {}
+  constructor(
+    private readonly svc: BlogAiService,
+    private readonly studio: BlogStudioService,
+  ) {}
 
   /** Voz da marca (tom/diretrizes editoriais) injetada nos prompts de geração. */
   @Get('settings')
@@ -19,6 +23,55 @@ export class BlogAiController {
   @Put('settings')
   updateSettings(@CurrentUser() user: AuthUser, @Body() body: { voice_guidelines?: string | null }) {
     return this.svc.updateSettings(user.org_id, body);
+  }
+
+  // ── Estúdio do Blog: prompts editáveis ───────────────────────────────
+
+  /** Lista os system prompts (article/ideate) — override ou default do código. */
+  @Get('studio/prompts')
+  listPrompts(@CurrentUser() user: AuthUser) {
+    return this.studio.listPrompts(user.org_id);
+  }
+
+  @Put('studio/prompts/:key')
+  upsertPrompt(@CurrentUser() user: AuthUser, @Param('key') key: BlogPromptKey, @Body() body: { prompt: string }) {
+    return this.studio.upsertPrompt(user.org_id, key, body?.prompt);
+  }
+
+  /** Reset → volta pro default do código. */
+  @Delete('studio/prompts/:key')
+  resetPrompt(@CurrentUser() user: AuthUser, @Param('key') key: BlogPromptKey) {
+    return this.studio.resetPrompt(user.org_id, key);
+  }
+
+  /** ✨ IA reescreve/melhora um system prompt a partir da intenção do usuário. */
+  @Post('studio/prompts/:key/generate')
+  generatePrompt(
+    @CurrentUser() user: AuthUser,
+    @Param('key') key: BlogPromptKey,
+    @Body() body: { instruction: string; current_prompt?: string },
+  ) {
+    return this.studio.generatePrompt(user.org_id, { key, instruction: body?.instruction, current_prompt: body?.current_prompt });
+  }
+
+  // ── Estúdio do Blog: base de conhecimento ────────────────────────────
+
+  @Get('studio/knowledge')
+  listKnowledge(@CurrentUser() user: AuthUser) {
+    return this.studio.listKnowledge(user.org_id);
+  }
+
+  @Post('studio/knowledge')
+  addKnowledge(
+    @CurrentUser() user: AuthUser,
+    @Body() body: { source_type: 'url' | 'text' | 'image'; value: string; title?: string },
+  ) {
+    return this.studio.addKnowledge(user.org_id, body);
+  }
+
+  @Delete('studio/knowledge/:id')
+  removeKnowledge(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.studio.removeKnowledge(user.org_id, id);
   }
 
   /** IA sugere N pautas (ancoradas nos pilares + GEO + lacunas). */

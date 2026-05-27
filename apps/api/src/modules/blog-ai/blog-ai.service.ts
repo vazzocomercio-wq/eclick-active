@@ -3,9 +3,8 @@ import { SupabaseService } from '../../common/supabase/supabase.service';
 import { LlmService } from '../../common/llm/llm.service';
 import { ImageGenerationService } from '../social/image-generation/image-generation.service';
 import { SanityBlogClient } from './sanity-blog.client';
+import { BlogStudioService } from './blog-studio.service';
 import {
-  BLOG_ARTICLE_SYSTEM_PROMPT,
-  BLOG_IDEATE_SYSTEM_PROMPT,
   BLOG_PILLARS,
   buildArticleUserPrompt,
   buildIdeateUserPrompt,
@@ -38,6 +37,7 @@ export class BlogAiService {
     private readonly llm: LlmService,
     private readonly images: ImageGenerationService,
     private readonly sanity: SanityBlogClient,
+    private readonly studio: BlogStudioService,
   ) {}
 
   private get db() {
@@ -122,12 +122,16 @@ export class BlogAiService {
   ): Promise<BlogPostRow> {
     const t0 = Date.now();
     try {
-      const voice = await this.getVoice(orgId);
+      const [voice, system, knowledge] = await Promise.all([
+        this.getVoice(orgId),
+        this.studio.resolveSystemPrompt(orgId, 'article'),
+        this.studio.getKnowledgeBlock(orgId),
+      ]);
       const out = await this.llm.chat({
         orgId,
         feature: 'blog_article',
-        system: BLOG_ARTICLE_SYSTEM_PROMPT,
-        user: buildArticleUserPrompt({ topic, pillar, notes, voice }),
+        system,
+        user: buildArticleUserPrompt({ topic, pillar, notes, voice, knowledge }),
         json_mode: true,
         max_tokens: 6000,
         temperature: 0.6,
@@ -141,6 +145,13 @@ export class BlogAiService {
 
       const body = this.toPortableText(art.sections);
       const slug = this.slugify(art.slug || art.title);
+
+      // Imagens inline (até 2): só quando a capa também está habilitada.
+      if (generateCover !== false) {
+        await this.generateInlineImages(orgId, postId, body);
+      } else {
+        this.stripInlineImagePlaceholders(body);
+      }
 
       let coverUrl: string | null = null;
       if (generateCover !== false) {
@@ -246,12 +257,16 @@ export class BlogAiService {
       .limit(50);
     const existingTitles = ((existing ?? []) as Array<{ title: string }>).map((r) => r.title);
 
-    const voice = await this.getVoice(orgId);
+    const [voice, system, knowledge] = await Promise.all([
+      this.getVoice(orgId),
+      this.studio.resolveSystemPrompt(orgId, 'ideate'),
+      this.studio.getKnowledgeBlock(orgId),
+    ]);
     const out = await this.llm.chat({
       orgId,
       feature: 'blog_ideate',
-      system: BLOG_IDEATE_SYSTEM_PROMPT,
-      user: buildIdeateUserPrompt({ seed: dto.seed, count, existingTitles, voice }),
+      system,
+      user: buildIdeateUserPrompt({ seed: dto.seed, count, existingTitles, voice, knowledge }),
       json_mode: true,
       max_tokens: 2000,
       temperature: 0.8,
@@ -341,6 +356,9 @@ export class BlogAiService {
       coverAssetId = await this.sanity.uploadImageFromUrl(row.cover_image_url);
     }
 
+    // imagens inline (url → asset durável no Sanity/CDN)
+    const body = await this.materializeBodyImages(row.body ?? []);
+
     const nowIso = new Date().toISOString();
     const pillar = row.pillar && VALID_PILLARS.has(row.pillar) ? row.pillar : DEFAULT_PILLAR;
 
@@ -351,7 +369,7 @@ export class BlogAiService {
       slug: { _type: 'slug', current: row.slug },
       excerpt: row.excerpt ?? '',
       tldr: row.tldr ?? [],
-      body: row.body ?? [],
+      body,
       faq: (row.faq ?? []).map((f) => ({ _type: 'faqItem', _key: this.k(), question: f.question, answer: f.answer })),
       aiPrompts: row.ai_prompts ?? [],
       citationSources: (row.citation_sources ?? []).map((s) => ({
@@ -433,6 +451,81 @@ export class BlogAiService {
     return out;
   }
 
+  /**
+   * 2º passo das imagens inline: gera (DALL·E via ImageGenerationService) as
+   * imagens dos nodes que têm `_genPrompt`, troca por `url`. Cap de 2 por
+   * artigo (custo). Best-effort: se uma falhar, o node é removido (sem buraco).
+   */
+  private async generateInlineImages(orgId: string, postId: string, body: PortableTextNode[]): Promise<void> {
+    const MAX = 2;
+    const pending = body.filter((n) => n._type === 'image' && typeof n._genPrompt === 'string');
+    let done = 0;
+    for (const node of pending) {
+      if (done >= MAX) {
+        this.removeNode(body, node);
+        continue;
+      }
+      const prompt = node._genPrompt as string;
+      try {
+        const img = await this.images.generateAndUpload(
+          orgId,
+          {
+            prompt,
+            primaryColor: '#00E5FF',
+            secondaryColor: '#09090b',
+            width: 1200,
+            height: 800,
+          },
+          `blog/${postId}/inline`,
+        );
+        node.url = img.url;
+        delete node._genPrompt;
+        done++;
+      } catch (e) {
+        this.log.warn(`imagem inline falhou (removendo node): ${(e as Error).message}`);
+        this.removeNode(body, node);
+      }
+    }
+  }
+
+  /**
+   * No publish: sobe as imagens inline (que hoje referenciam o storage do
+   * Active via `url`) como assets do Sanity, pra ficarem duráveis + na CDN —
+   * igual à capa. Best-effort: se o upload falhar, mantém o node por `url`
+   * (o front renderiza os dois jeitos).
+   */
+  private async materializeBodyImages(body: PortableTextNode[]): Promise<PortableTextNode[]> {
+    const out: PortableTextNode[] = [];
+    for (const node of body) {
+      if (node._type === 'image' && typeof node.url === 'string' && !node.asset) {
+        try {
+          const assetId = await this.sanity.uploadImageFromUrl(node.url as string);
+          const clone: PortableTextNode = { ...node, asset: { _type: 'reference', _ref: assetId } };
+          delete clone.url;
+          delete clone._genPrompt;
+          out.push(clone);
+          continue;
+        } catch (e) {
+          this.log.warn(`upload imagem inline pro Sanity falhou (mantém url): ${(e as Error).message}`);
+        }
+      }
+      out.push(node);
+    }
+    return out;
+  }
+
+  /** Remove placeholders de imagem (quando a geração de imagem está desligada). */
+  private stripInlineImagePlaceholders(body: PortableTextNode[]): void {
+    for (const node of body.filter((n) => n._type === 'image' && typeof n._genPrompt === 'string')) {
+      this.removeNode(body, node);
+    }
+  }
+
+  private removeNode(body: PortableTextNode[], node: PortableTextNode): void {
+    const idx = body.indexOf(node);
+    if (idx >= 0) body.splice(idx, 1);
+  }
+
   private textBlock(style: string, text: string): PortableTextNode {
     return {
       _type: 'block',
@@ -446,6 +539,12 @@ export class BlogAiService {
   private customBlock(b: RawArticleBlock): PortableTextNode | null {
     const _key = this.k();
     switch (b.type) {
+      case 'image':
+        // Placeholder: a imagem é gerada num 2º passo (generateInlineImages),
+        // que troca `_genPrompt` por `url`. O front renderiza via value.url.
+        return b.prompt?.trim()
+          ? { _type: 'image', _key, _genPrompt: b.prompt.trim(), alt: b.alt ?? '', caption: b.caption ?? undefined }
+          : null;
       case 'stat':
         return b.value && b.label ? { _type: 'stat', _key, value: b.value, label: b.label, source: b.source } : null;
       case 'paperQuote':
