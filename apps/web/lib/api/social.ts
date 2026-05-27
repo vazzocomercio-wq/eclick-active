@@ -749,6 +749,14 @@ export interface WeekPlan {
   generated_at: string;
   cached: boolean;
 }
+export interface Recommendation {
+  id: string;
+  kind: 'format' | 'timing' | 'campaign' | 'signal';
+  severity: 'info' | 'opportunity' | 'warning';
+  title: string;
+  detail: string;
+  action: { label: string; href: string } | null;
+}
 
 export const socialApi = {
   // Brands
@@ -945,6 +953,8 @@ export const socialApi = {
       api.get<WeekPlan>('/social/intelligence/week', { signal }),
     refreshWeek: () =>
       api.post<WeekPlan>('/social/intelligence/week/refresh', {}),
+    recommendations: (signal?: AbortSignal) =>
+      api.get<Recommendation[]>('/social/intelligence/recommendations', { signal }),
   },
 
   // A/B Testing

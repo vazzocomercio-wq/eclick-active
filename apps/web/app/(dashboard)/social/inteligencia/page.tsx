@@ -4,13 +4,14 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft, Sparkles, RefreshCw, Eye, TrendingUp, Users, Heart,
-  Flame, Clock, Loader2, Wand2, CalendarDays,
+  Flame, Clock, Loader2, Wand2, CalendarDays, Lightbulb,
 } from 'lucide-react';
 import {
   socialApi,
   type TodaysPlan,
   type IntelligenceOverview,
   type WeekPlan,
+  type Recommendation,
 } from '@/lib/api/social';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -32,19 +33,22 @@ export default function SocialIntelligencePage() {
   const [plan, setPlan] = useState<TodaysPlan | null>(null);
   const [overview, setOverview] = useState<IntelligenceOverview | null>(null);
   const [week, setWeek] = useState<WeekPlan | null>(null);
+  const [recs, setRecs] = useState<Recommendation[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = async () => {
     try {
-      const [p, o, w] = await Promise.all([
+      const [p, o, w, r] = await Promise.all([
         socialApi.intelligence.today(),
         socialApi.intelligence.overview(),
         socialApi.intelligence.week(),
+        socialApi.intelligence.recommendations(),
       ]);
       setPlan(p);
       setOverview(o);
       setWeek(w);
+      setRecs(r);
     } catch {
       /* silent */
     } finally {
@@ -176,6 +180,40 @@ export default function SocialIntelligencePage() {
                 </div>
               )}
             </section>
+
+            {/* ── RECOMENDAÇÕES ── */}
+            {recs.length > 0 && (
+              <section className="mb-6">
+                <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                  <Lightbulb className="h-4 w-4 text-amber-500" />Recomendações
+                </h2>
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                  {recs.map((r) => (
+                    <div
+                      key={r.id}
+                      className={cn(
+                        'flex items-start gap-3 rounded-lg border p-3',
+                        r.severity === 'warning'
+                          ? 'border-amber-500/40 bg-amber-500/5'
+                          : r.severity === 'opportunity'
+                            ? 'border-primary/30 bg-primary/5'
+                            : 'border-border bg-card',
+                      )}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[13px] font-medium">{r.title}</p>
+                        {r.detail && <p className="mt-0.5 text-xs text-muted-foreground">{r.detail}</p>}
+                      </div>
+                      {r.action && (
+                        <Button size="sm" variant="outline" asChild className="shrink-0">
+                          <Link href={r.action.href}>{r.action.label}</Link>
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
 
             {/* ── PLANO DA SEMANA ── */}
             {week && week.days.length > 0 && (

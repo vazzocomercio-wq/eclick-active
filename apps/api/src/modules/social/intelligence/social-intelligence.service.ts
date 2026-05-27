@@ -47,6 +47,16 @@ export interface WeekPlan {
   cached: boolean;
 }
 
+export type RecKind = 'format' | 'timing' | 'campaign' | 'signal';
+export interface Recommendation {
+  id: string;
+  kind: RecKind;
+  severity: 'info' | 'opportunity' | 'warning';
+  title: string;
+  detail: string;
+  action: { label: string; href: string } | null;
+}
+
 const SYSTEM_PROMPT = `Você é o estrategista de conteúdo de uma loja de e-commerce no e-Click.
 Sua missão: decidir O QUE POSTAR HOJE nas redes pra VENDER mais — cruzando a
 OPORTUNIDADE COMERCIAL (margem, estoque, overstock, demanda/tendência) com o que
@@ -102,6 +112,73 @@ export class SocialIntelligenceService {
   async getOverview(orgId: string): Promise<{ organic: unknown; generated_at: string }> {
     const organic = await this.bridge.getOrganicSummary(orgId);
     return { organic, generated_at: new Date().toISOString() };
+  }
+
+  /** Feed de recomendações acionáveis (determinístico, sem custo de IA): formato
+   *  campeão, melhor horário, produto que merece campanha + sinais do Active. */
+  async getRecommendations(orgId: string): Promise<Recommendation[]> {
+    const FMT: Record<string, string> = {
+      reel: 'Reels', REELS: 'Reels', post: 'Posts', FEED: 'Feed',
+      carousel: 'Carrosséis', STORY: 'Stories',
+    };
+    const [organic, candidates, sig] = await Promise.all([
+      this.bridge.getOrganicSummary(orgId).catch(() => null),
+      this.bridge.getCampaignCandidates(orgId, 'mixed', 5).catch(() => []),
+      this.supabase.adminClient
+        .from('social_signals')
+        .select('signal_type, severity, title, description')
+        .eq('org_id', orgId)
+        .is('acknowledged_at', null)
+        .order('detected_at', { ascending: false })
+        .limit(6),
+    ]);
+    const recs: Recommendation[] = [];
+
+    // 1. Formato campeão
+    if (organic && organic.by_format.length >= 2) {
+      const a = organic.by_format[0];
+      const b = organic.by_format[1];
+      if (a && b && a.avg_engagement_rate > 0 && a.avg_engagement_rate >= b.avg_engagement_rate * 1.3) {
+        const ratio = b.avg_engagement_rate > 0 ? (a.avg_engagement_rate / b.avg_engagement_rate).toFixed(1) : '';
+        recs.push({
+          id: 'format', kind: 'format', severity: 'opportunity',
+          title: `Poste mais ${FMT[a.format] ?? a.format}`,
+          detail: `${FMT[a.format] ?? a.format} engajam ${ratio ? `${ratio}× ` : ''}mais que ${FMT[b.format] ?? b.format} (alcance médio ${a.avg_reach} vs ${b.avg_reach}).`,
+          action: { label: 'Criar conteúdo', href: '/social/criar' },
+        });
+      }
+    }
+    // 2. Melhor horário
+    if (organic?.best_hour != null) {
+      recs.push({
+        id: 'timing', kind: 'timing', severity: 'info',
+        title: `Publique por volta das ${organic.best_hour}h`,
+        detail: 'É o horário em que seu público mais engajou nos últimos 30 dias.',
+        action: { label: 'Abrir calendário', href: '/social/calendario' },
+      });
+    }
+    // 3. Produto que merece campanha
+    const c = candidates[0];
+    if (c) {
+      recs.push({
+        id: 'campaign', kind: 'campaign', severity: 'opportunity',
+        title: `${c.product_name} merece campanha`,
+        detail: `Margem ${c.margin_pct ?? '?'}%${c.is_overstock ? ' · estoque parado (overstock)' : ''}${c.demand_trend === 'rising' ? ' · em alta no Radar' : ''} — bom candidato pra empurrar.`,
+        action: { label: 'Gerar campanha', href: '/social/campanhas' },
+      });
+    }
+    // 4. Sinais do Active (hit/flop/spike/queda)
+    const sigRows = (sig.data ?? []) as Array<{ signal_type: string; severity: string; title: string; description: string | null }>;
+    sigRows.forEach((s, i) => {
+      recs.push({
+        id: `sig-${s.signal_type}-${i}`, kind: 'signal',
+        severity: s.severity === 'critical' || s.severity === 'warning' ? 'warning' : 'info',
+        title: s.title,
+        detail: s.description ?? '',
+        action: null,
+      });
+    });
+    return recs;
   }
 
   /** Plano de conteúdo dos próximos 7 dias — a IA monta a semana com base em
