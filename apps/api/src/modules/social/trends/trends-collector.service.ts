@@ -4,6 +4,7 @@ import { YouTubeConnector } from './connectors/youtube.connector';
 import { GoogleTrendsConnector } from './connectors/google-trends.connector';
 import { TikTokConnector } from './connectors/tiktok.connector';
 import { MetaAdsConnector } from './connectors/meta-ads.connector';
+import { InstagramConnector } from './connectors/instagram.connector';
 import type { NewTrendItem, TrendMonitor } from './trends.types';
 
 export interface CollectResult {
@@ -13,10 +14,10 @@ export interface CollectResult {
 }
 
 /** Redes com conector implementado (youtube/google_trends/tiktok + meta_ads via Apify). */
-const TR1_NETWORKS = new Set(['youtube', 'google_trends', 'tiktok', 'meta_ads']);
+const TR1_NETWORKS = new Set(['youtube', 'google_trends', 'tiktok', 'meta_ads', 'instagram']);
 
 /** Redes pagas (Apify) — travadas por frequência no autopilot p/ segurar custo. */
-const APIFY_NETWORKS = new Set(['tiktok', 'meta_ads']);
+const APIFY_NETWORKS = new Set(['tiktok', 'meta_ads', 'instagram']);
 
 /**
  * Orquestra a coleta de tendências: pra cada monitor ativo, chama o conector
@@ -32,6 +33,7 @@ export class TrendsCollectorService {
     private readonly googleTrends: GoogleTrendsConnector,
     private readonly tiktok: TikTokConnector,
     private readonly metaAds: MetaAdsConnector,
+    private readonly instagram: InstagramConnector,
   ) {}
 
   async collectMonitor(orgId: string, monitor: TrendMonitor): Promise<number> {
@@ -44,6 +46,8 @@ export class TrendsCollectorService {
       items = await this.tiktok.collect(monitor);
     } else if (monitor.network === 'meta_ads') {
       items = await this.metaAds.collect(monitor);
+    } else if (monitor.network === 'instagram') {
+      items = await this.instagram.collect(monitor);
     } else {
       return 0; // rede sem conector nesta fase
     }
