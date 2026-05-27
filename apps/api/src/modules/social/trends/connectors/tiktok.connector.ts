@@ -92,7 +92,8 @@ export class TikTokConnector {
       }
     }
 
-    const url = `https://api.apify.com/v2/acts/${actor}/run-sync-get-dataset-items?token=${encodeURIComponent(token)}`;
+    // token vai no header Authorization (nunca em query string).
+    const url = `https://api.apify.com/v2/acts/${actor}/run-sync-get-dataset-items`;
     const out: NewTrendItem[] = [];
 
     // 1 run por trendType (o actor só aceita um por vez)
@@ -101,7 +102,7 @@ export class TikTokConnector {
         const input = { ...base, countryCode: country, period, maxResults, trendType };
         const res = await fetch(url, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify(input),
           signal: AbortSignal.timeout(120_000),
         });
@@ -158,7 +159,7 @@ export class TikTokConnector {
     if (!externalRaw && !name) return null;
 
     const views = num('videoViews', 'views', 'viewCount', 'playCount');
-    const uses = num('publishCnt', 'postCount', 'posts', 'videoCount');
+    const uses = num('publishedVideoCount', 'publishCnt', 'postCount', 'posts', 'videoCount');
     const rank = num('rank', 'ranking');
     const growth = num('rankDiff', 'trend', 'growth', 'publishCntGrowth');
 
