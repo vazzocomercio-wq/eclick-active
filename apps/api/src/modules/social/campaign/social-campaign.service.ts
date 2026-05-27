@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { SupabaseService } from '../../../common/supabase/supabase.service';
+import { asUuidOrNull } from '../../../common/uuid.util';
 import { EventsGateway } from '../../../gateways/events.gateway';
 import { LlmService } from '../../../common/llm/llm.service';
 import { SocialAiGeneratorService } from '../social-ai/social-ai-generator.service';

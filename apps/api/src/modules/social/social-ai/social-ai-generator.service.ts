@@ -6,6 +6,7 @@ import { SocialCalendarsService } from '../social-calendars.service';
 import { ImageGenerationService } from '../image-generation/image-generation.service';
 import { BridgeService } from '../../bridge/bridge.service';
 import { SocialPromptsService } from '../prompts/social-prompts.service';
+import { asUuidOrNull } from '../../../common/uuid.util';
 import {
   CALENDAR_SYSTEM_PROMPT,
   POST_SYSTEM_PROMPT,
@@ -397,7 +398,7 @@ export class SocialAiGeneratorService {
         pillar: dto.pillar ?? 'product',
         title: dto.theme,
         channels: dto.channels ?? ['instagram'],
-        related_product_id: dto.catalog_product_id ?? null,
+        related_product_id: asUuidOrNull(dto.catalog_product_id),
         status: 'generating',
         metadata: {
           brief: dto.theme,
@@ -742,7 +743,7 @@ export class SocialAiGeneratorService {
         pillar: dto.pillar ?? null,
         title: dto.theme,
         channels: dto.channels ?? ['instagram'],
-        related_product_id: dto.related_product_id ?? null,
+        related_product_id: asUuidOrNull(dto.related_product_id),
         status: 'draft',
         metadata: {
           hook: dto.hook,
@@ -771,7 +772,7 @@ export class SocialAiGeneratorService {
         pillar: dto.pillar ?? null,
         title: dto.theme,
         channels: dto.channels ?? ['instagram'],
-        related_product_id: dto.related_product_id ?? null,
+        related_product_id: asUuidOrNull(dto.related_product_id),
         status: 'draft',
         metadata: {
           hook: dto.hook,

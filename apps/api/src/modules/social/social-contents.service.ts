@@ -5,6 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { SupabaseService } from '../../common/supabase/supabase.service';
+import { asUuidOrNull } from '../../common/uuid.util';
 import type {
   SocialContent,
   ContentStatus,
@@ -111,9 +112,15 @@ export class SocialContentsService {
     id: string,
     dto: UpdateContentDto,
   ): Promise<SocialContent> {
+    // related_product_id é uuid; refs não-uuid (ex.: id de produto TikTok Shop)
+    // viram null — a foto/legenda já vêm no próprio PATCH (cover/media).
+    const patch =
+      'related_product_id' in dto
+        ? { ...dto, related_product_id: asUuidOrNull((dto as { related_product_id?: string | null }).related_product_id) }
+        : dto;
     const { data, error } = await this.supabase.adminClient
       .from('social_contents')
-      .update(dto)
+      .update(patch)
       .eq('id', id)
       .eq('org_id', orgId)
       .select('*')
