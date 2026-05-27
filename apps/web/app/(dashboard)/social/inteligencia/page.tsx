@@ -29,6 +29,18 @@ const BLOCKS: { label: string; hours: number[] }[] = [
 const FORMAT_LABEL: Record<string, string> = { reel: 'Reel', post: 'Post', carousel: 'Carrossel', REELS: 'Reels', FEED: 'Feed', STORY: 'Story' };
 const nf = (n: number) => n.toLocaleString('pt-BR');
 
+/** Score relativo do post (0-100): blend de alcance + engajamento vs o melhor do período. */
+function scoreOf(reach: number, er: number, maxReach: number, maxEr: number): number {
+  const r = maxReach > 0 ? reach / maxReach : 0;
+  const e = maxEr > 0 ? er / maxEr : 0;
+  return Math.round((0.45 * r + 0.55 * e) * 100);
+}
+function scoreColor(s: number): string {
+  if (s >= 70) return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-500';
+  if (s >= 40) return 'border-amber-500/40 bg-amber-500/10 text-amber-500';
+  return 'border-border bg-muted text-muted-foreground';
+}
+
 export default function SocialIntelligencePage() {
   const [plan, setPlan] = useState<TodaysPlan | null>(null);
   const [overview, setOverview] = useState<IntelligenceOverview | null>(null);
@@ -313,30 +325,45 @@ export default function SocialIntelligencePage() {
                 </h2>
                 <div className="rounded-lg border border-border bg-card p-3">
                   {org && org.top_posts.length > 0 ? (
-                    <div className="flex flex-col gap-2">
-                      {org.top_posts.map((p, i) => (
-                        <a
-                          key={i}
-                          href={p.permalink ?? '#'}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex items-center gap-3 rounded-md border border-border p-2 transition-colors hover:bg-muted/40"
-                        >
-                          {p.thumbnail_url ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={p.thumbnail_url} alt="" className="h-10 w-10 shrink-0 rounded object-cover" />
-                          ) : (
-                            <div className="h-10 w-10 shrink-0 rounded bg-muted" />
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-xs">{p.caption || '(sem legenda)'}</p>
-                            <p className="text-[10px] text-muted-foreground">
-                              {FORMAT_LABEL[p.type ?? ''] ?? p.type ?? 'POST'} · {nf(p.reach)} alcance · {nf(p.views)} views
-                            </p>
-                          </div>
-                        </a>
-                      ))}
-                    </div>
+                    (() => {
+                      const maxReach = Math.max(...org.top_posts.map((p) => p.reach), 1);
+                      const maxEr = Math.max(...org.top_posts.map((p) => p.engagement_rate), 0.0001);
+                      return (
+                        <div className="flex flex-col gap-2">
+                          {org.top_posts.map((p, i) => {
+                            const sc = scoreOf(p.reach, p.engagement_rate, maxReach, maxEr);
+                            return (
+                              <a
+                                key={i}
+                                href={p.permalink ?? '#'}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex items-center gap-3 rounded-md border border-border p-2 transition-colors hover:bg-muted/40"
+                              >
+                                {p.thumbnail_url ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={p.thumbnail_url} alt="" className="h-10 w-10 shrink-0 rounded object-cover" />
+                                ) : (
+                                  <div className="h-10 w-10 shrink-0 rounded bg-muted" />
+                                )}
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-xs">{p.caption || '(sem legenda)'}</p>
+                                  <p className="text-[10px] text-muted-foreground">
+                                    {FORMAT_LABEL[p.type ?? ''] ?? p.type ?? 'POST'} · {nf(p.reach)} alcance · {nf(p.views)} views
+                                  </p>
+                                </div>
+                                <span
+                                  title="Score relativo do post (alcance + engajamento)"
+                                  className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-[11px] font-bold', scoreColor(sc))}
+                                >
+                                  {sc}
+                                </span>
+                              </a>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()
                   ) : (
                     <p className="py-6 text-center text-xs text-muted-foreground">Sem posts coletados ainda.</p>
                   )}
