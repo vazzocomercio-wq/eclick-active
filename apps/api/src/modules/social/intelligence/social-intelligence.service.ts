@@ -57,6 +57,18 @@ export interface Recommendation {
   action: { label: string; href: string } | null;
 }
 
+export interface AdsSummary {
+  connected_accounts: number;
+  period_days: number;
+  totals: {
+    spend: number; impressions: number; clicks: number;
+    ctr: number; cpm: number; cpc: number;
+    conversions: number; cac: number; roas: number;
+  };
+  by_platform: Array<{ platform: string; spend: number; conversions: number }>;
+  top_campaigns: Array<{ name: string; status: string; platform: string; spend: number; clicks: number; ctr: number; conversions: number; roas: number }>;
+}
+
 const SYSTEM_PROMPT = `Você é o estrategista de conteúdo de uma loja de e-commerce no e-Click.
 Sua missão: decidir O QUE POSTAR HOJE nas redes pra VENDER mais — cruzando a
 OPORTUNIDADE COMERCIAL (margem, estoque, overstock, demanda/tendência) com o que
@@ -112,6 +124,69 @@ export class SocialIntelligenceService {
   async getOverview(orgId: string): Promise<{ organic: unknown; generated_at: string }> {
     const organic = await this.bridge.getOrganicSummary(orgId);
     return { organic, generated_at: new Date().toISOString() };
+  }
+
+  /** Resumo de ADS (Meta/Google) dos últimos 30 dias: gasto/CTR/CPM/CPC/conversões/
+   *  CAC/ROAS + top campanhas. Lê ad_metrics_daily + ad_campaigns (módulo ads/). */
+  async getAdsSummary(orgId: string): Promise<AdsSummary> {
+    const days = 30;
+    const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+    const [intg, metrics, camps] = await Promise.all([
+      this.supabase.adminClient.from('ad_integrations').select('id').eq('org_id', orgId).eq('status', 'active'),
+      this.supabase.adminClient.from('ad_metrics_daily').select('campaign_id, platform, spend, impressions, clicks, conversions, roas').eq('org_id', orgId).gte('date', since).limit(5000),
+      this.supabase.adminClient.from('ad_campaigns').select('id, name, status, platform').eq('org_id', orgId),
+    ]);
+
+    const rows = (metrics.data ?? []) as Array<{ campaign_id: string; platform: string; spend: number; impressions: number; clicks: number; conversions: number; roas: number }>;
+    const campMap = new Map<string, { name: string; status: string; platform: string }>();
+    for (const c of (camps.data ?? []) as Array<{ id: string; name: string; status: string; platform: string }>) {
+      campMap.set(c.id, { name: c.name, status: c.status, platform: c.platform });
+    }
+
+    let spend = 0, impressions = 0, clicks = 0, conversions = 0, roasSpend = 0;
+    const byPlat = new Map<string, { spend: number; conversions: number }>();
+    const byCamp = new Map<string, { spend: number; clicks: number; impressions: number; conversions: number; roasSpend: number }>();
+    for (const r of rows) {
+      spend += r.spend ?? 0; impressions += r.impressions ?? 0; clicks += r.clicks ?? 0; conversions += r.conversions ?? 0;
+      roasSpend += (r.roas ?? 0) * (r.spend ?? 0);
+      const p = byPlat.get(r.platform) ?? { spend: 0, conversions: 0 };
+      p.spend += r.spend ?? 0; p.conversions += r.conversions ?? 0;
+      byPlat.set(r.platform, p);
+      const cm = byCamp.get(r.campaign_id) ?? { spend: 0, clicks: 0, impressions: 0, conversions: 0, roasSpend: 0 };
+      cm.spend += r.spend ?? 0; cm.clicks += r.clicks ?? 0; cm.impressions += r.impressions ?? 0; cm.conversions += r.conversions ?? 0; cm.roasSpend += (r.roas ?? 0) * (r.spend ?? 0);
+      byCamp.set(r.campaign_id, cm);
+    }
+
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+    const top_campaigns = [...byCamp.entries()]
+      .map(([id, v]) => {
+        const meta = campMap.get(id) ?? { name: '(campanha)', status: '?', platform: 'meta' };
+        return {
+          name: meta.name, status: meta.status, platform: meta.platform,
+          spend: round2(v.spend), clicks: v.clicks,
+          ctr: v.impressions > 0 ? round2((v.clicks / v.impressions) * 100) : 0,
+          conversions: v.conversions,
+          roas: v.spend > 0 ? round2(v.roasSpend / v.spend) : 0,
+        };
+      })
+      .sort((a, b) => b.spend - a.spend)
+      .slice(0, 6);
+
+    return {
+      connected_accounts: (intg.data ?? []).length,
+      period_days: days,
+      totals: {
+        spend: round2(spend), impressions, clicks,
+        ctr: impressions > 0 ? round2((clicks / impressions) * 100) : 0,
+        cpm: impressions > 0 ? round2((spend / impressions) * 1000) : 0,
+        cpc: clicks > 0 ? round2(spend / clicks) : 0,
+        conversions,
+        cac: conversions > 0 ? round2(spend / conversions) : 0,
+        roas: spend > 0 ? round2(roasSpend / spend) : 0,
+      },
+      by_platform: [...byPlat.entries()].map(([platform, v]) => ({ platform, spend: round2(v.spend), conversions: v.conversions })),
+      top_campaigns,
+    };
   }
 
   /** Feed de recomendações acionáveis (determinístico, sem custo de IA): formato

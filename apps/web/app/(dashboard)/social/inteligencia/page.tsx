@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft, Sparkles, RefreshCw, Eye, TrendingUp, Users, Heart,
-  Flame, Clock, Loader2, Wand2, CalendarDays, Lightbulb,
+  Flame, Clock, Loader2, Wand2, CalendarDays, Lightbulb, Megaphone, DollarSign,
 } from 'lucide-react';
 import {
   socialApi,
@@ -12,6 +12,7 @@ import {
   type IntelligenceOverview,
   type WeekPlan,
   type Recommendation,
+  type AdsSummary,
 } from '@/lib/api/social';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -46,21 +47,24 @@ export default function SocialIntelligencePage() {
   const [overview, setOverview] = useState<IntelligenceOverview | null>(null);
   const [week, setWeek] = useState<WeekPlan | null>(null);
   const [recs, setRecs] = useState<Recommendation[]>([]);
+  const [ads, setAds] = useState<AdsSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = async () => {
     try {
-      const [p, o, w, r] = await Promise.all([
+      const [p, o, w, r, a] = await Promise.all([
         socialApi.intelligence.today(),
         socialApi.intelligence.overview(),
         socialApi.intelligence.week(),
         socialApi.intelligence.recommendations(),
+        socialApi.intelligence.ads(),
       ]);
       setPlan(p);
       setOverview(o);
       setWeek(w);
       setRecs(r);
+      setAds(a);
     } catch {
       /* silent */
     } finally {
@@ -261,6 +265,40 @@ export default function SocialIntelligencePage() {
                 <Kpi icon={<TrendingUp className="h-4 w-4" />} label="Visualizações" value={nf(org.totals.views)} />
                 <Kpi icon={<Heart className="h-4 w-4" />} label="Engajamento" value={nf(org.totals.engagement)} hint={`taxa ${(org.totals.avg_engagement_rate * 100).toFixed(2)}%`} />
                 <Kpi icon={<Users className="h-4 w-4" />} label="Seguidores" value={nf(org.totals.followers)} hint={`${nf(org.totals.profile_views)} visitas ao perfil`} />
+              </section>
+            )}
+
+            {/* ── ADS (Meta/Google) ── */}
+            {ads && ads.connected_accounts > 0 && (
+              <section className="mb-6">
+                <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                  <Megaphone className="h-4 w-4 text-primary" />Anúncios
+                  <span className="text-xs font-normal text-muted-foreground">· {ads.connected_accounts} conta(s) · últimos {ads.period_days}d</span>
+                </h2>
+                <div className="mb-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+                  <Kpi icon={<DollarSign className="h-4 w-4" />} label="Investido" value={`R$ ${nf(ads.totals.spend)}`} hint={`${nf(ads.totals.impressions)} impressões`} />
+                  <Kpi icon={<TrendingUp className="h-4 w-4" />} label="CTR" value={`${ads.totals.ctr}%`} hint={`CPM R$ ${ads.totals.cpm} · CPC R$ ${ads.totals.cpc}`} />
+                  <Kpi icon={<Users className="h-4 w-4" />} label="Conversões" value={nf(ads.totals.conversions)} hint={ads.totals.cac > 0 ? `CAC R$ ${ads.totals.cac}` : undefined} />
+                  <Kpi icon={<Sparkles className="h-4 w-4" />} label="ROAS" value={ads.totals.roas > 0 ? `${ads.totals.roas}x` : '—'} hint={ads.totals.roas > 0 ? undefined : 'sem conversão rastreada'} />
+                </div>
+                {ads.top_campaigns.length > 0 && (
+                  <div className="rounded-lg border border-border bg-card p-3">
+                    <p className="mb-2 text-xs font-semibold">Top campanhas (por investimento)</p>
+                    <div className="flex flex-col gap-1">
+                      {ads.top_campaigns.map((c, i) => (
+                        <div key={i} className="flex items-center justify-between gap-2 text-xs">
+                          <span className="min-w-0 truncate">
+                            <span className="uppercase text-muted-foreground">{c.platform}</span> · {c.name}
+                            {c.status !== 'ACTIVE' && <span className="ml-1 text-[10px] text-muted-foreground">({c.status})</span>}
+                          </span>
+                          <span className="shrink-0 text-muted-foreground">
+                            R$ {nf(c.spend)} · CTR {c.ctr}%{c.conversions > 0 ? ` · ${c.conversions} conv` : ''}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </section>
             )}
 

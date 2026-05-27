@@ -757,6 +757,13 @@ export interface Recommendation {
   detail: string;
   action: { label: string; href: string } | null;
 }
+export interface AdsSummary {
+  connected_accounts: number;
+  period_days: number;
+  totals: { spend: number; impressions: number; clicks: number; ctr: number; cpm: number; cpc: number; conversions: number; cac: number; roas: number };
+  by_platform: Array<{ platform: string; spend: number; conversions: number }>;
+  top_campaigns: Array<{ name: string; status: string; platform: string; spend: number; clicks: number; ctr: number; conversions: number; roas: number }>;
+}
 
 export const socialApi = {
   // Brands
@@ -955,6 +962,8 @@ export const socialApi = {
       api.post<WeekPlan>('/social/intelligence/week/refresh', {}),
     recommendations: (signal?: AbortSignal) =>
       api.get<Recommendation[]>('/social/intelligence/recommendations', { signal }),
+    ads: (signal?: AbortSignal) =>
+      api.get<AdsSummary>('/social/intelligence/ads', { signal }),
   },
 
   // A/B Testing
