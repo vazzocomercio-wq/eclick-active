@@ -51,6 +51,8 @@ export default function BlogStudioPage() {
   }, []);
 
   return (
+    <div className="flex h-full flex-col overflow-hidden">
+     <div className="flex-1 overflow-y-auto">
     <div className="mx-auto max-w-4xl px-4 py-6">
       <Link href="/blog-ia" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" /> {t('studio.back')}
@@ -112,6 +114,8 @@ export default function BlogStudioPage() {
           <KnowledgePanel knowledge={knowledge} setKnowledge={setKnowledge} setError={setError} t={t} />
         </>
       )}
+        </div>
+      </div>
     </div>
   );
 }

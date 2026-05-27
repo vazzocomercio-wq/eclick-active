@@ -211,6 +211,8 @@ export default function BlogIaPage() {
   }
 
   return (
+    <div className="flex h-full flex-col overflow-hidden">
+     <div className="flex-1 overflow-y-auto">
     <div className="mx-auto max-w-4xl px-4 py-6">
       {/* Header */}
       <div className="mb-6 flex items-start justify-between gap-3">
@@ -433,6 +435,8 @@ export default function BlogIaPage() {
           ))}
         </ul>
       )}
+    </div>
+      </div>
     </div>
   );
 }
