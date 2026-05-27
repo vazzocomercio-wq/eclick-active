@@ -81,18 +81,23 @@ export class SocialIntelligenceService {
     return this.generate(orgId, today);
   }
 
+  /** Resumo orgânico pro dashboard executivo (totais/heatmap/trend/top/por formato).
+   *  Vem do SaaS via bridge (dado coletado em analytics_social_posts). */
+  async getOverview(orgId: string): Promise<{ organic: unknown; generated_at: string }> {
+    const organic = await this.bridge.getOrganicSummary(orgId);
+    return { organic, generated_at: new Date().toISOString() };
+  }
+
   private async generate(orgId: string, today: string): Promise<TodaysPlan> {
-    const [candidates, byPillar, byHour, top] = await Promise.all([
+    const [candidates, organic] = await Promise.all([
       this.bridge.getCampaignCandidates(orgId, 'mixed', 8).catch(() => []),
-      this.metrics.getByPillar(orgId, 30).catch(() => []),
-      this.metrics.getByHour(orgId, 30).catch(() => []),
-      this.metrics.getTopPerformers(orgId, 30, undefined, 5).catch(() => []),
+      this.bridge.getOrganicSummary(orgId).catch(() => null),
     ]);
 
-    const hoursByEng = [...byHour].sort((a, b) => b.avg_engagement_rate - a.avg_engagement_rate);
-    const bestHour = hoursByEng[0]?.hour_of_day ?? null;
-    const bestFormat = top[0]?.content_type ?? byPillar[0]?.pillar ?? null;
-    const dataAvailable = candidates.length > 0 || byPillar.length > 0 || top.length > 0;
+    const bestHour = organic?.best_hour ?? null;
+    const bestFormat = organic?.best_format ?? null;
+    const orgPosts = organic?.totals.posts ?? 0;
+    const dataAvailable = candidates.length > 0 || orgPosts > 0;
 
     const signals: TodaySignals = {
       candidates: candidates.length,
@@ -116,14 +121,14 @@ export class SocialIntelligenceService {
           )
           .join('\n')
       : '(sem candidatos comerciais — sugira com base no engajamento)';
-    const pillarText = byPillar.length
-      ? byPillar.slice(0, 5).map((p) => `${p.pillar}: eng ${(p.avg_engagement_rate * 100).toFixed(1)}%, alcance médio ${Math.round(p.avg_reach)}`).join('\n')
+    const formatText = organic && organic.by_format.length
+      ? organic.by_format.slice(0, 5).map((f) => `${f.format}: eng ${(f.avg_engagement_rate * 100).toFixed(1)}%, alcance médio ${f.avg_reach}`).join('\n')
       : '(sem dados de formato)';
-    const hourText = hoursByEng.length
-      ? hoursByEng.slice(0, 3).map((h) => `${h.hour_of_day}h (eng ${(h.avg_engagement_rate * 100).toFixed(1)}%)`).join(', ')
-      : '(sem dados de horário)';
-    const topText = top.length
-      ? top.map((t) => `${t.content_type} "${(t.title ?? '').slice(0, 40)}" — alcance ${t.total_reach}, eng ${(t.avg_engagement_rate * 100).toFixed(1)}%`).join('\n')
+    const hourText = organic && organic.heatmap.length
+      ? [...organic.heatmap].sort((a, b) => b.reach - a.reach).slice(0, 3).map((h) => `${h.hour}h`).join(', ')
+      : bestHour != null ? `${bestHour}h` : '(sem dados de horário)';
+    const topText = organic && organic.top_posts.length
+      ? organic.top_posts.map((t) => `${t.type ?? 'POST'} "${(t.caption ?? '').slice(0, 40)}" — alcance ${t.reach}, eng ${(t.engagement_rate * 100).toFixed(1)}%`).join('\n')
       : '(sem histórico)';
 
     const user = [
@@ -132,8 +137,8 @@ export class SocialIntelligenceService {
       'PRODUTOS CANDIDATOS (oportunidade comercial — priorize estes):',
       candText,
       '',
-      'PILARES/TEMAS QUE MAIS ENGAJAM (últimos 30d):',
-      pillarText,
+      'FORMATOS QUE MAIS ENGAJAM (últimos 30d):',
+      formatText,
       '',
       `MELHORES HORÁRIOS: ${hourText}`,
       '',

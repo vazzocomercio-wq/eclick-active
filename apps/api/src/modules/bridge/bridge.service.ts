@@ -7,6 +7,7 @@ import {
   BridgeStatus,
   CommercialSignal,
   CampaignCandidate,
+  OrganicSummary,
 } from './bridge.types';
 
 /**
@@ -505,6 +506,31 @@ export class BridgeService {
     } catch (err) {
       this.log.warn(`getCampaignCandidates falhou para ${activeOrgId}: ${String(err)}`);
       return [];
+    }
+  }
+
+  /** Resumo orgânico (analytics) coletado no SaaS — pro Social Intelligence. */
+  async getOrganicSummary(activeOrgId: string): Promise<OrganicSummary | null> {
+    const cfg = this.saasInternalConfig();
+    if (!cfg) return null;
+    const saasOrgId = await this.resolveSaasOrgId(activeOrgId);
+    if (!saasOrgId) return null;
+    try {
+      const url = new URL(`${cfg.baseUrl}/internal/analytics/organic-summary`);
+      url.searchParams.set('org_id', saasOrgId);
+      const res = await fetch(url.toString(), {
+        method: 'GET',
+        headers: { 'X-Internal-Key': cfg.key },
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!res.ok) {
+        this.log.warn(`getOrganicSummary SaaS ${res.status}`);
+        return null;
+      }
+      return (await res.json()) as OrganicSummary;
+    } catch (err) {
+      this.log.warn(`getOrganicSummary falhou para ${activeOrgId}: ${String(err)}`);
+      return null;
     }
   }
 

@@ -22,4 +22,10 @@ export class SocialIntelligenceController {
   refresh(@CurrentUser() user: AuthUser): Promise<TodaysPlan> {
     return this.intel.getTodaysPlan(user.org_id, true);
   }
+
+  /** Resumo orgânico pro dashboard executivo (heatmap/trend/top/por formato). */
+  @Get('overview')
+  overview(@CurrentUser() user: AuthUser) {
+    return this.intel.getOverview(user.org_id);
+  }
 }

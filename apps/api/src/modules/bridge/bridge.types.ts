@@ -87,3 +87,30 @@ export interface CampaignCandidate extends CommercialSignal {
   category: string | null;
   score: number;
 }
+
+/** Resumo orgânico coletado no SaaS (analytics_social_posts) — Social Intelligence. */
+export interface OrganicSummary {
+  totals: {
+    posts: number;
+    reach: number;
+    views: number;
+    engagement: number;
+    avg_engagement_rate: number;
+    followers: number;
+    profile_views: number;
+  };
+  by_format: Array<{ format: string; posts: number; avg_reach: number; avg_engagement_rate: number }>;
+  heatmap: Array<{ dow: number; hour: number; posts: number; reach: number }>;
+  top_posts: Array<{
+    permalink: string | null;
+    caption: string;
+    type: string | null;
+    thumbnail_url: string | null;
+    reach: number;
+    views: number;
+    engagement_rate: number;
+  }>;
+  trend: Array<{ date: string; reach: number; views: number }>;
+  best_format: string | null;
+  best_hour: number | null;
+}
