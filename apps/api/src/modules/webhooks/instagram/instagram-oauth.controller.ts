@@ -40,7 +40,8 @@ const INSTAGRAM_SCOPES = [
  *
  * Env vars necessárias:
  *   META_APP_ID, META_APP_SECRET — do Facebook Developer Console
- *   META_OAUTH_REDIRECT_URI       — URL do callback (deve bater EXATO)
+ *   API_BASE_URL                 — base do callback (default https://api.active.eclick.app.br)
+ *   INSTAGRAM_OAUTH_REDIRECT_URI — override opc; senão deriva de API_BASE_URL + /channels/instagram/callback
  *   ENCRYPTION_KEY                — criptografa page_access_token
  */
 @Controller('channels/instagram')
@@ -56,7 +57,7 @@ export class InstagramOAuthController {
   @Get('auth')
   authUrl(@CurrentUser() user: AuthUser): { url: string } {
     const clientId = this.requireEnv('META_APP_ID');
-    const redirectUri = this.requireEnv('META_OAUTH_REDIRECT_URI');
+    const redirectUri = this.getRedirectUri();
     const state = encodeOAuthState({ org_id: user.org_id, agent_id: user.id });
     const params = new URLSearchParams({
       client_id: clientId,
@@ -101,7 +102,7 @@ export class InstagramOAuthController {
     try {
       const clientId = this.requireEnv('META_APP_ID');
       const clientSecret = this.requireEnv('META_APP_SECRET');
-      const redirectUri = this.requireEnv('META_OAUTH_REDIRECT_URI');
+      const redirectUri = this.getRedirectUri();
 
       // 1. Code → short-lived token
       const short = await this.instagram.exchangeCodeForToken({
@@ -220,6 +221,23 @@ export class InstagramOAuthController {
         config: {},
       });
     }
+  }
+
+  /**
+   * URL do callback do OAuth do Instagram. Deriva de API_BASE_URL (domínio da
+   * API) pra NÃO colidir com META_OAUTH_REDIRECT_URI — esse env é usado pelo
+   * controller de Meta Ads com um path diferente. Override opcional via
+   * INSTAGRAM_OAUTH_REDIRECT_URI. Tem que bater EXATO com a Valid OAuth
+   * Redirect URI registrada no app Meta.
+   */
+  private getRedirectUri(): string {
+    const apiBase = (
+      process.env.API_BASE_URL ?? 'https://api.active.eclick.app.br'
+    ).replace(/\/+$/, '');
+    return (
+      process.env.INSTAGRAM_OAUTH_REDIRECT_URI ??
+      `${apiBase}/channels/instagram/callback`
+    );
   }
 
   private requireEnv(name: string): string {
