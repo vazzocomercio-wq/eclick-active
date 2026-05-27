@@ -51,6 +51,7 @@ import { TrendsAlerterService } from './trends/trends-alerter.service';
 import { YouTubeConnector } from './trends/connectors/youtube.connector';
 import { GoogleTrendsConnector } from './trends/connectors/google-trends.connector';
 import { TikTokConnector } from './trends/connectors/tiktok.connector';
+import { MetaAdsConnector } from './trends/connectors/meta-ads.connector';
 import { AlertsModule } from '../alerts/alerts.module';
 import { ChannelsModule as ChannelDispatcherModule } from '../../common/channels/channels.module';
 import { SlackModule } from '../../common/slack/slack.module';
@@ -118,6 +119,7 @@ import { BridgeModule } from '../bridge/bridge.module';
     YouTubeConnector,
     GoogleTrendsConnector,
     TikTokConnector,
+    MetaAdsConnector,
   ],
   exports: [
     SocialBrandsService,

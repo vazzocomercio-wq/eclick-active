@@ -363,7 +363,7 @@ export default function TendenciasPage() {
                           ? `coletado ${new Date(m.last_collected_at).toLocaleDateString('pt-BR')}`
                           : 'aguardando coleta'}
                       </span>
-                      {(m.network === 'youtube' || m.network === 'google_trends' || m.network === 'tiktok') && (
+                      {(m.network === 'youtube' || m.network === 'google_trends' || m.network === 'tiktok' || m.network === 'meta_ads') && (
                         <Button
                           variant="ghost"
                           size="sm"

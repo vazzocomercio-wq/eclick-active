@@ -3,6 +3,7 @@ import { TrendsService } from './trends.service';
 import { YouTubeConnector } from './connectors/youtube.connector';
 import { GoogleTrendsConnector } from './connectors/google-trends.connector';
 import { TikTokConnector } from './connectors/tiktok.connector';
+import { MetaAdsConnector } from './connectors/meta-ads.connector';
 import type { NewTrendItem, TrendMonitor } from './trends.types';
 
 export interface CollectResult {
@@ -11,8 +12,11 @@ export interface CollectResult {
   by_source: Record<string, number>;
 }
 
-/** Redes com conector implementado (TR-1: youtube/google_trends; TR-5: tiktok). */
-const TR1_NETWORKS = new Set(['youtube', 'google_trends', 'tiktok']);
+/** Redes com conector implementado (youtube/google_trends/tiktok + meta_ads via Apify). */
+const TR1_NETWORKS = new Set(['youtube', 'google_trends', 'tiktok', 'meta_ads']);
+
+/** Redes pagas (Apify) — travadas por frequência no autopilot p/ segurar custo. */
+const APIFY_NETWORKS = new Set(['tiktok', 'meta_ads']);
 
 /**
  * Orquestra a coleta de tendências: pra cada monitor ativo, chama o conector
@@ -27,6 +31,7 @@ export class TrendsCollectorService {
     private readonly youtube: YouTubeConnector,
     private readonly googleTrends: GoogleTrendsConnector,
     private readonly tiktok: TikTokConnector,
+    private readonly metaAds: MetaAdsConnector,
   ) {}
 
   async collectMonitor(orgId: string, monitor: TrendMonitor): Promise<number> {
@@ -37,6 +42,8 @@ export class TrendsCollectorService {
       items = await this.googleTrends.collect(monitor);
     } else if (monitor.network === 'tiktok') {
       items = await this.tiktok.collect(monitor);
+    } else if (monitor.network === 'meta_ads') {
+      items = await this.metaAds.collect(monitor);
     } else {
       return 0; // rede sem conector nesta fase
     }
@@ -47,13 +54,14 @@ export class TrendsCollectorService {
   }
 
   async collectAll(orgId: string): Promise<CollectResult> {
-    // Trava de custo do Apify: TikTok não coleta no autopilot se foi coletado
-    // há menos de TIKTOK_COLLECT_EVERY_DAYS (default 7). Coleta manual ignora.
+    // Trava de custo do Apify: redes pagas (tiktok/meta_ads) não coletam no
+    // autopilot se coletadas há menos de TIKTOK_COLLECT_EVERY_DAYS (default 7).
+    // Coleta manual (botão) ignora a trava.
     const everyDays = Number(process.env.TIKTOK_COLLECT_EVERY_DAYS ?? 7);
     const now = Date.now();
     const monitors = (await this.trends.listMonitors(orgId)).filter((m) => {
       if (!m.is_active || !TR1_NETWORKS.has(m.network)) return false;
-      if (m.network === 'tiktok' && m.last_collected_at) {
+      if (APIFY_NETWORKS.has(m.network) && m.last_collected_at) {
         const ageDays = (now - new Date(m.last_collected_at).getTime()) / 86400000;
         if (ageDays < everyDays) return false;
       }
