@@ -133,15 +133,90 @@ export class SocialChannelCredentialsService {
         access_token_ciphertext: string;
         refresh_token_ciphertext: string | null;
       };
-      return {
-        cred,
-        access_token: decryptSecret(row.access_token_ciphertext),
-        refresh_token: row.refresh_token_ciphertext
-          ? decryptSecret(row.refresh_token_ciphertext)
-          : null,
-      };
+      let accessToken = decryptSecret(row.access_token_ciphertext);
+      const refreshToken = row.refresh_token_ciphertext
+        ? decryptSecret(row.refresh_token_ciphertext)
+        : null;
+
+      // Auto-refresh do TikTok: o access token do Content Posting API dura ~24h.
+      // Se está expirado (ou perto), renova com o refresh_token ANTES de publicar
+      // — senão o publish quebra por auth. Refresh tokens duram ~365 dias.
+      if (channel === 'tiktok_business' && refreshToken) {
+        const expMs = cred.expires_at ? new Date(cred.expires_at).getTime() : 0;
+        if (!expMs || expMs < Date.now() + 5 * 60 * 1000) {
+          const fresh = await this.refreshTikTokToken(cred, refreshToken);
+          if (fresh) accessToken = fresh;
+        }
+      }
+
+      return { cred, access_token: accessToken, refresh_token: refreshToken };
     } catch (err) {
       this.log.warn(`getDecryptedToken falhou: ${String(err)}`);
+      return null;
+    }
+  }
+
+  /** Renova o access token do TikTok (grant_type=refresh_token). Atualiza o
+   *  ciphertext + expires_at (refresh token rotaciona — grava o novo). Devolve o
+   *  novo access_token, ou null se falhar (e marca last_error). */
+  private async refreshTikTokToken(
+    cred: SocialChannelCredential,
+    refreshToken: string,
+  ): Promise<string | null> {
+    const clientKey = process.env.TIKTOK_CLIENT_KEY;
+    const clientSecret = process.env.TIKTOK_CLIENT_SECRET;
+    if (!clientKey || !clientSecret) {
+      this.log.warn('[tiktok.refresh] TIKTOK_CLIENT_KEY/SECRET ausentes');
+      return null;
+    }
+    try {
+      const res = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Cache-Control': 'no-cache',
+        },
+        body: new URLSearchParams({
+          client_key: clientKey,
+          client_secret: clientSecret,
+          grant_type: 'refresh_token',
+          refresh_token: refreshToken,
+        }).toString(),
+        signal: AbortSignal.timeout(20_000),
+      });
+      const tok = (await res.json()) as {
+        access_token?: string;
+        expires_in?: number;
+        refresh_token?: string;
+        error?: string;
+        error_description?: string;
+      };
+      if (!res.ok || tok.error || !tok.access_token) {
+        await this.markError(
+          cred.id,
+          `tiktok refresh falhou: ${tok.error_description ?? tok.error ?? res.status}`,
+        );
+        return null;
+      }
+      const update: Record<string, unknown> = {
+        access_token_ciphertext: encryptSecret(tok.access_token),
+        expires_at: tok.expires_in
+          ? new Date(Date.now() + tok.expires_in * 1000).toISOString()
+          : null,
+        last_validated_at: new Date().toISOString(),
+        last_error: null,
+      };
+      if (tok.refresh_token) {
+        update.refresh_token_ciphertext = encryptSecret(tok.refresh_token);
+      }
+      await this.supabase.adminClient
+        .from('social_channel_credentials')
+        .update(update)
+        .eq('id', cred.id);
+      this.log.log(`[tiktok.refresh] token renovado (cred ${cred.id})`);
+      return tok.access_token;
+    } catch (err) {
+      this.log.warn(`[tiktok.refresh] erro: ${String(err)}`);
       return null;
     }
   }
