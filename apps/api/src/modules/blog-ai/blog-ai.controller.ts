@@ -3,12 +3,18 @@ import { AuthGuard } from '../../common/auth/auth.guard';
 import { CurrentUser } from '../../common/auth/current-user.decorator';
 import type { AuthUser } from '../../common/auth/auth.types';
 import { BlogAiService } from './blog-ai.service';
-import type { GenerateBlogPostDto } from './blog-ai.types';
+import type { GenerateBlogPostDto, IdeateDto } from './blog-ai.types';
 
 @UseGuards(AuthGuard)
 @Controller('blog-ai')
 export class BlogAiController {
   constructor(private readonly svc: BlogAiService) {}
+
+  /** IA sugere N pautas (ancoradas nos pilares + GEO + lacunas). */
+  @Post('ideate')
+  ideate(@CurrentUser() user: AuthUser, @Body() dto: IdeateDto) {
+    return this.svc.ideate(user.org_id, dto);
+  }
 
   /** Gera um artigo GEO-otimizado + capa por IA → fila de revisão. */
   @Post('generate')

@@ -5,13 +5,17 @@ import { ImageGenerationService } from '../social/image-generation/image-generat
 import { SanityBlogClient } from './sanity-blog.client';
 import {
   BLOG_ARTICLE_SYSTEM_PROMPT,
+  BLOG_IDEATE_SYSTEM_PROMPT,
   BLOG_PILLARS,
   buildArticleUserPrompt,
+  buildIdeateUserPrompt,
   fallbackCoverPrompt,
 } from './blog-ai.prompts';
 import type {
   BlogPostRow,
+  BlogTopicIdea,
   GenerateBlogPostDto,
+  IdeateDto,
   PortableTextNode,
   RawArticle,
   RawArticleBlock,
@@ -150,6 +154,34 @@ export class BlogAiService {
       if (!(e instanceof BadRequestException)) await this.markFailed(postId, (e as Error).message);
       throw e;
     }
+  }
+
+  // ── Ideação de pautas ────────────────────────────────────────────────
+
+  async ideate(orgId: string, dto: IdeateDto): Promise<{ topics: BlogTopicIdea[] }> {
+    const count = Math.min(Math.max(dto.count ?? 5, 1), 10);
+    const { data: existing } = await this.db
+      .from('blog_posts')
+      .select('title')
+      .eq('org_id', orgId)
+      .order('created_at', { ascending: false })
+      .limit(50);
+    const existingTitles = ((existing ?? []) as Array<{ title: string }>).map((r) => r.title);
+
+    const out = await this.llm.chat({
+      orgId,
+      feature: 'blog_ideate',
+      system: BLOG_IDEATE_SYSTEM_PROMPT,
+      user: buildIdeateUserPrompt({ seed: dto.seed, count, existingTitles }),
+      json_mode: true,
+      max_tokens: 2000,
+      temperature: 0.8,
+    });
+    const parsed = this.parseJson<{ topics?: BlogTopicIdea[] }>(out.text);
+    const topics = (parsed?.topics ?? [])
+      .filter((tpc): tpc is BlogTopicIdea => !!tpc && typeof tpc.title === 'string' && tpc.title.length > 0)
+      .slice(0, count);
+    return { topics };
   }
 
   // ── CRUD pipeline ────────────────────────────────────────────────────

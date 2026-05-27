@@ -128,6 +128,10 @@
     "schedule": "排期",
     "publishNow": "立即发布",
     "unschedule": "取消排期",
+    "ideateTitle": "没思路？让 AI 推荐选题",
+    "seedPlaceholder": "可选方向（如 Shopee、运费、上新）",
+    "ideate": "推荐选题",
+    "ideating": "思考中…",
     "publishedToast": "已发布！已上线 eclick.app.br/blog",
     "errorGeneric": "出错了，请重试。"
   },

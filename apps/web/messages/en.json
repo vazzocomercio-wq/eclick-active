@@ -128,6 +128,10 @@
     "schedule": "Schedule",
     "publishNow": "Publish now",
     "unschedule": "Unschedule",
+    "ideateTitle": "No idea? AI suggests topics",
+    "seedPlaceholder": "Optional focus (e.g. Shopee, shipping, launch)",
+    "ideate": "Suggest topics",
+    "ideating": "Thinking…",
     "publishedToast": "Published! Live at eclick.app.br/blog",
     "errorGeneric": "Something went wrong. Try again."
   },

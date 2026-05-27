@@ -18,6 +18,21 @@ export interface GenerateBlogPostDto {
   generateCover?: boolean;
 }
 
+export interface IdeateDto {
+  /** Semente/foco opcional (ex: "Shopee", "frete", "lançamento"). */
+  seed?: string;
+  /** Quantas pautas (default 5, máx 10). */
+  count?: number;
+}
+
+export interface BlogTopicIdea {
+  title: string;
+  pillar: string;
+  angle: string;
+  why: string;
+  aiPrompts: string[];
+}
+
 // ── Shape cru que a IA retorna ────────────────────────────────────────
 export interface RawArticleBlock {
   type: 'stat' | 'paperQuote' | 'callout' | 'comparison';

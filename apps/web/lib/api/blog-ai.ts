@@ -43,7 +43,17 @@ export interface GenerateBlogPostInput {
   generateCover?: boolean;
 }
 
+export interface BlogTopicIdea {
+  title: string;
+  pillar: string;
+  angle: string;
+  why: string;
+  aiPrompts: string[];
+}
+
 export const blogAiApi = {
+  ideate: (seed?: string, count?: number) =>
+    api.post<{ topics: BlogTopicIdea[] }>('/blog-ai/ideate', { seed, count }),
   generate: (input: GenerateBlogPostInput) => api.post<BlogPost>('/blog-ai/generate', input),
   list: (status?: string) => api.get<BlogPost[]>('/blog-ai/posts', { query: { status } }),
   get: (id: string) => api.get<BlogPost>(`/blog-ai/posts/${id}`),

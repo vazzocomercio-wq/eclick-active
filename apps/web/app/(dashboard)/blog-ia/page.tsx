@@ -3,11 +3,15 @@
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { useTranslations } from 'next-intl';
-import { Sparkles, Loader2, Send, Archive, CheckCircle2, ExternalLink, AlertCircle, Clock } from 'lucide-react';
-import { blogAiApi, BLOG_PILLARS, type BlogPost } from '@/lib/api/blog-ai';
+import { Sparkles, Loader2, Send, Archive, CheckCircle2, ExternalLink, AlertCircle, Clock, Lightbulb } from 'lucide-react';
+import { blogAiApi, BLOG_PILLARS, type BlogPost, type BlogTopicIdea } from '@/lib/api/blog-ai';
 import { ApiError } from '@/lib/api/client';
 
 const BLOG_BASE = 'https://eclick.app.br/blog';
+
+function pillarLabel(slug: string): string {
+  return BLOG_PILLARS.find((p) => p.slug === slug)?.label ?? slug;
+}
 
 function fmtDateTime(iso: string | null): string {
   if (!iso) return '';
@@ -33,6 +37,10 @@ export default function BlogIaPage() {
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
+  const [seed, setSeed] = useState('');
+  const [ideas, setIdeas] = useState<BlogTopicIdea[]>([]);
+  const [ideating, setIdeating] = useState(false);
+
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -45,19 +53,38 @@ export default function BlogIaPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  async function onGenerate() {
-    if (!topic.trim() || generating) return;
+  async function runGenerate(topicVal: string, pillarVal: string) {
+    if (!topicVal.trim() || generating) return;
     setGenerating(true);
     setError(null);
     try {
-      const post = await blogAiApi.generate({ topic: topic.trim(), pillar, notes: notes.trim() || undefined });
+      const post = await blogAiApi.generate({ topic: topicVal.trim(), pillar: pillarVal, notes: notes.trim() || undefined });
       setPosts((prev) => [post, ...prev.filter((p) => p.id !== post.id)]);
       setTopic('');
       setNotes('');
+      setIdeas([]);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : t('errorGeneric'));
     } finally {
       setGenerating(false);
+    }
+  }
+
+  function onGenerate() {
+    void runGenerate(topic, pillar);
+  }
+
+  async function onIdeate() {
+    if (ideating) return;
+    setIdeating(true);
+    setError(null);
+    try {
+      const { topics } = await blogAiApi.ideate(seed.trim() || undefined);
+      setIdeas(topics);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : t('errorGeneric'));
+    } finally {
+      setIdeating(false);
     }
   }
 
@@ -177,6 +204,48 @@ export default function BlogIaPage() {
           {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
           {generating ? t('generating') : t('generate')}
         </button>
+      </div>
+
+      {/* Sugerir pautas (IA) */}
+      <div className="mt-4 rounded-xl border border-border bg-card p-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <Lightbulb className="h-4 w-4 text-primary" />
+          <span className="text-sm font-medium text-foreground">{t('ideateTitle')}</span>
+          <input
+            value={seed}
+            onChange={(e) => setSeed(e.target.value)}
+            placeholder={t('seedPlaceholder')}
+            className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-1.5 text-sm outline-none focus:border-primary"
+          />
+          <button
+            type="button"
+            onClick={onIdeate}
+            disabled={ideating}
+            className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10 disabled:opacity-50"
+          >
+            {ideating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lightbulb className="h-4 w-4" />}
+            {ideating ? t('ideating') : t('ideate')}
+          </button>
+        </div>
+        {ideas.length > 0 && (
+          <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+            {ideas.map((idea, i) => (
+              <li key={i} className="flex flex-col gap-1.5 rounded-lg border border-border bg-background p-3">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">{pillarLabel(idea.pillar)}</span>
+                <span className="text-sm font-semibold text-foreground">{idea.title}</span>
+                {idea.angle && <span className="text-xs text-muted-foreground">{idea.angle}</span>}
+                <button
+                  type="button"
+                  onClick={() => runGenerate(idea.title, idea.pillar)}
+                  disabled={generating}
+                  className="mt-1 inline-flex items-center gap-1.5 self-start rounded-md bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                >
+                  <Sparkles className="h-3 w-3" /> {t('generate')}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       {toast && (

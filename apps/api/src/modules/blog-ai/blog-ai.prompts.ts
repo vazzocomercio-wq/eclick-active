@@ -80,3 +80,41 @@ export function buildArticleUserPrompt(input: {
 export function fallbackCoverPrompt(title: string): string {
   return `Abstract dark futuristic tech background representing "${title}", glowing cyan (#00E5FF) accents on near-black (#09090b), minimal geometric, no text, no people, no logos, high quality, 16:9.`;
 }
+
+// ── Ideação de pautas ────────────────────────────────────────────────────
+
+export const BLOG_IDEATE_SYSTEM_PROMPT = `Você é o estrategista de conteúdo do blog da e-Click (Inteligência Comercial), especialista em GEO. Sua tarefa: propor PAUTAS de blog fortes, em PT-BR, ancoradas na estratégia GEO e nos 7 pilares editoriais.
+
+Cada pauta deve:
+- responder perguntas REAIS que vendedores de marketplace/lojistas fazem (ou fazem à IA);
+- ter ângulo claro e específico (não genérico);
+- caber num dos 7 pilares;
+- ter potencial GEO (dá pra citar fontes/estatísticas, responder dúvidas).
+
+Evite repetir temas já cobertos (lista fornecida). Varie os pilares.
+
+Responda APENAS JSON válido (sem markdown):
+{ "topics": [ {
+  "title": string,          // título da pauta (atraente, específico)
+  "pillar": string,         // slug do pilar (geo-101, ciencia-aplicada, como-fazer, mudanca-de-comportamento, demonstracoes, cases, geo-brasil)
+  "angle": string,          // 1 frase: o ângulo/promessa do post
+  "why": string,            // 1 frase: por que essa pauta importa agora
+  "aiPrompts": [string]     // 2-3 perguntas reais que o post responderia
+} ] }`;
+
+export function buildIdeateUserPrompt(input: {
+  seed?: string;
+  count: number;
+  existingTitles?: string[];
+}): string {
+  return [
+    `Proponha ${input.count} pautas.`,
+    input.seed ? `FOCO/SEMENTE: ${input.seed}` : 'Sem semente — proponha as mais valiosas para começar/continuar o blog.',
+    'Pilares: ' + BLOG_PILLARS.map((p) => `${p.slug} (${p.title})`).join(', '),
+    input.existingTitles?.length
+      ? `JÁ COBERTO (não repita): ${input.existingTitles.slice(0, 40).join(' | ')}`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
