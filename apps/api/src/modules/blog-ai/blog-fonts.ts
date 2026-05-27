@@ -55,6 +55,21 @@ export const BLOG_FONTS: BlogFontOption[] = [
   { slug: 'quicksand', label: 'Quicksand', family: "'Quicksand', sans-serif", google: 'Quicksand:wght@400;500;600;700', group: 'Casual' },
   { slug: 'comfortaa', label: 'Comfortaa', family: "'Comfortaa', sans-serif", google: 'Comfortaa:wght@400;500;700', group: 'Casual' },
   { slug: 'nunito', label: 'Nunito', family: "'Nunito', sans-serif", google: 'Nunito:wght@400;600;800', group: 'Casual' },
+  // Mais opções
+  { slug: 'plus-jakarta', label: 'Plus Jakarta Sans', family: "'Plus Jakarta Sans', sans-serif", google: 'Plus+Jakarta+Sans:wght@400;500;600;700', group: 'Moderno' },
+  { slug: 'urbanist', label: 'Urbanist', family: "'Urbanist', sans-serif", google: 'Urbanist:wght@400;500;600;700', group: 'Moderno' },
+  { slug: 'red-hat', label: 'Red Hat Display', family: "'Red Hat Display', sans-serif", google: 'Red+Hat+Display:wght@400;500;600;700', group: 'Moderno' },
+  { slug: 'eb-garamond', label: 'EB Garamond', family: "'EB Garamond', Georgia, serif", google: 'EB+Garamond:wght@400;500;600;700', group: 'Serifa' },
+  { slug: 'marcellus', label: 'Marcellus', family: "'Marcellus', Georgia, serif", google: 'Marcellus', group: 'Serifa' },
+  { slug: 'bitter', label: 'Bitter', family: "'Bitter', Georgia, serif", google: 'Bitter:wght@400;500;600;700', group: 'Serifa' },
+  { slug: 'zilla-slab', label: 'Zilla Slab', family: "'Zilla Slab', Georgia, serif", google: 'Zilla+Slab:wght@400;500;600;700', group: 'Serifa' },
+  { slug: 'teko', label: 'Teko', family: "'Teko', sans-serif", google: 'Teko:wght@400;500;600;700', group: 'Marcante' },
+  { slug: 'fjalla', label: 'Fjalla One', family: "'Fjalla One', sans-serif", google: 'Fjalla+One', group: 'Marcante' },
+  { slug: 'staatliches', label: 'Staatliches', family: "'Staatliches', sans-serif", google: 'Staatliches', group: 'Marcante' },
+  { slug: 'alfa-slab', label: 'Alfa Slab One', family: "'Alfa Slab One', Georgia, serif", google: 'Alfa+Slab+One', group: 'Marcante' },
+  { slug: 'fredoka', label: 'Fredoka', family: "'Fredoka', sans-serif", google: 'Fredoka:wght@400;500;600;700', group: 'Casual' },
+  { slug: 'baloo', label: 'Baloo 2', family: "'Baloo 2', sans-serif", google: 'Baloo+2:wght@400;500;600;700', group: 'Casual' },
+  { slug: 'varela-round', label: 'Varela Round', family: "'Varela Round', sans-serif", google: 'Varela+Round', group: 'Casual' },
 ];
 
 export const VALID_FONT_SLUGS = new Set(BLOG_FONTS.map((f) => f.slug));

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import {
@@ -17,6 +17,7 @@ import {
   AlertCircle,
   Wand2,
   Type,
+  ChevronDown,
 } from 'lucide-react';
 import {
   blogAiApi,
@@ -413,6 +414,8 @@ function FontPicker({
 }) {
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
   const selected = current ?? 'clash';
   const selFont = fonts.find((f) => f.slug === selected) ?? fonts[0];
 
@@ -427,7 +430,18 @@ function FontPicker({
     g.items.push(f);
   }
 
+  // fecha ao clicar fora
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
   async function pick(slug: string) {
+    setOpen(false);
     if (saving || slug === selected) return;
     setSaving(true);
     setError(null);
@@ -463,29 +477,44 @@ function FontPicker({
         </div>
       </div>
 
-      {/* Dropdown agrupado */}
-      <div className="flex items-center gap-2">
-        <select
-          value={selected}
-          onChange={(e) => pick(e.target.value)}
+      {/* Dropdown customizado (abre pra baixo; cada opção na própria fonte) */}
+      <div ref={ref} className="relative">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
           disabled={saving}
-          className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-50"
+          className="flex w-full items-center justify-between gap-2 rounded-md border border-border bg-background px-3 py-2 text-left text-sm outline-none focus:border-primary disabled:opacity-50"
         >
-          {groups.map((g) => (
-            <optgroup key={g.name} label={g.name}>
-              {g.items.map((f) => (
-                <option key={f.slug} value={f.slug}>
-                  {f.label}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
-        {saving ? (
-          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
-        ) : justSaved ? (
-          <Check className="h-4 w-4 shrink-0 text-primary" />
-        ) : null}
+          <span className="truncate" style={{ fontFamily: selFont?.family }}>{selFont?.label}</span>
+          <span className="flex shrink-0 items-center gap-1.5">
+            {saving ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : justSaved ? <Check className="h-4 w-4 text-primary" /> : null}
+            <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`} />
+          </span>
+        </button>
+        {open && (
+          <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-80 overflow-y-auto rounded-md border border-border bg-card shadow-xl">
+            {groups.map((g) => (
+              <div key={g.name}>
+                <div className="sticky top-0 bg-card px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {g.name}
+                </div>
+                {g.items.map((f) => (
+                  <button
+                    key={f.slug}
+                    type="button"
+                    onClick={() => pick(f.slug)}
+                    className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-background ${
+                      f.slug === selected ? 'bg-primary/10' : ''
+                    }`}
+                  >
+                    <span className="truncate text-lg text-foreground" style={{ fontFamily: f.family }}>{f.label}</span>
+                    {f.slug === selected && <Check className="h-4 w-4 shrink-0 text-primary" />}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
