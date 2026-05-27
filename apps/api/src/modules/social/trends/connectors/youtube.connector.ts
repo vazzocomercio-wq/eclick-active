@@ -70,24 +70,13 @@ export class YouTubeConnector {
       for (const att of attempts) {
         if (ids.length) break;
         const params = new URLSearchParams({ ...base, ...att.params });
-        this.log.log(`youtube qstr [${att.label}]: ${params.toString().replace(/key=[^&]+/, 'key=X')}`);
         const sRes = await this.ytFetch('search', params);
         if (!sRes.ok) {
           this.log.warn(`youtube search [${att.label}] ${sRes.status}: ${(await sRes.text()).slice(0, 200)}`);
           continue;
         }
-        const sText = await sRes.text();
-        let sJson: { items?: YtSearchItem[]; pageInfo?: { totalResults?: number } } = {};
-        try {
-          sJson = JSON.parse(sText) as { items?: YtSearchItem[] };
-        } catch {
-          this.log.warn(`youtube search [${att.label}] body não-JSON: ${sText.slice(0, 200)}`);
-        }
-        const rawItems = sJson.items ?? [];
-        this.log.log(
-          `youtube attempt [${att.label}] status=${sRes.status} itemsRaw=${rawItems.length} total=${sJson.pageInfo?.totalResults ?? '?'}`,
-        );
-        ids = rawItems
+        const sJson = (await sRes.json().catch(() => ({}))) as { items?: YtSearchItem[] };
+        ids = (sJson.items ?? [])
           .map((i) => i.id?.videoId)
           .filter((x): x is string => !!x);
         if (ids.length) used = att.label;
