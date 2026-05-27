@@ -70,6 +70,7 @@ export class YouTubeConnector {
       for (const att of attempts) {
         if (ids.length) break;
         const params = new URLSearchParams({ ...base, ...att.params });
+        this.log.log(`youtube qstr [${att.label}]: ${params.toString().replace(/key=[^&]+/, 'key=X')}`);
         const sRes = await this.ytFetch('search', params);
         if (!sRes.ok) {
           this.log.warn(`youtube search [${att.label}] ${sRes.status}: ${(await sRes.text()).slice(0, 200)}`);
