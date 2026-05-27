@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Megaphone, Sparkles, Plus, Calendar, Image as ImageIcon, ChevronRight, BarChart3, GitCompareArrows, Rocket, SlidersHorizontal, Radio, Palette } from 'lucide-react';
+import { Megaphone, Sparkles, Plus, Calendar, Image as ImageIcon, ChevronRight, BarChart3, GitCompareArrows, Rocket, SlidersHorizontal, Radio, Palette, Brain } from 'lucide-react';
 import { useSocialDashboard, useContents, useBrands } from '@/hooks/use-social';
 import { ContentCard } from '@/components/social/content-card';
 import { Button } from '@/components/ui/button';
@@ -86,6 +86,12 @@ export default function SocialDashboardPage() {
               </Link>
             </Button>
           )}
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/social/inteligencia">
+              <Brain className="h-3.5 w-3.5" />
+              <span className="hidden md:inline ml-1">Intelligence</span>
+            </Link>
+          </Button>
           <Button size="sm" asChild>
             <Link href="/social/criar">
               <Sparkles className="h-3.5 w-3.5" />
@@ -96,6 +102,24 @@ export default function SocialDashboardPage() {
       </header>
 
       <div className="flex-1 overflow-y-auto p-4 md:p-6">
+        <Link
+          href="/social/inteligencia"
+          className="mb-6 flex items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4 transition-colors hover:bg-primary/10"
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+              <Brain className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold">Social Intelligence — o que postar hoje pra vender mais</h2>
+              <p className="text-xs text-muted-foreground">
+                A IA cruza margem, estoque, Radar e engajamento e te diz a melhor aposta do dia.
+              </p>
+            </div>
+          </div>
+          <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+        </Link>
+
         {!hasBrand && (
           <div className="mb-6 rounded-xl border border-cyan-500/30 bg-cyan-500/5 p-5">
             <h2 className="mb-2 text-sm font-semibold">Bem-vindo ao Social AI Studio 🎨</h2>

@@ -705,6 +705,37 @@ export interface GenerateCampaignPayload {
   multi_scene?: boolean;
 }
 
+// ─── Social Intelligence (cérebro + dashboard) ────
+export interface TodaySuggestion {
+  product_id: string | null;
+  product_name: string;
+  format: 'reel' | 'post' | 'carousel';
+  angle: string;
+  why: string;
+  best_time: string | null;
+  photo_url: string | null;
+}
+export interface TodaysPlan {
+  date: string;
+  suggestions: TodaySuggestion[];
+  signals: { candidates: number; best_format: string | null; best_hour: number | null; data_available: boolean };
+  generated_at: string;
+  cached: boolean;
+}
+export interface OrganicSummary {
+  totals: { posts: number; reach: number; views: number; engagement: number; avg_engagement_rate: number; followers: number; profile_views: number };
+  by_format: Array<{ format: string; posts: number; avg_reach: number; avg_engagement_rate: number }>;
+  heatmap: Array<{ dow: number; hour: number; posts: number; reach: number }>;
+  top_posts: Array<{ permalink: string | null; caption: string; type: string | null; thumbnail_url: string | null; reach: number; views: number; engagement_rate: number }>;
+  trend: Array<{ date: string; reach: number; views: number }>;
+  best_format: string | null;
+  best_hour: number | null;
+}
+export interface IntelligenceOverview {
+  organic: OrganicSummary | null;
+  generated_at: string;
+}
+
 export const socialApi = {
   // Brands
   brands: {
@@ -886,6 +917,16 @@ export const socialApi = {
         `/social/brands/${brandId}/competitor-analysis`,
         {},
       ),
+  },
+
+  // Social Intelligence — cérebro "o que postar hoje" + dashboard executivo
+  intelligence: {
+    today: (signal?: AbortSignal) =>
+      api.get<TodaysPlan>('/social/intelligence/today', { signal }),
+    refreshToday: () =>
+      api.post<TodaysPlan>('/social/intelligence/today/refresh', {}),
+    overview: (signal?: AbortSignal) =>
+      api.get<IntelligenceOverview>('/social/intelligence/overview', { signal }),
   },
 
   // A/B Testing
