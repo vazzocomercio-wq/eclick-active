@@ -212,6 +212,38 @@ export class BridgeService {
     }
   }
 
+  /** Lista produtos do TikTok Shop (2ª fonte do seletor do Social AI Studio).
+   *  Mesma forma de SaasProduct (view active.v_saas_tiktok_products), só muda
+   *  a origem — marketplace='tiktok_shop'. Filtra por thumbnail presente. */
+  async listTikTokProducts(
+    activeOrgId: string,
+    opts: { search?: string; limit?: number } = {},
+  ): Promise<SaasProduct[]> {
+    const saasOrgId = await this.resolveSaasOrgId(activeOrgId);
+    if (!saasOrgId) return [];
+    if (!(await this.hasSaasIntegration(saasOrgId))) return [];
+    try {
+      let q = this.supabase.adminClient
+        .from('v_saas_tiktok_products')
+        .select(
+          'id,organization_id,ml_listing_id,title,sku,price,cost,stock_quantity,category,thumbnail_url,status,marketplace,margin_percent,metadata,created_at,updated_at,photos,description',
+        )
+        .eq('organization_id', saasOrgId)
+        .not('thumbnail_url', 'is', null)
+        .order('updated_at', { ascending: false, nullsFirst: false })
+        .limit(Math.min(opts.limit ?? 60, 200));
+      if (opts.search?.trim()) {
+        q = q.ilike('title', `%${opts.search.trim()}%`);
+      }
+      const { data, error } = await q;
+      if (error) throw error;
+      return (data ?? []) as SaasProduct[];
+    } catch (err) {
+      this.log.warn(`listTikTokProducts falhou para ${activeOrgId}: ${String(err)}`);
+      return [];
+    }
+  }
+
   // ── Ponte Canva (proxy HTTP pro SaaS) ──────────────────────────────────
   //
   // O token Canva + lógica de export (OAuth refresh, job polling) vivem no

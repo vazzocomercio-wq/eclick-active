@@ -141,6 +141,16 @@ export const bridgeApi = {
       signal,
     }),
 
+  /** Lista produtos do TikTok Shop (2ª fonte do seletor — mesma forma). */
+  listTikTokProducts: (
+    params: { search?: string; limit?: number } = {},
+    signal?: AbortSignal,
+  ) =>
+    api.get<SaasProduct[]>('/bridge/tiktok-products', {
+      query: { search: params.search, limit: params.limit },
+      signal,
+    }),
+
   /** Lista designs do Canva da org (pra usar como imagem do post). */
   listCanvaDesigns: (q?: string, signal?: AbortSignal) =>
     api.get<{ designs: CanvaDesign[] }>('/bridge/canva/designs', {

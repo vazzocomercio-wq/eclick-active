@@ -404,7 +404,7 @@ export const KB: KbEntry[] = [
     content: [
       'Na tela **Criar conteúdo** (`/social/criar`) você tem dois jeitos de dar uma **imagem real** pro post (a imagem gerada por IA no Active ainda cai num placeholder não-publicável):',
       '',
-      '**1. Produto do catálogo (SaaS):** escolha um produto no seletor "Produto do catálogo" → a IA escreve o post sobre ele e usa a **foto real** do produto como imagem. Puxa do catálogo do e-Click (ponte SaaS→Active).',
+      '**1. Produto do catálogo (SaaS):** escolha um produto no seletor "Produto do catálogo" → a IA escreve o post sobre ele e usa a **foto real** do produto como imagem. Puxa do catálogo do e-Click (ponte SaaS→Active). No seletor há **duas fontes**: **Catálogo** (ML/loja própria) e **TikTok Shop** (os produtos da sua loja TikTok Shop) — alterne pelas abas no topo da busca.',
       '',
       '**2. Design do Canva:** no seletor "Imagem do post" clique em **Usar um design do Canva** → busque e escolha um design → o e-Click **exporta** o design como imagem e usa no post (visual branded seu). Precisa ter o **Canva conectado** no e-Click (SaaS → Integrações). A exportação leva alguns segundos.',
       '',
@@ -419,7 +419,7 @@ export const KB: KbEntry[] = [
     content: [
       'Na aba **Vídeo/Reel** (`/social/criar`) a IA gera um **Reel** a partir de um produto do catálogo:',
       '',
-      '**Passo a passo:** escolha o **produto** (a foto dele é a base do vídeo) → escolha **como gerar** (Animar a foto real OU Cena por IA com o produto) → escolha o **estilo** (360°, Cinemagraph, Loop, Unboxing, UGC… — os marcados "experimental" dependem de pessoa/áudio e a qualidade varia) → a **estrutura do roteiro** (Dor+Solução+Benefício, AIDA, PAS…) → duração → **Gerar Reel**.',
+      '**Passo a passo:** escolha o **produto** (a foto dele é a base do vídeo — a fonte pode ser o **Catálogo** ou o **TikTok Shop**, nas abas do seletor) → escolha **como gerar** (Animar a foto real OU Cena por IA com o produto) → escolha o **estilo** (360°, Cinemagraph, Loop, Unboxing, UGC… — os marcados "experimental" dependem de pessoa/áudio e a qualidade varia) → a **estrutura do roteiro** (Dor+Solução+Benefício, AIDA, PAS…) → duração → **Gerar Reel**.',
       '',
       'A IA escreve o **roteiro + legenda** seguindo o estilo/estrutura e gera o **vídeo** no motor (Kling) — é **assíncrono**, leva de **1 a 3 minutos**. Pode deixar a tela aberta; o preview aparece quando fica pronto. Depois é só **aprovar e publicar** (vai como Reel no Instagram).',
       '',

@@ -75,6 +75,20 @@ export class BridgeController {
     });
   }
 
+  /** Lista produtos do TikTok Shop (2ª fonte do seletor do Social AI Studio).
+   *  Caminho próprio pra não cair na rota products/:sku. */
+  @Get('tiktok-products')
+  listTikTokProducts(
+    @CurrentUser() user: AuthUser,
+    @Query('search') search?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.bridge.listTikTokProducts(user.org_id, {
+      search: search ?? undefined,
+      limit: limit ? Number(limit) : 60,
+    });
+  }
+
   @Get('products/:sku')
   productBySku(@CurrentUser() user: AuthUser, @Param('sku') sku: string) {
     return this.bridge.getProduct(user.org_id, { sku });

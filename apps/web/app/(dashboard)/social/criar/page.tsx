@@ -80,6 +80,8 @@ export default function CreateContentPage() {
   const [productSearch, setProductSearch] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<SaasProduct | null>(null);
   const [showProductList, setShowProductList] = useState(false);
+  // Fonte do produto: catálogo do SaaS (ML/loja) ou TikTok Shop.
+  const [productSource, setProductSource] = useState<'catalog' | 'tiktok'>('catalog');
 
   // Canva como imagem do post (via bridge → SaaS exporta o design pra https)
   const [canvaDesigns, setCanvaDesigns] = useState<CanvaDesign[]>([]);
@@ -206,18 +208,20 @@ export default function CreateContentPage() {
     }
   }
 
-  // Busca produtos (debounce) quando a lista está aberta
+  // Busca produtos (debounce) quando a lista está aberta. Alterna a fonte
+  // entre o catálogo do SaaS (ML/loja) e o TikTok Shop.
   useEffect(() => {
     if (!showProductList) return;
     const ctrl = new AbortController();
+    const fetcher =
+      productSource === 'tiktok' ? bridgeApi.listTikTokProducts : bridgeApi.listProducts;
     const t = setTimeout(() => {
-      bridgeApi
-        .listProducts({ search: productSearch.trim() || undefined, limit: 40 }, ctrl.signal)
+      fetcher({ search: productSearch.trim() || undefined, limit: 40 }, ctrl.signal)
         .then(setProducts)
         .catch(() => { /* fallback vazio */ });
     }, 300);
     return () => { clearTimeout(t); ctrl.abort(); };
-  }, [productSearch, showProductList]);
+  }, [productSearch, showProductList, productSource]);
 
   const pickProduct = (p: SaasProduct) => {
     setSelectedProduct(p);
@@ -548,20 +552,48 @@ export default function CreateContentPage() {
                 </div>
               ) : showProductList ? (
                 <div className="rounded-md border border-border bg-background">
+                  {/* Fonte do produto: catálogo do SaaS ou TikTok Shop */}
+                  <div className="flex gap-1 border-b border-border p-1">
+                    {([
+                      { key: 'catalog' as const, label: 'Catálogo' },
+                      { key: 'tiktok' as const, label: 'TikTok Shop' },
+                    ]).map((s) => (
+                      <button
+                        key={s.key}
+                        type="button"
+                        onClick={() => {
+                          if (productSource === s.key) return;
+                          setProductSource(s.key);
+                          setProducts([]);
+                        }}
+                        className={`flex-1 rounded px-2 py-1 text-[11px] font-medium transition-colors ${
+                          productSource === s.key
+                            ? 'bg-primary/10 text-primary'
+                            : 'text-muted-foreground hover:bg-muted'
+                        }`}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
                   <div className="relative border-b border-border">
                     <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                     <input
                       autoFocus
                       value={productSearch}
                       onChange={(e) => setProductSearch(e.target.value)}
-                      placeholder="Buscar produto…"
+                      placeholder={productSource === 'tiktok' ? 'Buscar no TikTok Shop…' : 'Buscar produto…'}
                       className="w-full bg-transparent py-1.5 pl-7 pr-2 text-sm outline-none"
                     />
                   </div>
                   <div className="max-h-52 overflow-y-auto">
                     {products.length === 0 ? (
                       <p className="px-2 py-3 text-center text-[11px] text-muted-foreground">
-                        {productSearch ? 'Nada encontrado.' : 'Digite pra buscar no catálogo…'}
+                        {productSearch
+                          ? 'Nada encontrado.'
+                          : productSource === 'tiktok'
+                            ? 'Digite pra buscar no TikTok Shop…'
+                            : 'Digite pra buscar no catálogo…'}
                       </p>
                     ) : (
                       products.map((p) => (
