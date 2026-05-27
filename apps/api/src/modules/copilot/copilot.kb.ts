@@ -444,6 +444,21 @@ export const KB: KbEntry[] = [
     ].join('\n'),
     tags: ['social', 'tendencias', 'radar', 'trends', 'youtube', 'tiktok', 'meta', 'conteudo', 'o que postar'],
   },
+  {
+    routes: ['/social/posts', '/social/posts/:id', '/social/inteligencia'],
+    category: 'SOCIAL',
+    title: 'Meus posts: dados individuais de cada post + veredito da IA',
+    content: [
+      'Em **Meus posts** (`/social/posts`) você vê **cada post individualmente** com suas métricas próprias — como no "Painel profissional" do Instagram, mas com IA por cima.',
+      '',
+      '**Lista:** filtre por formato (Reels/Posts/Stories) e ordene por alcance, score, engajamento ou mais recentes. Cada card mostra alcance, views, curtidas, comentários, compartilhamentos, salvamentos, taxa de engajamento e um **score relativo** (0-100, alcance + engajamento vs o melhor da conta).',
+      '',
+      '**Detalhe** (clique num post): métricas completas + **evolução diária do alcance** + **comparação com a mediana do formato** (ex: "2.1× acima da mediana de Reels"). O botão **Analisar com IA** dá um veredito: o que funcionou, o que melhorar e a próxima ação concreta.',
+      '',
+      'Os dados são coletados no SaaS (Instagram conectado) e chegam ao Active pela ponte. Se a lista está vazia, é porque a coleta orgânica ainda não rodou pra essa conta.',
+    ].join('\n'),
+    tags: ['social', 'posts', 'metricas', 'insights', 'individual', 'veredito', 'ia', 'reel', 'engajamento', 'score'],
+  },
 
   // ── BLOG IA ───────────────────────────────────────────
   {

@@ -2,6 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { SupabaseService } from '../../../common/supabase/supabase.service';
 import { LlmService } from '../../../common/llm/llm.service';
 import { BridgeService } from '../../bridge/bridge.service';
+import type {
+  OrganicPostsPage,
+  OrganicPostDetail,
+  OrganicPostsFilters,
+} from '../../bridge/bridge.types';
 import { SocialMetricsService } from '../analytics/social-metrics.service';
 
 export type SuggestionFormat = 'reel' | 'post' | 'carousel';
@@ -69,6 +74,16 @@ export interface AdsSummary {
   top_campaigns: Array<{ name: string; status: string; platform: string; spend: number; clicks: number; ctr: number; conversions: number; roas: number }>;
 }
 
+export interface PostVerdict {
+  post_id: string;
+  headline: string;
+  vs_benchmark: string | null;
+  what_worked: string[];
+  what_to_improve: string[];
+  next_action: string | null;
+  generated_at: string;
+}
+
 export interface SentimentSummary {
   analyzed: number;
   positive: number;
@@ -134,6 +149,85 @@ export class SocialIntelligenceService {
   async getOverview(orgId: string): Promise<{ organic: unknown; generated_at: string }> {
     const organic = await this.bridge.getOrganicSummary(orgId);
     return { organic, generated_at: new Date().toISOString() };
+  }
+
+  // ─── Drill-down dos NOSSOS posts (TR-A) ─────────────────────────
+
+  /** Lista de posts da org com métricas individuais (via bridge SaaS). */
+  async listPosts(orgId: string, filters: OrganicPostsFilters = {}): Promise<OrganicPostsPage> {
+    return this.bridge.listOrganicPosts(orgId, filters);
+  }
+
+  /** Detalhe de 1 post: métricas + série diária + benchmark do formato. */
+  async getPostDetail(orgId: string, postId: string): Promise<OrganicPostDetail | null> {
+    return this.bridge.getOrganicPostDetail(orgId, postId);
+  }
+
+  /** Veredito da IA sobre 1 post: o que funcionou, o que melhorar, próxima ação.
+   *  Sob demanda (gasta 1 chamada de IA). */
+  async getPostVerdict(orgId: string, postId: string): Promise<PostVerdict | null> {
+    const detail = await this.bridge.getOrganicPostDetail(orgId, postId);
+    if (!detail) return null;
+
+    const FMT: Record<string, string> = {
+      REELS: 'Reel', FEED: 'Post', STORY: 'Story', AD: 'Anúncio', OUTRO: 'Post',
+    };
+    const m = detail.post.metrics;
+    const fmt = FMT[detail.post.media_product_type ?? 'OUTRO'] ?? detail.post.media_product_type ?? 'Post';
+    const bench = detail.benchmark;
+    const erPct = (m.engagement_rate * 100).toFixed(2);
+    const benchTxt = bench
+      ? `Mediana de ${fmt}: alcance ${bench.median_reach}, engajamento ${(bench.median_engagement_rate * 100).toFixed(2)}% (amostra ${bench.sample}).`
+      : 'Sem benchmark de formato.';
+    const trendTxt = detail.daily.length > 1
+      ? `Série diária (alcance): ${detail.daily.map((d) => d.reach).join(' → ')}.`
+      : '';
+
+    const empty: PostVerdict = {
+      post_id: postId, headline: '', vs_benchmark: null,
+      what_worked: [], what_to_improve: [], next_action: null,
+      generated_at: new Date().toISOString(),
+    };
+
+    const user = [
+      `Analise a performance deste ${fmt} de Instagram de uma loja e-commerce e dê um veredito acionável.`,
+      '',
+      `Legenda: "${(detail.post.caption || '(sem legenda)').slice(0, 200)}"`,
+      `Métricas: alcance ${m.reach}, visualizações ${m.views}, curtidas ${m.likes}, comentários ${m.comments}, ` +
+        `compartilhamentos ${m.shares}, salvamentos ${m.saved}, taxa de engajamento ${erPct}%.`,
+      benchTxt,
+      trendTxt,
+      '',
+      'JSON: {"headline":"<veredito em 1 frase>","vs_benchmark":"<como se compara à mediana do formato, ex: 2.1x acima>","what_worked":["..."],"what_to_improve":["..."],"next_action":"<próxima ação concreta>"}',
+    ].join('\n');
+
+    try {
+      const r = await this.llm.chat({
+        orgId,
+        feature: 'social_intelligence_today',
+        system: 'Você é analista de performance de conteúdo de redes sociais de um e-commerce. Seja concreto e comercial. Responda só JSON válido.',
+        user,
+        json_mode: true,
+        max_tokens: 800,
+        temperature: 0.4,
+      });
+      const p = JSON.parse(r.text.replace(/```json/gi, '').replace(/```/g, '').trim()) as {
+        headline?: string; vs_benchmark?: string;
+        what_worked?: string[]; what_to_improve?: string[]; next_action?: string;
+      };
+      return {
+        post_id: postId,
+        headline: String(p.headline ?? '').slice(0, 200),
+        vs_benchmark: p.vs_benchmark ? String(p.vs_benchmark).slice(0, 120) : null,
+        what_worked: (Array.isArray(p.what_worked) ? p.what_worked : []).slice(0, 4).map((s) => String(s).slice(0, 160)),
+        what_to_improve: (Array.isArray(p.what_to_improve) ? p.what_to_improve : []).slice(0, 4).map((s) => String(s).slice(0, 160)),
+        next_action: p.next_action ? String(p.next_action).slice(0, 200) : null,
+        generated_at: new Date().toISOString(),
+      };
+    } catch (e) {
+      this.log.warn(`[social-intel] post verdict falhou: ${(e as Error).message}`);
+      return empty;
+    }
   }
 
   /** Sentimento das conversas — 1 chamada LLM sobre as últimas mensagens INBOUND

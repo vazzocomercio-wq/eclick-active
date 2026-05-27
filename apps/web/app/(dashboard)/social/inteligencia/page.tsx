@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
-  ArrowLeft, Sparkles, RefreshCw, Eye, TrendingUp, Users, Heart,
+  ArrowLeft, ArrowRight, Sparkles, RefreshCw, Eye, TrendingUp, Users, Heart,
   Flame, Clock, Loader2, Wand2, CalendarDays, Lightbulb, Megaphone, DollarSign, MessageCircle,
 } from 'lucide-react';
 import {
@@ -362,9 +362,14 @@ export default function SocialIntelligencePage() {
 
               {/* ── TOP POSTS ── */}
               <section>
-                <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-                  <TrendingUp className="h-4 w-4 text-primary" />Top conteúdo (por alcance)
-                </h2>
+                <div className="mb-3 flex items-center justify-between">
+                  <h2 className="flex items-center gap-2 text-sm font-semibold">
+                    <TrendingUp className="h-4 w-4 text-primary" />Top conteúdo (por alcance)
+                  </h2>
+                  <Link href="/social/posts" className="inline-flex items-center text-xs text-muted-foreground hover:text-foreground">
+                    Ver todos os posts <ArrowRight className="h-3 w-3" />
+                  </Link>
+                </div>
                 <div className="rounded-lg border border-border bg-card p-3">
                   {org && org.top_posts.length > 0 ? (
                     (() => {

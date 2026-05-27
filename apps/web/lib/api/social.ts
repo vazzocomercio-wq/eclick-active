@@ -774,6 +774,62 @@ export interface SentimentSummary {
   cached: boolean;
 }
 
+// ─── Drill-down dos NOSSOS posts (TR-A) ───
+export interface OrganicPostMetrics {
+  reach: number; views: number; likes: number; comments: number;
+  shares: number; saved: number; impressions: number;
+  total_interactions: number; engagement_rate: number;
+}
+export interface OrganicPostItem {
+  id: string;
+  network: string;
+  account_external_id: string;
+  external_post_id: string;
+  media_type: string | null;
+  media_product_type: string | null;
+  permalink: string | null;
+  caption: string;
+  thumbnail_url: string | null;
+  media_url: string | null;
+  published_at: string | null;
+  source: string;
+  insights_available: boolean;
+  metrics: OrganicPostMetrics;
+  score: number;
+}
+export interface OrganicPostsPage {
+  posts: OrganicPostItem[];
+  total: number;
+}
+export interface OrganicPostDailyPoint {
+  date: string; reach: number; impressions: number; likes: number;
+  comments: number; shares: number; saved: number; video_views: number;
+  total_interactions: number; engagement_rate: number;
+}
+export interface OrganicPostDetail {
+  post: OrganicPostItem;
+  daily: OrganicPostDailyPoint[];
+  benchmark: { format: string; median_reach: number; median_engagement_rate: number; sample: number } | null;
+}
+export interface PostVerdict {
+  post_id: string;
+  headline: string;
+  vs_benchmark: string | null;
+  what_worked: string[];
+  what_to_improve: string[];
+  next_action: string | null;
+  generated_at: string;
+}
+export interface PostsFilters {
+  format?: string;
+  network?: string;
+  account?: string;
+  search?: string;
+  sort?: 'reach' | 'engagement' | 'recent' | 'score';
+  limit?: number;
+  offset?: number;
+}
+
 // ─── Radar de Conteúdo (Tendências + dados individuais) ───
 export type TrendNetwork =
   | 'youtube' | 'meta_ads' | 'tiktok' | 'google_trends' | 'instagram';
@@ -1110,6 +1166,23 @@ export const socialApi = {
       api.get<AdsSummary>('/social/intelligence/ads', { signal }),
     sentiment: (signal?: AbortSignal) =>
       api.get<SentimentSummary>('/social/intelligence/sentiment', { signal }),
+    posts: (filters: PostsFilters = {}, signal?: AbortSignal) =>
+      api.get<OrganicPostsPage>('/social/intelligence/posts', {
+        query: {
+          format: filters.format,
+          network: filters.network,
+          account: filters.account,
+          search: filters.search,
+          sort: filters.sort,
+          limit: filters.limit,
+          offset: filters.offset,
+        },
+        signal,
+      }),
+    postDetail: (id: string, signal?: AbortSignal) =>
+      api.get<OrganicPostDetail>(`/social/intelligence/posts/${id}`, { signal }),
+    postVerdict: (id: string) =>
+      api.post<PostVerdict>(`/social/intelligence/posts/${id}/verdict`, {}),
   },
 
   // Radar de Conteúdo — tendências + dados individuais por item

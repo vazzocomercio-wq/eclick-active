@@ -114,3 +114,68 @@ export interface OrganicSummary {
   best_format: string | null;
   best_hour: number | null;
 }
+
+/** Drill-down por post (TR-A) — dados individuais coletados no SaaS. */
+export interface OrganicPostMetrics {
+  reach: number;
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  saved: number;
+  impressions: number;
+  total_interactions: number;
+  engagement_rate: number;
+}
+export interface OrganicPostItem {
+  id: string;
+  network: string;
+  account_external_id: string;
+  external_post_id: string;
+  media_type: string | null;
+  media_product_type: string | null;
+  permalink: string | null;
+  caption: string;
+  thumbnail_url: string | null;
+  media_url: string | null;
+  published_at: string | null;
+  source: string;
+  insights_available: boolean;
+  metrics: OrganicPostMetrics;
+  score: number;
+}
+export interface OrganicPostsPage {
+  posts: OrganicPostItem[];
+  total: number;
+}
+export interface OrganicPostDailyPoint {
+  date: string;
+  reach: number;
+  impressions: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  saved: number;
+  video_views: number;
+  total_interactions: number;
+  engagement_rate: number;
+}
+export interface OrganicPostDetail {
+  post: OrganicPostItem;
+  daily: OrganicPostDailyPoint[];
+  benchmark: {
+    format: string;
+    median_reach: number;
+    median_engagement_rate: number;
+    sample: number;
+  } | null;
+}
+export interface OrganicPostsFilters {
+  format?: string;
+  network?: string;
+  account?: string;
+  search?: string;
+  sort?: 'reach' | 'engagement' | 'recent' | 'score';
+  limit?: number;
+  offset?: number;
+}

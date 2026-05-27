@@ -8,6 +8,9 @@ import {
   CommercialSignal,
   CampaignCandidate,
   OrganicSummary,
+  OrganicPostsPage,
+  OrganicPostDetail,
+  OrganicPostsFilters,
 } from './bridge.types';
 
 /**
@@ -530,6 +533,72 @@ export class BridgeService {
       return (await res.json()) as OrganicSummary;
     } catch (err) {
       this.log.warn(`getOrganicSummary falhou para ${activeOrgId}: ${String(err)}`);
+      return null;
+    }
+  }
+
+  /** Lista de posts orgânicos com métricas individuais + score (drill-down TR-A). */
+  async listOrganicPosts(
+    activeOrgId: string,
+    filters: OrganicPostsFilters = {},
+  ): Promise<OrganicPostsPage> {
+    const empty: OrganicPostsPage = { posts: [], total: 0 };
+    const cfg = this.saasInternalConfig();
+    if (!cfg) return empty;
+    const saasOrgId = await this.resolveSaasOrgId(activeOrgId);
+    if (!saasOrgId) return empty;
+    try {
+      const url = new URL(`${cfg.baseUrl}/internal/analytics/posts`);
+      url.searchParams.set('org_id', saasOrgId);
+      if (filters.format) url.searchParams.set('format', filters.format);
+      if (filters.network) url.searchParams.set('network', filters.network);
+      if (filters.account) url.searchParams.set('account', filters.account);
+      if (filters.search) url.searchParams.set('search', filters.search);
+      if (filters.sort) url.searchParams.set('sort', filters.sort);
+      if (filters.limit != null) url.searchParams.set('limit', String(filters.limit));
+      if (filters.offset != null) url.searchParams.set('offset', String(filters.offset));
+      const res = await fetch(url.toString(), {
+        method: 'GET',
+        headers: { 'X-Internal-Key': cfg.key },
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!res.ok) {
+        this.log.warn(`listOrganicPosts SaaS ${res.status}`);
+        return empty;
+      }
+      return (await res.json()) as OrganicPostsPage;
+    } catch (err) {
+      this.log.warn(`listOrganicPosts falhou para ${activeOrgId}: ${String(err)}`);
+      return empty;
+    }
+  }
+
+  /** Detalhe de 1 post: métricas + série diária + benchmark do formato. */
+  async getOrganicPostDetail(
+    activeOrgId: string,
+    postId: string,
+  ): Promise<OrganicPostDetail | null> {
+    const cfg = this.saasInternalConfig();
+    if (!cfg) return null;
+    const saasOrgId = await this.resolveSaasOrgId(activeOrgId);
+    if (!saasOrgId) return null;
+    try {
+      const url = new URL(
+        `${cfg.baseUrl}/internal/analytics/posts/${encodeURIComponent(postId)}`,
+      );
+      url.searchParams.set('org_id', saasOrgId);
+      const res = await fetch(url.toString(), {
+        method: 'GET',
+        headers: { 'X-Internal-Key': cfg.key },
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!res.ok) {
+        if (res.status !== 404) this.log.warn(`getOrganicPostDetail SaaS ${res.status}`);
+        return null;
+      }
+      return (await res.json()) as OrganicPostDetail;
+    } catch (err) {
+      this.log.warn(`getOrganicPostDetail falhou para ${activeOrgId}: ${String(err)}`);
       return null;
     }
   }

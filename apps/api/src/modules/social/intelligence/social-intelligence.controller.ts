@@ -1,8 +1,9 @@
-import { Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '../../../common/auth/auth.guard';
 import { CurrentUser } from '../../../common/auth/current-user.decorator';
 import type { AuthUser } from '../../../common/auth/auth.types';
-import { SocialIntelligenceService, type TodaysPlan, type WeekPlan, type Recommendation, type AdsSummary, type SentimentSummary } from './social-intelligence.service';
+import { SocialIntelligenceService, type TodaysPlan, type WeekPlan, type Recommendation, type AdsSummary, type SentimentSummary, type PostVerdict } from './social-intelligence.service';
+import type { OrganicPostsPage, OrganicPostDetail, OrganicPostsFilters } from '../../bridge/bridge.types';
 
 /**
  * E-Click Social Intelligence — "O que postar hoje".
@@ -61,5 +62,51 @@ export class SocialIntelligenceController {
   @Post('sentiment/refresh')
   sentimentRefresh(@CurrentUser() user: AuthUser): Promise<SentimentSummary> {
     return this.intel.getSentiment(user.org_id, true);
+  }
+
+  // ─── Drill-down dos NOSSOS posts (TR-A) ─────────────────────────
+
+  /** Lista de posts da org com métricas individuais + score. */
+  @Get('posts')
+  posts(
+    @CurrentUser() user: AuthUser,
+    @Query('format') format?: string,
+    @Query('network') network?: string,
+    @Query('account') account?: string,
+    @Query('search') search?: string,
+    @Query('sort') sort?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ): Promise<OrganicPostsPage> {
+    const filters: OrganicPostsFilters = {
+      format,
+      network,
+      account,
+      search,
+      sort: (['reach', 'engagement', 'recent', 'score'] as const).includes(sort as never)
+        ? (sort as OrganicPostsFilters['sort'])
+        : undefined,
+      limit: limit ? Number(limit) : undefined,
+      offset: offset ? Number(offset) : undefined,
+    };
+    return this.intel.listPosts(user.org_id, filters);
+  }
+
+  /** Detalhe de 1 post (métricas + série diária + benchmark). */
+  @Get('posts/:id')
+  postDetail(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ): Promise<OrganicPostDetail | null> {
+    return this.intel.getPostDetail(user.org_id, id);
+  }
+
+  /** Veredito da IA sobre 1 post (sob demanda — gasta 1 chamada de IA). */
+  @Post('posts/:id/verdict')
+  postVerdict(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ): Promise<PostVerdict | null> {
+    return this.intel.getPostVerdict(user.org_id, id);
   }
 }
