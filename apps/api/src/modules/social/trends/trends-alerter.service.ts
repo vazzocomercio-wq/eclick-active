@@ -113,7 +113,7 @@ export class TrendsAlerterService {
       .select('id')
       .eq('org_id', orgId)
       .eq('status', 'active')
-      .in('channel_type', ['baileys', 'zapi'])
+      .in('channel_type', ['baileys', 'zapi', 'whatsapp_free', 'whatsapp_cloud'])
       .order('created_at', { ascending: true })
       .limit(1)
       .maybeSingle();
