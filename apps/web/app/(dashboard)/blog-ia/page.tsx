@@ -40,6 +40,7 @@ export default function BlogIaPage() {
   const [seed, setSeed] = useState('');
   const [ideas, setIdeas] = useState<BlogTopicIdea[]>([]);
   const [ideating, setIdeating] = useState(false);
+  const [batching, setBatching] = useState(false);
 
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,6 +53,16 @@ export default function BlogIaPage() {
       .catch(() => setPosts([]))
       .finally(() => setLoading(false));
   }, []);
+
+  // Enquanto houver post 'generating' (lote/avulso), atualiza a lista a cada 6s.
+  const hasGenerating = posts.some((p) => p.status === 'generating');
+  useEffect(() => {
+    if (!hasGenerating) return;
+    const id = setInterval(() => {
+      blogAiApi.list().then(setPosts).catch(() => {});
+    }, 6000);
+    return () => clearInterval(id);
+  }, [hasGenerating]);
 
   async function runGenerate(topicVal: string, pillarVal: string) {
     if (!topicVal.trim() || generating) return;
@@ -85,6 +96,21 @@ export default function BlogIaPage() {
       setError(e instanceof ApiError ? e.message : t('errorGeneric'));
     } finally {
       setIdeating(false);
+    }
+  }
+
+  async function onBatch() {
+    if (batching) return;
+    setBatching(true);
+    setError(null);
+    try {
+      const created = await blogAiApi.generateBatch(seed.trim() || undefined, 5);
+      setPosts((prev) => [...created, ...prev.filter((p) => !created.some((c) => c.id === p.id))]);
+      setIdeas([]);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : t('errorGeneric'));
+    } finally {
+      setBatching(false);
     }
   }
 
@@ -225,6 +251,15 @@ export default function BlogIaPage() {
           >
             {ideating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lightbulb className="h-4 w-4" />}
             {ideating ? t('ideating') : t('ideate')}
+          </button>
+          <button
+            type="button"
+            onClick={onBatch}
+            disabled={batching || ideating}
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50"
+          >
+            {batching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            {batching ? t('batching') : t('batch')}
           </button>
         </div>
         {ideas.length > 0 && (

@@ -54,6 +54,8 @@ export interface BlogTopicIdea {
 export const blogAiApi = {
   ideate: (seed?: string, count?: number) =>
     api.post<{ topics: BlogTopicIdea[] }>('/blog-ai/ideate', { seed, count }),
+  generateBatch: (seed?: string, count?: number) =>
+    api.post<BlogPost[]>('/blog-ai/generate-batch', { seed, count }),
   generate: (input: GenerateBlogPostInput) => api.post<BlogPost>('/blog-ai/generate', input),
   list: (status?: string) => api.get<BlogPost[]>('/blog-ai/posts', { query: { status } }),
   get: (id: string) => api.get<BlogPost>(`/blog-ai/posts/${id}`),

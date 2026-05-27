@@ -132,6 +132,8 @@
     "seedPlaceholder": "可选方向（如 Shopee、运费、上新）",
     "ideate": "推荐选题",
     "ideating": "思考中…",
+    "batch": "批量生成 5 篇",
+    "batching": "批量生成中…",
     "publishedToast": "已发布！已上线 eclick.app.br/blog",
     "errorGeneric": "出错了，请重试。"
   },

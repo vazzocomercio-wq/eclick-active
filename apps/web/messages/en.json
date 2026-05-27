@@ -132,6 +132,8 @@
     "seedPlaceholder": "Optional focus (e.g. Shopee, shipping, launch)",
     "ideate": "Suggest topics",
     "ideating": "Thinking…",
+    "batch": "Generate 5 at once",
+    "batching": "Generating batch…",
     "publishedToast": "Published! Live at eclick.app.br/blog",
     "errorGeneric": "Something went wrong. Try again."
   },

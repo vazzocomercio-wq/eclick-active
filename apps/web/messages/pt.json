@@ -132,6 +132,8 @@
     "seedPlaceholder": "Foco opcional (ex: Shopee, frete, lançamento)",
     "ideate": "Sugerir pautas",
     "ideating": "Pensando…",
+    "batch": "Gerar 5 em lote",
+    "batching": "Gerando lote…",
     "publishedToast": "Publicado! Já está no ar em eclick.app.br/blog",
     "errorGeneric": "Algo deu errado. Tente de novo."
   },

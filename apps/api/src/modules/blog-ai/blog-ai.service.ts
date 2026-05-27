@@ -53,33 +53,46 @@ export class BlogAiService {
   ): Promise<BlogPostRow> {
     if (!dto.topic?.trim()) throw new BadRequestException('Informe o tema/pauta.');
     const pillar = dto.pillar && VALID_PILLARS.has(dto.pillar) ? dto.pillar : DEFAULT_PILLAR;
-    const t0 = Date.now();
+    const postId = await this.createDraft(orgId, userId, dto.topic, pillar);
+    return this.runGeneration(orgId, postId, dto.topic, pillar, dto.notes, dto.generateCover);
+  }
 
-    // 1) cria a linha em 'generating'
-    const { data: created, error: insErr } = await this.db
+  /** Cria a linha em 'generating' e devolve o id. */
+  private async createDraft(orgId: string, userId: string | null, topic: string, pillar: string): Promise<string> {
+    const { data, error } = await this.db
       .from('blog_posts')
       .insert({
         org_id: orgId,
         created_by: userId,
-        title: dto.topic.slice(0, 180),
-        slug: `rascunho-${Date.now().toString(36)}`,
+        title: topic.slice(0, 180),
+        slug: `rascunho-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
         status: 'generating',
-        source_topic: dto.topic,
+        source_topic: topic,
         pillar,
         category: pillar,
       })
       .select('id')
       .single();
-    if (insErr) throw new BadRequestException(`blog_posts insert: ${insErr.message}`);
-    const postId = (created as { id: string }).id;
+    if (error) throw new BadRequestException(`blog_posts insert: ${error.message}`);
+    return (data as { id: string }).id;
+  }
 
+  /** Núcleo da geração: LLM → Portable Text → capa → status 'review'. */
+  private async runGeneration(
+    orgId: string,
+    postId: string,
+    topic: string,
+    pillar: string,
+    notes?: string,
+    generateCover = true,
+  ): Promise<BlogPostRow> {
+    const t0 = Date.now();
     try {
-      // 2) gera o artigo (JSON estruturado)
       const out = await this.llm.chat({
         orgId,
         feature: 'blog_article',
         system: BLOG_ARTICLE_SYSTEM_PROMPT,
-        user: buildArticleUserPrompt({ topic: dto.topic, pillar, notes: dto.notes }),
+        user: buildArticleUserPrompt({ topic, pillar, notes }),
         json_mode: true,
         max_tokens: 6000,
         temperature: 0.6,
@@ -94,9 +107,8 @@ export class BlogAiService {
       const body = this.toPortableText(art.sections);
       const slug = this.slugify(art.slug || art.title);
 
-      // 3) capa por IA (não bloqueia o artigo se falhar)
       let coverUrl: string | null = null;
-      if (dto.generateCover !== false) {
+      if (generateCover !== false) {
         try {
           const img = await this.images.generateAndUpload(
             orgId,
@@ -115,7 +127,6 @@ export class BlogAiService {
         }
       }
 
-      // 4) persiste tudo + status review
       const { data: updated, error: updErr } = await this.db
         .from('blog_posts')
         .update({
@@ -153,6 +164,38 @@ export class BlogAiService {
     } catch (e) {
       if (!(e instanceof BadRequestException)) await this.markFailed(postId, (e as Error).message);
       throw e;
+    }
+  }
+
+  /**
+   * Lote (autopilot): IA sugere N pautas → cria N rascunhos → gera em
+   * background (sequencial, pra controlar custo/rate). Retorna as linhas
+   * 'generating' na hora; a UI faz poll e elas viram 'review' conforme prontas.
+   */
+  async generateBatch(orgId: string, userId: string | null, dto: IdeateDto): Promise<BlogPostRow[]> {
+    const { topics } = await this.ideate(orgId, dto);
+    if (!topics.length) throw new BadRequestException('A IA não sugeriu pautas — tente outra semente.');
+    const drafts: Array<{ id: string; topic: string; pillar: string }> = [];
+    for (const tpc of topics) {
+      const pillar = VALID_PILLARS.has(tpc.pillar) ? tpc.pillar : DEFAULT_PILLAR;
+      const id = await this.createDraft(orgId, userId, tpc.title, pillar);
+      drafts.push({ id, topic: tpc.title, pillar });
+    }
+    void this.runBatch(orgId, drafts);
+    const { data } = await this.db.from('blog_posts').select('*').in(
+      'id',
+      drafts.map((d) => d.id),
+    );
+    return (data ?? []) as BlogPostRow[];
+  }
+
+  private async runBatch(orgId: string, drafts: Array<{ id: string; topic: string; pillar: string }>): Promise<void> {
+    for (const d of drafts) {
+      try {
+        await this.runGeneration(orgId, d.id, d.topic, d.pillar);
+      } catch (e) {
+        this.log.warn(`[blog-ai] lote item ${d.id} falhou: ${(e as Error).message}`);
+      }
     }
   }
 

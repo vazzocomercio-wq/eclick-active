@@ -16,6 +16,12 @@ export class BlogAiController {
     return this.svc.ideate(user.org_id, dto);
   }
 
+  /** Lote/autopilot: IA sugere N pautas e gera os N artigos (fila de revisão). */
+  @Post('generate-batch')
+  generateBatch(@CurrentUser() user: AuthUser, @Body() dto: IdeateDto) {
+    return this.svc.generateBatch(user.org_id, user.id, dto);
+  }
+
   /** Gera um artigo GEO-otimizado + capa por IA → fila de revisão. */
   @Post('generate')
   generate(@CurrentUser() user: AuthUser, @Body() dto: GenerateBlogPostDto) {
