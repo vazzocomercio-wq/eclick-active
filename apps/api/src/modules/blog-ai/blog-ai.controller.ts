@@ -4,6 +4,7 @@ import { CurrentUser } from '../../common/auth/current-user.decorator';
 import type { AuthUser } from '../../common/auth/auth.types';
 import { BlogAiService } from './blog-ai.service';
 import { BlogStudioService, type BlogPromptKey } from './blog-studio.service';
+import { BLOG_FONTS } from './blog-fonts';
 import type { GenerateBlogPostDto, IdeateDto } from './blog-ai.types';
 
 @UseGuards(AuthGuard)
@@ -21,8 +22,17 @@ export class BlogAiController {
   }
 
   @Put('settings')
-  updateSettings(@CurrentUser() user: AuthUser, @Body() body: { voice_guidelines?: string | null }) {
+  updateSettings(
+    @CurrentUser() user: AuthUser,
+    @Body() body: { voice_guidelines?: string | null; display_font?: string | null },
+  ) {
     return this.svc.updateSettings(user.org_id, body);
+  }
+
+  /** Catálogo de fontes de título disponíveis (slug + label + família p/ preview). */
+  @Get('fonts')
+  fonts() {
+    return BLOG_FONTS;
   }
 
   // ── Estúdio do Blog: prompts editáveis ───────────────────────────────

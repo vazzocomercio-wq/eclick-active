@@ -164,6 +164,8 @@
       "genRun": "生成",
       "generating": "生成中…",
       "cancel": "取消",
+      "fontTitle": "博客字体",
+      "fontHelp": "为公开博客的标题选择字体。几秒内应用到网站。（每篇文章可在文章页设置自己的字体。）",
       "knowledgeTitle": "知识库",
       "knowledgeHelp": "AI 撰写时作为事实参考的 URL 和笔记（不会逐字复制，而是作为依据）。",
       "kUrl": "网址",

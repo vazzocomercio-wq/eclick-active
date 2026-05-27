@@ -164,6 +164,8 @@
       "genRun": "Generate",
       "generating": "Generating…",
       "cancel": "Cancel",
+      "fontTitle": "Blog font",
+      "fontHelp": "Choose the font for the public blog's headings. Applies to the site in seconds. (Each article can have its own font on the posts screen.)",
       "knowledgeTitle": "Knowledge base",
       "knowledgeHelp": "URLs and notes the AI uses as factual reference when writing (it won't copy verbatim — it grounds the content).",
       "kUrl": "URL",

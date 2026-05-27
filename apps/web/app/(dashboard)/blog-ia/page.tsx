@@ -75,7 +75,7 @@ export default function BlogIaPage() {
     setError(null);
     try {
       const trimmed = voice.trim();
-      const saved = await blogAiApi.saveSettings(trimmed || null);
+      const saved = await blogAiApi.saveSettings({ voice_guidelines: trimmed || null });
       setVoiceSaved(saved.voice_guidelines ?? '');
       setVoice(saved.voice_guidelines ?? '');
       setVoiceJustSaved(true);

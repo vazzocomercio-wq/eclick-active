@@ -53,6 +53,13 @@ export interface BlogTopicIdea {
 
 export interface BlogSettings {
   voice_guidelines: string | null;
+  display_font: string | null;
+}
+
+export interface BlogFontOption {
+  slug: string;
+  label: string;
+  family: string;
 }
 
 export type BlogPromptKey = 'article' | 'ideate';
@@ -77,8 +84,9 @@ export interface BlogKnowledgeSource {
 
 export const blogAiApi = {
   getSettings: () => api.get<BlogSettings>('/blog-ai/settings'),
-  saveSettings: (voice_guidelines: string | null) =>
-    api.put<BlogSettings>('/blog-ai/settings', { voice_guidelines }),
+  saveSettings: (patch: { voice_guidelines?: string | null; display_font?: string | null }) =>
+    api.put<BlogSettings>('/blog-ai/settings', patch),
+  listFonts: () => api.get<BlogFontOption[]>('/blog-ai/fonts'),
 
   // Estúdio: prompts editáveis
   listPrompts: () => api.get<BlogPrompt[]>('/blog-ai/studio/prompts'),

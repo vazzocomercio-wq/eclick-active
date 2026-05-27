@@ -95,4 +95,36 @@ export class SanityBlogClient {
       body: JSON.stringify({ mutations: [{ patch: { id: docId, set: { status } } }] }),
     });
   }
+
+  /** Patch (set) de campos num doc existente — ex: trocar a fonte de um post já publicado. */
+  async patchDocument(docId: string, set: Record<string, unknown>): Promise<void> {
+    if (!this.isConfigured()) return;
+    await fetch(this.base(`data/mutate/${this.dataset}`), {
+      method: 'POST',
+      headers: this.headers({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ mutations: [{ patch: { id: docId, set } }] }),
+    });
+  }
+
+  /**
+   * Config global do blog (singleton _id="siteSettings"). createIfNotExists +
+   * patch set pra não clobberar outros campos. Usado pra fonte padrão do blog.
+   */
+  async setSiteSettings(set: Record<string, unknown>): Promise<void> {
+    if (!this.isConfigured()) throw new Error('Sanity não configurado (SANITY_PROJECT_ID/SANITY_WRITE_TOKEN).');
+    const res = await fetch(this.base(`data/mutate/${this.dataset}`), {
+      method: 'POST',
+      headers: this.headers({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        mutations: [
+          { createIfNotExists: { _id: 'siteSettings', _type: 'siteSettings' } },
+          { patch: { id: 'siteSettings', set } },
+        ],
+      }),
+    });
+    if (!res.ok) {
+      const json = (await res.json().catch(() => ({}))) as { error?: { description?: string }; message?: string };
+      throw new Error(`setSiteSettings falhou: HTTP ${res.status} ${json.error?.description ?? json.message ?? ''}`);
+    }
+  }
 }

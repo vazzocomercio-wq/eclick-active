@@ -164,6 +164,8 @@
       "genRun": "Gerar",
       "generating": "Gerando…",
       "cancel": "Cancelar",
+      "fontTitle": "Fonte do blog",
+      "fontHelp": "Escolha a fonte dos títulos do blog público. Aplica no site em segundos. (Cada artigo pode ter uma fonte própria na tela de posts.)",
       "knowledgeTitle": "Base de conhecimento",
       "knowledgeHelp": "URLs e notas que a IA usa como referência factual ao escrever (não copia literal — usa pra embasar).",
       "kUrl": "URL",

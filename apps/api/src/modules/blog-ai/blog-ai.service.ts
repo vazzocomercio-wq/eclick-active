@@ -4,6 +4,7 @@ import { LlmService } from '../../common/llm/llm.service';
 import { ImageGenerationService } from '../social/image-generation/image-generation.service';
 import { SanityBlogClient } from './sanity-blog.client';
 import { BlogStudioService } from './blog-studio.service';
+import { normalizeFontSlug } from './blog-fonts';
 import {
   BLOG_PILLARS,
   buildArticleUserPrompt,
@@ -46,26 +47,43 @@ export class BlogAiService {
 
   // ── Settings (tom de voz da marca) ───────────────────────────────────
 
-  async getSettings(orgId: string): Promise<{ voice_guidelines: string | null }> {
+  async getSettings(orgId: string): Promise<{ voice_guidelines: string | null; display_font: string | null }> {
     const { data } = await this.db
       .from('blog_settings')
-      .select('voice_guidelines')
+      .select('voice_guidelines, display_font')
       .eq('org_id', orgId)
       .maybeSingle();
-    return { voice_guidelines: (data as { voice_guidelines: string | null } | null)?.voice_guidelines ?? null };
+    const row = data as { voice_guidelines: string | null; display_font: string | null } | null;
+    return { voice_guidelines: row?.voice_guidelines ?? null, display_font: row?.display_font ?? null };
   }
 
-  async updateSettings(orgId: string, dto: { voice_guidelines?: string | null }): Promise<{ voice_guidelines: string | null }> {
+  async updateSettings(
+    orgId: string,
+    dto: { voice_guidelines?: string | null; display_font?: string | null },
+  ): Promise<{ voice_guidelines: string | null; display_font: string | null }> {
+    // Update parcial: só toca as colunas presentes no dto (não zera as outras).
+    const payload: Record<string, unknown> = { org_id: orgId, updated_at: new Date().toISOString() };
+    if ('voice_guidelines' in dto) payload.voice_guidelines = dto.voice_guidelines ?? null;
+    if ('display_font' in dto) payload.display_font = dto.display_font ? normalizeFontSlug(dto.display_font) : null;
+
     const { data, error } = await this.db
       .from('blog_settings')
-      .upsert(
-        { org_id: orgId, voice_guidelines: dto.voice_guidelines ?? null, updated_at: new Date().toISOString() },
-        { onConflict: 'org_id' },
-      )
-      .select('voice_guidelines')
+      .upsert(payload, { onConflict: 'org_id' })
+      .select('voice_guidelines, display_font')
       .single();
     if (error) throw new BadRequestException(`blog_settings: ${error.message}`);
-    return { voice_guidelines: (data as { voice_guidelines: string | null }).voice_guidelines };
+
+    // Espelha a fonte padrão no Sanity (site público lê de lá) + revalida o blog.
+    if ('display_font' in dto && this.sanity.isConfigured()) {
+      try {
+        await this.sanity.setSiteSettings({ blogDisplayFont: normalizeFontSlug(dto.display_font) });
+        void this.revalidateFront('');
+      } catch (e) {
+        this.log.warn(`espelhar fonte no Sanity falhou (non-fatal): ${(e as Error).message}`);
+      }
+    }
+    const row = data as { voice_guidelines: string | null; display_font: string | null };
+    return { voice_guidelines: row.voice_guidelines, display_font: row.display_font };
   }
 
   /** Voz da marca (se configurada) pra injetar nos prompts. Best-effort. */

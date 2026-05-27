@@ -16,13 +16,21 @@ import {
   Check,
   AlertCircle,
   Wand2,
+  Type,
 } from 'lucide-react';
 import {
   blogAiApi,
   type BlogPrompt,
   type BlogPromptKey,
   type BlogKnowledgeSource,
+  type BlogFontOption,
 } from '@/lib/api/blog-ai';
+
+/** Stylesheets de preview das fontes (Google Fonts + Fontshare p/ Clash). */
+const FONT_PREVIEW_HREFS = [
+  'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Sora:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&family=Inter+Tight:wght@400;500;600;700&family=Chivo:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Syne:wght@400;500;600;700&family=Exo+2:wght@400;500;600;700&family=Unbounded:wght@400;500;600;700&family=Lexend:wght@400;500;600;700&display=swap',
+  'https://api.fontshare.com/v2/css?f[]=clash-display@400,500,600,700&display=swap',
+];
 import { ApiError } from '@/lib/api/client';
 
 export default function BlogStudioPage() {
@@ -30,17 +38,37 @@ export default function BlogStudioPage() {
 
   const [prompts, setPrompts] = useState<BlogPrompt[]>([]);
   const [knowledge, setKnowledge] = useState<BlogKnowledgeSource[]>([]);
+  const [fonts, setFonts] = useState<BlogFontOption[]>([]);
+  const [currentFont, setCurrentFont] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([blogAiApi.listPrompts(), blogAiApi.listKnowledge()])
-      .then(([p, k]) => {
+    Promise.all([blogAiApi.listPrompts(), blogAiApi.listKnowledge(), blogAiApi.listFonts(), blogAiApi.getSettings()])
+      .then(([p, k, f, s]) => {
         setPrompts(p);
         setKnowledge(k);
+        setFonts(f);
+        setCurrentFont(s.display_font);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
+  }, []);
+
+  // Carrega as stylesheets de preview das fontes uma vez.
+  useEffect(() => {
+    const links = FONT_PREVIEW_HREFS.map((href) => {
+      const existing = document.querySelector(`link[href="${href}"]`);
+      if (existing) return null;
+      const el = document.createElement('link');
+      el.rel = 'stylesheet';
+      el.href = href;
+      document.head.appendChild(el);
+      return el;
+    });
+    return () => {
+      links.forEach((el) => el?.remove());
+    };
   }, []);
 
   return (
@@ -70,8 +98,20 @@ export default function BlogStudioPage() {
         </div>
       ) : (
         <>
-          {/* Prompts editáveis */}
+          {/* Fonte do blog */}
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            {t('studio.fontTitle')}
+          </h2>
+          <FontPicker
+            fonts={fonts}
+            current={currentFont}
+            onChange={setCurrentFont}
+            setError={setError}
+            t={t}
+          />
+
+          {/* Prompts editáveis */}
+          <h2 className="mb-3 mt-8 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
             {t('studio.promptsTitle')}
           </h2>
           <div className="flex flex-col gap-4">
@@ -365,6 +405,76 @@ function KnowledgePanel({
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+function FontPicker({
+  fonts,
+  current,
+  onChange,
+  setError,
+  t,
+}: {
+  fonts: BlogFontOption[];
+  current: string | null;
+  onChange: (slug: string) => void;
+  setError: (s: string | null) => void;
+  t: (k: string) => string;
+}) {
+  const [savingSlug, setSavingSlug] = useState<string | null>(null);
+  const selected = current ?? 'clash';
+
+  async function pick(slug: string) {
+    if (savingSlug || slug === selected) return;
+    setSavingSlug(slug);
+    setError(null);
+    try {
+      const saved = await blogAiApi.saveSettings({ display_font: slug });
+      onChange(saved.display_font ?? slug);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : t('errorGeneric'));
+    } finally {
+      setSavingSlug(null);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-5">
+      <p className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
+        <Type className="h-4 w-4 text-primary" /> {t('studio.fontHelp')}
+      </p>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {fonts.map((f) => {
+          const isSel = f.slug === selected;
+          return (
+            <button
+              key={f.slug}
+              type="button"
+              onClick={() => pick(f.slug)}
+              disabled={savingSlug !== null}
+              className={`flex items-center justify-between gap-3 rounded-lg border p-3 text-left transition-colors disabled:opacity-60 ${
+                isSel ? 'border-primary bg-primary/5' : 'border-border bg-background hover:border-primary/40'
+              }`}
+            >
+              <div className="min-w-0 flex-1">
+                <div
+                  className="truncate text-xl text-foreground"
+                  style={{ fontFamily: f.family, fontWeight: 500 }}
+                >
+                  Como a IA escolhe
+                </div>
+                <div className="mt-0.5 text-[11px] text-muted-foreground">{f.label}</div>
+              </div>
+              {savingSlug === f.slug ? (
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
+              ) : isSel ? (
+                <Check className="h-4 w-4 shrink-0 text-primary" />
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

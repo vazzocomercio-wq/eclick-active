@@ -133,6 +133,7 @@ export interface BlogPostRow {
   rejected_reason: string | null;
   source_topic: string | null;
   pillar: string | null;
+  display_font: string | null;
   cost_usd: number;
   generation_metadata: Record<string, unknown>;
   created_by: string | null;
