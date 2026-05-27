@@ -46,31 +46,47 @@ export class YouTubeConnector {
     if (!q) return [];
 
     try {
-      // 1) search.list — ids dos vídeos mais vistos da categoria (últimos 30d)
+      // 1) search.list — busca resiliente. O combo recência+viewCount+idioma
+      //    pode zerar dependendo do IP/região do servidor; então tentamos
+      //    progressivamente mais amplo até obter ids.
       const publishedAfter = new Date(Date.now() - 30 * 86400000).toISOString();
-      const searchUrl = new URL(`${this.API}/search`);
-      searchUrl.searchParams.set('part', 'snippet');
-      searchUrl.searchParams.set('type', 'video');
-      searchUrl.searchParams.set('order', 'viewCount');
-      searchUrl.searchParams.set('maxResults', String(Math.min(max, 50)));
-      searchUrl.searchParams.set('regionCode', monitor.region || 'BR');
-      searchUrl.searchParams.set('relevanceLanguage', monitor.language || 'pt');
-      searchUrl.searchParams.set('publishedAfter', publishedAfter);
-      searchUrl.searchParams.set('q', q);
-      searchUrl.searchParams.set('key', key);
+      const region = monitor.region || 'BR';
+      const language = monitor.language || 'pt';
+      const base: Record<string, string> = {
+        part: 'snippet',
+        type: 'video',
+        maxResults: String(Math.min(max, 50)),
+        regionCode: region,
+        q,
+        key,
+      };
+      const attempts: Array<{ label: string; params: Record<string, string> }> = [
+        { label: 'recent+relevance+lang', params: { order: 'relevance', publishedAfter, relevanceLanguage: language } },
+        { label: 'recent+views', params: { order: 'viewCount', publishedAfter } },
+        { label: 'alltime+relevance', params: { order: 'relevance' } },
+        { label: 'alltime+views', params: { order: 'viewCount' } },
+      ];
 
-      const sRes = await fetch(searchUrl.toString(), { signal: AbortSignal.timeout(20_000) });
-      if (!sRes.ok) {
-        this.log.warn(`youtube search ${sRes.status}: ${(await sRes.text()).slice(0, 300)}`);
-        return [];
+      let ids: string[] = [];
+      let used = '';
+      for (const att of attempts) {
+        if (ids.length) break;
+        const url = new URL(`${this.API}/search`);
+        for (const [k, v] of Object.entries({ ...base, ...att.params })) {
+          url.searchParams.set(k, v);
+        }
+        const sRes = await fetch(url.toString(), { signal: AbortSignal.timeout(20_000) });
+        if (!sRes.ok) {
+          this.log.warn(`youtube search [${att.label}] ${sRes.status}: ${(await sRes.text()).slice(0, 200)}`);
+          continue;
+        }
+        const sJson = (await sRes.json()) as { items?: YtSearchItem[] };
+        ids = (sJson.items ?? [])
+          .map((i) => i.id?.videoId)
+          .filter((x): x is string => !!x);
+        if (ids.length) used = att.label;
       }
-      const sJson = (await sRes.json()) as { items?: YtSearchItem[] };
-      const ids = (sJson.items ?? [])
-        .map((i) => i.id?.videoId)
-        .filter((x): x is string => !!x);
-      this.log.log(
-        `youtube search ok key=${key.length}c q="${q}" raw=${(sJson.items ?? []).length} ids=${ids.length}`,
-      );
+      this.log.log(`youtube q="${q}" key=${key.length}c ids=${ids.length} via=${used || 'none'}`);
       if (!ids.length) return [];
 
       // 2) videos.list — estatísticas + duração
