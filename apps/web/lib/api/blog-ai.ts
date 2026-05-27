@@ -61,6 +61,8 @@ export interface BlogFontOption {
   slug: string;
   label: string;
   family: string;
+  google: string | null;
+  group: string;
 }
 
 export type BlogPromptKey = 'article' | 'ideate';

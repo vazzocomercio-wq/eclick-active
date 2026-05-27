@@ -25,7 +25,13 @@ import {
   type BlogKnowledgeSource,
   type BlogFontOption,
 } from '@/lib/api/blog-ai';
-import { PREVIEW_FONT_CLASS } from './preview-fonts';
+/** Stylesheets de preview (Google Fonts todas as famílias + Fontshare p/ Clash). */
+function previewFontHref(fonts: BlogFontOption[]): string | null {
+  const params = fonts.map((f) => f.google).filter((g): g is string => !!g);
+  if (!params.length) return null;
+  return `https://fonts.googleapis.com/css2?${params.map((p) => `family=${p}`).join('&')}&display=swap`;
+}
+const CLASH_PREVIEW_HREF = 'https://api.fontshare.com/v2/css?f[]=clash-display@400,500,600,700&display=swap';
 import { ApiError } from '@/lib/api/client';
 
 export default function BlogStudioPage() {
@@ -405,58 +411,81 @@ function FontPicker({
   setError: (s: string | null) => void;
   t: (k: string) => string;
 }) {
-  const [savingSlug, setSavingSlug] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
   const selected = current ?? 'clash';
+  const selFont = fonts.find((f) => f.slug === selected) ?? fonts[0];
+
+  // agrupa por group, preservando a ordem do catálogo
+  const groups: Array<{ name: string; items: BlogFontOption[] }> = [];
+  for (const f of fonts) {
+    let g = groups.find((x) => x.name === f.group);
+    if (!g) {
+      g = { name: f.group, items: [] };
+      groups.push(g);
+    }
+    g.items.push(f);
+  }
 
   async function pick(slug: string) {
-    if (savingSlug || slug === selected) return;
-    setSavingSlug(slug);
+    if (saving || slug === selected) return;
+    setSaving(true);
     setError(null);
     try {
       const saved = await blogAiApi.saveSettings({ display_font: slug });
       onChange(saved.display_font ?? slug);
+      setJustSaved(true);
+      setTimeout(() => setJustSaved(false), 2000);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : t('errorGeneric'));
     } finally {
-      setSavingSlug(null);
+      setSaving(false);
     }
   }
 
   return (
     <div className="rounded-xl border border-border bg-card p-5">
+      {/* stylesheets de preview (todas as famílias + Clash via Fontshare) */}
+      {previewFontHref(fonts) && <link rel="stylesheet" href={previewFontHref(fonts) as string} />}
+      <link rel="stylesheet" href={CLASH_PREVIEW_HREF} />
+
       <p className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
         <Type className="h-4 w-4 text-primary" /> {t('studio.fontHelp')}
       </p>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        {fonts.map((f) => {
-          const isSel = f.slug === selected;
-          return (
-            <button
-              key={f.slug}
-              type="button"
-              onClick={() => pick(f.slug)}
-              disabled={savingSlug !== null}
-              className={`flex items-center justify-between gap-3 rounded-lg border p-3 text-left transition-colors disabled:opacity-60 ${
-                isSel ? 'border-primary bg-primary/5' : 'border-border bg-background hover:border-primary/40'
-              }`}
-            >
-              <div className="min-w-0 flex-1">
-                <div
-                  className={`truncate text-2xl text-foreground ${PREVIEW_FONT_CLASS[f.slug] ?? ''}`}
-                  style={{ fontWeight: 500 }}
-                >
-                  Como a IA escolhe
-                </div>
-                <div className="mt-0.5 text-[11px] text-muted-foreground">{f.label}</div>
-              </div>
-              {savingSlug === f.slug ? (
-                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
-              ) : isSel ? (
-                <Check className="h-4 w-4 shrink-0 text-primary" />
-              ) : null}
-            </button>
-          );
-        })}
+
+      {/* Preview ao vivo da fonte selecionada */}
+      <div className="mb-4 rounded-lg border border-border bg-background p-5">
+        <div className="truncate text-3xl text-foreground" style={{ fontFamily: selFont?.family, fontWeight: 600 }}>
+          Como a IA escolhe quais produtos recomendar
+        </div>
+        <div className="mt-1 truncate text-base text-muted-foreground" style={{ fontFamily: selFont?.family, fontWeight: 400 }}>
+          GEO · Inteligência Comercial · 0123456789
+        </div>
+      </div>
+
+      {/* Dropdown agrupado */}
+      <div className="flex items-center gap-2">
+        <select
+          value={selected}
+          onChange={(e) => pick(e.target.value)}
+          disabled={saving}
+          className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-50"
+        >
+          {groups.map((g) => (
+            <optgroup key={g.name} label={g.name}>
+              {g.items.map((f) => (
+                <option key={f.slug} value={f.slug}>
+                  {f.label}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+        {saving ? (
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
+        ) : justSaved ? (
+          <Check className="h-4 w-4 shrink-0 text-primary" />
+        ) : null}
       </div>
     </div>
   );
