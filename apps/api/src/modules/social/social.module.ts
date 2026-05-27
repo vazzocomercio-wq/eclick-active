@@ -47,6 +47,7 @@ import { TrendsService } from './trends/trends.service';
 import { TrendsCollectorService } from './trends/trends-collector.service';
 import { TrendsCollectorWorker } from './trends/trends-collector.worker';
 import { TrendsBriefService } from './trends/trends-brief.service';
+import { TrendsAlerterService } from './trends/trends-alerter.service';
 import { YouTubeConnector } from './trends/connectors/youtube.connector';
 import { GoogleTrendsConnector } from './trends/connectors/google-trends.connector';
 import { AlertsModule } from '../alerts/alerts.module';
@@ -112,6 +113,7 @@ import { BridgeModule } from '../bridge/bridge.module';
     TrendsCollectorService,
     TrendsCollectorWorker,
     TrendsBriefService,
+    TrendsAlerterService,
     YouTubeConnector,
     GoogleTrendsConnector,
   ],

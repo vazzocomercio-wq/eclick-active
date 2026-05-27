@@ -117,6 +117,43 @@ export default function CreateContentPage() {
     if (!brandId && brands.length > 0 && brands[0]) setBrandId(brands[0].id);
   }, [brands, brandId]);
 
+  // 1-clique do Radar de Conteúdo: pré-preenche a partir de uma pauta (brief).
+  // Lê query params via window.location (client-only) pra evitar Suspense no build.
+  const [prefilled, setPrefilled] = useState(false);
+  useEffect(() => {
+    if (prefilled || typeof window === 'undefined') return;
+    const p = new URLSearchParams(window.location.search);
+    const fmt = p.get('format');
+    const theme0 = p.get('theme');
+    const hook0 = p.get('hook');
+    const pid = p.get('product_id');
+    const psearch = p.get('product_search');
+    if (!fmt && !theme0 && !hook0 && !pid && !psearch) return;
+    setPrefilled(true);
+    if (fmt === 'reel' || fmt === 'video') setTab('video');
+    else if (fmt === 'carousel') setTab('carousel');
+    else if (fmt === 'post') setTab('post');
+    if (theme0) setTheme(theme0);
+    if (hook0) setHook(hook0);
+    if (pid || psearch) {
+      bridgeApi
+        .listProducts({ search: psearch || undefined, limit: 40 })
+        .then((prods) => {
+          const found = pid ? prods.find((x) => x.id === pid) : undefined;
+          if (found) {
+            setSelectedProduct(found);
+            setPillar('product');
+          } else if (psearch) {
+            setProductSearch(psearch);
+            setShowProductList(true);
+          }
+        })
+        .catch(() => {
+          /* fallback: deixa o usuário escolher manualmente */
+        });
+    }
+  }, [prefilled]);
+
   // Carrega a receita default da org (pro botão "Gerar campanha completa")
   useEffect(() => {
     const ctrl = new AbortController();

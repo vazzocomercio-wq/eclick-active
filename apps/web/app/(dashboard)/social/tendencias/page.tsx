@@ -33,6 +33,15 @@ const NET_LABEL: Record<string, string> = Object.fromEntries(
 const FORMAT_LABEL: Record<string, string> = {
   reel: 'Reel', post: 'Post', carousel: 'Carrossel', story: 'Story', video: 'Vídeo',
 };
+
+/** Monta a URL do Social AI Studio pré-preenchida a partir de uma pauta (1-clique). */
+function briefHref(b: TrendBrief, prod?: TrendBriefProduct): string {
+  const params = new URLSearchParams({ format: b.format, theme: b.title });
+  if (b.hook) params.set('hook', b.hook);
+  if (prod?.product_id) params.set('product_id', prod.product_id);
+  if (prod?.name) params.set('product_search', prod.name);
+  return `/social/criar?${params.toString()}`;
+}
 function NetIcon({ source, className }: { source: TrendNetwork; className?: string }) {
   switch (source) {
     case 'youtube': return <Play className={className} />;
@@ -503,7 +512,7 @@ export default function TendenciasPage() {
                           </div>
                         )}
                         <Button size="sm" className="mt-auto w-full" asChild>
-                          <Link href="/social/criar">
+                          <Link href={briefHref(b, prod)}>
                             <Wand2 className="h-3.5 w-3.5" />
                             <span className="ml-1">Gerar conteúdo</span>
                           </Link>

@@ -6,6 +6,9 @@ import {
 } from '@nestjs/common';
 import { SupabaseService } from '../../../common/supabase/supabase.service';
 import { TrendsCollectorService } from './trends-collector.service';
+import { TrendsBriefService } from './trends-brief.service';
+import { TrendsAlerterService } from './trends-alerter.service';
+import { TrendsService } from './trends.service';
 
 const TICK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h (cota YouTube + Trends é diária)
 const STARTUP_DELAY_MS = 3 * 60 * 1000; // 3min — depois dos outros workers subirem
@@ -27,6 +30,9 @@ export class TrendsCollectorWorker implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly supabase: SupabaseService,
     private readonly collector: TrendsCollectorService,
+    private readonly briefs: TrendsBriefService,
+    private readonly alerter: TrendsAlerterService,
+    private readonly trends: TrendsService,
   ) {}
 
   onModuleInit(): void {
@@ -59,15 +65,27 @@ export class TrendsCollectorWorker implements OnModuleInit, OnModuleDestroy {
       if (orgIds.length === 0) return;
 
       let totalItems = 0;
+      let totalBriefs = 0;
+      let totalAlerts = 0;
       for (const orgId of orgIds) {
         try {
-          const r = await this.collector.collectAll(orgId);
-          totalItems += r.items;
+          const collected = await this.collector.collectAll(orgId);
+          totalItems += collected.items;
+          if (collected.items > 0) {
+            // autopilot diário: gera pautas + dispara digest dos sinais fortes
+            const gen = await this.briefs.generate(orgId);
+            totalBriefs += gen.briefs;
+            const signals = await this.trends.listSignals(orgId, 5);
+            const a = await this.alerter.alertDigest(orgId, signals, gen.briefs);
+            totalAlerts += a.delivered;
+          }
         } catch (err) {
           this.log.warn(`org ${orgId} falhou: ${String(err)}`);
         }
       }
-      this.log.log(`tick: ${orgIds.length} orgs, ${totalItems} itens coletados`);
+      this.log.log(
+        `tick: ${orgIds.length} orgs, ${totalItems} itens, ${totalBriefs} pautas, ${totalAlerts} alertas`,
+      );
     } catch (err) {
       this.log.warn(`tick falhou: ${String(err)}`);
     }
