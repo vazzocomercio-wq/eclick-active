@@ -428,6 +428,28 @@ export const KB: KbEntry[] = [
     tags: ['social', 'reel', 'video', 'criar', 'instagram', 'kling', 'produto'],
   },
 
+  // ── BLOG IA ───────────────────────────────────────────
+  {
+    routes: ['/blog-ia'],
+    category: 'SOCIAL',
+    title: 'Blog IA: gerar, agendar e publicar artigos GEO',
+    content: [
+      'O **Blog IA** (`/blog-ia`) é o motor de conteúdo do blog público (eclick.app.br/blog). A IA **escreve o artigo + gera a capa**, você **revisa e publica** (humano no controle).',
+      '',
+      '**Como criar um artigo:**',
+      '- Digite o **tema/pauta** + escolha o **pilar** editorial (GEO 101, Ciência aplicada, Como fazer, etc.) → **Gerar artigo**. Leva ~1 min (texto + capa por IA).',
+      '- Sem ideia? Em **"A IA sugere pautas"** clique **Sugerir pautas** (ou dê uma semente) → a IA propõe pautas ancoradas nos pilares e nas lacunas do que já foi escrito → **Gerar** em 1 clique.',
+      '- **Gerar em lote**: cria 5 artigos de uma vez (a lista atualiza sozinha conforme ficam prontos).',
+      '',
+      '**GEO embutido:** os artigos já nascem otimizados pra serem **citados pelos motores de IA** (ChatGPT/Gemini/Perplexity) — citam fontes, usam estatísticas, têm FAQ e mapeiam as perguntas que respondem.',
+      '',
+      '**Voz da marca:** no topo, abra **"Voz da marca"** e descreva o tom/diretrizes editoriais (ex: técnico-honesto, sem jargão de guru, sempre citar fontes). A IA **segue isso** ao gerar artigos e sugerir pautas — todo conteúdo sai consistente com a marca.',
+      '',
+      '**Publicar / agendar:** cada rascunho em revisão tem **Publicar** (vai pro ar na hora em eclick.app.br/blog) ou **Agendar** (escolha data/hora — um worker publica sozinho no horário). **Arquivar** descarta.',
+    ].join('\n'),
+    tags: ['blog', 'blog-ia', 'geo', 'conteudo', 'artigo', 'publicar', 'agendar', 'voz', 'marca', 'pauta'],
+  },
+
   // ── CONFIG ────────────────────────────────────────────
   {
     routes: ['/configuracoes', '/configuracoes/:tab'],

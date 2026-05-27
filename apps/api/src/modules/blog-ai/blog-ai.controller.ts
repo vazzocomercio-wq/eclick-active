@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '../../common/auth/auth.guard';
 import { CurrentUser } from '../../common/auth/current-user.decorator';
 import type { AuthUser } from '../../common/auth/auth.types';
@@ -9,6 +9,17 @@ import type { GenerateBlogPostDto, IdeateDto } from './blog-ai.types';
 @Controller('blog-ai')
 export class BlogAiController {
   constructor(private readonly svc: BlogAiService) {}
+
+  /** Voz da marca (tom/diretrizes editoriais) injetada nos prompts de geração. */
+  @Get('settings')
+  getSettings(@CurrentUser() user: AuthUser) {
+    return this.svc.getSettings(user.org_id);
+  }
+
+  @Put('settings')
+  updateSettings(@CurrentUser() user: AuthUser, @Body() body: { voice_guidelines?: string | null }) {
+    return this.svc.updateSettings(user.org_id, body);
+  }
 
   /** IA sugere N pautas (ancoradas nos pilares + GEO + lacunas). */
   @Post('ideate')

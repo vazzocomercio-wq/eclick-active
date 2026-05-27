@@ -135,7 +135,13 @@
     "batch": "Gerar 5 em lote",
     "batching": "Gerando lote…",
     "publishedToast": "Publicado! Já está no ar em eclick.app.br/blog",
-    "errorGeneric": "Algo deu errado. Tente de novo."
+    "errorGeneric": "Algo deu errado. Tente de novo.",
+    "voiceTitle": "Voz da marca",
+    "voiceActive": "Ativa",
+    "voiceHelp": "Defina o tom e as diretrizes editoriais. A IA segue isso ao gerar artigos e sugerir pautas.",
+    "voicePlaceholder": "Ex: Tom técnico-honesto, direto, sem jargão de guru. Trate o leitor como um lojista experiente. Sempre cite fontes. Evite superlativos e promessas mágicas.",
+    "voiceSave": "Salvar voz",
+    "voiceSaved": "Salvo"
   },
   "contacts": {
     "page": {

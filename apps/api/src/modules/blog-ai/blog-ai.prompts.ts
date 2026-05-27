@@ -61,9 +61,11 @@ export function buildArticleUserPrompt(input: {
   topic: string;
   pillar?: string;
   notes?: string;
+  voice?: string;
 }): string {
   const pillar = BLOG_PILLARS.find((p) => p.slug === input.pillar);
   return [
+    input.voice ? `VOZ DA MARCA (siga estritamente o tom/diretrizes): ${input.voice}` : '',
     `TEMA/PAUTA: ${input.topic}`,
     pillar ? `PILAR EDITORIAL: ${pillar.title} (${pillar.desc})` : 'PILAR: escolha o mais adequado entre os 7 pilares.',
     input.notes ? `DIREÇÕES EXTRAS: ${input.notes}` : '',
@@ -106,8 +108,10 @@ export function buildIdeateUserPrompt(input: {
   seed?: string;
   count: number;
   existingTitles?: string[];
+  voice?: string;
 }): string {
   return [
+    input.voice ? `VOZ DA MARCA: ${input.voice}` : '',
     `Proponha ${input.count} pautas.`,
     input.seed ? `FOCO/SEMENTE: ${input.seed}` : 'Sem semente — proponha as mais valiosas para começar/continuar o blog.',
     'Pilares: ' + BLOG_PILLARS.map((p) => `${p.slug} (${p.title})`).join(', '),

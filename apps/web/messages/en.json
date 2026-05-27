@@ -135,7 +135,13 @@
     "batch": "Generate 5 at once",
     "batching": "Generating batch…",
     "publishedToast": "Published! Live at eclick.app.br/blog",
-    "errorGeneric": "Something went wrong. Try again."
+    "errorGeneric": "Something went wrong. Try again.",
+    "voiceTitle": "Brand voice",
+    "voiceActive": "Active",
+    "voiceHelp": "Set the tone and editorial guidelines. The AI follows this when writing articles and suggesting topics.",
+    "voicePlaceholder": "E.g.: Honest, technical tone, straight to the point, no guru jargon. Treat the reader as an experienced seller. Always cite sources. Avoid superlatives and magical promises.",
+    "voiceSave": "Save voice",
+    "voiceSaved": "Saved"
   },
   "contacts": {
     "page": {

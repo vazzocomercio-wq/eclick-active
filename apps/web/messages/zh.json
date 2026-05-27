@@ -135,7 +135,13 @@
     "batch": "批量生成 5 篇",
     "batching": "批量生成中…",
     "publishedToast": "已发布！已上线 eclick.app.br/blog",
-    "errorGeneric": "出错了，请重试。"
+    "errorGeneric": "出错了，请重试。",
+    "voiceTitle": "品牌语气",
+    "voiceActive": "已启用",
+    "voiceHelp": "设定语气和编辑准则。AI 在撰写文章和建议选题时会遵循这些设定。",
+    "voicePlaceholder": "例如：诚实、专业的语气，直截了当，不用大师式行话。把读者当作经验丰富的卖家。始终引用来源。避免夸张和不切实际的承诺。",
+    "voiceSave": "保存语气",
+    "voiceSaved": "已保存"
   },
   "contacts": {
     "page": {

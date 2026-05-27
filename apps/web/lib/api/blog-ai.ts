@@ -51,7 +51,14 @@ export interface BlogTopicIdea {
   aiPrompts: string[];
 }
 
+export interface BlogSettings {
+  voice_guidelines: string | null;
+}
+
 export const blogAiApi = {
+  getSettings: () => api.get<BlogSettings>('/blog-ai/settings'),
+  saveSettings: (voice_guidelines: string | null) =>
+    api.put<BlogSettings>('/blog-ai/settings', { voice_guidelines }),
   ideate: (seed?: string, count?: number) =>
     api.post<{ topics: BlogTopicIdea[] }>('/blog-ai/ideate', { seed, count }),
   generateBatch: (seed?: string, count?: number) =>

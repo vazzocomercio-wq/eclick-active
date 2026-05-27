@@ -44,6 +44,40 @@ export class BlogAiService {
     return this.supabase.adminClient;
   }
 
+  // ── Settings (tom de voz da marca) ───────────────────────────────────
+
+  async getSettings(orgId: string): Promise<{ voice_guidelines: string | null }> {
+    const { data } = await this.db
+      .from('blog_settings')
+      .select('voice_guidelines')
+      .eq('org_id', orgId)
+      .maybeSingle();
+    return { voice_guidelines: (data as { voice_guidelines: string | null } | null)?.voice_guidelines ?? null };
+  }
+
+  async updateSettings(orgId: string, dto: { voice_guidelines?: string | null }): Promise<{ voice_guidelines: string | null }> {
+    const { data, error } = await this.db
+      .from('blog_settings')
+      .upsert(
+        { org_id: orgId, voice_guidelines: dto.voice_guidelines ?? null, updated_at: new Date().toISOString() },
+        { onConflict: 'org_id' },
+      )
+      .select('voice_guidelines')
+      .single();
+    if (error) throw new BadRequestException(`blog_settings: ${error.message}`);
+    return { voice_guidelines: (data as { voice_guidelines: string | null }).voice_guidelines };
+  }
+
+  /** Voz da marca (se configurada) pra injetar nos prompts. Best-effort. */
+  private async getVoice(orgId: string): Promise<string | undefined> {
+    try {
+      const { voice_guidelines } = await this.getSettings(orgId);
+      return voice_guidelines?.trim() || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   // ── Geração ──────────────────────────────────────────────────────────
 
   async generateArticle(
@@ -88,11 +122,12 @@ export class BlogAiService {
   ): Promise<BlogPostRow> {
     const t0 = Date.now();
     try {
+      const voice = await this.getVoice(orgId);
       const out = await this.llm.chat({
         orgId,
         feature: 'blog_article',
         system: BLOG_ARTICLE_SYSTEM_PROMPT,
-        user: buildArticleUserPrompt({ topic, pillar, notes }),
+        user: buildArticleUserPrompt({ topic, pillar, notes, voice }),
         json_mode: true,
         max_tokens: 6000,
         temperature: 0.6,
@@ -211,11 +246,12 @@ export class BlogAiService {
       .limit(50);
     const existingTitles = ((existing ?? []) as Array<{ title: string }>).map((r) => r.title);
 
+    const voice = await this.getVoice(orgId);
     const out = await this.llm.chat({
       orgId,
       feature: 'blog_ideate',
       system: BLOG_IDEATE_SYSTEM_PROMPT,
-      user: buildIdeateUserPrompt({ seed: dto.seed, count, existingTitles }),
+      user: buildIdeateUserPrompt({ seed: dto.seed, count, existingTitles, voice }),
       json_mode: true,
       max_tokens: 2000,
       temperature: 0.8,

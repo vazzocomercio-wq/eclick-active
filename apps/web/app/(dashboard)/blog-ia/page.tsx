@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { useTranslations } from 'next-intl';
-import { Sparkles, Loader2, Send, Archive, CheckCircle2, ExternalLink, AlertCircle, Clock, Lightbulb } from 'lucide-react';
+import { Sparkles, Loader2, Send, Archive, CheckCircle2, ExternalLink, AlertCircle, Clock, Lightbulb, MessageSquareQuote, ChevronDown, Check } from 'lucide-react';
 import { blogAiApi, BLOG_PILLARS, type BlogPost, type BlogTopicIdea } from '@/lib/api/blog-ai';
 import { ApiError } from '@/lib/api/client';
 
@@ -46,13 +46,44 @@ export default function BlogIaPage() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
 
+  const [voiceOpen, setVoiceOpen] = useState(false);
+  const [voice, setVoice] = useState('');
+  const [voiceSaved, setVoiceSaved] = useState('');
+  const [voiceSaving, setVoiceSaving] = useState(false);
+  const [voiceJustSaved, setVoiceJustSaved] = useState(false);
+
   useEffect(() => {
     blogAiApi
       .list()
       .then(setPosts)
       .catch(() => setPosts([]))
       .finally(() => setLoading(false));
+    blogAiApi
+      .getSettings()
+      .then((s) => {
+        setVoice(s.voice_guidelines ?? '');
+        setVoiceSaved(s.voice_guidelines ?? '');
+      })
+      .catch(() => {});
   }, []);
+
+  async function onSaveVoice() {
+    if (voiceSaving) return;
+    setVoiceSaving(true);
+    setError(null);
+    try {
+      const trimmed = voice.trim();
+      const saved = await blogAiApi.saveSettings(trimmed || null);
+      setVoiceSaved(saved.voice_guidelines ?? '');
+      setVoice(saved.voice_guidelines ?? '');
+      setVoiceJustSaved(true);
+      setTimeout(() => setVoiceJustSaved(false), 2500);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : t('errorGeneric'));
+    } finally {
+      setVoiceSaving(false);
+    }
+  }
 
   // Enquanto houver post 'generating' (lote/avulso), atualiza a lista a cada 6s.
   const hasGenerating = posts.some((p) => p.status === 'generating');
@@ -176,6 +207,47 @@ export default function BlogIaPage() {
         </div>
         <h1 className="mt-1 text-2xl font-bold text-foreground">{t('title')}</h1>
         <p className="mt-1 text-sm text-muted-foreground">{t('subtitle')}</p>
+      </div>
+
+      {/* Voz da marca */}
+      <div className="mb-4 rounded-xl border border-border bg-card">
+        <button
+          type="button"
+          onClick={() => setVoiceOpen((v) => !v)}
+          className="flex w-full items-center gap-2 px-5 py-3 text-left"
+        >
+          <MessageSquareQuote className="h-4 w-4 text-primary" />
+          <span className="text-sm font-medium text-foreground">{t('voiceTitle')}</span>
+          {voiceSaved && !voiceOpen && (
+            <span className="rounded-sm bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-primary">
+              {t('voiceActive')}
+            </span>
+          )}
+          <ChevronDown className={`ml-auto h-4 w-4 text-muted-foreground transition-transform ${voiceOpen ? 'rotate-180' : ''}`} />
+        </button>
+        {voiceOpen && (
+          <div className="border-t border-border px-5 py-4">
+            <p className="mb-2 text-xs text-muted-foreground">{t('voiceHelp')}</p>
+            <textarea
+              value={voice}
+              onChange={(e) => setVoice(e.target.value)}
+              placeholder={t('voicePlaceholder')}
+              rows={5}
+              className="w-full resize-y rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+            />
+            <div className="mt-3 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={onSaveVoice}
+                disabled={voiceSaving || voice.trim() === voiceSaved.trim()}
+                className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                {voiceSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : voiceJustSaved ? <Check className="h-4 w-4" /> : null}
+                {voiceJustSaved ? t('voiceSaved') : t('voiceSave')}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Form */}
