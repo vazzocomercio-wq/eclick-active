@@ -4,12 +4,13 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft, Sparkles, RefreshCw, Eye, TrendingUp, Users, Heart,
-  Flame, Clock, Loader2, Wand2,
+  Flame, Clock, Loader2, Wand2, CalendarDays,
 } from 'lucide-react';
 import {
   socialApi,
   type TodaysPlan,
   type IntelligenceOverview,
+  type WeekPlan,
 } from '@/lib/api/social';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -30,17 +31,20 @@ const nf = (n: number) => n.toLocaleString('pt-BR');
 export default function SocialIntelligencePage() {
   const [plan, setPlan] = useState<TodaysPlan | null>(null);
   const [overview, setOverview] = useState<IntelligenceOverview | null>(null);
+  const [week, setWeek] = useState<WeekPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = async () => {
     try {
-      const [p, o] = await Promise.all([
+      const [p, o, w] = await Promise.all([
         socialApi.intelligence.today(),
         socialApi.intelligence.overview(),
+        socialApi.intelligence.week(),
       ]);
       setPlan(p);
       setOverview(o);
+      setWeek(w);
     } catch {
       /* silent */
     } finally {
@@ -172,6 +176,33 @@ export default function SocialIntelligencePage() {
                 </div>
               )}
             </section>
+
+            {/* ── PLANO DA SEMANA ── */}
+            {week && week.days.length > 0 && (
+              <section className="mb-6">
+                <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                  <CalendarDays className="h-4 w-4 text-primary" />Plano da semana
+                  <span className="text-xs font-normal text-muted-foreground">· a IA montou com base em produtos + engajamento</span>
+                </h2>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-7">
+                  {week.days.map((d, i) => (
+                    <div key={i} className="flex flex-col gap-1 rounded-lg border border-border bg-card p-3">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-xs font-semibold">{d.weekday}</span>
+                        <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold text-primary">{FORMAT_LABEL[d.format] ?? d.format}</span>
+                      </div>
+                      <p className="text-[11px] font-medium leading-snug" title={d.product_name}>{d.product_name}</p>
+                      <p className="text-[11px] leading-snug text-muted-foreground">{d.angle}</p>
+                      {d.best_time && (
+                        <span className="mt-auto flex items-center gap-0.5 pt-1 text-[10px] text-muted-foreground">
+                          <Clock className="h-3 w-3" />{d.best_time}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
 
             {/* ── KPIs EXECUTIVOS ── */}
             {org && (

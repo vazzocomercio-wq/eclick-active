@@ -735,6 +735,20 @@ export interface IntelligenceOverview {
   organic: OrganicSummary | null;
   generated_at: string;
 }
+export interface WeekDaySlot {
+  weekday: string;
+  product_id: string | null;
+  product_name: string;
+  format: 'reel' | 'post' | 'carousel';
+  angle: string;
+  best_time: string | null;
+}
+export interface WeekPlan {
+  week_start: string;
+  days: WeekDaySlot[];
+  generated_at: string;
+  cached: boolean;
+}
 
 export const socialApi = {
   // Brands
@@ -927,6 +941,10 @@ export const socialApi = {
       api.post<TodaysPlan>('/social/intelligence/today/refresh', {}),
     overview: (signal?: AbortSignal) =>
       api.get<IntelligenceOverview>('/social/intelligence/overview', { signal }),
+    week: (signal?: AbortSignal) =>
+      api.get<WeekPlan>('/social/intelligence/week', { signal }),
+    refreshWeek: () =>
+      api.post<WeekPlan>('/social/intelligence/week/refresh', {}),
   },
 
   // A/B Testing

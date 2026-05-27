@@ -31,6 +31,22 @@ export interface TodaysPlan {
   cached: boolean;
 }
 
+export interface WeekDaySlot {
+  weekday: string;
+  product_id: string | null;
+  product_name: string;
+  format: SuggestionFormat;
+  angle: string;
+  best_time: string | null;
+}
+
+export interface WeekPlan {
+  week_start: string;
+  days: WeekDaySlot[];
+  generated_at: string;
+  cached: boolean;
+}
+
 const SYSTEM_PROMPT = `Você é o estrategista de conteúdo de uma loja de e-commerce no e-Click.
 Sua missão: decidir O QUE POSTAR HOJE nas redes pra VENDER mais — cruzando a
 OPORTUNIDADE COMERCIAL (margem, estoque, overstock, demanda/tendência) com o que
@@ -86,6 +102,92 @@ export class SocialIntelligenceService {
   async getOverview(orgId: string): Promise<{ organic: unknown; generated_at: string }> {
     const organic = await this.bridge.getOrganicSummary(orgId);
     return { organic, generated_at: new Date().toISOString() };
+  }
+
+  /** Plano de conteúdo dos próximos 7 dias — a IA monta a semana com base em
+   *  produtos/estoque/Radar + formato/horário que engajam. Cacheia em plan_json.week
+   *  (read-merge: preserva as sugestões de "hoje"). */
+  async getWeekPlan(orgId: string, refresh = false): Promise<WeekPlan> {
+    const today = new Date().toISOString().slice(0, 10);
+    const { data: row } = await this.supabase.adminClient
+      .from('social_intelligence_daily')
+      .select('plan_json')
+      .eq('org_id', orgId)
+      .eq('date', today)
+      .maybeSingle();
+    const plan = (row?.plan_json ?? {}) as { week?: WeekPlan };
+    if (!refresh && plan.week?.days?.length) {
+      return { ...plan.week, cached: true };
+    }
+
+    const [candidates, organic] = await Promise.all([
+      this.bridge.getCampaignCandidates(orgId, 'mixed', 10).catch(() => []),
+      this.bridge.getOrganicSummary(orgId).catch(() => null),
+    ]);
+    const days = await this.generateWeek(orgId, candidates, organic);
+    const week: WeekPlan = { week_start: today, days, generated_at: new Date().toISOString(), cached: false };
+
+    const merged = { ...((row?.plan_json as Record<string, unknown>) ?? {}), week };
+    await this.supabase.adminClient
+      .from('social_intelligence_daily')
+      .upsert(
+        { org_id: orgId, date: today, plan_json: merged, updated_at: new Date().toISOString() },
+        { onConflict: 'org_id,date' },
+      );
+    return week;
+  }
+
+  private async generateWeek(
+    orgId: string,
+    candidates: Awaited<ReturnType<BridgeService['getCampaignCandidates']>>,
+    organic: Awaited<ReturnType<BridgeService['getOrganicSummary']>>,
+  ): Promise<WeekDaySlot[]> {
+    if (!candidates.length && !(organic && organic.totals.posts > 0)) return [];
+
+    const candText = candidates.length
+      ? candidates
+          .map((c, i) => `${i + 1}. ${c.product_name} | margem ${c.margin_pct ?? '?'}% | estoque ${c.stock}${c.is_overstock ? ' (OVERSTOCK)' : ''} | demanda ${c.demand_trend} [id:${c.product_id}]`)
+          .join('\n')
+      : '(sem candidatos comerciais)';
+    const fmtHint = organic?.best_format ? `Formato que mais engaja: ${organic.best_format}. ` : '';
+    const hourHint = organic?.best_hour != null ? `Melhor horário ~${organic.best_hour}h. ` : '';
+
+    const user = [
+      'Monte o PLANO DE CONTEÚDO dos próximos 7 dias (Segunda→Domingo) pra VENDER mais.',
+      'Distribua os produtos candidatos pelos dias — varie produtos e ângulos, não repita o mesmo produto em dias seguidos. Priorize margem alta e estoque parado.',
+      `${fmtHint}${hourHint}1 peça por dia.`,
+      '',
+      'PRODUTOS CANDIDATOS:',
+      candText,
+      '',
+      'JSON: {"days":[{"weekday":"Segunda","product_id":"<id do candidato ou null>","product_name":"...","format":"reel|post|carousel","angle":"<tema/gancho>","best_time":"<ex: 19h>"}]} — exatamente 7 itens (Segunda a Domingo).',
+    ].join('\n');
+
+    try {
+      const r = await this.llm.chat({
+        orgId,
+        feature: 'social_intelligence_today',
+        system: SYSTEM_PROMPT,
+        user,
+        json_mode: true,
+        max_tokens: 1600,
+        temperature: 0.7,
+      });
+      const parsed = JSON.parse(r.text.replace(/```json/gi, '').replace(/```/g, '').trim()) as {
+        days?: Array<Partial<WeekDaySlot>>;
+      };
+      return (parsed.days ?? []).slice(0, 7).map((d) => ({
+        weekday: String(d.weekday ?? '').slice(0, 20),
+        product_id: d.product_id ?? null,
+        product_name: String(d.product_name ?? '').slice(0, 120),
+        format: (['reel', 'post', 'carousel'] as const).includes(d.format as SuggestionFormat) ? (d.format as SuggestionFormat) : 'post',
+        angle: String(d.angle ?? '').slice(0, 200),
+        best_time: d.best_time ?? null,
+      }));
+    } catch (e) {
+      this.log.warn(`[social-intel] week falhou: ${(e as Error).message}`);
+      return [];
+    }
   }
 
   private async generate(orgId: string, today: string): Promise<TodaysPlan> {
