@@ -25,12 +25,7 @@ import {
   type BlogKnowledgeSource,
   type BlogFontOption,
 } from '@/lib/api/blog-ai';
-
-/** Stylesheets de preview das fontes (Google Fonts + Fontshare p/ Clash). */
-const FONT_PREVIEW_HREFS = [
-  'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Sora:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&family=Inter+Tight:wght@400;500;600;700&family=Chivo:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Syne:wght@400;500;600;700&family=Exo+2:wght@400;500;600;700&family=Unbounded:wght@400;500;600;700&family=Lexend:wght@400;500;600;700&display=swap',
-  'https://api.fontshare.com/v2/css?f[]=clash-display@400,500,600,700&display=swap',
-];
+import { PREVIEW_FONT_CLASS } from './preview-fonts';
 import { ApiError } from '@/lib/api/client';
 
 export default function BlogStudioPage() {
@@ -53,22 +48,6 @@ export default function BlogStudioPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
-
-  // Carrega as stylesheets de preview das fontes uma vez.
-  useEffect(() => {
-    const links = FONT_PREVIEW_HREFS.map((href) => {
-      const existing = document.querySelector(`link[href="${href}"]`);
-      if (existing) return null;
-      const el = document.createElement('link');
-      el.rel = 'stylesheet';
-      el.href = href;
-      document.head.appendChild(el);
-      return el;
-    });
-    return () => {
-      links.forEach((el) => el?.remove());
-    };
   }, []);
 
   return (
@@ -459,8 +438,8 @@ function FontPicker({
             >
               <div className="min-w-0 flex-1">
                 <div
-                  className="truncate text-xl text-foreground"
-                  style={{ fontFamily: f.family, fontWeight: 500 }}
+                  className={`truncate text-2xl text-foreground ${PREVIEW_FONT_CLASS[f.slug] ?? ''}`}
+                  style={{ fontWeight: 500 }}
                 >
                   Como a IA escolhe
                 </div>
