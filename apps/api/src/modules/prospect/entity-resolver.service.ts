@@ -35,7 +35,7 @@ export class EntityResolverService {
   ) {}
 
   private get db() {
-    return this.supabase.adminClient.schema('prospect' as 'public');
+    return this.supabase.adminClient;
   }
 
   private get rpc() {
@@ -52,7 +52,7 @@ export class EntityResolverService {
     enqueued_for_review: Array<{ id: string; similarity: number }>;
   }> {
     const { data: entity } = await this.db
-      .from('entities')
+      .from('prospect_entities')
       .select('id, display_name, razao_social, nome_fantasia, cnpj')
       .eq('org_id', orgId)
       .eq('id', entityId)
@@ -170,7 +170,7 @@ export class EntityResolverService {
    */
   private async pickWinner(idA: string, idB: string): Promise<string> {
     const { data } = await this.db
-      .from('entities')
+      .from('prospect_entities')
       .select('id, cnpj, created_at')
       .in('id', [idA, idB]);
     const rows = (data ?? []) as Array<{ id: string; cnpj: string | null; created_at: string }>;
@@ -184,8 +184,8 @@ export class EntityResolverService {
 
     // 2) Mais raw_records
     const [cntA, cntB] = await Promise.all([
-      this.db.from('entity_links').select('id', { count: 'exact', head: true }).eq('entity_id', a.id),
-      this.db.from('entity_links').select('id', { count: 'exact', head: true }).eq('entity_id', b.id),
+      this.db.from('prospect_entity_links').select('id', { count: 'exact', head: true }).eq('entity_id', a.id),
+      this.db.from('prospect_entity_links').select('id', { count: 'exact', head: true }).eq('entity_id', b.id),
     ]);
     const linksA = (cntA as { count: number | null }).count ?? 0;
     const linksB = (cntB as { count: number | null }).count ?? 0;
@@ -201,29 +201,29 @@ export class EntityResolverService {
    */
   private async merge(winnerId: string, loserId: string): Promise<void> {
     // entity_links: re-aponta para winner
-    await this.db.from('entity_links').update({ entity_id: winnerId }).eq('entity_id', loserId);
+    await this.db.from('prospect_entity_links').update({ entity_id: winnerId }).eq('entity_id', loserId);
 
     // contacts: re-aponta para winner (UNIQUE constraint pode colidir — pegar erro silenciosamente)
     const { data: loserContacts } = await this.db
-      .from('contacts')
+      .from('prospect_contacts')
       .select('kind, value, validated_in, confidence, is_pii, last_validated_at')
       .eq('entity_id', loserId);
     for (const c of (loserContacts ?? []) as Array<Record<string, unknown>>) {
       // tenta upsert (UNIQUE entity_id+kind+value)
-      const { error } = await this.db.from('contacts').insert({ entity_id: winnerId, ...c });
+      const { error } = await this.db.from('prospect_contacts').insert({ entity_id: winnerId, ...c });
       if (error && !error.message.includes('duplicate key')) {
         this.log.warn(`[merge] contact insert: ${error.message}`);
       }
     }
-    await this.db.from('contacts').delete().eq('entity_id', loserId);
+    await this.db.from('prospect_contacts').delete().eq('entity_id', loserId);
 
     // signals + consent: re-apontam
-    await this.db.from('signals').update({ entity_id: winnerId }).eq('entity_id', loserId);
-    await this.db.from('consent_ledger').update({ entity_id: winnerId }).eq('entity_id', loserId);
+    await this.db.from('prospect_signals').update({ entity_id: winnerId }).eq('entity_id', loserId);
+    await this.db.from('prospect_consent_ledger').update({ entity_id: winnerId }).eq('entity_id', loserId);
 
     // marca loser
     await this.db
-      .from('entities')
+      .from('prospect_entities')
       .update({ status: 'descartado' })
       .eq('id', loserId);
   }

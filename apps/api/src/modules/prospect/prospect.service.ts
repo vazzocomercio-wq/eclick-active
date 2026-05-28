@@ -85,12 +85,14 @@ export class ProspectService {
     return this.resolver.resolve(orgId, entityId);
   }
 
-  /** Cliente Supabase com schema `prospect` pré-selecionado. */
+  /** Cliente Supabase. Tabelas do Prospect vivem em `active.prospect_*`
+   *  (movidas em 088 — PostgREST não expõe schema `prospect`). */
   private get db() {
-    return this.supabase.adminClient.schema('prospect' as 'public');
+    return this.supabase.adminClient;
   }
 
-  /** Cliente raw (schema padrão) — usado pra ler/escrever em `active.*`. */
+  /** Alias retrocompat — antes apontava pra `active.*` (schema padrão).
+   *  Continua valendo a mesma coisa agora. */
   private get activeDb() {
     return this.supabase.adminClient;
   }
@@ -215,7 +217,7 @@ export class ProspectService {
       .limit(1)
       .maybeSingle();
     if (!existingConsent) {
-      await this.db.from('consent_ledger').insert({
+      await this.db.from('prospect_consent_ledger').insert({
         entity_id: entityId,
         subject_kind: 'pf_lead',
         legal_basis: 'legitimo_interesse',
@@ -283,8 +285,8 @@ export class ProspectService {
     const ageYears = ageMs / (365.25 * 24 * 60 * 60 * 1000);
     if (ageYears >= 18) return false;
 
-    await this.db.from('entities').update({ status: 'descartado' }).eq('id', entityId);
-    await this.db.from('signals').insert({
+    await this.db.from('prospect_entities').update({ status: 'descartado' }).eq('id', entityId);
+    await this.db.from('prospect_signals').insert({
       entity_id: entityId,
       signal_type: 'minor_guard_triggered',
       value: { birth_date: birthDateIso, age_years: Math.floor(ageYears) },
@@ -335,10 +337,10 @@ export class ProspectService {
 
     const [{ data: contacts }, { data: signals }, { data: consent }, { data: links }] =
       await Promise.all([
-        this.db.from('contacts').select('*').eq('entity_id', entityId),
-        this.db.from('signals').select('*').eq('entity_id', entityId).order('detected_at', { ascending: false }),
-        this.db.from('consent_ledger').select('*').eq('entity_id', entityId).order('created_at', { ascending: false }),
-        this.db.from('entity_links').select('*, raw_record:raw_records(id, source_id, collected_at)').eq('entity_id', entityId),
+        this.db.from('prospect_contacts').select('*').eq('entity_id', entityId),
+        this.db.from('prospect_signals').select('*').eq('entity_id', entityId).order('detected_at', { ascending: false }),
+        this.db.from('prospect_consent_ledger').select('*').eq('entity_id', entityId).order('created_at', { ascending: false }),
+        this.db.from('prospect_entity_links').select('*, raw_record:prospect_raw_records(id, source_id, collected_at)').eq('entity_id', entityId),
       ]);
 
     return {
@@ -371,7 +373,7 @@ export class ProspectService {
     }
 
     const { data: job, error } = await this.db
-      .from('enrichment_jobs')
+      .from('prospect_enrichment_jobs')
       .insert({
         entity_id: entityId,
         source_id: dto.source_id ?? null,
@@ -635,7 +637,7 @@ export class ProspectService {
     if (!entity) throw new NotFoundException('Entity não encontrada');
     const e = entity as { id: string; entity_type: 'pj' | 'pf' };
 
-    const { error } = await this.db.from('consent_ledger').insert({
+    const { error } = await this.db.from('prospect_consent_ledger').insert({
       entity_id: entityId,
       subject_kind: e.entity_type === 'pj' ? 'pj' : 'pf_lead',
       legal_basis: 'consentimento',
@@ -661,7 +663,7 @@ export class ProspectService {
     }
 
     // Acha todas as entidades em qualquer org que tenham esse documento.
-    let q = this.db.from('entities').select('id, org_id, entity_type');
+    let q = this.db.from('prospect_entities').select('id, org_id, entity_type');
     if (cnpj) q = q.eq('cnpj', cnpj);
     if (cpf) q = q.eq('cpf', cpf);
     const { data: entities, error } = await q;
@@ -684,7 +686,7 @@ export class ProspectService {
       opt_out_at: optOutAt,
       opt_out_reason: dto.reason ?? `Solicitado por ${dto.requester_email}`,
     }));
-    const { error: insErr } = await this.db.from('consent_ledger').insert(rows);
+    const { error: insErr } = await this.db.from('prospect_consent_ledger').insert(rows);
     if (insErr) throw new BadRequestException(insErr.message);
 
     this.log.log(`[opt-out.public] ${list.length} entity(s) com opt-out registrado (cnpj=${!!cnpj} cpf=${!!cpf})`);
@@ -696,8 +698,8 @@ export class ProspectService {
   // ──────────────────────────────────────────────────────────────────
   async listMatchReview(orgId: string) {
     const { data, error } = await this.db
-      .from('match_review')
-      .select('*, a:entities!entity_a(id, display_name, cnpj, prospect_score), b:entities!entity_b(id, display_name, cnpj, prospect_score)')
+      .from('prospect_match_review')
+      .select('*, a:prospect_entities!entity_a(id, display_name, cnpj, prospect_score), b:prospect_entities!entity_b(id, display_name, cnpj, prospect_score)')
       .eq('status', 'pending')
       .order('created_at', { ascending: false })
       .limit(100);
@@ -723,7 +725,7 @@ export class ProspectService {
     // S5 implementa o merge real (atualiza entity_links, contacts, signals do "loser").
     this.log.warn(`[resolveMatch.stub] match=${matchId} decision=${dto.decision} — S5 ainda não implementa merge`);
     const { data, error } = await this.db
-      .from('match_review')
+      .from('prospect_match_review')
       .update({
         status: dto.decision === 'merge' ? 'merged' : 'rejected',
         reviewed_by: userId,
@@ -743,7 +745,7 @@ export class ProspectService {
   async cacReport(orgId: string): Promise<CacReport> {
     // Agrega via raw_records.cost_cents + entities promovidas.
     const { data: rawAgg } = await this.db
-      .from('raw_records')
+      .from('prospect_raw_records')
       .select('source_id, cost_cents')
       .eq('org_id', orgId);
 

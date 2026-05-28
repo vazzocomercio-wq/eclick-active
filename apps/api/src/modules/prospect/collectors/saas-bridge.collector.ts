@@ -59,7 +59,7 @@ export class SaasBridgeCollector {
   constructor(private readonly supabase: SupabaseService) {}
 
   private get db() {
-    return this.supabase.adminClient.schema('prospect' as 'public');
+    return this.supabase.adminClient;
   }
 
   private resolveKey(): string {
@@ -142,7 +142,7 @@ export class SaasBridgeCollector {
 
     // Persiste raw_record só com o `data` (provider + custo entram nas colunas)
     const sourceId = this.providerToSourceId(body.provider);
-    await this.db.from('raw_records').insert({
+    await this.db.from('prospect_raw_records').insert({
       org_id: orgId,
       source_id: sourceId ?? 'hubdev',          // fallback se provider desconhecido
       external_ref: cpf,
@@ -187,7 +187,7 @@ export class SaasBridgeCollector {
     // ── Atualiza entity com nome ──────────────────────────────────
     if (body.data?.full_name) {
       await this.db
-        .from('entities')
+        .from('prospect_entities')
         .update({
           full_name: body.data.full_name,
           display_name: body.data.full_name,
@@ -243,7 +243,7 @@ export class SaasBridgeCollector {
     isPii: boolean,
   ): Promise<boolean> {
     const { data: existing } = await this.db
-      .from('contacts')
+      .from('prospect_contacts')
       .select('id, validated_in')
       .eq('entity_id', entityId)
       .eq('kind', kind)
@@ -252,7 +252,7 @@ export class SaasBridgeCollector {
     if (existing) {
       const cur = existing as { id: string; validated_in: number };
       await this.db
-        .from('contacts')
+        .from('prospect_contacts')
         .update({
           validated_in: (cur.validated_in ?? 1) + 1,
           last_validated_at: new Date().toISOString(),
@@ -260,7 +260,7 @@ export class SaasBridgeCollector {
         .eq('id', cur.id);
       return false;
     }
-    const { error } = await this.db.from('contacts').insert({
+    const { error } = await this.db.from('prospect_contacts').insert({
       entity_id: entityId,
       kind,
       value,

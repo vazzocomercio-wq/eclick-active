@@ -58,7 +58,7 @@ export class BrasilApiCollector {
   constructor(private readonly supabase: SupabaseService) {}
 
   private get db() {
-    return this.supabase.adminClient.schema('prospect' as 'public');
+    return this.supabase.adminClient;
   }
 
   /**
@@ -78,7 +78,7 @@ export class BrasilApiCollector {
     // 1) Idempotência — checa cache
     const since = new Date(Date.now() - CACHE_TTL_DAYS * 86400_000).toISOString();
     const { data: cached } = await this.db
-      .from('raw_records')
+      .from('prospect_raw_records')
       .select('id, payload, collected_at')
       .eq('org_id', orgId)
       .eq('source_id', SOURCE_ID)
@@ -102,7 +102,7 @@ export class BrasilApiCollector {
 
     // 3) Persistência: raw_record (se não foi do cache) + entity
     if (!usedCache && payload) {
-      const { error: rawErr } = await this.db.from('raw_records').insert({
+      const { error: rawErr } = await this.db.from('prospect_raw_records').insert({
         org_id: orgId,
         source_id: SOURCE_ID,
         external_ref: cnpj,
@@ -120,7 +120,7 @@ export class BrasilApiCollector {
 
     // 4) Upsert da entity (idempotente por org_id+cnpj)
     const { data: existing } = await this.db
-      .from('entities')
+      .from('prospect_entities')
       .select('id, status')
       .eq('org_id', orgId)
       .eq('cnpj', cnpj)
@@ -131,7 +131,7 @@ export class BrasilApiCollector {
     if (existing) {
       entityId = (existing as { id: string }).id;
       const { error: updErr } = await this.db
-        .from('entities')
+        .from('prospect_entities')
         .update({
           ...entityData,
           status:
@@ -144,7 +144,7 @@ export class BrasilApiCollector {
       status = usedCache ? 'cached' : 'updated';
     } else {
       const { data: created, error: insErr } = await this.db
-        .from('entities')
+        .from('prospect_entities')
         .insert({
           org_id: orgId,
           entity_type: 'pj',
@@ -162,14 +162,14 @@ export class BrasilApiCollector {
     // 5) Consent ledger — legítimo interesse PJ (dado público Receita)
     //    Só insere uma vez por entity+origin pra não duplicar.
     const { data: existingConsent } = await this.db
-      .from('consent_ledger')
+      .from('prospect_consent_ledger')
       .select('id')
       .eq('entity_id', entityId)
       .eq('origin', SOURCE_ID)
       .limit(1)
       .maybeSingle();
     if (!existingConsent) {
-      await this.db.from('consent_ledger').insert({
+      await this.db.from('prospect_consent_ledger').insert({
         entity_id: entityId,
         subject_kind: 'pj',
         legal_basis: 'legitimo_interesse',

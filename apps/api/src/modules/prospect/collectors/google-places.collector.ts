@@ -75,7 +75,7 @@ export class GooglePlacesCollector {
   constructor(private readonly supabase: SupabaseService) {}
 
   private get db() {
-    return this.supabase.adminClient.schema('prospect' as 'public');
+    return this.supabase.adminClient;
   }
 
   private resolveApiKey(): string {
@@ -153,7 +153,7 @@ export class GooglePlacesCollector {
     // Custo do request: 1 cobrança independente de quantos resultados (até 20)
     // Grava 1 raw_record agregado por chamada com payload mínimo.
     const { data: rawAgg } = await this.db
-      .from('raw_records')
+      .from('prospect_raw_records')
       .insert({
         org_id: orgId,
         source_id: SOURCE_ID,
@@ -176,7 +176,7 @@ export class GooglePlacesCollector {
 
       // Grava raw_record individual por place (place_id permanente conforme ToS)
       const { data: raw } = await this.db
-        .from('raw_records')
+        .from('prospect_raw_records')
         .insert({
           org_id: orgId,
           source_id: SOURCE_ID,
@@ -191,8 +191,8 @@ export class GooglePlacesCollector {
       // Idempotência: busca entity existente pelo external_ref do place
       // (busca via entity_links → raw_records.external_ref).
       const { data: existingLink } = await this.db
-        .from('entity_links')
-        .select('entity_id, raw_records!inner(external_ref, source_id, org_id)')
+        .from('prospect_entity_links')
+        .select('entity_id, prospect_raw_records!inner(external_ref, source_id, org_id)')
         .eq('raw_records.org_id', orgId)
         .eq('raw_records.source_id', SOURCE_ID)
         .eq('raw_records.external_ref', placeId)
@@ -203,7 +203,7 @@ export class GooglePlacesCollector {
       if (existingLink) {
         entityId = (existingLink as { entity_id: string }).entity_id;
         await this.db
-          .from('entities')
+          .from('prospect_entities')
           .update({
             display_name: displayName,
             address: this.mapAddress(p),
@@ -213,7 +213,7 @@ export class GooglePlacesCollector {
         result.updated += 1;
       } else {
         const { data: created, error: insErr } = await this.db
-          .from('entities')
+          .from('prospect_entities')
           .insert({
             org_id: orgId,
             entity_type: 'pj',
@@ -233,7 +233,7 @@ export class GooglePlacesCollector {
         result.created += 1;
 
         // Consent: PJ via dado público Places → legítimo interesse
-        await this.db.from('consent_ledger').insert({
+        await this.db.from('prospect_consent_ledger').insert({
           entity_id: entityId,
           subject_kind: 'pj',
           legal_basis: 'legitimo_interesse',
@@ -243,7 +243,7 @@ export class GooglePlacesCollector {
 
       // entity_link com este raw_record
       if (rawId) {
-        await this.db.from('entity_links').insert({
+        await this.db.from('prospect_entity_links').insert({
           entity_id: entityId,
           raw_record_id: rawId,
           match_method: 'probabilistic',     // place_id ≠ CNPJ → não é determinístico
@@ -262,7 +262,7 @@ export class GooglePlacesCollector {
 
       // Sinais — guarda rating/visits pro Prospect Score (S6)
       if (p.rating != null && p.userRatingCount != null) {
-        await this.db.from('signals').insert({
+        await this.db.from('prospect_signals').insert({
           entity_id: entityId,
           signal_type: 'places_reviews',
           value: {
@@ -288,7 +288,7 @@ export class GooglePlacesCollector {
 
   private async upsertContact(entityId: string, kind: 'phone' | 'site', value: string, confidence: number) {
     const { data: existing } = await this.db
-      .from('contacts')
+      .from('prospect_contacts')
       .select('id, validated_in')
       .eq('entity_id', entityId)
       .eq('kind', kind)
@@ -297,14 +297,14 @@ export class GooglePlacesCollector {
     if (existing) {
       const cur = existing as { id: string; validated_in: number };
       await this.db
-        .from('contacts')
+        .from('prospect_contacts')
         .update({
           validated_in: (cur.validated_in ?? 1) + 1,
           last_validated_at: new Date().toISOString(),
         })
         .eq('id', cur.id);
     } else {
-      await this.db.from('contacts').insert({
+      await this.db.from('prospect_contacts').insert({
         entity_id: entityId,
         kind,
         value,

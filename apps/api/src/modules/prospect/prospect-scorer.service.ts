@@ -46,7 +46,7 @@ export class ProspectScorerService {
   constructor(private readonly supabase: SupabaseService) {}
 
   private get db() {
-    return this.supabase.adminClient.schema('prospect' as 'public');
+    return this.supabase.adminClient;
   }
 
   /**
@@ -61,7 +61,7 @@ export class ProspectScorerService {
     breakdown: Array<{ signal: string; weight: number; reason: string }>;
   }> {
     const { data: entity } = await this.db
-      .from('entities')
+      .from('prospect_entities')
       .select('id, prospect_score, status, cnae, situacao')
       .eq('org_id', orgId)
       .eq('id', entityId)
@@ -88,7 +88,7 @@ export class ProspectScorerService {
 
     // 1) Sinais (signals table)
     const { data: signals } = await this.db
-      .from('signals')
+      .from('prospect_signals')
       .select('signal_type, value')
       .eq('entity_id', entityId);
 
@@ -149,7 +149,7 @@ export class ProspectScorerService {
 
     if (scoreAfter !== scoreBefore || newStatus) {
       const { error } = await this.db
-        .from('entities')
+        .from('prospect_entities')
         .update(updates)
         .eq('id', entityId);
       if (error) {
@@ -173,7 +173,7 @@ export class ProspectScorerService {
 
   /** Recalcula score de TODAS as entities de uma org (use com cautela). */
   async rescoreOrg(orgId: string, opts?: { onlyStatus?: string[] }): Promise<{ updated: number; }> {
-    let q = this.db.from('entities').select('id').eq('org_id', orgId);
+    let q = this.db.from('prospect_entities').select('id').eq('org_id', orgId);
     if (opts?.onlyStatus?.length) q = q.in('status', opts.onlyStatus);
     const { data } = await q;
     const rows = (data ?? []) as Array<{ id: string }>;
