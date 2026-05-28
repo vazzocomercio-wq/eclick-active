@@ -185,32 +185,119 @@ export class BrasilApiCollector {
     };
   }
 
-  /** Bate na BrasilAPI. Trata 404 (CNPJ inexistente) com erro amigável. */
+  /**
+   * Chain de fallback pra contornar bloqueio de IP cloud da BrasilAPI:
+   *   1. BrasilAPI (primária — wrapper Receita oficial)
+   *   2. minhareceita.org (open-source, mesmo schema da BrasilAPI)
+   *   3. publica.cnpj.ws (schema diferente — normalizado abaixo)
+   *
+   * Se um provider responde 403/429/5xx, tenta o próximo. Só 404 é
+   * "CNPJ inexistente" e aborta (não tenta outros).
+   *
+   * NOTA: solução temporária até o épico CNPJ Data Lake (DL.1-DL.8)
+   * indexar a base oficial da Receita.
+   */
   private async fetchFromBrasilApi(cnpj: string): Promise<BrasilApiCnpjResponse> {
-    const url = `https://brasilapi.com.br/api/cnpj/v1/${cnpj}`;
-    try {
-      const res = await fetch(url, {
-        headers: { Accept: 'application/json' },
-        // BrasilAPI free tier: ~1 req/s. Timeout de 15s pra dump completo.
-        signal: AbortSignal.timeout(15_000),
-      });
-      if (res.status === 404) {
-        throw new BadRequestException('CNPJ não encontrado na Receita.');
+    const providers: Array<{ name: string; fn: (c: string) => Promise<BrasilApiCnpjResponse | null> }> = [
+      { name: 'brasilapi',     fn: c => this.tryBrasilApi(c) },
+      { name: 'minhareceita',  fn: c => this.tryMinhaReceita(c) },
+      { name: 'publica.cnpj',  fn: c => this.tryPublicaCnpjWs(c) },
+    ];
+
+    const errors: string[] = [];
+    for (const p of providers) {
+      try {
+        const result = await p.fn(cnpj);
+        if (result) {
+          this.log.log(`[brasilapi-chain] ok via ${p.name} cnpj=${cnpj} razao="${result.razao_social ?? '?'}"`);
+          return result;
+        }
+        errors.push(`${p.name}: not_found`);
+      } catch (e: unknown) {
+        const msg = (e as { message?: string })?.message ?? 'unknown';
+        errors.push(`${p.name}: ${msg}`);
+        this.log.warn(`[brasilapi-chain] ${p.name} falhou: ${msg}`);
       }
-      if (res.status === 429) {
-        throw new BadRequestException('BrasilAPI rate-limit atingido. Tente novamente em 1min.');
-      }
-      if (!res.ok) {
-        throw new BadRequestException(`BrasilAPI erro ${res.status}.`);
-      }
-      const json = (await res.json()) as BrasilApiCnpjResponse;
-      this.log.log(`[brasilapi] fetch ok cnpj=${cnpj} razao="${json.razao_social ?? '?'}"`);
-      return json;
-    } catch (e: unknown) {
-      if (e instanceof BadRequestException) throw e;
-      const msg = (e as { message?: string })?.message ?? 'unknown';
-      throw new BadRequestException(`BrasilAPI fetch falhou: ${msg}`);
     }
+    throw new BadRequestException(
+      `Todos os providers públicos de CNPJ falharam. Detalhes: ${errors.join(' | ')}`,
+    );
+  }
+
+  private async tryBrasilApi(cnpj: string): Promise<BrasilApiCnpjResponse | null> {
+    const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (res.status === 404) throw new Error('cnpj_not_found');
+    if (!res.ok) throw new Error(`http_${res.status}`);
+    return (await res.json()) as BrasilApiCnpjResponse;
+  }
+
+  /** minhareceita.org tem schema IDÊNTICO à BrasilAPI (ambos wrappam o
+   *  mesmo dump da Receita). Retorno direto. */
+  private async tryMinhaReceita(cnpj: string): Promise<BrasilApiCnpjResponse | null> {
+    const res = await fetch(`https://minhareceita.org/${cnpj}`, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (res.status === 404) throw new Error('cnpj_not_found');
+    if (!res.ok) throw new Error(`http_${res.status}`);
+    return (await res.json()) as BrasilApiCnpjResponse;
+  }
+
+  /** publica.cnpj.ws tem schema aninhado (estabelecimento.*). Normaliza
+   *  pra mesma forma da BrasilAPI antes de devolver. */
+  private async tryPublicaCnpjWs(cnpj: string): Promise<BrasilApiCnpjResponse | null> {
+    const res = await fetch(`https://publica.cnpj.ws/cnpj/${cnpj}`, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (res.status === 404) throw new Error('cnpj_not_found');
+    if (!res.ok) throw new Error(`http_${res.status}`);
+    const raw = await res.json() as {
+      razao_social?: string;
+      porte?: { descricao?: string };
+      natureza_juridica?: { descricao?: string };
+      estabelecimento?: {
+        nome_fantasia?: string;
+        situacao_cadastral?: string;
+        tipo_logradouro?: string;
+        logradouro?: string;
+        numero?: string;
+        complemento?: string;
+        bairro?: string;
+        cep?: string;
+        cidade?: { nome?: string };
+        estado?: { sigla?: string };
+        atividade_principal?: { id?: string };
+        ddd1?: string;
+        telefone1?: string;
+        email?: string;
+      };
+      socios?: Array<{ nome?: string }>;
+    };
+    const est = raw.estabelecimento ?? {};
+    // Normaliza pra BrasilApiCnpjResponse
+    return {
+      cnpj,
+      razao_social:                 raw.razao_social,
+      nome_fantasia:                est.nome_fantasia,
+      porte:                        raw.porte?.descricao,
+      natureza_juridica:            raw.natureza_juridica?.descricao,
+      descricao_situacao_cadastral: est.situacao_cadastral,
+      cnae_fiscal:                  est.atividade_principal?.id ? Number(est.atividade_principal.id) : undefined,
+      logradouro:                   [est.tipo_logradouro, est.logradouro].filter(Boolean).join(' '),
+      numero:                       est.numero,
+      complemento:                  est.complemento,
+      bairro:                       est.bairro,
+      municipio:                    est.cidade?.nome,
+      uf:                           est.estado?.sigla,
+      cep:                          est.cep,
+      ddd_telefone_1:               est.ddd1 && est.telefone1 ? `${est.ddd1}${est.telefone1}` : undefined,
+      email:                        est.email,
+      qsa: (raw.socios ?? []).map(s => ({ nome_socio: s.nome })),
+    };
   }
 
   /** Mapeia resposta BrasilAPI → colunas de prospect.entities. */
