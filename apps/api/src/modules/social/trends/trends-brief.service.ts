@@ -116,16 +116,26 @@ export class TrendsBriefService {
         });
       }
 
-      // tópico em alta: top vídeo da categoria
+      // tópico em alta: top vídeo da categoria.
+      // Título do signal SEMPRE em PT-BR (template) pra não vazar título raw
+      // do YouTube em inglês no digest do WhatsApp/Slack. O título original
+      // fica acessível pelo evidence_item_ids → trend_items na tela do Radar.
       const topVid = yt[0];
       if (topVid) {
+        const views = Number(topVid.metrics.views ?? 0);
+        const viewsLabel =
+          views >= 1_000_000
+            ? `${(views / 1_000_000).toFixed(1).replace('.', ',')} mi de views`
+            : views >= 1_000
+              ? `${Math.round(views / 1000)} mil views`
+              : `${views} views`;
         rows.push({
           org_id: orgId,
           source: 'youtube',
           category: cat,
           signal_type: 'topic_rising',
-          title: (topVid.title ?? 'Vídeo em alta').slice(0, 80),
-          summary: `Vídeo com ${topVid.metrics.views ?? 0} views em alta em "${cat}".`,
+          title: `Vídeo em alta em ${cat} · ${viewsLabel}`.slice(0, 80),
+          summary: `Vídeo bombando em "${cat}" com ${viewsLabel}. Abra o Radar pra ver o exemplo.`,
           score: topVid.score,
           evidence_item_ids: [topVid.id],
         });
