@@ -8,6 +8,7 @@ import {
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { BrasilApiCollector } from './collectors/brasilapi.collector';
 import { GooglePlacesCollector } from './collectors/google-places.collector';
+import { SaasBridgeCollector } from './collectors/saas-bridge.collector';
 import { EntityResolverService } from './entity-resolver.service';
 import { ProspectScorerService } from './prospect-scorer.service';
 import type {
@@ -43,6 +44,7 @@ export class ProspectService {
     private readonly supabase: SupabaseService,
     private readonly brasilApi: BrasilApiCollector,
     private readonly places: GooglePlacesCollector,
+    private readonly saasBridge: SaasBridgeCollector,
     private readonly resolver: EntityResolverService,
     private readonly scorer: ProspectScorerService,
   ) {}
@@ -221,23 +223,44 @@ export class ProspectService {
       });
     }
 
-    // 5) Dispara resolver + score async (mesmo padrão de PJ)
-    this.resolver
-      .resolve(orgId, entityId)
-      .then(() => this.scorer.scoreEntity(orgId, entityId))
-      .catch(err =>
-        this.log.error(`[post-collect-pf async] entity=${entityId}: ${(err as Error).message}`),
-      );
+    // 5) Enrichment via bridge SaaS + resolver + score (async, não bloqueia)
+    this.enrichPfAsync(orgId, entityId, cpf).catch(err =>
+      this.log.error(`[post-collect-pf async] entity=${entityId}: ${(err as Error).message}`),
+    );
 
-    this.log.warn(
-      `[collect.pf] entity=${entityId} status=${status} — enrichment via bridge SaaS pendente (TODO /internal/enrichment/cpf)`,
+    this.log.log(
+      `[collect.pf] entity=${entityId} status=${status} — enrichment via bridge disparado`,
     );
 
     return {
       entity_id: entityId,
       status,
-      source_used: 'manual_pf_seed',
+      source_used: 'saas_bridge_cpf',
     };
+  }
+
+  /** Pipeline pós-collect PF: enrich SaaS → guard menores → resolver → score. */
+  private async enrichPfAsync(orgId: string, entityId: string, cpf: string): Promise<void> {
+    const result = await this.saasBridge.enrichCpf(
+      orgId,
+      entityId,
+      cpf,
+      // callback se menor detectado
+      async (birthDate) => {
+        await this.applyMinorGuard(entityId, birthDate);
+      },
+    );
+    this.log.log(
+      `[collect.pf.enriched] entity=${entityId} ok=${result.ok} provider=${result.provider} ` +
+      `cache=${result.cache_hit} contacts=${result.contacts_added} cost=${result.cost_cents}¢ ` +
+      `minor=${result.minor_blocked}`,
+    );
+
+    // Se o minor guard descartou a entity, não roda resolver/score (gasto inútil)
+    if (result.minor_blocked) return;
+
+    await this.resolver.resolve(orgId, entityId);
+    await this.scorer.scoreEntity(orgId, entityId);
   }
 
   /**

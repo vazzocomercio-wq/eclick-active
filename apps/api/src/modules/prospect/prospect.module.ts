@@ -7,6 +7,7 @@ import { ProspectPublicController } from './prospect.public.controller';
 import { ProspectService } from './prospect.service';
 import { BrasilApiCollector } from './collectors/brasilapi.collector';
 import { GooglePlacesCollector } from './collectors/google-places.collector';
+import { SaasBridgeCollector } from './collectors/saas-bridge.collector';
 import { EntityResolverService } from './entity-resolver.service';
 import { ProspectScorerService } from './prospect-scorer.service';
 
@@ -28,6 +29,7 @@ import { ProspectScorerService } from './prospect-scorer.service';
     ProspectService,
     BrasilApiCollector,
     GooglePlacesCollector,
+    SaasBridgeCollector,
     EntityResolverService,
     ProspectScorerService,
   ],
