@@ -1,0 +1,25 @@
+import { Module } from '@nestjs/common';
+import { SupabaseModule } from '../../common/supabase/supabase.module';
+import { AuthModule } from '../../common/auth/auth.module';
+import { ProspectController } from './prospect.controller';
+import { ProspectPublicController } from './prospect.public.controller';
+import { ProspectService } from './prospect.service';
+
+/**
+ * e-Click Prospect — Lead Intelligence Engine.
+ *
+ * Schema: `prospect.*` (separado de `active.*` p/ isolar raw/PII).
+ * Pipeline: descobre (Active) → enriquece (bridge SaaS p/ camadas pagas) →
+ * pontua → compliance gate → promove p/ `active.contacts` + card no Funil.
+ *
+ * Decisão de produto (2026-05-28):
+ *  • PJ: coleta fria permitida (legítimo interesse + dado público CNPJ).
+ *  • PF: APENAS opt-in/inbound. Coleta fria proibida.
+ */
+@Module({
+  imports: [SupabaseModule, AuthModule],
+  controllers: [ProspectController, ProspectPublicController],
+  providers: [ProspectService],
+  exports: [ProspectService],
+})
+export class ProspectModule {}
