@@ -178,7 +178,7 @@ export class ProspectService {
 
     // 3) Idempotência por (org_id, cpf)
     const { data: existing } = await this.db
-      .from('entities')
+      .from('prospect_entities')
       .select('id')
       .eq('org_id', orgId)
       .eq('cpf', cpf)
@@ -191,7 +191,7 @@ export class ProspectService {
       status = 'updated';
     } else {
       const { data: created, error } = await this.db
-        .from('entities')
+        .from('prospect_entities')
         .insert({
           org_id: orgId,
           entity_type: 'pf',
@@ -210,7 +210,7 @@ export class ProspectService {
     // 4) Consent ledger — base legal: legítimo interesse, com origin marcando
     //    a autorização jurídica interna (rastreável pra LGPD).
     const { data: existingConsent } = await this.db
-      .from('consent_ledger')
+      .from('prospect_consent_ledger')
       .select('id')
       .eq('entity_id', entityId)
       .eq('origin', 'internal_legal_release_2026_05_28')
@@ -301,7 +301,7 @@ export class ProspectService {
   // ──────────────────────────────────────────────────────────────────
   async list(orgId: string, q: ListEntitiesQuery): Promise<ProspectEntityRow[]> {
     let query = this.db
-      .from('entities')
+      .from('prospect_entities')
       .select('*')
       .eq('org_id', orgId)
       .order('prospect_score', { ascending: false })
@@ -317,7 +317,7 @@ export class ProspectService {
     const ids = rows.map(r => r.id);
     if (!ids.length) return [];
     const { data: sigRows } = await this.db
-      .from('signals')
+      .from('prospect_signals')
       .select('entity_id')
       .in('entity_id', ids)
       .eq('signal_type', q.signal_type);
@@ -327,7 +327,7 @@ export class ProspectService {
 
   async getProfile(orgId: string, entityId: string) {
     const { data: entity, error } = await this.db
-      .from('entities')
+      .from('prospect_entities')
       .select('*')
       .eq('org_id', orgId)
       .eq('id', entityId)
@@ -357,7 +357,7 @@ export class ProspectService {
   // ──────────────────────────────────────────────────────────────────
   async enrich(orgId: string, entityId: string, dto: EnrichDto): Promise<{ job_id: string; status: string; gate_reason: string | null; }> {
     const { data: entity } = await this.db
-      .from('entities')
+      .from('prospect_entities')
       .select('id, prospect_score, status')
       .eq('org_id', orgId)
       .eq('id', entityId)
@@ -402,7 +402,7 @@ export class ProspectService {
   }> {
     // 1) Entity + dados pra abordagem
     const { data: entity } = await this.db
-      .from('entities')
+      .from('prospect_entities')
       .select('*')
       .eq('org_id', orgId)
       .eq('id', entityId)
@@ -423,7 +423,7 @@ export class ProspectService {
 
     // 2) Compliance gate — opt-out bloqueia
     const { data: optOut } = await this.db
-      .from('consent_ledger')
+      .from('prospect_consent_ledger')
       .select('id')
       .eq('entity_id', entityId)
       .not('opt_out_at', 'is', null)
@@ -490,7 +490,7 @@ export class ProspectService {
 
     // 5) Contato principal — phone do primeiro contact phone se existir
     const { data: phoneContact } = await this.db
-      .from('contacts')
+      .from('prospect_contacts')
       .select('value, confidence')
       .eq('entity_id', entityId)
       .eq('kind', 'phone')
@@ -563,7 +563,7 @@ export class ProspectService {
     // 9) Atualiza entity
     const now = new Date().toISOString();
     await this.db
-      .from('entities')
+      .from('prospect_entities')
       .update({
         status: 'promovido',
         promoted_at: now,
@@ -588,7 +588,7 @@ export class ProspectService {
     e: { display_name: string | null; cnae: string | null; situacao: string | null; prospect_score: number; },
   ): Promise<string> {
     const { data: signals } = await this.db
-      .from('signals')
+      .from('prospect_signals')
       .select('signal_type, value')
       .eq('entity_id', entityId);
     const sigList = (signals ?? []) as Array<{ signal_type: string; value: Record<string, unknown> | null }>;
@@ -629,7 +629,7 @@ export class ProspectService {
   // ──────────────────────────────────────────────────────────────────
   async optOutInternal(orgId: string, entityId: string, reason?: string) {
     const { data: entity } = await this.db
-      .from('entities')
+      .from('prospect_entities')
       .select('id, entity_type')
       .eq('org_id', orgId)
       .eq('id', entityId)
@@ -712,7 +712,7 @@ export class ProspectService {
     for (const r of rows) {
       if (!r.a) continue;
       const { data: aOrg } = await this.db
-        .from('entities')
+        .from('prospect_entities')
         .select('org_id')
         .eq('id', r.a.id)
         .maybeSingle();
@@ -759,7 +759,7 @@ export class ProspectService {
 
     // Contagem de promoted total (sem distribuição por fonte — S7 vai gravar attribution).
     const { count: totalPromoted } = await this.db
-      .from('entities')
+      .from('prospect_entities')
       .select('id', { count: 'exact', head: true })
       .eq('org_id', orgId)
       .eq('status', 'promovido');
