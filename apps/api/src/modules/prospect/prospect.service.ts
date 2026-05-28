@@ -7,9 +7,11 @@ import {
 } from '@nestjs/common';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { BrasilApiCollector } from './collectors/brasilapi.collector';
+import { GooglePlacesCollector } from './collectors/google-places.collector';
 import type {
   CacReport,
   CollectDto,
+  DiscoverPlacesDto,
   EnrichDto,
   ListEntitiesQuery,
   OptOutPublicDto,
@@ -38,7 +40,19 @@ export class ProspectService {
   constructor(
     private readonly supabase: SupabaseService,
     private readonly brasilApi: BrasilApiCollector,
+    private readonly places: GooglePlacesCollector,
   ) {}
+
+  // ──────────────────────────────────────────────────────────────────
+  // Discovery — Google Places (S4)
+  // ──────────────────────────────────────────────────────────────────
+  async discoverPlaces(orgId: string, dto: DiscoverPlacesDto) {
+    return this.places.discoverByText(orgId, {
+      query: dto.query,
+      region: dto.region,
+      maxResults: dto.max_results,
+    });
+  }
 
   /** Cliente Supabase com schema `prospect` pré-selecionado. */
   private get db() {

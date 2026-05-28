@@ -13,6 +13,7 @@ import type { AuthUser } from '../../common/auth/auth.types';
 import { ProspectService } from './prospect.service';
 import type {
   CollectDto,
+  DiscoverPlacesDto,
   EnrichDto,
   ListEntitiesQuery,
   PromoteDto,
@@ -34,6 +35,16 @@ export class ProspectController {
   @Post('collect')
   collect(@CurrentUser() user: AuthUser, @Body() body: CollectDto) {
     return this.svc.collect(user.org_id, body);
+  }
+
+  /** Descobre PJs por busca textual no Google Places. Cria entidades sem CNPJ
+   *  (S5 entity_resolver vai casar com Receita depois). */
+  @Post('discover/places')
+  discoverPlaces(
+    @CurrentUser() user: AuthUser,
+    @Body() body: DiscoverPlacesDto,
+  ) {
+    return this.svc.discoverPlaces(user.org_id, body);
   }
 
   /** Lista entidades com filtros (score, sinais, status, tipo). */

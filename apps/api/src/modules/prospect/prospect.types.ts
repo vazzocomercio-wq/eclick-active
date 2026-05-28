@@ -144,6 +144,15 @@ export interface ResolveMatchDto {
   notes?: string;
 }
 
+export interface DiscoverPlacesDto {
+  /** Texto livre (ex.: "loja de cosméticos em Belo Horizonte MG"). */
+  query: string;
+  /** Filtro opcional (ex.: "Belo Horizonte MG"). */
+  region?: string;
+  /** Cap interno: 20 (limite do Places New por página). */
+  max_results?: number;
+}
+
 // ── CAC report ────────────────────────────────────────────────────────
 
 export interface CacReport {
