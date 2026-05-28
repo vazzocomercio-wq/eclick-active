@@ -232,9 +232,17 @@ export class ProspectService {
   }
 
   // ──────────────────────────────────────────────────────────────────
-  // Promote — vira contato no Active (S7 implementa o bridge real)
+  // Promote — vira contato + card no Funil do Active (S7 real)
   // ──────────────────────────────────────────────────────────────────
-  async promote(orgId: string, entityId: string, _dto: PromoteDto): Promise<{ contact_id: string | null; promoted_at: string; }> {
+  async promote(orgId: string, entityId: string, dto: PromoteDto): Promise<{
+    contact_id: string;
+    deal_id: string;
+    pipeline_id: string;
+    stage_id: string;
+    promoted_at: string;
+    ai_pitch: string;
+  }> {
+    // 1) Entity + dados pra abordagem
     const { data: entity } = await this.db
       .from('entities')
       .select('*')
@@ -242,8 +250,20 @@ export class ProspectService {
       .eq('id', entityId)
       .maybeSingle();
     if (!entity) throw new NotFoundException('Entity não encontrada');
+    const e = entity as {
+      id: string;
+      cnpj: string | null;
+      display_name: string | null;
+      razao_social: string | null;
+      nome_fantasia: string | null;
+      cnae: string | null;
+      situacao: string | null;
+      prospect_score: number;
+      status: string;
+      promoted_contact_id: string | null;
+    };
 
-    // Compliance gate — opt-out bloqueia
+    // 2) Compliance gate — opt-out bloqueia
     const { data: optOut } = await this.db
       .from('consent_ledger')
       .select('id')
@@ -251,15 +271,199 @@ export class ProspectService {
       .not('opt_out_at', 'is', null)
       .limit(1)
       .maybeSingle();
-    if (optOut) throw new ForbiddenException('Entity com opt-out registrado — não pode promover.');
+    if (optOut) {
+      throw new ForbiddenException('Entity com opt-out registrado — não pode promover.');
+    }
 
-    this.log.warn(`[promote.stub] entity=${entityId} — S7 (bridge p/ active.contacts) ainda não implementado`);
+    // 3) Já foi promovida antes?
+    if (e.promoted_contact_id) {
+      // Idempotente: retorna o que já existe sem duplicar deal.
+      const { data: existingContact } = await this.activeDb
+        .from('contacts')
+        .select('id')
+        .eq('id', e.promoted_contact_id)
+        .maybeSingle();
+      if (existingContact) {
+        const { data: existingDeal } = await this.activeDb
+          .from('deals')
+          .select('id, pipeline_id, stage_id')
+          .eq('contact_id', e.promoted_contact_id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (existingDeal) {
+          const d = existingDeal as { id: string; pipeline_id: string; stage_id: string };
+          return {
+            contact_id: e.promoted_contact_id,
+            deal_id: d.id,
+            pipeline_id: d.pipeline_id,
+            stage_id: d.stage_id,
+            promoted_at: new Date().toISOString(),
+            ai_pitch: '(já promovido — retornando registro existente)',
+          };
+        }
+      }
+    }
+
+    // 4) Garante pipeline + primeiro stage
+    let pipelineId: string;
+    let stageId: string;
+    if (dto.pipeline_id) {
+      pipelineId = dto.pipeline_id;
+      const { data: firstStage } = await this.activeDb
+        .from('pipeline_stages')
+        .select('id')
+        .eq('pipeline_id', pipelineId)
+        .order('position', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (!firstStage) throw new BadRequestException('pipeline_id inválido (sem stages).');
+      stageId = (firstStage as { id: string }).id;
+    } else {
+      const { data: ensured, error: ensErr } = await this.activeDb.rpc(
+        'prospect_ensure_pipeline',
+        { p_org_id: orgId },
+      );
+      if (ensErr) throw new BadRequestException(ensErr.message);
+      const result = ensured as { pipeline_id: string; first_stage_id: string };
+      pipelineId = result.pipeline_id;
+      stageId = result.first_stage_id;
+    }
+
+    // 5) Contato principal — phone do primeiro contact phone se existir
+    const { data: phoneContact } = await this.db
+      .from('contacts')
+      .select('value, confidence')
+      .eq('entity_id', entityId)
+      .eq('kind', 'phone')
+      .order('confidence', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const phone = (phoneContact as { value: string } | null)?.value ?? null;
+
+    // 6) Cria contact no Active (ou atualiza se já existe por CNPJ via custom_fields)
+    const contactName =
+      e.nome_fantasia || e.razao_social || e.display_name || `CNPJ ${e.cnpj ?? '?'}`;
+    const customFields: Record<string, unknown> = {
+      cnpj: e.cnpj,
+      cnae: e.cnae,
+      situacao: e.situacao,
+      prospect_score: e.prospect_score,
+      promotion_reason: dto.reason ?? null,
+      promoted_at: new Date().toISOString(),
+    };
+
+    const { data: createdContact, error: contErr } = await this.activeDb
+      .from('contacts')
+      .insert({
+        org_id: orgId,
+        name: contactName,
+        phone,
+        source: 'prospect',
+        tags: ['prospect-promoted'],
+        prospect_entity_id: entityId,
+        custom_fields: customFields,
+        temperature: e.prospect_score >= 70 ? 'hot' : 'warm',
+        score: e.prospect_score,
+      })
+      .select('id')
+      .single();
+    if (contErr) throw new BadRequestException(`Falha ao criar contact: ${contErr.message}`);
+    const contactId = (createdContact as { id: string }).id;
+
+    // 7) Gera pitch sugerido (heurístico — S7 MVP; refina com LLM em fase futura)
+    const aiPitch = await this.buildPitch(entityId, e);
+
+    // 8) Cria deal no Funil
+    const { data: createdDeal, error: dealErr } = await this.activeDb
+      .from('deals')
+      .insert({
+        org_id: orgId,
+        pipeline_id: pipelineId,
+        stage_id: stageId,
+        contact_id: contactId,
+        title: `${contactName}${e.cnpj ? ` (${this.formatCnpj(e.cnpj)})` : ''}`,
+        ai_score: e.prospect_score,
+        ai_next_action: 'Enviar abordagem inicial (ver custom_fields.ai_pitch)',
+        custom_fields: {
+          prospect_entity_id: entityId,
+          prospect_score: e.prospect_score,
+          ai_pitch: aiPitch,
+          source: 'prospect_module',
+        },
+        tags: ['prospect'],
+      })
+      .select('id')
+      .single();
+    if (dealErr) {
+      // Rollback parcial: deixa contact criado (não é fatal — fica órfão até retry).
+      this.log.error(`[promote] deal create fail: ${dealErr.message}`);
+      throw new BadRequestException(`Falha ao criar deal: ${dealErr.message}`);
+    }
+    const dealId = (createdDeal as { id: string }).id;
+
+    // 9) Atualiza entity
     const now = new Date().toISOString();
     await this.db
       .from('entities')
-      .update({ status: 'promovido', promoted_at: now })
+      .update({
+        status: 'promovido',
+        promoted_at: now,
+        promoted_contact_id: contactId,
+      })
       .eq('id', entityId);
-    return { contact_id: null, promoted_at: now };
+
+    this.log.log(`[promote] entity=${entityId} → contact=${contactId} deal=${dealId} pipeline=${pipelineId}`);
+    return {
+      contact_id: contactId,
+      deal_id: dealId,
+      pipeline_id: pipelineId,
+      stage_id: stageId,
+      promoted_at: now,
+      ai_pitch: aiPitch,
+    };
+  }
+
+  /** Gera texto de abordagem heurístico baseado em signals + entity. */
+  private async buildPitch(
+    entityId: string,
+    e: { display_name: string | null; cnae: string | null; situacao: string | null; prospect_score: number; },
+  ): Promise<string> {
+    const { data: signals } = await this.db
+      .from('signals')
+      .select('signal_type, value')
+      .eq('entity_id', entityId);
+    const sigList = (signals ?? []) as Array<{ signal_type: string; value: Record<string, unknown> | null }>;
+
+    const hooks: string[] = [];
+    const reviews = sigList.find(s => s.signal_type === 'places_reviews');
+    if (reviews?.value) {
+      const rating = Number(reviews.value['rating'] ?? 0);
+      const count = Number(reviews.value['count'] ?? 0);
+      if (rating >= 4.5) hooks.push(`Nota ${rating} no Google com ${count} avaliações`);
+    }
+    if (sigList.find(s => s.signal_type === 'marketplace_seller')) {
+      hooks.push('Seller ativo em marketplace');
+    }
+    if (e.cnae?.startsWith('47')) hooks.push('CNAE de varejo (ICP forte)');
+
+    const name = e.display_name ?? 'a empresa';
+    const score = e.prospect_score;
+    const summary = hooks.length
+      ? `Sinais: ${hooks.join(' · ')}.`
+      : 'Sinais limitados nesta camada — considerar enriquecer (camada 1) antes da abordagem.';
+    return [
+      `Lead: ${name} (Prospect Score: ${score}/100).`,
+      summary,
+      score >= 70
+        ? 'Abordagem sugerida: WhatsApp citando o gargalo de operação (reputação, mediações, falta de e-commerce próprio).'
+        : 'Sugerido: qualificar mais antes de abordar (aguardar camada 1 de enriquecimento).',
+    ].join('\n');
+  }
+
+  private formatCnpj(c: string): string {
+    if (!c || c.length !== 14) return c;
+    return `${c.slice(0, 2)}.${c.slice(2, 5)}.${c.slice(5, 8)}/${c.slice(8, 12)}-${c.slice(12)}`;
   }
 
   // ──────────────────────────────────────────────────────────────────
