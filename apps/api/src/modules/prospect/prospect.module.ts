@@ -1,11 +1,13 @@
 import { Module } from '@nestjs/common';
 import { SupabaseModule } from '../../common/supabase/supabase.module';
 import { AuthModule } from '../../common/auth/auth.module';
+import { KnowledgeModule } from '../knowledge/knowledge.module';
 import { ProspectController } from './prospect.controller';
 import { ProspectPublicController } from './prospect.public.controller';
 import { ProspectService } from './prospect.service';
 import { BrasilApiCollector } from './collectors/brasilapi.collector';
 import { GooglePlacesCollector } from './collectors/google-places.collector';
+import { EntityResolverService } from './entity-resolver.service';
 
 /**
  * e-Click Prospect — Lead Intelligence Engine.
@@ -19,9 +21,14 @@ import { GooglePlacesCollector } from './collectors/google-places.collector';
  *  • PF: APENAS opt-in/inbound. Coleta fria proibida.
  */
 @Module({
-  imports: [SupabaseModule, AuthModule],
+  imports: [SupabaseModule, AuthModule, KnowledgeModule],
   controllers: [ProspectController, ProspectPublicController],
-  providers: [ProspectService, BrasilApiCollector, GooglePlacesCollector],
+  providers: [
+    ProspectService,
+    BrasilApiCollector,
+    GooglePlacesCollector,
+    EntityResolverService,
+  ],
   exports: [ProspectService],
 })
 export class ProspectModule {}

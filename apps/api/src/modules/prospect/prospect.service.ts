@@ -8,6 +8,7 @@ import {
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { BrasilApiCollector } from './collectors/brasilapi.collector';
 import { GooglePlacesCollector } from './collectors/google-places.collector';
+import { EntityResolverService } from './entity-resolver.service';
 import type {
   CacReport,
   CollectDto,
@@ -41,17 +42,31 @@ export class ProspectService {
     private readonly supabase: SupabaseService,
     private readonly brasilApi: BrasilApiCollector,
     private readonly places: GooglePlacesCollector,
+    private readonly resolver: EntityResolverService,
   ) {}
 
   // ──────────────────────────────────────────────────────────────────
   // Discovery — Google Places (S4)
   // ──────────────────────────────────────────────────────────────────
   async discoverPlaces(orgId: string, dto: DiscoverPlacesDto) {
-    return this.places.discoverByText(orgId, {
+    const result = await this.places.discoverByText(orgId, {
       query: dto.query,
       region: dto.region,
       maxResults: dto.max_results,
     });
+    // S5: dispara entity resolver pra cada entity nova/atualizada.
+    // Async sem await — não bloqueia a resposta (errors logam, não estouram).
+    for (const ent of result.entities) {
+      this.resolver.resolve(orgId, ent.id).catch(err =>
+        this.log.error(`[resolver async] entity=${ent.id}: ${(err as Error).message}`),
+      );
+    }
+    return result;
+  }
+
+  /** Endpoint manual: força re-resolução de uma entity (gera embedding + match). */
+  async resolveEntity(orgId: string, entityId: string) {
+    return this.resolver.resolve(orgId, entityId);
   }
 
   /** Cliente Supabase com schema `prospect` pré-selecionado. */
@@ -89,6 +104,10 @@ export class ProspectService {
 
     if (sourceId === 'brasilapi_cnpj' || sourceId === 'receita_aberta') {
       const result = await this.brasilApi.collect(orgId, cnpj);
+      // S5: dispara resolver async (não bloqueia)
+      this.resolver.resolve(orgId, result.entity_id).catch(err =>
+        this.log.error(`[resolver async] entity=${result.entity_id}: ${(err as Error).message}`),
+      );
       return {
         entity_id: result.entity_id,
         status: result.status,

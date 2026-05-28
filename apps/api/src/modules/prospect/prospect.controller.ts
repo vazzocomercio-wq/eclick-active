@@ -63,6 +63,13 @@ export class ProspectController {
     return this.svc.getProfile(user.org_id, id);
   }
 
+  /** Força re-resolução (gera embedding + busca similares + auto-merge ≥90 ou
+   *  fila match_review 80–89). */
+  @Post('entities/:id/resolve')
+  resolve(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.svc.resolveEntity(user.org_id, id);
+  }
+
   /** Força próxima camada de enrichment (respeita gates Corte_1 / Corte_2). */
   @Post('entities/:id/enrich')
   enrich(
