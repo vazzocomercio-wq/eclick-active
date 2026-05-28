@@ -4,12 +4,14 @@ import { AuthModule } from '../../common/auth/auth.module';
 import { KnowledgeModule } from '../knowledge/knowledge.module';
 import { ProspectController } from './prospect.controller';
 import { ProspectPublicController } from './prospect.public.controller';
+import { ProspectDriveController } from './drive/prospect-drive.controller';
 import { ProspectService } from './prospect.service';
 import { BrasilApiCollector } from './collectors/brasilapi.collector';
 import { GooglePlacesCollector } from './collectors/google-places.collector';
 import { SaasBridgeCollector } from './collectors/saas-bridge.collector';
 import { EntityResolverService } from './entity-resolver.service';
 import { ProspectScorerService } from './prospect-scorer.service';
+import { DriveClient } from './drive/drive.client';
 
 /**
  * e-Click Prospect — Lead Intelligence Engine.
@@ -24,7 +26,7 @@ import { ProspectScorerService } from './prospect-scorer.service';
  */
 @Module({
   imports: [SupabaseModule, AuthModule, KnowledgeModule],
-  controllers: [ProspectController, ProspectPublicController],
+  controllers: [ProspectController, ProspectPublicController, ProspectDriveController],
   providers: [
     ProspectService,
     BrasilApiCollector,
@@ -32,6 +34,7 @@ import { ProspectScorerService } from './prospect-scorer.service';
     SaasBridgeCollector,
     EntityResolverService,
     ProspectScorerService,
+    DriveClient,
   ],
   exports: [ProspectService],
 })
