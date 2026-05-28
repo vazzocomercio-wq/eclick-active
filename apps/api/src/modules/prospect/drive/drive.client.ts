@@ -46,7 +46,14 @@ export interface DriveFileMetadata {
   modifiedTime?: string;
 }
 
-const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+// IMPORTANTE: usar `drive` (full) e não `drive.file`. O scope `drive.file`
+// só vê arquivos criados pela própria app — NÃO vê pastas compartilhadas
+// pelo usuário (que é o nosso caso: pasta `eclick-cnpj-lake` foi criada
+// pelo Vazzo e compartilhada como Editor pra SA).
+// Como a SA só tem acesso REAL ao que foi explicitamente compartilhado,
+// `drive` aqui é equivalente em poder ao `drive.file` mas funciona pro
+// nosso caso de uso.
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 const TOKEN_URI = 'https://oauth2.googleapis.com/token';
 const DRIVE_API = 'https://www.googleapis.com/drive/v3';
 const DRIVE_UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3';
