@@ -42,8 +42,10 @@ export default function ProspectListPage() {
   const [statusFilter, setStatusFilter] = useState<EntityStatus | ''>('');
   const [minScore, setMinScore] = useState<number>(0);
 
-  // CNPJ coletor
-  const [cnpjInput, setCnpjInput] = useState('');
+  // Coletor por documento (PJ via CNPJ ou PF via CPF)
+  const [docType, setDocType] = useState<'pj' | 'pf'>('pj');
+  const [docInput, setDocInput] = useState('');
+  const [pfNameSeed, setPfNameSeed] = useState('');
   const [collecting, setCollecting] = useState(false);
 
   // Places discover
@@ -75,15 +77,21 @@ export default function ProspectListPage() {
   }, [statusFilter, minScore]);
 
   async function handleCollect() {
-    if (!cnpjInput.trim()) return;
+    if (!docInput.trim()) return;
     setCollecting(true);
     setError(null);
     try {
-      const res = await prospectApi.collect({
-        entity_type: 'pj',
-        cnpj: cnpjInput.trim(),
-      });
-      setCnpjInput('');
+      const body: Parameters<typeof prospectApi.collect>[0] =
+        docType === 'pj'
+          ? { entity_type: 'pj', cnpj: docInput.trim() }
+          : ({
+              entity_type: 'pf',
+              cpf: docInput.trim(),
+              ...(pfNameSeed.trim() ? { seed: { full_name: pfNameSeed.trim() } } : {}),
+            } as Parameters<typeof prospectApi.collect>[0]);
+      const res = await prospectApi.collect(body);
+      setDocInput('');
+      setPfNameSeed('');
       await load();
       setDiscoverInfo(`Entity ${res.status}: ${res.entity_id.slice(0, 8)}…`);
     } catch (e) {
@@ -139,28 +147,58 @@ export default function ProspectListPage() {
       {/* Coletores */}
       <section className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <div className="rounded-xl border border-cyan-500/20 bg-zinc-900/80 p-4">
-          <h2 className="text-sm font-semibold text-cyan-300 mb-3 flex items-center gap-2">
-            <Building2 className="w-4 h-4" /> Coletar por CNPJ (camada 0 — grátis)
-          </h2>
-          <div className="flex gap-2">
-            <input
-              value={cnpjInput}
-              onChange={(e) => setCnpjInput(e.target.value)}
-              placeholder="00.000.000/0000-00"
-              className="flex-1 bg-zinc-950 border border-zinc-800 text-white rounded-lg px-3 py-2 text-sm focus:border-cyan-500/50 focus:outline-none"
-              disabled={collecting}
-            />
-            <button
-              onClick={handleCollect}
-              disabled={collecting || !cnpjInput.trim()}
-              className="px-4 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 text-zinc-950 font-semibold text-sm flex items-center gap-1"
-            >
-              {collecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-              Coletar
-            </button>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-cyan-300 flex items-center gap-2">
+              <Building2 className="w-4 h-4" />
+              {docType === 'pj' ? 'Coletar por CNPJ (camada 0 — grátis)' : 'Coletar por CPF'}
+            </h2>
+            <div className="inline-flex rounded-lg border border-zinc-800 p-0.5 text-xs">
+              <button
+                onClick={() => { setDocType('pj'); setDocInput(''); }}
+                className={`px-2 py-1 rounded ${docType === 'pj' ? 'bg-cyan-500 text-zinc-950 font-semibold' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                PJ
+              </button>
+              <button
+                onClick={() => { setDocType('pf'); setDocInput(''); }}
+                className={`px-2 py-1 rounded ${docType === 'pf' ? 'bg-cyan-500 text-zinc-950 font-semibold' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                PF
+              </button>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-2">
+              <input
+                value={docInput}
+                onChange={(e) => setDocInput(e.target.value)}
+                placeholder={docType === 'pj' ? '00.000.000/0000-00' : '000.000.000-00'}
+                className="flex-1 bg-zinc-950 border border-zinc-800 text-white rounded-lg px-3 py-2 text-sm focus:border-cyan-500/50 focus:outline-none"
+                disabled={collecting}
+              />
+              <button
+                onClick={handleCollect}
+                disabled={collecting || !docInput.trim()}
+                className="px-4 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 text-zinc-950 font-semibold text-sm flex items-center gap-1"
+              >
+                {collecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                Coletar
+              </button>
+            </div>
+            {docType === 'pf' && (
+              <input
+                value={pfNameSeed}
+                onChange={(e) => setPfNameSeed(e.target.value)}
+                placeholder="Nome completo (opcional)"
+                className="bg-zinc-950 border border-zinc-800 text-white rounded-lg px-3 py-2 text-sm focus:border-cyan-500/50 focus:outline-none"
+                disabled={collecting}
+              />
+            )}
           </div>
           <p className="text-xs text-slate-500 mt-2">
-            BrasilAPI · cache 30d · sem custo · idempotente.
+            {docType === 'pj'
+              ? 'BrasilAPI · cache 30d · sem custo · idempotente.'
+              : 'Cria entity PF + consent legítimo interesse (uso interno). Enrichment via bridge SaaS — em construção.'}
           </p>
         </div>
 

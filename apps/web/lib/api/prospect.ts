@@ -106,7 +106,13 @@ export interface DiscoverPlacesResult {
 }
 
 export const prospectApi = {
-  collect: (input: { entity_type: EntityType; cnpj?: string; source_id?: string }) =>
+  collect: (input: {
+    entity_type: EntityType;
+    cnpj?: string;
+    cpf?: string;
+    source_id?: string;
+    seed?: { full_name?: string; display_name?: string; razao_social?: string };
+  }) =>
     api.post<{ entity_id: string; status: string; source_used: string }>('/prospect/collect', input),
 
   discoverPlaces: (input: { query: string; region?: string; max_results?: number }) =>
