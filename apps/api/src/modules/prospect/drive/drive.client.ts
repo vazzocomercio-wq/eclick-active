@@ -252,6 +252,28 @@ export class DriveClient {
     return Buffer.from(arrayBuf);
   }
 
+  /**
+   * Debug: lista TUDO que a SA enxerga (sem filtro de parents).
+   * Útil pra confirmar se a SA tem acesso a alguma pasta (e qual o ID real).
+   */
+  async listAllVisible(): Promise<DriveFileMetadata[]> {
+    const token = await this.getAccessToken();
+    const params = new URLSearchParams({
+      fields: 'files(id,name,mimeType,owners(emailAddress),webViewLink,modifiedTime)',
+      pageSize: '50',
+      orderBy: 'modifiedTime desc',
+    });
+    const res = await fetch(`${DRIVE_API}/files?${params}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new InternalServerErrorException(`Drive listAll falhou: ${res.status} ${text.slice(0, 200)}`);
+    }
+    const json = (await res.json()) as { files?: DriveFileMetadata[] };
+    return json.files ?? [];
+  }
+
   /** Apaga arquivo (cleanup de dumps antigos). */
   async delete(fileId: string): Promise<void> {
     const token = await this.getAccessToken();

@@ -31,4 +31,10 @@ export class ProspectDriveController {
   list() {
     return this.drive.list();
   }
+
+  /** Debug: lista TUDO que a SA vê, em qualquer pasta. */
+  @Get('debug-all')
+  debugAll() {
+    return this.drive.listAllVisible();
+  }
 }
