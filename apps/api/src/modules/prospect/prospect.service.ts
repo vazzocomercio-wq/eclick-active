@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { SupabaseService } from '../../common/supabase/supabase.service';
+import { BrasilApiCollector } from './collectors/brasilapi.collector';
 import type {
   CacReport,
   CollectDto,
@@ -34,7 +35,10 @@ const onlyDigits = (s: string | undefined | null) =>
 export class ProspectService {
   private readonly log = new Logger(ProspectService.name);
 
-  constructor(private readonly supabase: SupabaseService) {}
+  constructor(
+    private readonly supabase: SupabaseService,
+    private readonly brasilApi: BrasilApiCollector,
+  ) {}
 
   /** Cliente Supabase com schema `prospect` pré-selecionado. */
   private get db() {
@@ -49,7 +53,11 @@ export class ProspectService {
   // ──────────────────────────────────────────────────────────────────
   // Collect — disparar coleta (S3/S4 implementam de verdade)
   // ──────────────────────────────────────────────────────────────────
-  async collect(orgId: string, dto: CollectDto): Promise<{ entity_id: string; status: 'created' | 'updated'; }> {
+  async collect(orgId: string, dto: CollectDto): Promise<{
+    entity_id: string;
+    status: 'created' | 'updated' | 'cached';
+    source_used: string;
+  }> {
     if (dto.entity_type === 'pf') {
       // Coleta FRIA de PF é proibida por decisão de produto (LGPD).
       // PF só entra via opt-in/inbound (form, TikTok Live, cliente existente).
@@ -61,32 +69,23 @@ export class ProspectService {
     if (!cnpj || cnpj.length !== 14) {
       throw new BadRequestException('CNPJ inválido (14 dígitos).');
     }
-    this.log.warn(
-      `[collect.stub] org=${orgId} cnpj=${cnpj} source=${dto.source_id ?? 'auto'} — S3/S4 ainda não implementado`,
-    );
-    // Stub: insere a entidade mínima se ainda não existe (idempotente por CNPJ).
-    const { data: existing } = await this.db
-      .from('entities')
-      .select('id')
-      .eq('org_id', orgId)
-      .eq('cnpj', cnpj)
-      .maybeSingle();
-    if (existing) {
-      return { entity_id: (existing as { id: string }).id, status: 'updated' };
+
+    // Routing por source_id. Default = brasilapi_cnpj (camada 0 grátis).
+    const sourceId = dto.source_id ?? 'brasilapi_cnpj';
+
+    if (sourceId === 'brasilapi_cnpj' || sourceId === 'receita_aberta') {
+      const result = await this.brasilApi.collect(orgId, cnpj);
+      return {
+        entity_id: result.entity_id,
+        status: result.status,
+        source_used: 'brasilapi_cnpj',
+      };
     }
-    const { data: created, error } = await this.db
-      .from('entities')
-      .insert({
-        org_id: orgId,
-        entity_type: 'pj',
-        cnpj,
-        display_name: dto.seed?.['display_name'] ?? null,
-        razao_social: dto.seed?.['razao_social'] ?? null,
-      })
-      .select('id')
-      .single();
-    if (error) throw new BadRequestException(error.message);
-    return { entity_id: (created as { id: string }).id, status: 'created' };
+
+    // Outras fontes vão entrar nas próximas sprints (S4 Places; S5+ bridge SaaS).
+    throw new BadRequestException(
+      `Fonte '${sourceId}' ainda não implementada na Fase 0. Disponível: brasilapi_cnpj.`,
+    );
   }
 
   // ──────────────────────────────────────────────────────────────────

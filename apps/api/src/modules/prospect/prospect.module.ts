@@ -4,6 +4,7 @@ import { AuthModule } from '../../common/auth/auth.module';
 import { ProspectController } from './prospect.controller';
 import { ProspectPublicController } from './prospect.public.controller';
 import { ProspectService } from './prospect.service';
+import { BrasilApiCollector } from './collectors/brasilapi.collector';
 
 /**
  * e-Click Prospect — Lead Intelligence Engine.
@@ -19,7 +20,7 @@ import { ProspectService } from './prospect.service';
 @Module({
   imports: [SupabaseModule, AuthModule],
   controllers: [ProspectController, ProspectPublicController],
-  providers: [ProspectService],
+  providers: [ProspectService, BrasilApiCollector],
   exports: [ProspectService],
 })
 export class ProspectModule {}
