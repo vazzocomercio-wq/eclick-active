@@ -101,13 +101,12 @@ export class ProspectService {
     status: 'created' | 'updated' | 'cached';
     source_used: string;
   }> {
+    // ── Branch PF (decisão 2026-05-28: liberada por org via flag) ──────
     if (dto.entity_type === 'pf') {
-      // Coleta FRIA de PF é proibida por decisão de produto (LGPD).
-      // PF só entra via opt-in/inbound (form, TikTok Live, cliente existente).
-      throw new ForbiddenException(
-        'Coleta fria de PF não é permitida. PF só entra via opt-in/inbound.',
-      );
+      return this.collectPf(orgId, dto);
     }
+
+    // ── Branch PJ ──────────────────────────────────────────────────────
     const cnpj = onlyDigits(dto.cnpj);
     if (!cnpj || cnpj.length !== 14) {
       throw new BadRequestException('CNPJ inválido (14 dígitos).');
@@ -132,10 +131,144 @@ export class ProspectService {
       };
     }
 
-    // Outras fontes vão entrar nas próximas sprints (S4 Places; S5+ bridge SaaS).
+    // Outras fontes PJ entram nas próximas sprints (bridge SaaS).
     throw new BadRequestException(
-      `Fonte '${sourceId}' ainda não implementada na Fase 0. Disponível: brasilapi_cnpj.`,
+      `Fonte PJ '${sourceId}' ainda não implementada. Disponível: brasilapi_cnpj.`,
     );
+  }
+
+  /**
+   * Coleta PF — só permitida pra orgs com `prospect_pf_cold_enabled=true`
+   * (flag setada via migration 087 sob autorização jurídica explícita).
+   *
+   * ⚠️ Esta fase NÃO chama provider PF ainda — apenas cria a entity-mãe
+   * + grava consent_ledger com base legal. O enrichment real (HubDev/
+   * BigDataCorp/DataStone/PH3A pra CPF) acontece via bridge SaaS futuro
+   * (precisa endpoint `/internal/enrichment/cpf` no eclick-backend).
+   *
+   * Guard menores de 18 — quando o enrichment vier, descarta entity se
+   * data_nascimento indicar idade<18. Stub do guard fica em
+   * applyMinorGuard() pra ser invocado quando o lookup CPF entrar.
+   */
+  private async collectPf(orgId: string, dto: CollectDto): Promise<{
+    entity_id: string;
+    status: 'created' | 'updated' | 'cached';
+    source_used: string;
+  }> {
+    // 1) Flag por org
+    const { data: enabled } = await this.activeDb.rpc(
+      'prospect_is_pf_cold_enabled',
+      { p_org_id: orgId },
+    );
+    if (!enabled) {
+      throw new ForbiddenException(
+        'Sua org não tem autorização pra coleta PF (exige validação jurídica + flag organizations.prospect_pf_cold_enabled=true).',
+      );
+    }
+
+    // 2) CPF validação
+    const cpf = onlyDigits(dto.cpf);
+    if (!cpf || cpf.length !== 11) {
+      throw new BadRequestException('CPF inválido (11 dígitos).');
+    }
+
+    // 3) Idempotência por (org_id, cpf)
+    const { data: existing } = await this.db
+      .from('entities')
+      .select('id')
+      .eq('org_id', orgId)
+      .eq('cpf', cpf)
+      .maybeSingle();
+
+    let entityId: string;
+    let status: 'created' | 'updated';
+    if (existing) {
+      entityId = (existing as { id: string }).id;
+      status = 'updated';
+    } else {
+      const { data: created, error } = await this.db
+        .from('entities')
+        .insert({
+          org_id: orgId,
+          entity_type: 'pf',
+          cpf,
+          full_name: dto.seed?.['full_name'] ?? null,
+          display_name: dto.seed?.['full_name'] ?? null,
+          status: 'novo',
+        })
+        .select('id')
+        .single();
+      if (error) throw new BadRequestException(error.message);
+      entityId = (created as { id: string }).id;
+      status = 'created';
+    }
+
+    // 4) Consent ledger — base legal: legítimo interesse, com origin marcando
+    //    a autorização jurídica interna (rastreável pra LGPD).
+    const { data: existingConsent } = await this.db
+      .from('consent_ledger')
+      .select('id')
+      .eq('entity_id', entityId)
+      .eq('origin', 'internal_legal_release_2026_05_28')
+      .limit(1)
+      .maybeSingle();
+    if (!existingConsent) {
+      await this.db.from('consent_ledger').insert({
+        entity_id: entityId,
+        subject_kind: 'pf_lead',
+        legal_basis: 'legitimo_interesse',
+        origin: 'internal_legal_release_2026_05_28',
+      });
+    }
+
+    // 5) Dispara resolver + score async (mesmo padrão de PJ)
+    this.resolver
+      .resolve(orgId, entityId)
+      .then(() => this.scorer.scoreEntity(orgId, entityId))
+      .catch(err =>
+        this.log.error(`[post-collect-pf async] entity=${entityId}: ${(err as Error).message}`),
+      );
+
+    this.log.warn(
+      `[collect.pf] entity=${entityId} status=${status} — enrichment via bridge SaaS pendente (TODO /internal/enrichment/cpf)`,
+    );
+
+    return {
+      entity_id: entityId,
+      status,
+      source_used: 'manual_pf_seed',
+    };
+  }
+
+  /**
+   * Guard de menores de 18.
+   * Chamar quando enrichment retornar data_nascimento. Se idade<18:
+   *   • marca entity.status='descartado'
+   *   • grava signal 'minor_guard_triggered'
+   *   • retorna true (caller deve abortar enrichment)
+   *
+   * Stub público pra collector CPF futuro invocar.
+   */
+  async applyMinorGuard(
+    entityId: string,
+    birthDateIso: string | null | undefined,
+  ): Promise<boolean> {
+    if (!birthDateIso) return false;
+    const birth = new Date(birthDateIso);
+    if (Number.isNaN(birth.getTime())) return false;
+    const ageMs = Date.now() - birth.getTime();
+    const ageYears = ageMs / (365.25 * 24 * 60 * 60 * 1000);
+    if (ageYears >= 18) return false;
+
+    await this.db.from('entities').update({ status: 'descartado' }).eq('id', entityId);
+    await this.db.from('signals').insert({
+      entity_id: entityId,
+      signal_type: 'minor_guard_triggered',
+      value: { birth_date: birthDateIso, age_years: Math.floor(ageYears) },
+      weight: 0,
+    });
+    this.log.warn(`[minor-guard] entity=${entityId} descartado (idade ${Math.floor(ageYears)})`);
+    return true;
   }
 
   // ──────────────────────────────────────────────────────────────────
