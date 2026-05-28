@@ -9,6 +9,7 @@ import { SupabaseService } from '../../common/supabase/supabase.service';
 import { BrasilApiCollector } from './collectors/brasilapi.collector';
 import { GooglePlacesCollector } from './collectors/google-places.collector';
 import { EntityResolverService } from './entity-resolver.service';
+import { ProspectScorerService } from './prospect-scorer.service';
 import type {
   CacReport,
   CollectDto,
@@ -43,7 +44,18 @@ export class ProspectService {
     private readonly brasilApi: BrasilApiCollector,
     private readonly places: GooglePlacesCollector,
     private readonly resolver: EntityResolverService,
+    private readonly scorer: ProspectScorerService,
   ) {}
+
+  /** Recalcula prospect_score de uma entity. */
+  async scoreEntity(orgId: string, entityId: string) {
+    return this.scorer.scoreEntity(orgId, entityId);
+  }
+
+  /** Recalcula score de todas as entities da org (opcional: filtra por status). */
+  async rescoreOrg(orgId: string, status?: string[]) {
+    return this.scorer.rescoreOrg(orgId, status ? { onlyStatus: status } : undefined);
+  }
 
   // ──────────────────────────────────────────────────────────────────
   // Discovery — Google Places (S4)
@@ -54,12 +66,14 @@ export class ProspectService {
       region: dto.region,
       maxResults: dto.max_results,
     });
-    // S5: dispara entity resolver pra cada entity nova/atualizada.
-    // Async sem await — não bloqueia a resposta (errors logam, não estouram).
+    // S5 + S6: dispara resolver + score pra cada entity (async, não bloqueia).
     for (const ent of result.entities) {
-      this.resolver.resolve(orgId, ent.id).catch(err =>
-        this.log.error(`[resolver async] entity=${ent.id}: ${(err as Error).message}`),
-      );
+      this.resolver
+        .resolve(orgId, ent.id)
+        .then(() => this.scorer.scoreEntity(orgId, ent.id))
+        .catch(err =>
+          this.log.error(`[post-discover async] entity=${ent.id}: ${(err as Error).message}`),
+        );
     }
     return result;
   }
@@ -104,10 +118,13 @@ export class ProspectService {
 
     if (sourceId === 'brasilapi_cnpj' || sourceId === 'receita_aberta') {
       const result = await this.brasilApi.collect(orgId, cnpj);
-      // S5: dispara resolver async (não bloqueia)
-      this.resolver.resolve(orgId, result.entity_id).catch(err =>
-        this.log.error(`[resolver async] entity=${result.entity_id}: ${(err as Error).message}`),
-      );
+      // S5 + S6: dispara resolver + score async (não bloqueia resposta)
+      this.resolver
+        .resolve(orgId, result.entity_id)
+        .then(() => this.scorer.scoreEntity(orgId, result.entity_id))
+        .catch(err =>
+          this.log.error(`[post-collect async] entity=${result.entity_id}: ${(err as Error).message}`),
+        );
       return {
         entity_id: result.entity_id,
         status: result.status,

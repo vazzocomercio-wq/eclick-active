@@ -8,6 +8,7 @@ import { ProspectService } from './prospect.service';
 import { BrasilApiCollector } from './collectors/brasilapi.collector';
 import { GooglePlacesCollector } from './collectors/google-places.collector';
 import { EntityResolverService } from './entity-resolver.service';
+import { ProspectScorerService } from './prospect-scorer.service';
 
 /**
  * e-Click Prospect — Lead Intelligence Engine.
@@ -28,6 +29,7 @@ import { EntityResolverService } from './entity-resolver.service';
     BrasilApiCollector,
     GooglePlacesCollector,
     EntityResolverService,
+    ProspectScorerService,
   ],
   exports: [ProspectService],
 })

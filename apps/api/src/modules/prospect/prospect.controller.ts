@@ -70,6 +70,22 @@ export class ProspectController {
     return this.svc.resolveEntity(user.org_id, id);
   }
 
+  /** Força recálculo do prospect_score (lê signals + entity → atualiza score
+   *  e status se cruzou corte ≥70). Retorna o breakdown auditável. */
+  @Post('entities/:id/score')
+  score(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.svc.scoreEntity(user.org_id, id);
+  }
+
+  /** Re-score em lote pra org inteira (admin / depois de ajuste de pesos). */
+  @Post('rescore')
+  rescore(
+    @CurrentUser() user: AuthUser,
+    @Body() body: { status?: string[] },
+  ) {
+    return this.svc.rescoreOrg(user.org_id, body?.status);
+  }
+
   /** Força próxima camada de enrichment (respeita gates Corte_1 / Corte_2). */
   @Post('entities/:id/enrich')
   enrich(
