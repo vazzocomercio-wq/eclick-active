@@ -142,4 +142,10 @@ export class BlogAiController {
   setPostFont(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: { display_font: string | null }) {
     return this.svc.setPostFont(user.org_id, id, body?.display_font ?? null);
   }
+
+  /** Regera a capa por IA (útil quando o post veio com placeholder do fallback). */
+  @Post('posts/:id/regenerate-cover')
+  regenerateCover(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.svc.regenerateCover(user.org_id, id);
+  }
 }

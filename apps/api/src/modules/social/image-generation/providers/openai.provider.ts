@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import sharp from 'sharp';
 import { LlmService } from '../../../../common/llm/llm.service';
 import type {
   GeneratedImage,
@@ -7,17 +8,17 @@ import type {
 } from '../image-generation.types';
 
 /**
- * Provider OpenAI Images — DALL·E 3 / gpt-image-1.
- * Disponível quando `OPENAI_API_KEY` está configurada.
+ * Provider OpenAI Images — DALL·E 3.
+ * Disponível quando `OPENAI_API_KEY` resolvível (BYOK ou platform).
  *
- * MVP 1: implementação stub que retorna unavailable. Quando a feature
- * for habilitada, basta:
- *   1. Setar `process.env.OPENAI_API_KEY`
- *   2. Adicionar fetch() pra https://api.openai.com/v1/images/generations
- *   3. Retornar buffer da resposta
+ * DALL·E 3 só aceita tamanhos fixos (1024x1024, 1024x1792, 1792x1024).
+ * O blog (e outras features) podem pedir qualquer tamanho — então:
+ *   1) Escolhemos o tamanho DALL·E válido com aspect ratio mais próximo.
+ *   2) Após gerar, recortamos com sharp pro width/height solicitado.
  *
- * Stub permite que o ImageGenerationService já tente esse provider
- * sem quebrar (cai no PlaceholderProvider quando isAvailable=false).
+ * Sem esse normalizador, qualquer pedido fora de 1024/1792 retorna 400 →
+ * a chain cai no PlaceholderImageProvider (que escreve o prompt como texto
+ * em SVG sobre gradiente — visual quebrado).
  */
 @Injectable()
 export class OpenAIImageProvider implements ImageProvider {
@@ -40,12 +41,12 @@ export class OpenAIImageProvider implements ImageProvider {
       throw new Error('Sem chave OpenAI configurada pra esta org (BYOK)');
     }
 
-    const width = input.width ?? 1024;
-    const height = input.height ?? 1024;
-    const size = `${width}x${height}`;
+    const targetW = input.width ?? 1024;
+    const targetH = input.height ?? 1024;
+    const dalleSize = pickDalleSize(targetW, targetH);
 
-    // Reforça cores da marca no prompt
-    const enrichedPrompt = `${input.prompt}\n\nEstilo: cores principais ${input.primaryColor} e ${input.secondaryColor}, design profissional para Instagram, alta qualidade, sem texto na imagem.`;
+    // Reforça cores da marca no prompt + impede texto na imagem
+    const enrichedPrompt = `${input.prompt}\n\nEstilo: cores principais ${input.primaryColor} e ${input.secondaryColor}, design profissional, alta qualidade, sem texto na imagem, sem letras.`;
 
     try {
       const res = await fetch('https://api.openai.com/v1/images/generations', {
@@ -58,7 +59,7 @@ export class OpenAIImageProvider implements ImageProvider {
           model: 'dall-e-3',
           prompt: enrichedPrompt.slice(0, 4000),
           n: 1,
-          size,
+          size: dalleSize.label,
           response_format: 'b64_json',
         }),
       });
@@ -68,13 +69,23 @@ export class OpenAIImageProvider implements ImageProvider {
       const body = (await res.json()) as { data?: Array<{ b64_json?: string }> };
       const b64 = body.data?.[0]?.b64_json;
       if (!b64) throw new Error('Resposta sem b64_json');
-      const buffer = Buffer.from(b64, 'base64');
+      const raw = Buffer.from(b64, 'base64');
+
+      // Crop pro tamanho solicitado (cover fit, centralizado).
+      // Se o aspect já bate (ex: pediu 1024x1024 e gerou 1024x1024), sharp
+      // só re-encoda em PNG e segue. Sem isso, a capa do blog viria
+      // 1792x1024 quando o consumer pediu 1200x630.
+      const finalBuffer = await sharp(raw)
+        .resize(targetW, targetH, { fit: 'cover', position: 'centre' })
+        .png({ quality: 92 })
+        .toBuffer();
+
       return {
-        buffer,
+        buffer: finalBuffer,
         mimeType: 'image/png',
         provider: 'openai',
-        width,
-        height,
+        width: targetW,
+        height: targetH,
         ext: 'png',
       };
     } catch (err) {
@@ -82,4 +93,31 @@ export class OpenAIImageProvider implements ImageProvider {
       throw err;
     }
   }
+}
+
+/**
+ * DALL·E 3 só aceita 3 tamanhos. Escolhemos o que tem aspect ratio mais
+ * próximo do solicitado, pra perder o mínimo possível no crop.
+ *
+ *   1024x1024 (1.0)    — quadrado
+ *   1792x1024 (~1.75)  — landscape (capa de blog, OG image)
+ *   1024x1792 (~0.57)  — portrait (story, reels)
+ */
+function pickDalleSize(w: number, h: number): { w: number; h: number; label: string } {
+  const want = w / h;
+  const options = [
+    { w: 1024, h: 1024, label: '1024x1024', ratio: 1.0 },
+    { w: 1792, h: 1024, label: '1792x1024', ratio: 1792 / 1024 },
+    { w: 1024, h: 1792, label: '1024x1792', ratio: 1024 / 1792 },
+  ];
+  let best = options[0];
+  let bestDelta = Math.abs(want - best.ratio);
+  for (const opt of options.slice(1)) {
+    const delta = Math.abs(want - opt.ratio);
+    if (delta < bestDelta) {
+      best = opt;
+      bestDelta = delta;
+    }
+  }
+  return best;
 }

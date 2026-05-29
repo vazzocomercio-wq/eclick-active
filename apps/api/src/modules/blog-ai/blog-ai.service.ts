@@ -350,6 +350,64 @@ export class BlogAiService {
     return row;
   }
 
+  /**
+   * Regera a capa de um post que ficou com placeholder (SVG do fallback
+   * provider). Reusa o `coverImagePrompt` salvo em `generation_metadata`
+   * (ou monta um fallback a partir do título). Se o post já está
+   * publicado no Sanity, faz o upload da nova capa + patcha o doc +
+   * revalida o front.
+   */
+  async regenerateCover(orgId: string, id: string): Promise<BlogPostRow> {
+    const row = await this.get(orgId, id);
+    const meta = (row.generation_metadata ?? {}) as { cover_prompt?: string | null };
+    const prompt =
+      typeof meta.cover_prompt === 'string' && meta.cover_prompt.trim().length > 0
+        ? meta.cover_prompt
+        : fallbackCoverPrompt(row.title);
+
+    const img = await this.images.generateAndUpload(
+      orgId,
+      {
+        prompt,
+        primaryColor: '#00E5FF',
+        secondaryColor: '#09090b',
+        width: 1200,
+        height: 630,
+      },
+      `blog/${id}`,
+    );
+
+    const { data, error } = await this.db
+      .from('blog_posts')
+      .update({
+        cover_image_url: img.url,
+        generation_metadata: { ...meta, cover_prompt: prompt, cover_regenerated_at: new Date().toISOString() },
+      })
+      .eq('org_id', orgId)
+      .eq('id', id)
+      .select('*')
+      .single();
+    if (error) throw new BadRequestException(error.message);
+    const updated = data as BlogPostRow;
+
+    // Se já está publicado no Sanity, propaga a nova capa pra produção.
+    if (updated.sanity_doc_id && this.sanity.isConfigured()) {
+      try {
+        const assetId = await this.sanity.uploadImageFromUrl(img.url);
+        if (assetId) {
+          await this.sanity.patchDocument(updated.sanity_doc_id, {
+            coverImage: { _type: 'image', asset: { _type: 'reference', _ref: assetId }, alt: updated.title },
+          });
+          void this.revalidateFront(updated.slug);
+        }
+      } catch (e) {
+        this.log.warn(`re-upload da capa no Sanity falhou (non-fatal): ${(e as Error).message}`);
+      }
+    }
+
+    return updated;
+  }
+
   // ── Agendamento ──────────────────────────────────────────────────────
 
   async schedule(orgId: string, id: string, scheduledForIso: string): Promise<BlogPostRow> {
