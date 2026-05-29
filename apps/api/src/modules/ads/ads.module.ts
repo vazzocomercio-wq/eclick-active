@@ -19,6 +19,9 @@ import { SignalDetectorService } from './signals/signal-detector.service';
 import { SignalDetectorWorker } from './signals/signal-detector.worker';
 import { AdLeadsService } from './webhooks/ad-leads.service';
 import { MetaLeadAdsController } from './webhooks/meta-lead.controller';
+import { AdCompositionsController } from './publish/ad-compositions.controller';
+import { AdCompositionsService } from './publish/ad-compositions.service';
+import { MetaPublishService } from './publish/meta-publish.service';
 
 /**
  * Módulo de Ads — Blocos B + C + E + G do Active Intelligence.
@@ -46,9 +49,12 @@ import { MetaLeadAdsController } from './webhooks/meta-lead.controller';
     AdMetricsController,
     AdSignalsController,
     MetaLeadAdsController,
+    AdCompositionsController,
   ],
   providers: [
     AdIntegrationsService,
+    MetaPublishService,
+    AdCompositionsService,
     AdsSyncService,
     AdsSyncWorker,
     MetaConnector,
@@ -68,6 +74,7 @@ import { MetaLeadAdsController } from './webhooks/meta-lead.controller';
     MetricCoverageService,
     SignalDetectorService,
     AdLeadsService,
+    AdCompositionsService,
   ],
 })
 export class AdsModule {}
