@@ -509,11 +509,48 @@ export class BlogAiService {
       .single();
     if (error) throw new BadRequestException(error.message);
     void this.revalidateFront(row.slug);
+    void this.notifyNewsletter({
+      slug: row.slug,
+      title: row.title,
+      excerpt: row.excerpt ?? null,
+      coverImageUrl: row.cover_image_url ?? null,
+      focusKeyword: row.focus_keyword ?? null,
+    });
     this.log.log(`[blog-ai] post ${id} publicado no Sanity (${sanityId})`);
     return data as BlogPostRow;
   }
 
   // ── helpers ──────────────────────────────────────────────────────────
+
+  /**
+   * Dispara o broadcast da newsletter no SaaS pra notificar inscritos.
+   * Endpoint SaaS: `POST /internal/blog/notify-subscribers` (X-Internal-Key).
+   * Idempotente por slug — chamadas extras retornam alreadySent. Best-effort.
+   *
+   * Config Active env:
+   *   SAAS_BLOG_NOTIFY_URL   = https://eclick-backend-production-2a87.up.railway.app/internal/blog/notify-subscribers
+   *   SAAS_INTERNAL_KEY      = mesma key do INTERNAL_API_KEY do SaaS
+   */
+  private async notifyNewsletter(input: {
+    slug: string;
+    title: string;
+    excerpt: string | null;
+    coverImageUrl: string | null;
+    focusKeyword: string | null;
+  }): Promise<void> {
+    const url = process.env.SAAS_BLOG_NOTIFY_URL;
+    const key = process.env.SAAS_INTERNAL_KEY;
+    if (!url || !key) return;
+    try {
+      await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Internal-Key': key },
+        body: JSON.stringify(input),
+      });
+    } catch (e) {
+      this.log.warn(`notifyNewsletter falhou (non-fatal): ${(e as Error).message}`);
+    }
+  }
 
   /**
    * Avisa o site público (eclick-frontend) pra revalidar o blog — assim o post
