@@ -60,16 +60,26 @@ export class OpenAIImageProvider implements ImageProvider {
           prompt: enrichedPrompt.slice(0, 4000),
           n: 1,
           size: dalleSize.label,
-          response_format: 'b64_json',
+          // OpenAI deprecou response_format pra dall-e-3 — agora só retorna
+          // URL temporária (~1h). Mantemos sem response_format e baixamos.
         }),
       });
       if (!res.ok) {
         throw new Error(`OpenAI image gen falhou: ${res.status} ${await res.text().catch(() => '')}`);
       }
-      const body = (await res.json()) as { data?: Array<{ b64_json?: string }> };
-      const b64 = body.data?.[0]?.b64_json;
-      if (!b64) throw new Error('Resposta sem b64_json');
-      const raw = Buffer.from(b64, 'base64');
+      const body = (await res.json()) as { data?: Array<{ url?: string; b64_json?: string }> };
+      const item = body.data?.[0];
+      let raw: Buffer;
+      if (item?.b64_json) {
+        raw = Buffer.from(item.b64_json, 'base64');
+      } else if (item?.url) {
+        const imgRes = await fetch(item.url);
+        if (!imgRes.ok) throw new Error(`Download da imagem OpenAI falhou: ${imgRes.status}`);
+        const arr = await imgRes.arrayBuffer();
+        raw = Buffer.from(arr);
+      } else {
+        throw new Error('Resposta sem url nem b64_json');
+      }
 
       // Crop pro tamanho solicitado (cover fit, centralizado).
       // Se o aspect já bate (ex: pediu 1024x1024 e gerou 1024x1024), sharp
