@@ -389,11 +389,20 @@ function mapOptimizationGoal(obj: AdObjective): string {
   return map[obj] ?? 'LINK_CLICKS';
 }
 
-/** Garante geo_locations mínimo (Brasil) se o targeting vier vazio. */
+/**
+ * Normaliza o targeting pros requisitos atuais do Meta:
+ *  - geo_locations mínimo (Brasil) se vier vazio;
+ *  - targeting_automation.advantage_audience explícito (0/1) — o Meta passou
+ *    a EXIGIR a flag de público Advantage. 0 = respeita o público definido
+ *    (não expande automaticamente). Só seta se o caller não definiu.
+ */
 function normalizeTargeting(t: Record<string, unknown>): Record<string, unknown> {
   const targeting = { ...(t ?? {}) };
   if (!targeting.geo_locations) {
     targeting.geo_locations = { countries: ['BR'] };
+  }
+  if (targeting.targeting_automation === undefined) {
+    targeting.targeting_automation = { advantage_audience: 0 };
   }
   return targeting;
 }
