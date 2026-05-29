@@ -98,7 +98,12 @@ export class MetaPublishService {
     const copiesWithHash = await this.ensureImageHashes(token, accountId, comp.ad_copies);
 
     // 2. Campaign
-    const campaignId = await this.createCampaign(token, accountId, comp);
+    let campaignId: string;
+    try {
+      campaignId = await this.createCampaign(token, accountId, comp);
+    } catch (err) {
+      throw this.toHttpError(err);
+    }
 
     // 3. Ad Set
     let adsetId: string;
@@ -215,6 +220,9 @@ export class MetaPublishService {
       objective: mapObjective(comp.objective),
       status: 'PAUSED',
       special_ad_categories: comp.special_ad_categories ?? [],
+      // Orçamento fica no ad set (não usamos CBO). O Meta exige declarar
+      // explicitamente que os ad sets NÃO compartilham orçamento.
+      is_adset_budget_sharing_enabled: false,
       access_token: token,
     });
     if (!json.id) throw new Error('Meta não retornou id da campaign');
