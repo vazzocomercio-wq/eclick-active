@@ -22,6 +22,7 @@ import { MetaLeadAdsController } from './webhooks/meta-lead.controller';
 import { AdCompositionsController } from './publish/ad-compositions.controller';
 import { AdCompositionsService } from './publish/ad-compositions.service';
 import { MetaPublishService } from './publish/meta-publish.service';
+import { AdComplianceService } from './publish/ad-compliance.service';
 
 /**
  * Módulo de Ads — Blocos B + C + E + G do Active Intelligence.
@@ -54,6 +55,7 @@ import { MetaPublishService } from './publish/meta-publish.service';
   providers: [
     AdIntegrationsService,
     MetaPublishService,
+    AdComplianceService,
     AdCompositionsService,
     AdsSyncService,
     AdsSyncWorker,

@@ -94,6 +94,15 @@ export class AdCompositionsController {
     await this.service.archive(user.org_id, id);
   }
 
+  /** Roda o validador anti-reprovação sem publicar (UI mostra os avisos). */
+  @Post(':id/validate')
+  validate(
+    @CurrentUser() user: AuthUser,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
+    return this.service.validate(user.org_id, id);
+  }
+
   /** Publica no Meta (cria Campaign+AdSet+Ads PAUSED). */
   @Post(':id/publish')
   publish(

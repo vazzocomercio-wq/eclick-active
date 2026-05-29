@@ -9,6 +9,8 @@ import { SupabaseService } from '../../../common/supabase/supabase.service';
 import { LlmService } from '../../../common/llm/llm.service';
 import { AdIntegrationsService } from '../ad-integrations.service';
 import { MetaPublishService } from './meta-publish.service';
+import { AdComplianceService, type ComplianceResult } from './ad-compliance.service';
+import { TEXT_LIMITS } from './meta-ad-specs';
 import type {
   AdComposition,
   AdCopy,
@@ -75,7 +77,14 @@ export class AdCompositionsService {
     private readonly llm: LlmService,
     private readonly integrations: AdIntegrationsService,
     private readonly publisher: MetaPublishService,
+    private readonly compliance: AdComplianceService,
   ) {}
+
+  /** Roda o validador anti-reprovação sem publicar (UI mostra antes). */
+  async validate(orgId: string, id: string): Promise<ComplianceResult> {
+    const comp = await this.get(orgId, id);
+    return this.compliance.check(comp);
+  }
 
   // ────────────────────────────────────────────
   // CRUD
@@ -292,6 +301,21 @@ export class AdCompositionsService {
       throw new BadRequestException(`Não dá pra publicar uma composição com status "${comp.status}".`);
     }
 
+    // Porteiro anti-reprovação: bloqueia violações HARD antes de tocar no Meta.
+    const compliance = this.compliance.check(comp);
+    if (!compliance.ok) {
+      const msg = compliance.hard.map((i) => i.message).join(' | ');
+      await this.supabase.adminClient
+        .from('ad_compositions')
+        .update({ status: 'failed', last_error: `Conformidade Meta: ${msg}`.slice(0, 500) })
+        .eq('org_id', orgId)
+        .eq('id', id);
+      throw new BadRequestException(`Bloqueado por conformidade Meta: ${msg}`);
+    }
+    if (compliance.soft.length) {
+      this.logger.warn(`[publish] avisos de conformidade comp=${id}: ${compliance.soft.map((i) => i.code).join(',')}`);
+    }
+
     await this.setStatus(orgId, id, 'publishing');
 
     try {
@@ -410,9 +434,20 @@ function buildSystemPrompt(): string {
     'Você é um especialista em Meta Ads (Facebook/Instagram) para e-commerce brasileiro.',
     'Receba um produto e gere uma campanha COMPLETA, pronta para revisão e publicação.',
     '',
-    'Regras:',
-    '- Português do Brasil, copy direto e persuasivo, respeitando limites do Meta',
-    '  (headline ~40 chars, primary_text até ~125 chars antes do "ver mais").',
+    'LIMITES DE TEXTO (obrigatório respeitar — senão trunca):',
+    `- headline: até ${TEXT_LIMITS.headline.recommended} caracteres (NUNCA passe de ${TEXT_LIMITS.headline.hard}).`,
+    `- primary_text: até ${TEXT_LIMITS.primary_text.recommended} caracteres (a parte forte nos primeiros 125).`,
+    `- description: até ${TEXT_LIMITS.description.hard} caracteres.`,
+    '',
+    'POLÍTICA DO META (evitar reprovação — CRÍTICO):',
+    '- NUNCA insinue atributos pessoais do usuário (peso, saúde, dívida, idade, religião,',
+    '  relacionamento). É a causa #1 de reprovação. ERRADO: "Você está acima do peso?".',
+    '  CERTO: foque no BENEFÍCIO do produto, em 2ª/3ª pessoa neutra.',
+    '- Sem garantias/promessas exageradas ("100% garantido", "cura", "milagre"), sem',
+    '  antes/depois corporal, sem CAPS-LOCK excessivo ou !!! em excesso.',
+    '',
+    'Regras gerais:',
+    '- Português do Brasil, copy direto e persuasivo.',
     '- Gere 3 variações (A/B/C) com ângulos psicológicos DISTINTOS (ex: prova social,',
     '  escassez, benefício prático).',
     '- CTA válido do Meta: SHOP_NOW, LEARN_MORE, SIGN_UP, ORDER_NOW, GET_OFFER.',
