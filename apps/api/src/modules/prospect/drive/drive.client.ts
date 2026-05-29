@@ -260,6 +260,39 @@ export class DriveClient {
   }
 
   /**
+   * Cria sub-pasta dentro do lake (idempotente — retorna ID se já existe).
+   * Útil pra organizar dumps por fonte: `receita/`, `gov-federal/`, `bec-sp/`...
+   */
+  async ensureSubfolder(name: string, parentId?: string): Promise<string> {
+    const token = await this.getAccessToken();
+    const parent = parentId ?? this.resolveLakeFolderId();
+    const q = encodeURIComponent(
+      `'${parent}' in parents and name='${name}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+    );
+    const findRes = await fetch(`${DRIVE_API}/files?q=${q}&fields=files(id)`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (findRes.ok) {
+      const { files } = (await findRes.json()) as { files: Array<{ id: string }> };
+      if (files.length > 0) return files[0]!.id;
+    }
+    const createRes = await fetch(`${DRIVE_API}/files?fields=id`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name,
+        parents: [parent],
+        mimeType: 'application/vnd.google-apps.folder',
+      }),
+    });
+    if (!createRes.ok) {
+      const text = await createRes.text().catch(() => '');
+      throw new InternalServerErrorException(`Drive mkdir falhou: ${createRes.status} ${text.slice(0, 200)}`);
+    }
+    return ((await createRes.json()) as { id: string }).id;
+  }
+
+  /**
    * Debug: lista TUDO que a SA enxerga (sem filtro de parents).
    * Útil pra confirmar se a SA tem acesso a alguma pasta (e qual o ID real).
    */
