@@ -117,23 +117,24 @@ export class MetaPublishService {
 
     // 4. Ads (1 por variant). Tolera falha parcial — registra os que entraram.
     const adIds: string[] = [];
+    const adErrors: string[] = [];
     for (const copy of copiesWithHash) {
       try {
         const id = await this.createAd(token, accountId, comp, adsetId, copy);
         adIds.push(id);
       } catch (err) {
-        this.logger.warn(
-          `[publish] ad variant ${copy.variant} falhou: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        const m = err instanceof Error ? err.message : String(err);
+        adErrors.push(`var ${copy.variant}: ${m}`);
+        this.logger.warn(`[publish] ad variant ${copy.variant} falhou: ${m}`);
       }
     }
 
     if (adIds.length === 0) {
-      // Nenhum anúncio criou — limpa campaign+adset e falha.
+      // Nenhum anúncio criou — limpa campaign+adset e falha COM o motivo real do Meta.
       await this.safeDelete(token, adsetId);
       await this.safeDelete(token, campaignId);
       throw new BadRequestException(
-        'Nenhum anúncio pôde ser criado no Meta — verifique imagem, copy e a Página selecionada.',
+        `Nenhum anúncio criado no Meta. Motivo: ${adErrors[0] ?? 'desconhecido — verifique imagem, copy e a Página.'}`,
       );
     }
 
