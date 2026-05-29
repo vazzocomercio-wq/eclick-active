@@ -285,9 +285,11 @@ export class MetaPublishService {
       page_id: comp.page_id,
       link_data: linkData,
     };
-    if (comp.instagram_actor_id) {
-      objectStorySpec.instagram_actor_id = comp.instagram_actor_id;
-    }
+    // NOTA: NÃO enviamos instagram_actor_id no Onda 1. O id de
+    // instagram_business_account vindo de /me/accounts NÃO é o "actor id"
+    // que o creative espera (Graph recusa com #100). As placements do IG
+    // ainda são servidas via a Página conectada. Controle explícito do
+    // ator IG (lookup em /act_x/instagram_accounts) fica pra onda futura.
 
     const json = await this.httpPost<{ id?: string }>(`${GRAPH}/${accountId}/ads`, {
       name: `${comp.name} — var ${copy.variant}`,
