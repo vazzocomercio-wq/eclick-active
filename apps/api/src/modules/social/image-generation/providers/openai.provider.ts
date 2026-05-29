@@ -8,15 +8,15 @@ import type {
 } from '../image-generation.types';
 
 /**
- * Provider OpenAI Images — DALL·E 3.
+ * Provider OpenAI Images — gpt-image-1 (sucessor do dall-e-3, retirado em 2026).
  * Disponível quando `OPENAI_API_KEY` resolvível (BYOK ou platform).
  *
- * DALL·E 3 só aceita tamanhos fixos (1024x1024, 1024x1792, 1792x1024).
+ * gpt-image-1 só aceita tamanhos fixos (1024x1024, 1024x1536, 1536x1024).
  * O blog (e outras features) podem pedir qualquer tamanho — então:
- *   1) Escolhemos o tamanho DALL·E válido com aspect ratio mais próximo.
+ *   1) Escolhemos o tamanho válido com aspect ratio mais próximo.
  *   2) Após gerar, recortamos com sharp pro width/height solicitado.
  *
- * Sem esse normalizador, qualquer pedido fora de 1024/1792 retorna 400 →
+ * Sem esse normalizador, qualquer pedido fora dos 3 tamanhos retorna 400 →
  * a chain cai no PlaceholderImageProvider (que escreve o prompt como texto
  * em SVG sobre gradiente — visual quebrado).
  */
@@ -43,10 +43,11 @@ export class OpenAIImageProvider implements ImageProvider {
 
     const targetW = input.width ?? 1024;
     const targetH = input.height ?? 1024;
-    const dalleSize = pickDalleSize(targetW, targetH);
+    const apiSize = pickImageSize(targetW, targetH);
 
-    // Reforça cores da marca no prompt + impede texto na imagem
-    const enrichedPrompt = `${input.prompt}\n\nEstilo: cores principais ${input.primaryColor} e ${input.secondaryColor}, design profissional, alta qualidade, sem texto na imagem, sem letras.`;
+    // Reforça cores da marca no prompt + impede texto na imagem.
+    // gpt-image-1 é bem mais sensível a esses prompts negativos que o dall-e-3.
+    const enrichedPrompt = `${input.prompt}\n\nEstilo: cores principais ${input.primaryColor} e ${input.secondaryColor}, design profissional, alta qualidade, sem texto na imagem, sem letras, sem palavras.`;
 
     try {
       const res = await fetch('https://api.openai.com/v1/images/generations', {
@@ -56,12 +57,11 @@ export class OpenAIImageProvider implements ImageProvider {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'dall-e-3',
+          model: 'gpt-image-1',
           prompt: enrichedPrompt.slice(0, 4000),
           n: 1,
-          size: dalleSize.label,
-          // OpenAI deprecou response_format pra dall-e-3 — agora só retorna
-          // URL temporária (~1h). Mantemos sem response_format e baixamos.
+          size: apiSize.label,
+          // gpt-image-1 retorna sempre b64_json por default — sem response_format.
         }),
       });
       if (!res.ok) {
@@ -84,7 +84,7 @@ export class OpenAIImageProvider implements ImageProvider {
       // Crop pro tamanho solicitado (cover fit, centralizado).
       // Se o aspect já bate (ex: pediu 1024x1024 e gerou 1024x1024), sharp
       // só re-encoda em PNG e segue. Sem isso, a capa do blog viria
-      // 1792x1024 quando o consumer pediu 1200x630.
+      // 1536x1024 quando o consumer pediu 1200x630.
       const finalBuffer = await sharp(raw)
         .resize(targetW, targetH, { fit: 'cover', position: 'centre' })
         .png({ quality: 92 })
@@ -106,19 +106,19 @@ export class OpenAIImageProvider implements ImageProvider {
 }
 
 /**
- * DALL·E 3 só aceita 3 tamanhos. Escolhemos o que tem aspect ratio mais
+ * gpt-image-1 só aceita 3 tamanhos. Escolhemos o que tem aspect ratio mais
  * próximo do solicitado, pra perder o mínimo possível no crop.
  *
  *   1024x1024 (1.0)    — quadrado
- *   1792x1024 (~1.75)  — landscape (capa de blog, OG image)
- *   1024x1792 (~0.57)  — portrait (story, reels)
+ *   1536x1024 (~1.5)   — landscape (capa de blog, OG image)
+ *   1024x1536 (~0.67)  — portrait (story, reels)
  */
-function pickDalleSize(w: number, h: number): { w: number; h: number; label: string } {
+function pickImageSize(w: number, h: number): { w: number; h: number; label: string } {
   const want = w / h;
   const options = [
     { w: 1024, h: 1024, label: '1024x1024', ratio: 1.0 },
-    { w: 1792, h: 1024, label: '1792x1024', ratio: 1792 / 1024 },
-    { w: 1024, h: 1792, label: '1024x1792', ratio: 1024 / 1792 },
+    { w: 1536, h: 1024, label: '1536x1024', ratio: 1536 / 1024 },
+    { w: 1024, h: 1536, label: '1024x1536', ratio: 1024 / 1536 },
   ];
   let best = options[0];
   let bestDelta = Math.abs(want - best.ratio);
