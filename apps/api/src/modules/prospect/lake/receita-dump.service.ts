@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SupabaseService } from '../../../common/supabase/supabase.service';
-import { DriveClient } from '../drive/drive.client';
 
 /**
  * Worker do CNPJ Data Lake — DL.2.a (detector + manifest)
@@ -34,6 +33,9 @@ const RECEITA_BASE =
  * Default = token vigente em mai/2026.
  */
 const RECEITA_SHARE_TOKEN = process.env.RECEITA_SHARE_TOKEN ?? 'YggdBLfdninEJX9';
+
+/** Bucket privado do Supabase Storage que guarda manifests + dumps do lake. */
+const LAKE_BUCKET = 'prospect-lake';
 
 /** Arquivos de dados esperados num dump completo (cross-check de cobertura). */
 const DUMP_FILES = [
@@ -85,10 +87,7 @@ export interface ReceitaDumpResult {
 export class ReceitaDumpService {
   private readonly log = new Logger(ReceitaDumpService.name);
 
-  constructor(
-    private readonly supabase: SupabaseService,
-    private readonly drive: DriveClient,
-  ) {}
+  constructor(private readonly supabase: SupabaseService) {}
 
   private get db() {
     return this.supabase.adminClient;
@@ -264,15 +263,24 @@ export class ReceitaDumpService {
         files,
       };
 
-      // 4) Sobe manifest pro Drive na subpasta `receita/`
+      // 4) Sobe manifest pro Supabase Storage (bucket privado `prospect-lake`).
+      //    ⚠️ Por que não o Google Drive? Service Account não tem cota de
+      //    storage própria e não pode SER DONA de arquivos; em conta Gmail
+      //    pessoal (sem Shared Drive, que é recurso Workspace) o upload da SA
+      //    dá 403. A SA até LÊ pasta compartilhada, mas não ESCREVE. Storage
+      //    de objeto do Supabase é separado do Postgres (não "carrega o
+      //    sistema") e funciona com a service_role que já temos.
       const manifestBuffer = Buffer.from(JSON.stringify(manifest, null, 2), 'utf-8');
-      const receitaFolderId = await this.drive.ensureSubfolder('receita');
-      const driveFile = await this.drive.upload(
-        `manifest-${month}.json`,
-        manifestBuffer,
-        'application/json',
-        receitaFolderId,
-      );
+      const storagePath = `receita/manifest-${month}.json`;
+      const { error: upErr } = await this.db.storage
+        .from(LAKE_BUCKET)
+        .upload(storagePath, manifestBuffer, {
+          contentType: 'application/json',
+          upsert: true,
+        });
+      if (upErr) {
+        throw new Error(`Storage upload falhou: ${upErr.message}`);
+      }
 
       // 5) Atualiza run com sucesso
       await this.db
@@ -282,21 +290,21 @@ export class ReceitaDumpService {
           finished_at: new Date().toISOString(),
           rows_processed: 0,
           bytes_uploaded: manifestBuffer.length,
-          drive_file_id: driveFile.id,
-          drive_file_path: `receita/manifest-${month}.json`,
+          drive_file_id: `${LAKE_BUCKET}/${storagePath}`,
+          drive_file_path: storagePath,
         })
         .eq('id', runId);
 
       this.log.log(
         `[receita-dump] DL.2.a OK month=${month} arquivos=${availableCount}/${files.length} ` +
-          `total=${(totalSize / 1024 / 1024 / 1024).toFixed(2)}GB drive=${driveFile.id}`,
+          `total=${(totalSize / 1024 / 1024 / 1024).toFixed(2)}GB storage=${LAKE_BUCKET}/${storagePath}`,
       );
 
       return {
         ok: true,
         month,
-        manifest_drive_file_id: driveFile.id,
-        manifest_web_view_link: driveFile.webViewLink ?? null,
+        manifest_drive_file_id: `${LAKE_BUCKET}/${storagePath}`,
+        manifest_web_view_link: null,
         total_files_available: availableCount,
         total_size_bytes: totalSize,
         total_size_mb: Math.round(totalSize / 1024 / 1024),
