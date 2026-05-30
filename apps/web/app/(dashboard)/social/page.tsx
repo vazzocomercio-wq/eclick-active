@@ -67,6 +67,12 @@ export default function SocialDashboardPage() {
             </Link>
           </Button>
           <Button variant="outline" size="sm" asChild>
+            <Link href="/social/anuncios">
+              <Megaphone className="h-3.5 w-3.5" />
+              <span className="hidden md:inline ml-1">Anúncios</span>
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
             <Link href="/social/live">
               <Radio className="h-3.5 w-3.5" />
               <span className="hidden md:inline ml-1">Live</span>

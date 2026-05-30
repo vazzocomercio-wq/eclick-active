@@ -21,6 +21,38 @@ export type AdCompositionStatus =
   | 'paused'
   | 'archived';
 
+export type AdCreativeFormat = 'image' | 'carousel' | 'video' | 'reels';
+export type AdCreativeSource = 'ai' | 'manual' | 'content';
+
+export interface AdCard {
+  image_url?: string;
+  image_hash?: string;
+  headline?: string;
+  description?: string;
+  link?: string;
+}
+
+export interface AdVideo {
+  url?: string;
+  video_id?: string;
+  thumbnail_url?: string;
+  duration_sec?: number;
+  width?: number;
+  height?: number;
+}
+
+export interface ComplianceIssue {
+  code: string;
+  severity: 'hard' | 'soft';
+  message: string;
+  field?: string;
+}
+export interface ComplianceResult {
+  ok: boolean;
+  hard: ComplianceIssue[];
+  soft: ComplianceIssue[];
+}
+
 export interface AdCopy {
   variant: string;
   headline: string;
@@ -45,6 +77,12 @@ export interface AdComposition {
   objective: AdObjective;
   optimization_goal: string | null;
   status: AdCompositionStatus;
+  creative_format: AdCreativeFormat;
+  creative_source: AdCreativeSource;
+  content_id: string | null;
+  object_story_id: string | null;
+  cards: AdCard[];
+  video: AdVideo | null;
   targeting: Record<string, unknown>;
   budget_daily_cents: number;
   budget_total_cents: number | null;
@@ -135,6 +173,20 @@ export const adsApi = {
 
   generate: (input: GenerateInput) =>
     api.post<AdComposition>('/ad-compositions/generate', input),
+
+  /** Cria anúncio a partir de um conteúdo do Studio (post/carrossel/reel). */
+  fromContent: (input: {
+    integration_id: string;
+    content_id: string;
+    page_id?: string;
+    instagram_actor_id?: string;
+    objective?: AdObjective;
+    destination_url?: string;
+    budget_daily_cents?: number;
+  }) => api.post<AdComposition>('/ad-compositions/from-content', input),
+
+  /** Roda o validador anti-reprovação sem publicar. */
+  validate: (id: string) => api.post<ComplianceResult>(`/ad-compositions/${id}/validate`),
 
   update: (id: string, patch: UpdateInput) =>
     api.patch<AdComposition>(`/ad-compositions/${id}`, patch),

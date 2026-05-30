@@ -25,7 +25,6 @@ import {
   MessageSquare,
   Newspaper,
   Settings,
-  Target,
   TrendingUp,
   UserCog,
   Users,
@@ -94,7 +93,6 @@ const PRIMARY_NAV: NavEntry[] = [
     items: [
       { type: 'item', href: '/calendario-conteudo', icon: CalendarRange, labelKey: 'items.calendarioConteudo', tag: 'AI' },
       { type: 'item', href: '/social',              icon: Megaphone,     labelKey: 'items.social',             tag: 'AI' },
-      { type: 'item', href: '/anuncios',            icon: Target,        labelKey: 'items.anuncios',           tag: 'AI' },
       { type: 'item', href: '/blog-ia',             icon: Newspaper,     labelKey: 'items.blogIa',             tag: 'AI' },
       { type: 'item', href: '/paginas',             icon: Layout,        labelKey: 'items.paginas',            tag: 'AI' },
       { type: 'item', href: '/automacoes',          icon: Zap,           labelKey: 'items.automacoes' },
