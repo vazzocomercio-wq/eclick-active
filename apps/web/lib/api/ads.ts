@@ -158,6 +158,20 @@ export type UpdateInput = Partial<{
 // API
 // ────────────────────────────────────────────
 
+export interface AdMetricsTotals {
+  spend: number; impressions: number; clicks: number; conversions: number;
+  ctr: number; cpc: number; cpa: number;
+}
+export interface AdMetrics {
+  available: boolean;
+  totals: AdMetricsTotals | null;
+  series: Array<{ date: string; spend: number; clicks: number; conversions: number }>;
+}
+export interface AdBreakdownRow {
+  key: string; spend: number; impressions: number; clicks: number; ctr: number; conversions: number;
+}
+export type BreakdownDimension = 'placement' | 'age' | 'gender';
+
 export interface AdAudience {
   id: string;
   integration_id: string;
@@ -212,6 +226,12 @@ export const adsApi = {
   publish: (id: string) => api.post<AdComposition>(`/ad-compositions/${id}/publish`),
   pause: (id: string) => api.post<AdComposition>(`/ad-compositions/${id}/pause`),
   resume: (id: string) => api.post<AdComposition>(`/ad-compositions/${id}/resume`),
+
+  // Desempenho
+  metrics: (id: string, days?: number) =>
+    api.get<AdMetrics>(`/ad-compositions/${id}/metrics`, { query: { days } }),
+  breakdown: (id: string, breakdown: BreakdownDimension, days?: number) =>
+    api.get<AdBreakdownRow[]>(`/ad-compositions/${id}/insights`, { query: { breakdown, days } }),
 
   // Públicos (Custom Audience do CRM + Lookalike)
   audiences: {

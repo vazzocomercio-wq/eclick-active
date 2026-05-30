@@ -10,6 +10,7 @@ import { LlmService } from '../../../common/llm/llm.service';
 import { AdIntegrationsService } from '../ad-integrations.service';
 import { MetaPublishService } from './meta-publish.service';
 import { AdComplianceService, type ComplianceResult, type MediaInfo } from './ad-compliance.service';
+import { MetaInsightsService, type BreakdownDimension, type BreakdownRow } from './meta-insights.service';
 import { TEXT_LIMITS } from './meta-ad-specs';
 import type {
   AdComposition,
@@ -90,7 +91,63 @@ export class AdCompositionsService {
     private readonly integrations: AdIntegrationsService,
     private readonly publisher: MetaPublishService,
     private readonly compliance: AdComplianceService,
+    private readonly insights: MetaInsightsService,
   ) {}
+
+  // ────────────────────────────────────────────
+  // Desempenho (medição) — Onda 3
+  // ────────────────────────────────────────────
+
+  /** Agrega as métricas JÁ sincronizadas (ad_metrics_daily) da campanha. */
+  async metrics(orgId: string, id: string, days = 30): Promise<{
+    available: boolean;
+    totals: { spend: number; impressions: number; clicks: number; conversions: number; ctr: number; cpc: number; cpa: number } | null;
+    series: Array<{ date: string; spend: number; clicks: number; conversions: number }>;
+  }> {
+    const comp = await this.get(orgId, id);
+    const empty = { available: false, totals: null, series: [] as Array<{ date: string; spend: number; clicks: number; conversions: number }> };
+    if (!comp.external_campaign_id) return empty;
+
+    const { data: camps } = await this.supabase.adminClient
+      .from('ad_campaigns')
+      .select('id')
+      .eq('integration_id', comp.integration_id)
+      .eq('external_id', comp.external_campaign_id);
+    const ids = ((camps ?? []) as Array<{ id: string }>).map((c) => c.id);
+    if (!ids.length) return empty;
+
+    const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+    const { data: rows } = await this.supabase.adminClient
+      .from('ad_metrics_daily')
+      .select('date, spend, impressions, clicks, conversions')
+      .in('campaign_id', ids)
+      .gte('date', since)
+      .order('date', { ascending: true });
+
+    const list = (rows ?? []) as Array<{ date: string; spend: number; impressions: number; clicks: number; conversions: number }>;
+    if (!list.length) return empty;
+
+    let spend = 0, impressions = 0, clicks = 0, conversions = 0;
+    const series: Array<{ date: string; spend: number; clicks: number; conversions: number }> = [];
+    for (const r of list) {
+      const s = Number(r.spend) || 0, im = Number(r.impressions) || 0, cl = Number(r.clicks) || 0, cv = Number(r.conversions) || 0;
+      spend += s; impressions += im; clicks += cl; conversions += cv;
+      series.push({ date: r.date, spend: s, clicks: cl, conversions: cv });
+    }
+    const ctr = impressions ? (clicks / impressions) * 100 : 0;
+    const cpc = clicks ? spend / clicks : 0;
+    const cpa = conversions ? spend / conversions : 0;
+    return { available: true, totals: { spend, impressions, clicks, conversions, ctr, cpc, cpa }, series };
+  }
+
+  /** Breakdown ao vivo (posicionamento/idade/gênero) via Graph. */
+  async breakdown(orgId: string, id: string, dimension: BreakdownDimension, days = 30): Promise<BreakdownRow[]> {
+    const comp = await this.get(orgId, id);
+    if (!comp.external_campaign_id) {
+      throw new BadRequestException('Campanha ainda não publicada — sem dados de desempenho.');
+    }
+    return this.insights.fetchBreakdown(orgId, comp.integration_id, comp.external_campaign_id, dimension, days);
+  }
 
   /** Roda o validador anti-reprovação sem publicar (UI mostra antes). */
   async validate(orgId: string, id: string): Promise<ComplianceResult> {

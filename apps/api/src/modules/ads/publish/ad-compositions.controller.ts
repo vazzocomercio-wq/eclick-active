@@ -12,6 +12,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import type { BreakdownDimension } from './meta-insights.service';
 import { AuthGuard } from '../../../common/auth/auth.guard';
 import { CurrentUser } from '../../../common/auth/current-user.decorator';
 import type { AuthUser } from '../../../common/auth/auth.types';
@@ -120,6 +121,27 @@ export class AdCompositionsController {
     @Param('id', new ParseUUIDPipe()) id: string,
   ): Promise<AdComposition> {
     return this.service.publish(user.org_id, id);
+  }
+
+  /** Métricas agregadas (das já sincronizadas) da campanha publicada. */
+  @Get(':id/metrics')
+  metrics(
+    @CurrentUser() user: AuthUser,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query('days') days?: string,
+  ) {
+    return this.service.metrics(user.org_id, id, days ? Number(days) : 30);
+  }
+
+  /** Breakdown ao vivo: ?breakdown=placement|age|gender */
+  @Get(':id/insights')
+  insights(
+    @CurrentUser() user: AuthUser,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query('breakdown') breakdown: BreakdownDimension = 'placement',
+    @Query('days') days?: string,
+  ) {
+    return this.service.breakdown(user.org_id, id, breakdown, days ? Number(days) : 30);
   }
 
   @Post(':id/pause')

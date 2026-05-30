@@ -5,14 +5,17 @@ import Link from 'next/link';
 import {
   ArrowLeft, Megaphone, Sparkles, Loader2, Play, Pause, Trash2, Rocket,
   CheckCircle2, AlertTriangle, ExternalLink, RefreshCw, ChevronDown, ChevronUp,
-  Images, Film, ImageIcon, LayoutGrid, Users, UserPlus, Copy,
+  Images, Film, ImageIcon, LayoutGrid, Users, UserPlus, Copy, BarChart3,
 } from 'lucide-react';
 import {
   adsApi,
   type AdAudience,
+  type AdBreakdownRow,
   type AdComposition,
   type AdIntegration,
+  type AdMetrics,
   type AdObjective,
+  type BreakdownDimension,
   type MetaPage,
 } from '@/lib/api/ads';
 import { socialApi, type SocialContent } from '@/lib/api/social';
@@ -58,6 +61,80 @@ function StatusPill({ status }: { status: string }) {
     <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium', s.cls)}>
       {s.label}
     </span>
+  );
+}
+
+function MetricsPanel({ compId }: { compId: string }) {
+  const [m, setM] = useState<AdMetrics | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [dim, setDim] = useState<BreakdownDimension | null>(null);
+  const [rows, setRows] = useState<AdBreakdownRow[]>([]);
+  const [bdLoading, setBdLoading] = useState(false);
+  const [bdErr, setBdErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    adsApi.metrics(compId)
+      .then((r) => { if (!cancelled) setM(r); })
+      .catch(() => { if (!cancelled) setM(null); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [compId]);
+
+  const loadBreakdown = async (d: BreakdownDimension) => {
+    setDim(d); setBdLoading(true); setBdErr(null);
+    try { setRows(await adsApi.breakdown(compId, d)); }
+    catch (e) { setBdErr(e instanceof ApiError ? e.message : 'Falha ao carregar.'); setRows([]); }
+    finally { setBdLoading(false); }
+  };
+
+  const fmtN = (n: number) => Math.round(n).toLocaleString('pt-BR');
+  if (loading) return <div className="py-3 text-center"><Loader2 className="mx-auto h-4 w-4 animate-spin text-muted-foreground" /></div>;
+  if (!m?.available || !m.totals) {
+    return <p className="text-xs text-muted-foreground">Sem dados ainda — as métricas aparecem algumas horas depois de ativar a campanha no Meta (o sync é horário).</p>;
+  }
+  const t = m.totals;
+  const cells: Array<[string, string]> = [
+    ['Gasto', brl(Math.round(t.spend * 100))],
+    ['Impressões', fmtN(t.impressions)],
+    ['Cliques', fmtN(t.clicks)],
+    ['CTR', `${t.ctr.toFixed(2)}%`],
+    ['CPC', brl(Math.round(t.cpc * 100))],
+    ['Conversões', fmtN(t.conversions)],
+  ];
+  return (
+    <div>
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+        {cells.map(([label, val]) => (
+          <div key={label} className="rounded-lg border border-border p-2 text-center">
+            <div className="text-[10px] text-muted-foreground">{label}</div>
+            <div className="text-sm font-semibold">{val}</div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+        <span className="text-xs text-muted-foreground">Ver por:</span>
+        {(['placement', 'age', 'gender'] as BreakdownDimension[]).map((d) => (
+          <Button key={d} size="sm" variant={dim === d ? 'default' : 'outline'} onClick={() => void loadBreakdown(d)} disabled={bdLoading}>
+            {d === 'placement' ? 'Posicionamento' : d === 'age' ? 'Idade' : 'Gênero'}
+          </Button>
+        ))}
+      </div>
+      {bdLoading && <div className="py-2"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>}
+      {bdErr && <p className="mt-2 text-xs text-red-600">{bdErr}</p>}
+      {!bdLoading && dim && rows.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {rows.map((r) => (
+            <li key={r.key} className="flex items-center justify-between rounded border border-border px-2 py-1 text-xs">
+              <span className="font-medium capitalize">{r.key}</span>
+              <span className="text-muted-foreground">{brl(Math.round(r.spend * 100))} · {r.ctr.toFixed(2)}% CTR · {fmtN(r.conversions)} conv</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {!bdLoading && dim && rows.length === 0 && !bdErr && <p className="mt-2 text-xs text-muted-foreground">Sem dados pra esse recorte ainda.</p>}
+    </div>
   );
 }
 
@@ -550,6 +627,13 @@ export default function AnunciosPage() {
                                 <a className="inline-flex items-center gap-1 text-violet-600 underline" href={`https://www.facebook.com/adsmanager/manage/campaigns?act=${c.ad_account_id.replace('act_', '')}&selected_campaign_ids=${c.external_campaign_id}`} target="_blank" rel="noreferrer">Abrir no Meta <ExternalLink className="h-3 w-3" /></a>
                               )}
                             </div>
+
+                            {c.external_campaign_id && (
+                              <div className="mb-3 rounded-lg bg-muted/40 p-3">
+                                <h4 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground"><BarChart3 className="h-3.5 w-3.5" /> Desempenho (30 dias)</h4>
+                                <MetricsPanel compId={c.id} />
+                              </div>
+                            )}
 
                             <div className="flex flex-wrap items-center gap-2">
                               {!c.external_campaign_id && c.status !== 'publishing' && (
