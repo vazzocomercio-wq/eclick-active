@@ -23,6 +23,9 @@ import { AdCompositionsController } from './publish/ad-compositions.controller';
 import { AdCompositionsService } from './publish/ad-compositions.service';
 import { MetaPublishService } from './publish/meta-publish.service';
 import { AdComplianceService } from './publish/ad-compliance.service';
+import { AdAudiencesController } from './publish/ad-audiences.controller';
+import { AdAudiencesService } from './publish/ad-audiences.service';
+import { MetaAudienceService } from './publish/meta-audience.service';
 
 /**
  * Módulo de Ads — Blocos B + C + E + G do Active Intelligence.
@@ -51,12 +54,15 @@ import { AdComplianceService } from './publish/ad-compliance.service';
     AdSignalsController,
     MetaLeadAdsController,
     AdCompositionsController,
+    AdAudiencesController,
   ],
   providers: [
     AdIntegrationsService,
     MetaPublishService,
     AdComplianceService,
     AdCompositionsService,
+    MetaAudienceService,
+    AdAudiencesService,
     AdsSyncService,
     AdsSyncWorker,
     MetaConnector,
