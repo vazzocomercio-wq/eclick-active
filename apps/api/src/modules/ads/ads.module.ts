@@ -78,6 +78,7 @@ import { AdAutopilotService } from './publish/ad-autopilot.service';
     SignalDetectorService,
     SignalDetectorWorker,
     AdLeadsService,
+    AdAutopilotService,
   ],
   exports: [
     AdIntegrationsService,
