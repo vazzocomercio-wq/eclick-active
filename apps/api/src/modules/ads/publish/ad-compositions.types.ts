@@ -17,6 +17,9 @@ export type AdCompositionStatus =
   | 'paused'
   | 'archived';
 
+export type AdCreativeFormat = 'image' | 'carousel' | 'video' | 'reels';
+export type AdCreativeSource = 'ai' | 'manual' | 'content';
+
 export interface AdCopy {
   /** 'A' | 'B' | 'C' */
   variant: string;
@@ -33,6 +36,27 @@ export interface AdCopy {
   image_hash?: string;
 }
 
+/** Card de carrossel. */
+export interface AdCard {
+  image_url?: string;
+  image_hash?: string;
+  headline?: string;
+  description?: string;
+  /** link próprio do card (senão usa destination_url). */
+  link?: string;
+}
+
+/** Vídeo do anúncio (reels/feed). */
+export interface AdVideo {
+  url?: string;
+  /** id no Meta após upload em /advideos. */
+  video_id?: string;
+  thumbnail_url?: string;
+  duration_sec?: number;
+  width?: number;
+  height?: number;
+}
+
 export interface AdComposition {
   id: string;
   org_id: string;
@@ -46,6 +70,16 @@ export interface AdComposition {
   objective: AdObjective;
   optimization_goal: string | null;
   status: AdCompositionStatus;
+  creative_format: AdCreativeFormat;
+  creative_source: AdCreativeSource;
+  /** ref. solta ao social_content reusado. */
+  content_id: string | null;
+  /** post FB já publicado (page_post_id) p/ promover como anúncio. */
+  object_story_id: string | null;
+  /** carrossel. */
+  cards: AdCard[];
+  /** vídeo/reels. */
+  video: AdVideo | null;
   targeting: Record<string, unknown>;
   budget_daily_cents: number;
   budget_total_cents: number | null;

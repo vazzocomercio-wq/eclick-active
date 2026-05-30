@@ -9,18 +9,20 @@ import { SupabaseService } from '../../../common/supabase/supabase.service';
 import { LlmService } from '../../../common/llm/llm.service';
 import { AdIntegrationsService } from '../ad-integrations.service';
 import { MetaPublishService } from './meta-publish.service';
-import { AdComplianceService, type ComplianceResult } from './ad-compliance.service';
+import { AdComplianceService, type ComplianceResult, type MediaInfo } from './ad-compliance.service';
 import { TEXT_LIMITS } from './meta-ad-specs';
 import type {
   AdComposition,
   AdCopy,
+  AdCreativeFormat,
   AdObjective,
   MetaPage,
 } from './ad-compositions.types';
 
 const SELECT_COLS =
   'id, org_id, integration_id, platform, ad_account_id, page_id, instagram_actor_id, ' +
-  'product_ref, name, objective, optimization_goal, status, targeting, budget_daily_cents, ' +
+  'product_ref, name, objective, optimization_goal, status, creative_format, creative_source, ' +
+  'content_id, object_story_id, cards, video, targeting, budget_daily_cents, ' +
   'budget_total_cents, duration_days, bid_strategy, bid_amount_cents, special_ad_categories, ' +
   'ad_copies, destination_url, utm_params, external_campaign_id, external_adset_id, ' +
   'external_ad_ids, published_at, last_error, generation_metadata, created_by, created_at, updated_at';
@@ -42,6 +44,16 @@ export interface CreateCompositionDto {
   ad_copies?: AdCopy[];
   destination_url?: string;
   utm_params?: Record<string, string>;
+}
+
+export interface FromContentDto {
+  integration_id: string;
+  content_id: string;
+  page_id?: string;
+  instagram_actor_id?: string;
+  objective?: AdObjective;
+  destination_url?: string;
+  budget_daily_cents?: number;
 }
 
 export interface GenerateCompositionDto {
@@ -83,7 +95,23 @@ export class AdCompositionsService {
   /** Roda o validador anti-reprovação sem publicar (UI mostra antes). */
   async validate(orgId: string, id: string): Promise<ComplianceResult> {
     const comp = await this.get(orgId, id);
-    return this.compliance.check(comp);
+    if (comp.object_story_id) return { ok: true, hard: [], soft: [] };
+    return this.compliance.check(comp, {
+      format: comp.creative_format,
+      media: this.assembleMediaInfo(comp),
+    });
+  }
+
+  /** Monta os metadados de mídia pro validador, por formato. */
+  private assembleMediaInfo(comp: AdComposition): MediaInfo[] {
+    if (comp.creative_format === 'carousel') {
+      return (comp.cards ?? []).map((c) => ({ url: c.image_url }));
+    }
+    if (comp.creative_format === 'video' || comp.creative_format === 'reels') {
+      const v = comp.video;
+      return v ? [{ url: v.url, duration_sec: v.duration_sec, width: v.width, height: v.height }] : [];
+    }
+    return (comp.ad_copies ?? []).map((c) => ({ url: c.image_url }));
   }
 
   // ────────────────────────────────────────────
@@ -289,6 +317,103 @@ export class AdCompositionsService {
   }
 
   // ────────────────────────────────────────────
+  // Reuso de conteúdo do Studio (post/carrossel/reel → anúncio)
+  // ────────────────────────────────────────────
+
+  async fromContent(
+    orgId: string,
+    userId: string,
+    dto: FromContentDto,
+  ): Promise<AdComposition> {
+    const integ = await this.resolveIntegration(orgId, dto.integration_id);
+
+    const { data: content, error } = await this.supabase.adminClient
+      .from('social_contents')
+      .select('id, content_type, title, caption, cta, media, cover_image_url, slides, related_product_id')
+      .eq('org_id', orgId)
+      .eq('id', dto.content_id)
+      .maybeSingle();
+    if (error) throw new InternalServerErrorException(error.message);
+    if (!content) throw new NotFoundException('Conteúdo não encontrado.');
+
+    const c = content as {
+      id: string;
+      content_type: string;
+      title: string | null;
+      caption: string | null;
+      cta: string | null;
+      media: Array<{ url: string; thumbnail_url?: string; width?: number; height?: number }> | null;
+      cover_image_url: string | null;
+      slides: Array<{ image_url?: string | null; title?: string; subtitle?: string }> | null;
+      related_product_id: string | null;
+    };
+
+    const format = mapContentTypeToFormat(c.content_type);
+    const headline = (c.title ?? c.caption ?? 'Confira').slice(0, 40);
+    const primaryText = c.caption ?? c.title ?? '';
+    const baseCopy: AdCopy = { variant: 'A', headline, primary_text: primaryText, cta: 'SHOP_NOW' };
+
+    const insert: Record<string, unknown> = {
+      org_id: orgId,
+      integration_id: dto.integration_id,
+      platform: 'meta',
+      ad_account_id: integ.ad_account_id,
+      page_id: dto.page_id ?? null,
+      instagram_actor_id: dto.instagram_actor_id ?? null,
+      product_ref: c.related_product_id,
+      name: `${headline.slice(0, 60)} — ${format}`,
+      objective: dto.objective ?? 'traffic',
+      creative_format: format,
+      creative_source: 'content',
+      content_id: c.id,
+      destination_url: dto.destination_url ?? null,
+      budget_daily_cents: dto.budget_daily_cents ?? 3000,
+      duration_days: 7,
+      bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+      special_ad_categories: [],
+      status: 'draft',
+      generation_metadata: { source: 'content', content_type: c.content_type },
+      created_by: userId,
+    };
+
+    if (format === 'carousel') {
+      const cards = (c.slides ?? [])
+        .filter((s) => s.image_url)
+        .map((s) => ({ image_url: s.image_url!, headline: s.title, description: s.subtitle }));
+      if (cards.length < 2) {
+        throw new BadRequestException('Este conteúdo não tem cards suficientes (mín. 2) pra um carrossel.');
+      }
+      insert.cards = cards.slice(0, 10);
+      insert.ad_copies = [baseCopy];
+    } else if (format === 'reels' || format === 'video') {
+      const videoUrl =
+        (c.media ?? []).find((m) => /\.(mp4|mov|m4v|webm)(\?|$)/i.test(m.url))?.url ?? c.media?.[0]?.url;
+      if (!videoUrl) throw new BadRequestException('Este conteúdo não tem vídeo pra anunciar.');
+      const m0 = c.media?.[0];
+      insert.video = {
+        url: videoUrl,
+        thumbnail_url: c.cover_image_url ?? m0?.thumbnail_url ?? null,
+        width: m0?.width ?? null,
+        height: m0?.height ?? null,
+      };
+      insert.ad_copies = [baseCopy];
+    } else {
+      // image
+      const img = c.cover_image_url ?? c.media?.[0]?.url;
+      if (!img) throw new BadRequestException('Este conteúdo não tem imagem pra anunciar.');
+      insert.ad_copies = [{ ...baseCopy, image_url: img }];
+    }
+
+    const { data, error: insErr } = await this.supabase.adminClient
+      .from('ad_compositions')
+      .insert(insert)
+      .select(SELECT_COLS)
+      .single();
+    if (insErr || !data) throw new InternalServerErrorException(insErr?.message ?? 'Falha ao criar do conteúdo');
+    return data as unknown as AdComposition;
+  }
+
+  // ────────────────────────────────────────────
   // Publicação / pause / resume
   // ────────────────────────────────────────────
 
@@ -302,18 +427,24 @@ export class AdCompositionsService {
     }
 
     // Porteiro anti-reprovação: bloqueia violações HARD antes de tocar no Meta.
-    const compliance = this.compliance.check(comp);
-    if (!compliance.ok) {
-      const msg = compliance.hard.map((i) => i.message).join(' | ');
-      await this.supabase.adminClient
-        .from('ad_compositions')
-        .update({ status: 'failed', last_error: `Conformidade Meta: ${msg}`.slice(0, 500) })
-        .eq('org_id', orgId)
-        .eq('id', id);
-      throw new BadRequestException(`Bloqueado por conformidade Meta: ${msg}`);
-    }
-    if (compliance.soft.length) {
-      this.logger.warn(`[publish] avisos de conformidade comp=${id}: ${compliance.soft.map((i) => i.code).join(',')}`);
+    // (Promover post já publicado pula — o post já passou pela régua do Meta.)
+    if (!comp.object_story_id) {
+      const compliance = this.compliance.check(comp, {
+        format: comp.creative_format,
+        media: this.assembleMediaInfo(comp),
+      });
+      if (!compliance.ok) {
+        const msg = compliance.hard.map((i) => i.message).join(' | ');
+        await this.supabase.adminClient
+          .from('ad_compositions')
+          .update({ status: 'failed', last_error: `Conformidade Meta: ${msg}`.slice(0, 500) })
+          .eq('org_id', orgId)
+          .eq('id', id);
+        throw new BadRequestException(`Bloqueado por conformidade Meta: ${msg}`);
+      }
+      if (compliance.soft.length) {
+        this.logger.warn(`[publish] avisos de conformidade comp=${id}: ${compliance.soft.map((i) => i.code).join(',')}`);
+      }
     }
 
     await this.setStatus(orgId, id, 'publishing');
@@ -427,6 +558,22 @@ interface GeneratedCampaign {
     cta?: string;
     angle?: string;
   }>;
+}
+
+/** social_contents.content_type → formato de anúncio Meta. */
+function mapContentTypeToFormat(ct: string): AdCreativeFormat {
+  switch (ct) {
+    case 'carousel':
+      return 'carousel';
+    case 'reel':
+    case 'vsl':
+    case 'ugc':
+    case 'tiktok':
+    case 'story':
+      return 'reels';
+    default:
+      return 'image'; // post
+  }
 }
 
 function buildSystemPrompt(): string {

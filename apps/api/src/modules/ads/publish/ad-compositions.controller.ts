@@ -18,6 +18,7 @@ import type { AuthUser } from '../../../common/auth/auth.types';
 import {
   AdCompositionsService,
   CreateCompositionDto,
+  FromContentDto,
   GenerateCompositionDto,
 } from './ad-compositions.service';
 import type { AdComposition, MetaPage } from './ad-compositions.types';
@@ -74,6 +75,15 @@ export class AdCompositionsController {
     @Body() dto: GenerateCompositionDto,
   ): Promise<AdComposition> {
     return this.service.generate(user.org_id, user.id, dto);
+  }
+
+  /** Cria um anúncio a partir de um conteúdo do Studio (post/carrossel/reel). */
+  @Post('from-content')
+  fromContent(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: FromContentDto,
+  ): Promise<AdComposition> {
+    return this.service.fromContent(user.org_id, user.id, dto);
   }
 
   @Patch(':id')

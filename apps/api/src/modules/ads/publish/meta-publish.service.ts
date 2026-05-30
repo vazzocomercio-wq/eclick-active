@@ -77,27 +77,22 @@ export class MetaPublishService {
    * Tudo PAUSED. Retorna os IDs externos pra persistir.
    */
   async publishComposition(comp: AdComposition): Promise<PublishResult> {
-    if (!comp.page_id) {
+    const format = comp.creative_format ?? 'image';
+    const promoting = !!comp.object_story_id; // promover post já publicado
+
+    if (!promoting && !comp.page_id) {
       throw new BadRequestException(
         'Selecione uma Página do Facebook antes de publicar (o anúncio precisa de uma Página que o assine).',
       );
     }
-    if (!comp.ad_copies?.length) {
-      throw new BadRequestException('A composição não tem nenhum anúncio (copy).');
-    }
-    if (!comp.destination_url) {
-      throw new BadRequestException('Defina a URL de destino do anúncio.');
-    }
+    this.assertCreativePresent(comp, format, promoting);
 
     const token = await this.integrations.getAccessToken(comp.org_id, comp.integration_id);
     const accountId = comp.ad_account_id.startsWith('act_')
       ? comp.ad_account_id
       : `act_${comp.ad_account_id}`;
 
-    // 1. Garante image_hash pra cada copy que tem image_url (upload /adimages).
-    const copiesWithHash = await this.ensureImageHashes(token, accountId, comp.ad_copies);
-
-    // 2. Campaign
+    // 1. Campaign
     let campaignId: string;
     try {
       campaignId = await this.createCampaign(token, accountId, comp);
@@ -105,40 +100,186 @@ export class MetaPublishService {
       throw this.toHttpError(err);
     }
 
-    // 3. Ad Set
+    // 2. Ad Set
     let adsetId: string;
     try {
       adsetId = await this.createAdSet(token, accountId, comp, campaignId);
     } catch (err) {
-      // Rollback best-effort da campaign órfã pra não poluir a conta.
-      await this.safeDelete(token, campaignId);
+      await this.safeDelete(token, campaignId); // rollback campaign órfã
       throw this.toHttpError(err);
     }
 
-    // 4. Ads (1 por variant). Tolera falha parcial — registra os que entraram.
+    // 3. Anúncio(s) — por formato/origem
     const adIds: string[] = [];
     const adErrors: string[] = [];
-    for (const copy of copiesWithHash) {
-      try {
-        const id = await this.createAd(token, accountId, comp, adsetId, copy);
-        adIds.push(id);
-      } catch (err) {
-        const m = err instanceof Error ? err.message : String(err);
-        adErrors.push(`var ${copy.variant}: ${m}`);
-        this.logger.warn(`[publish] ad variant ${copy.variant} falhou: ${m}`);
+    try {
+      if (promoting) {
+        adIds.push(await this.createAdFromStory(token, accountId, comp, adsetId, comp.object_story_id!));
+      } else if (format === 'carousel') {
+        adIds.push(await this.createCarouselAd(token, accountId, comp, adsetId));
+      } else if (format === 'video' || format === 'reels') {
+        adIds.push(await this.createVideoAd(token, accountId, comp, adsetId));
+      } else {
+        // imagem — 1 ad por variante (A/B/C), tolera falha parcial
+        const copiesWithHash = await this.ensureImageHashes(token, accountId, comp.ad_copies);
+        for (const copy of copiesWithHash) {
+          try {
+            adIds.push(await this.createAd(token, accountId, comp, adsetId, copy));
+          } catch (err) {
+            const m = err instanceof Error ? err.message : String(err);
+            adErrors.push(`var ${copy.variant}: ${m}`);
+            this.logger.warn(`[publish] ad variant ${copy.variant} falhou: ${m}`);
+          }
+        }
       }
+    } catch (err) {
+      adErrors.push(err instanceof Error ? err.message : String(err));
     }
 
     if (adIds.length === 0) {
-      // Nenhum anúncio criou — limpa campaign+adset e falha COM o motivo real do Meta.
       await this.safeDelete(token, adsetId);
       await this.safeDelete(token, campaignId);
       throw new BadRequestException(
-        `Nenhum anúncio criado no Meta. Motivo: ${adErrors[0] ?? 'desconhecido — verifique imagem, copy e a Página.'}`,
+        `Nenhum anúncio criado no Meta. Motivo: ${adErrors[0] ?? 'desconhecido — verifique mídia, copy e a Página.'}`,
       );
     }
 
     return { campaign_id: campaignId, adset_id: adsetId, ad_ids: adIds };
+  }
+
+  /** Garante que há criativo pro formato escolhido (pré-Graph). */
+  private assertCreativePresent(comp: AdComposition, format: string, promoting: boolean): void {
+    if (promoting) return; // o post existente já carrega o criativo
+    if (!comp.destination_url) {
+      throw new BadRequestException('Defina a URL de destino do anúncio.');
+    }
+    if (format === 'image' && !comp.ad_copies?.length) {
+      throw new BadRequestException('A composição não tem nenhum anúncio (copy).');
+    }
+    if (format === 'carousel' && (comp.cards?.length ?? 0) < 2) {
+      throw new BadRequestException('Carrossel precisa de ao menos 2 cards.');
+    }
+    if ((format === 'video' || format === 'reels') && !comp.video?.url && !comp.video?.video_id) {
+      throw new BadRequestException('Anúncio de vídeo/Reels precisa de um vídeo.');
+    }
+  }
+
+  // ────────────────────────────────────────────
+  // Builders por formato (Onda 2)
+  // ────────────────────────────────────────────
+
+  /** Promove um post FB já publicado (mantém engajamento). Qualquer formato. */
+  private async createAdFromStory(
+    token: string,
+    accountId: string,
+    comp: AdComposition,
+    adsetId: string,
+    objectStoryId: string,
+  ): Promise<string> {
+    const json = await this.httpPost<{ id?: string }>(`${GRAPH}/${accountId}/ads`, {
+      name: `${comp.name} — post`,
+      adset_id: adsetId,
+      creative: { object_story_id: objectStoryId },
+      status: 'PAUSED',
+      access_token: token,
+    });
+    if (!json.id) throw new Error('Meta não retornou id do ad (promo post)');
+    return json.id;
+  }
+
+  /** Carrossel: 1 ad com N cards (child_attachments). */
+  private async createCarouselAd(
+    token: string,
+    accountId: string,
+    comp: AdComposition,
+    adsetId: string,
+  ): Promise<string> {
+    const copy = comp.ad_copies?.[0];
+    const childAttachments: Array<Record<string, unknown>> = [];
+    for (const card of comp.cards ?? []) {
+      let imageHash = card.image_hash;
+      if (!imageHash && card.image_url) {
+        try {
+          imageHash = await this.uploadImageFromUrl(token, accountId, card.image_url);
+        } catch {
+          /* cai no picture URL */
+        }
+      }
+      const att: Record<string, unknown> = {
+        link: card.link ?? comp.destination_url,
+        name: card.headline ?? copy?.headline ?? '',
+        description: card.description ?? '',
+      };
+      if (imageHash) att.image_hash = imageHash;
+      else if (card.image_url) att.picture = card.image_url;
+      childAttachments.push(att);
+    }
+
+    const linkData: Record<string, unknown> = {
+      link: comp.destination_url,
+      message: copy?.primary_text ?? '',
+      child_attachments: childAttachments,
+      multi_share_optimized: true,
+      multi_share_end_card: true,
+    };
+    if (copy?.cta) linkData.call_to_action = { type: copy.cta };
+
+    const json = await this.httpPost<{ id?: string }>(`${GRAPH}/${accountId}/ads`, {
+      name: `${comp.name} — carrossel`,
+      adset_id: adsetId,
+      creative: { object_story_spec: { page_id: comp.page_id, link_data: linkData } },
+      status: 'PAUSED',
+      access_token: token,
+    });
+    if (!json.id) throw new Error('Meta não retornou id do ad (carrossel)');
+    return json.id;
+  }
+
+  /** Vídeo / Reels: faz upload (se preciso) e cria 1 ad com video_data. */
+  private async createVideoAd(
+    token: string,
+    accountId: string,
+    comp: AdComposition,
+    adsetId: string,
+  ): Promise<string> {
+    const copy = comp.ad_copies?.[0];
+    let videoId = comp.video?.video_id;
+    if (!videoId) {
+      if (!comp.video?.url) throw new Error('vídeo sem URL nem id');
+      videoId = await this.uploadVideoFromUrl(token, accountId, comp.video.url);
+    }
+
+    const videoData: Record<string, unknown> = {
+      video_id: videoId,
+      message: copy?.primary_text ?? '',
+      title: copy?.headline ?? '',
+      call_to_action: {
+        type: copy?.cta ?? 'LEARN_MORE',
+        value: { link: comp.destination_url },
+      },
+    };
+    // Meta exige uma thumbnail pro video_data.
+    if (comp.video?.thumbnail_url) videoData.image_url = comp.video.thumbnail_url;
+
+    const json = await this.httpPost<{ id?: string }>(`${GRAPH}/${accountId}/ads`, {
+      name: `${comp.name} — vídeo`,
+      adset_id: adsetId,
+      creative: { object_story_spec: { page_id: comp.page_id, video_data: videoData } },
+      status: 'PAUSED',
+      access_token: token,
+    });
+    if (!json.id) throw new Error('Meta não retornou id do ad (vídeo)');
+    return json.id;
+  }
+
+  /** Sobe um vídeo via /advideos a partir de uma URL (Meta busca o arquivo). */
+  private async uploadVideoFromUrl(token: string, accountId: string, url: string): Promise<string> {
+    const json = await this.httpPost<{ id?: string }>(`${GRAPH}/${accountId}/advideos`, {
+      file_url: url,
+      access_token: token,
+    });
+    if (!json.id) throw new Error('Meta não retornou id do vídeo (/advideos)');
+    return json.id;
   }
 
   // ────────────────────────────────────────────
