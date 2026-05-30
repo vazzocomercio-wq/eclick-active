@@ -158,6 +158,22 @@ export type UpdateInput = Partial<{
 // API
 // ────────────────────────────────────────────
 
+export interface AdAudience {
+  id: string;
+  integration_id: string;
+  external_audience_id: string | null;
+  name: string;
+  type: 'custom' | 'lookalike';
+  source: string;
+  lookalike_country: string | null;
+  lookalike_ratio: number | null;
+  matched_count: number | null;
+  approximate_count: number | null;
+  status: 'pending' | 'ready' | 'error' | 'archived';
+  last_error: string | null;
+  created_at: string;
+}
+
 export const adsApi = {
   /** Contas de anúncios conectadas (Bloco B). */
   listIntegrations: () => api.get<AdIntegration[]>('/ad-integrations'),
@@ -196,4 +212,14 @@ export const adsApi = {
   publish: (id: string) => api.post<AdComposition>(`/ad-compositions/${id}/publish`),
   pause: (id: string) => api.post<AdComposition>(`/ad-compositions/${id}/pause`),
   resume: (id: string) => api.post<AdComposition>(`/ad-compositions/${id}/resume`),
+
+  // Públicos (Custom Audience do CRM + Lookalike)
+  audiences: {
+    list: () => api.get<AdAudience[]>('/ad-audiences'),
+    fromCrm: (body: { integration_id: string; name?: string }) =>
+      api.post<AdAudience>('/ad-audiences/from-crm', body),
+    lookalike: (body: { integration_id: string; source_audience_id: string; name?: string; country?: string; ratio?: number }) =>
+      api.post<AdAudience>('/ad-audiences/lookalike', body),
+    archive: (id: string) => api.delete<void>(`/ad-audiences/${id}`),
+  },
 };

@@ -5,10 +5,11 @@ import Link from 'next/link';
 import {
   ArrowLeft, Megaphone, Sparkles, Loader2, Play, Pause, Trash2, Rocket,
   CheckCircle2, AlertTriangle, ExternalLink, RefreshCw, ChevronDown, ChevronUp,
-  Images, Film, ImageIcon, LayoutGrid,
+  Images, Film, ImageIcon, LayoutGrid, Users, UserPlus, Copy,
 } from 'lucide-react';
 import {
   adsApi,
+  type AdAudience,
   type AdComposition,
   type AdIntegration,
   type AdObjective,
@@ -93,6 +94,16 @@ export default function AnunciosPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirmPublishId, setConfirmPublishId] = useState<string | null>(null);
 
+  // públicos
+  const [audiences, setAudiences] = useState<AdAudience[]>([]);
+  const [audienceId, setAudienceId] = useState(''); // id local selecionado p/ targeting
+  const [showAudiences, setShowAudiences] = useState(false);
+  const [audienceBusy, setAudienceBusy] = useState(false);
+  const selectedAudienceExtId = useMemo(
+    () => audiences.find((a) => a.id === audienceId)?.external_audience_id ?? null,
+    [audiences, audienceId],
+  );
+
   const metaIntegrations = useMemo(
     () => integrations.filter((i) => i.platform === 'meta' && i.status === 'active'),
     [integrations],
@@ -102,9 +113,14 @@ export default function AnunciosPage() {
     setLoading(true);
     setError(null);
     try {
-      const [ints, list] = await Promise.all([adsApi.listIntegrations(), adsApi.list()]);
+      const [ints, list, auds] = await Promise.all([
+        adsApi.listIntegrations(),
+        adsApi.list(),
+        adsApi.audiences.list().catch(() => [] as AdAudience[]),
+      ]);
       setIntegrations(ints);
       setComps(list.filter((c) => c.status !== 'archived'));
+      setAudiences(auds);
       const firstMeta = ints.find((i) => i.platform === 'meta' && i.status === 'active');
       if (firstMeta && !integrationId) setIntegrationId(firstMeta.id);
     } catch (e) {
@@ -144,6 +160,54 @@ export default function AnunciosPage() {
     return () => { cancelled = true; };
   }, [mode, contents.length]);
 
+  /** Injeta o público selecionado no targeting da composição recém-criada. */
+  const applyAudience = async (c: AdComposition): Promise<AdComposition> => {
+    if (!selectedAudienceExtId) return c;
+    try {
+      const existing = (c.targeting ?? {}) as Record<string, unknown>;
+      return await adsApi.update(c.id, {
+        targeting: { ...existing, custom_audiences: [{ id: selectedAudienceExtId }] },
+      });
+    } catch {
+      return c;
+    }
+  };
+
+  const onCreateAudienceFromCrm = async () => {
+    if (!integrationId) return setError('Selecione uma conta de anúncios.');
+    setAudienceBusy(true); setError(null); setNotice(null);
+    try {
+      const a = await adsApi.audiences.fromCrm({ integration_id: integrationId });
+      setAudiences((prev) => [a, ...prev]);
+      setNotice(`Público "${a.name}" criado com ${a.matched_count ?? 0} contatos. O Meta leva alguns minutos pra processar.`);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Falha ao criar público do CRM.');
+    } finally { setAudienceBusy(false); }
+  };
+
+  const onCreateLookalike = async (source: AdAudience) => {
+    if (!integrationId) return;
+    setAudienceBusy(true); setError(null); setNotice(null);
+    try {
+      const a = await adsApi.audiences.lookalike({ integration_id: integrationId, source_audience_id: source.id });
+      setAudiences((prev) => [a, ...prev]);
+      setNotice(`Lookalike criado a partir de "${source.name}".`);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Falha ao criar lookalike.');
+    } finally { setAudienceBusy(false); }
+  };
+
+  const onArchiveAudience = async (a: AdAudience) => {
+    setAudienceBusy(true);
+    try {
+      await adsApi.audiences.archive(a.id);
+      setAudiences((prev) => prev.filter((x) => x.id !== a.id));
+      if (audienceId === a.id) setAudienceId('');
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Falha ao arquivar público.');
+    } finally { setAudienceBusy(false); }
+  };
+
   const onGenerate = async () => {
     if (!integrationId) return setError('Selecione uma conta de anúncios.');
     if (!prodName.trim()) return setError('Informe o nome do produto.');
@@ -163,8 +227,9 @@ export default function AnunciosPage() {
           image_url: prodImage.trim() || undefined,
         },
       });
-      setComps((prev) => [created, ...prev]);
-      setExpandedId(created.id);
+      const withAud = await applyAudience(created);
+      setComps((prev) => [withAud, ...prev]);
+      setExpandedId(withAud.id);
       setNotice('Rascunho gerado pela IA. Revise antes de publicar.');
       setProdName(''); setProdDesc(''); setProdPrice(''); setProdImage('');
     } catch (e) {
@@ -185,9 +250,10 @@ export default function AnunciosPage() {
         objective,
         destination_url: destUrl.trim() || undefined,
       });
-      setComps((prev) => [created, ...prev]);
-      setExpandedId(created.id);
-      setNotice(`Anúncio (${FORMAT_META[created.creative_format]?.label ?? created.creative_format}) criado a partir do conteúdo. Revise antes de publicar.`);
+      const withAud = await applyAudience(created);
+      setComps((prev) => [withAud, ...prev]);
+      setExpandedId(withAud.id);
+      setNotice(`Anúncio (${fmtMeta(created.creative_format).label}) criado a partir do conteúdo. Revise antes de publicar.`);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Falha ao usar o conteúdo.');
     } finally { setPickingId(null); }
@@ -293,6 +359,63 @@ export default function AnunciosPage() {
                   <input value={destUrl} onChange={(e) => setDestUrl(e.target.value)} placeholder="loja/produto" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
                 </div>
               </div>
+
+              {/* Público + gerenciar */}
+              <div className="mb-4 flex flex-wrap items-end gap-3">
+                <div className="min-w-[240px] flex-1">
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Público (opcional)</label>
+                  <select value={audienceId} onChange={(e) => setAudienceId(e.target.value)} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm">
+                    <option value="">Público amplo (segmentação da IA)</option>
+                    {audiences.filter((a) => a.status === 'ready' && a.external_audience_id).map((a) => (
+                      <option key={a.id} value={a.id}>{a.type === 'lookalike' ? '🔁 ' : '👥 '}{a.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => setShowAudiences((v) => !v)}>
+                  <Users className="mr-1.5 h-4 w-4" /> Gerenciar públicos
+                </Button>
+              </div>
+
+              {/* Painel de Públicos */}
+              {showAudiences && (
+                <div className="mb-6 rounded-xl border border-border bg-card p-4 shadow-sm">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <h2 className="flex items-center gap-2 text-sm font-semibold"><Users className="h-4 w-4 text-violet-600" /> Públicos do CRM</h2>
+                    <Button size="sm" onClick={() => void onCreateAudienceFromCrm()} disabled={audienceBusy}>
+                      {audienceBusy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <UserPlus className="mr-1.5 h-4 w-4" />} Criar do CRM
+                    </Button>
+                  </div>
+                  <p className="mb-3 text-xs text-muted-foreground">Transforme seus contatos (e-mail/telefone) num público do Meta e gere um <strong>Lookalike</strong> pra alcançar gente parecida. Os dados vão hasheados — nada de PII em claro.</p>
+                  {audiences.length === 0 ? (
+                    <p className="py-4 text-center text-sm text-muted-foreground">Nenhum público ainda. Crie o primeiro a partir do seu CRM.</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {audiences.map((a) => (
+                        <li key={a.id} className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="truncate text-sm font-medium">{a.name}</span>
+                              <span className={cn('rounded-full border px-1.5 py-0.5 text-[10px]', a.type === 'lookalike' ? 'border-blue-200 bg-blue-50 text-blue-600' : 'border-violet-200 bg-violet-50 text-violet-600')}>{a.type === 'lookalike' ? 'Lookalike' : 'CRM'}</span>
+                              <span className={cn('rounded-full px-1.5 py-0.5 text-[10px]', a.status === 'ready' ? 'bg-emerald-50 text-emerald-700' : a.status === 'error' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600')}>{a.status === 'ready' ? 'pronto' : a.status === 'error' ? 'erro' : 'processando'}</span>
+                            </div>
+                            <div className="mt-0.5 text-xs text-muted-foreground">
+                              {a.matched_count != null && `${a.matched_count.toLocaleString('pt-BR')} contatos`}
+                              {a.approximate_count != null && ` · ~${a.approximate_count.toLocaleString('pt-BR')} no Meta`}
+                              {a.last_error && <span className="text-red-600"> · {a.last_error}</span>}
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1">
+                            {a.type === 'custom' && a.status === 'ready' && (
+                              <Button size="sm" variant="outline" onClick={() => void onCreateLookalike(a)} disabled={audienceBusy}><Copy className="mr-1 h-3.5 w-3.5" /> Lookalike</Button>
+                            )}
+                            <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-red-600" onClick={() => void onArchiveAudience(a)} disabled={audienceBusy}><Trash2 className="h-3.5 w-3.5" /></Button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
 
               {/* Toggle de modo */}
               <div className="mb-4 inline-flex rounded-lg border border-border p-1">
