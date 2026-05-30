@@ -41,6 +41,7 @@ import { ReEngagementModule } from './modules/re-engagement/re-engagement.module
 import { ReportsModule } from './modules/reports/reports.module';
 import { SacModule } from './modules/sac/sac.module';
 import { SocialModule } from './modules/social/social.module';
+import { StudioCortesModule } from './modules/studio-cortes/studio-cortes.module';
 import { BlogAiModule } from './modules/blog-ai/blog-ai.module';
 import { ProspectModule } from './modules/prospect/prospect.module';
 import { SettingsModule } from './modules/settings/settings.module';
@@ -95,6 +96,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     BridgeModule,
     SacModule,
     SocialModule,
+    StudioCortesModule,
     BlogAiModule,
     ProspectModule,
     AgencyModule,

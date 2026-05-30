@@ -1,0 +1,110 @@
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { AuthGuard } from '../../common/auth/auth.guard';
+import { CurrentUser } from '../../common/auth/current-user.decorator';
+import type { AuthUser } from '../../common/auth/auth.types';
+import { StudioCortesService, type UploadedMaster } from './studio-cortes.service';
+import { StorageJanitorWorker } from './janitor/storage-janitor.worker';
+import type { ClipStatus } from './studio-cortes.types';
+
+@UseGuards(AuthGuard)
+@Controller('studio-cortes')
+export class StudioCortesController {
+  constructor(
+    private readonly service: StudioCortesService,
+    private readonly janitor: StorageJanitorWorker,
+  ) {}
+
+  /** Status de configuração (Drive/provedor) — usado pela UI e pelo smoke. */
+  @Get('config')
+  config() {
+    return this.service.config();
+  }
+
+  // ── Upload ────────────────────────────────────────────────
+
+  @Post('upload')
+  @HttpCode(HttpStatus.CREATED)
+  @UseInterceptors(FileInterceptor('file'))
+  async upload(
+    @CurrentUser() user: AuthUser,
+    @UploadedFile() file: UploadedMaster | undefined,
+    @Body() body: { title?: string },
+  ) {
+    if (!file) throw new BadRequestException('Envie o vídeo no campo "file".');
+    return this.service.createUploadJob(user.org_id, user.id, file, body?.title);
+  }
+
+  // ── Leitura ───────────────────────────────────────────────
+
+  @Get('jobs')
+  listJobs(@CurrentUser() user: AuthUser) {
+    return this.service.listJobs(user.org_id);
+  }
+
+  @Get('board')
+  board(@CurrentUser() user: AuthUser) {
+    return this.service.getBoard(user.org_id);
+  }
+
+  // ── Mutação ───────────────────────────────────────────────
+
+  @Patch('clips/:id/status')
+  setClipStatus(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { status: ClipStatus },
+  ) {
+    return this.service.setClipStatus(user.org_id, id, body.status);
+  }
+
+  @Patch('posts/:id')
+  updatePost(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body()
+    body: {
+      title?: string | null;
+      copy?: string | null;
+      hashtags?: string[];
+      scheduled_at?: string | null;
+      account_id?: string | null;
+    },
+  ) {
+    return this.service.updateClipPost(user.org_id, id, body);
+  }
+
+  @Patch('jobs/:id')
+  updateJob(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { auto_approve?: boolean; title?: string },
+  ) {
+    return this.service.updateJob(user.org_id, id, body);
+  }
+
+  @Post('jobs/:id/regenerate-copy')
+  regenerateCopy(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.service.regenerateCopy(user.org_id, id);
+  }
+
+  /** Roda o Janitor manualmente pra org do usuário (smoke / on-demand). */
+  @Post('janitor/run')
+  runJanitor(@CurrentUser() user: AuthUser) {
+    return this.janitor.runForOrg(user.org_id);
+  }
+}

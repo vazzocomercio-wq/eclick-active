@@ -1,0 +1,243 @@
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { SupabaseService } from '../../common/supabase/supabase.service';
+import { CortesDriveClient } from './cortes-drive.client';
+import { ClippingRunnerService } from './clipping/clipping-runner.service';
+import { CopyRunnerService } from './copy/copy-runner.service';
+import type {
+  Clip,
+  ClipPlatform,
+  ClipStatus,
+  ContentJob,
+  JobSourceType,
+} from './studio-cortes.types';
+
+export interface UploadedMaster {
+  originalname: string;
+  mimetype: string;
+  buffer: Buffer;
+  size: number;
+}
+
+const MAX_MASTER_BYTES = 2 * 1024 * 1024 * 1024; // 2GB
+const CLIP_STATUSES: ClipStatus[] = ['a_revisar', 'aprovado', 'agendado', 'publicado', 'falhou'];
+const PLATFORMS: ClipPlatform[] = ['instagram', 'tiktok', 'youtube'];
+
+@Injectable()
+export class StudioCortesService {
+  private readonly log = new Logger(StudioCortesService.name);
+
+  constructor(
+    private readonly supabase: SupabaseService,
+    private readonly drive: CortesDriveClient,
+    private readonly clipping: ClippingRunnerService,
+    private readonly copyRunner: CopyRunnerService,
+  ) {}
+
+  // ── Upload ────────────────────────────────────────────────
+
+  /**
+   * Recebe o master, grava no Shared Drive em /cortes/{job_id}/ e cria o
+   * content_job (received). Depois submete o corte (async — não bloqueia a
+   * resposta do upload, e creds faltando no provedor não derrubam o upload).
+   */
+  async createUploadJob(
+    orgId: string,
+    userId: string,
+    file: UploadedMaster,
+    title?: string,
+  ): Promise<ContentJob> {
+    if (!file?.buffer?.length) throw new BadRequestException('Arquivo de vídeo vazio.');
+    if (file.size > MAX_MASTER_BYTES) {
+      throw new BadRequestException('Master maior que 2GB. Reduza ou use a fonte por YouTube/Drive.');
+    }
+    if (!this.drive.isConfigured()) {
+      throw new BadRequestException(
+        'Google Drive não configurado (GOOGLE_SA_KEY + CORTES_DRIVE_ID). Configure no Railway active-api.',
+      );
+    }
+
+    // 1. Cria o job primeiro (pra ter o id que vira nome da pasta).
+    const { data: created, error: insErr } = await this.supabase.adminClient
+      .from('content_jobs')
+      .insert({
+        org_id: orgId,
+        title: title?.trim() || file.originalname,
+        source_type: 'upload' as JobSourceType,
+        status: 'received',
+        created_by: null, // FK é org_members.id; guardamos o auth user no metadata
+        metadata: { created_by_user_id: userId, original_filename: file.originalname },
+      })
+      .select('*')
+      .single();
+    if (insErr) throw new Error(`Falha ao criar job: ${insErr.message}`);
+    const job = created as ContentJob;
+
+    // 2. Grava o master no Shared Drive.
+    try {
+      const folderId = await this.drive.ensureJobFolder(job.id);
+      const ext = file.originalname.split('.').pop()?.toLowerCase() || 'mp4';
+      const driveFile = await this.drive.uploadFile(
+        folderId,
+        `master.${ext}`,
+        file.buffer,
+        file.mimetype || 'video/mp4',
+      );
+      const { data: updated } = await this.supabase.adminClient
+        .from('content_jobs')
+        .update({ drive_file_id: driveFile.id, drive_folder_id: folderId })
+        .eq('id', job.id)
+        .select('*')
+        .single();
+      const ready = (updated as ContentJob | null) ?? { ...job, drive_file_id: driveFile.id, drive_folder_id: folderId };
+
+      // 3. Submete o corte async (webhook conclui depois).
+      void this.clipping.submit(ready).catch((err) => {
+        this.log.error(`[upload] submit do corte falhou (job ${job.id}): ${String(err)}`);
+      });
+
+      return ready;
+    } catch (err) {
+      await this.supabase.adminClient
+        .from('content_jobs')
+        .update({ status: 'failed', failure_reason: `Upload pro Drive falhou: ${String(err)}` })
+        .eq('id', job.id);
+      throw err;
+    }
+  }
+
+  // ── Leitura ───────────────────────────────────────────────
+
+  async listJobs(orgId: string): Promise<ContentJob[]> {
+    const { data, error } = await this.supabase.adminClient
+      .from('content_jobs')
+      .select('*')
+      .eq('org_id', orgId)
+      .order('created_at', { ascending: false })
+      .limit(100);
+    if (error) throw new Error(error.message);
+    return (data ?? []) as ContentJob[];
+  }
+
+  /** Board (kanban): cortes + suas copys + info do job, pra agrupar por status. */
+  async getBoard(orgId: string): Promise<{
+    columns: Record<ClipStatus, unknown[]>;
+  }> {
+    const { data, error } = await this.supabase.adminClient
+      .from('clips')
+      .select('*, posts:clip_posts(*), job:content_jobs(id,title,status,source_type)')
+      .eq('org_id', orgId)
+      .order('created_at', { ascending: false })
+      .limit(300);
+    if (error) throw new Error(error.message);
+
+    const columns = Object.fromEntries(CLIP_STATUSES.map((s) => [s, [] as unknown[]])) as Record<
+      ClipStatus,
+      unknown[]
+    >;
+    for (const row of (data ?? []) as Array<Clip & { status: ClipStatus }>) {
+      (columns[row.status] ??= []).push(row);
+    }
+    return { columns };
+  }
+
+  // ── Mutação (board) ───────────────────────────────────────
+
+  /** Move um corte de coluna (só muda estado — publicação é Sprint 2). */
+  async setClipStatus(orgId: string, clipId: string, status: ClipStatus): Promise<Clip> {
+    if (!CLIP_STATUSES.includes(status)) throw new BadRequestException(`Status inválido: ${status}`);
+    // Sprint 1: mover pra 'publicado' direto não é permitido (publicação = Sprint 2).
+    if (status === 'publicado') {
+      throw new BadRequestException('Publicação só no Sprint 2. Use Aprovado/Agendado por enquanto.');
+    }
+    const { data, error } = await this.supabase.adminClient
+      .from('clips')
+      .update({ status })
+      .eq('id', clipId)
+      .eq('org_id', orgId)
+      .select('*')
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) throw new NotFoundException('Corte não encontrado.');
+    return data as Clip;
+  }
+
+  /** Edita a copy de um corte em uma plataforma. */
+  async updateClipPost(
+    orgId: string,
+    postId: string,
+    patch: {
+      title?: string | null;
+      copy?: string | null;
+      hashtags?: string[];
+      scheduled_at?: string | null;
+      account_id?: string | null;
+    },
+  ): Promise<unknown> {
+    const fields: Record<string, unknown> = {};
+    if (patch.title !== undefined) fields.title = patch.title;
+    if (patch.copy !== undefined) fields.copy = patch.copy;
+    if (patch.hashtags !== undefined) fields.hashtags = patch.hashtags;
+    if (patch.scheduled_at !== undefined) fields.scheduled_at = patch.scheduled_at;
+    if (patch.account_id !== undefined) fields.account_id = patch.account_id;
+    if (Object.keys(fields).length === 0) throw new BadRequestException('Nada pra atualizar.');
+
+    const { data, error } = await this.supabase.adminClient
+      .from('clip_posts')
+      .update(fields)
+      .eq('id', postId)
+      .eq('org_id', orgId)
+      .select('*')
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) throw new NotFoundException('Copy não encontrada.');
+    return data;
+  }
+
+  /** Toggle auto-aprovar / renomear job. */
+  async updateJob(
+    orgId: string,
+    jobId: string,
+    patch: { auto_approve?: boolean; title?: string },
+  ): Promise<ContentJob> {
+    const fields: Record<string, unknown> = {};
+    if (patch.auto_approve !== undefined) fields.auto_approve = patch.auto_approve;
+    if (patch.title !== undefined) fields.title = patch.title;
+    if (Object.keys(fields).length === 0) throw new BadRequestException('Nada pra atualizar.');
+
+    const { data, error } = await this.supabase.adminClient
+      .from('content_jobs')
+      .update(fields)
+      .eq('id', jobId)
+      .eq('org_id', orgId)
+      .select('*')
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) throw new NotFoundException('Job não encontrado.');
+    return data as ContentJob;
+  }
+
+  /** Regera as copys de um job (re-dispara o CopyRunner). */
+  async regenerateCopy(orgId: string, jobId: string): Promise<{ generated: number }> {
+    const { data } = await this.supabase.adminClient
+      .from('content_jobs')
+      .select('id')
+      .eq('id', jobId)
+      .eq('org_id', orgId)
+      .maybeSingle();
+    if (!data) throw new NotFoundException('Job não encontrado.');
+    return this.copyRunner.runForJob(orgId, jobId);
+  }
+
+  /** Status de configuração (Drive + provedor) — útil pro smoke e pra UI. */
+  async config(): Promise<{
+    drive_configured: boolean;
+    vizard_configured: boolean;
+    platforms: ClipPlatform[];
+  }> {
+    return {
+      drive_configured: this.drive.isConfigured(),
+      vizard_configured: Boolean(process.env.VIZARD_API_KEY?.trim()),
+      platforms: PLATFORMS,
+    };
+  }
+}
