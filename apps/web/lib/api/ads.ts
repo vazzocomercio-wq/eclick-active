@@ -158,6 +158,20 @@ export type UpdateInput = Partial<{
 // API
 // ────────────────────────────────────────────
 
+export type AutopilotAction = 'pause' | 'resume' | 'decrease_budget' | 'increase_budget' | 'refresh_creative';
+export interface AutopilotSuggestion {
+  signal_id: string;
+  campaign_external_id: string;
+  campaign_name: string;
+  signal_type: string;
+  severity: string;
+  current_value: number | null;
+  action: AutopilotAction;
+  pct?: number;
+  label: string;
+  rationale: string;
+}
+
 export interface AdMetricsTotals {
   spend: number; impressions: number; clicks: number; conversions: number;
   ctr: number; cpc: number; cpa: number;
@@ -232,6 +246,14 @@ export const adsApi = {
     api.get<AdMetrics>(`/ad-compositions/${id}/metrics`, { query: { days } }),
   breakdown: (id: string, breakdown: BreakdownDimension, days?: number) =>
     api.get<AdBreakdownRow[]>(`/ad-compositions/${id}/insights`, { query: { breakdown, days } }),
+
+  // Piloto automático (sinais → ações)
+  autopilot: {
+    suggestions: () => api.get<AutopilotSuggestion[]>('/ad-autopilot/suggestions'),
+    apply: (body: { signal_id: string; action: AutopilotAction; pct?: number }) =>
+      api.post<{ ok: true; result: unknown }>('/ad-autopilot/apply', body),
+    dismiss: (signalId: string) => api.post<{ ok: true }>(`/ad-autopilot/dismiss/${signalId}`),
+  },
 
   // Públicos (Custom Audience do CRM + Lookalike)
   audiences: {

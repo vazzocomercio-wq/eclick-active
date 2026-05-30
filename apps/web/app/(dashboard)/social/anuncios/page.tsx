@@ -15,6 +15,7 @@ import {
   type AdIntegration,
   type AdMetrics,
   type AdObjective,
+  type AutopilotSuggestion,
   type BreakdownDimension,
   type MetaPage,
 } from '@/lib/api/ads';
@@ -61,6 +62,72 @@ function StatusPill({ status }: { status: string }) {
     <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium', s.cls)}>
       {s.label}
     </span>
+  );
+}
+
+function AutopilotPanel() {
+  const [sugs, setSugs] = useState<AutopilotSuggestion[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { setSugs(await adsApi.autopilot.suggestions()); } catch { setSugs([]); } finally { setLoading(false); }
+  }, []);
+  useEffect(() => { void load(); }, [load]);
+
+  const apply = async (s: AutopilotSuggestion) => {
+    setBusy(s.signal_id); setMsg(null);
+    try {
+      await adsApi.autopilot.apply({ signal_id: s.signal_id, action: s.action, pct: s.pct });
+      setSugs((p) => p.filter((x) => x.signal_id !== s.signal_id));
+      setMsg(`✓ ${s.label} aplicado em "${s.campaign_name}".`);
+    } catch (e) { setMsg(e instanceof ApiError ? e.message : 'Falha ao aplicar.'); }
+    finally { setBusy(null); }
+  };
+  const dismiss = async (s: AutopilotSuggestion) => {
+    setBusy(s.signal_id);
+    try { await adsApi.autopilot.dismiss(s.signal_id); setSugs((p) => p.filter((x) => x.signal_id !== s.signal_id)); }
+    catch { /* noop */ } finally { setBusy(null); }
+  };
+
+  if (loading) return null;
+  const n = sugs.length;
+  return (
+    <div className={cn('mb-5 rounded-xl border p-3', n > 0 ? 'border-amber-300 bg-amber-50/60' : 'border-border bg-card')}>
+      <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center justify-between gap-2 text-left" disabled={n === 0}>
+        <span className="flex items-center gap-2 text-sm font-semibold">
+          🤖 Piloto automático
+          {n > 0 ? <span className="rounded-full bg-amber-500 px-2 py-0.5 text-xs font-medium text-white">{n} otimização{n > 1 ? 'ões' : ''}</span>
+                 : <span className="text-xs font-normal text-muted-foreground">— tudo certo, nada pendente</span>}
+        </span>
+        {n > 0 && (open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />)}
+      </button>
+      {msg && <p className="mt-2 text-xs text-emerald-700">{msg}</p>}
+      {open && n > 0 && (
+        <ul className="mt-3 space-y-2">
+          {sugs.map((s) => (
+            <li key={s.signal_id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-background px-3 py-2">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className={cn('rounded-full px-1.5 py-0.5 text-[10px] font-medium', s.severity === 'critical' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700')}>{s.severity}</span>
+                  <span className="truncate text-sm font-medium">{s.campaign_name}</span>
+                </div>
+                <p className="mt-0.5 text-xs text-muted-foreground">{s.rationale}</p>
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <Button size="sm" onClick={() => void apply(s)} disabled={busy === s.signal_id}>
+                  {busy === s.signal_id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : s.label}
+                </Button>
+                <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => void dismiss(s)} disabled={busy === s.signal_id}>Dispensar</Button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -405,6 +472,8 @@ export default function AnunciosPage() {
               Nenhuma conta Meta conectada. Conecte em <strong>Configurações &gt; Integrações</strong>.
             </div>
           )}
+
+          {metaIntegrations.length > 0 && <AutopilotPanel />}
 
           {metaIntegrations.length > 0 && (
             <>

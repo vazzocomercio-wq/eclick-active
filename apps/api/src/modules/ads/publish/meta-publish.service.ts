@@ -296,6 +296,48 @@ export class MetaPublishService {
     await this.httpPost(`${GRAPH}/${campaignId}`, { status, access_token: token });
   }
 
+  /**
+   * Ajusta o orçamento de uma campanha por percentual (ex: -0.3 = −30%).
+   * Se a campanha usa CBO (daily_budget na campanha) escala ela; senão
+   * escala o daily_budget de cada ad set. Retorna o que mudou (em cents).
+   */
+  async adjustCampaignBudgetByPct(
+    orgId: string,
+    integrationId: string,
+    campaignId: string,
+    pct: number,
+  ): Promise<{ scope: 'campaign' | 'adset'; from: number; to: number }[]> {
+    const token = await this.integrations.getAccessToken(orgId, integrationId);
+    const factor = Math.max(0.1, 1 + pct); // nunca zera; piso 10% do atual
+    const changed: { scope: 'campaign' | 'adset'; from: number; to: number }[] = [];
+
+    const camp = await this.httpGet<{ daily_budget?: string }>(
+      `${GRAPH}/${campaignId}?fields=daily_budget&access_token=${encodeURIComponent(token)}`,
+    );
+    if (camp.daily_budget && Number(camp.daily_budget) > 0) {
+      const from = Number(camp.daily_budget);
+      const to = Math.max(100, Math.round(from * factor)); // mín R$1/dia
+      await this.httpPost(`${GRAPH}/${campaignId}`, { daily_budget: to, access_token: token });
+      changed.push({ scope: 'campaign', from, to });
+      return changed;
+    }
+
+    const adsets = await this.httpGet<{ data?: Array<{ id: string; daily_budget?: string }> }>(
+      `${GRAPH}/${campaignId}/adsets?fields=id,daily_budget&limit=100&access_token=${encodeURIComponent(token)}`,
+    );
+    for (const a of adsets.data ?? []) {
+      if (!a.daily_budget || Number(a.daily_budget) <= 0) continue;
+      const from = Number(a.daily_budget);
+      const to = Math.max(100, Math.round(from * factor));
+      await this.httpPost(`${GRAPH}/${a.id}`, { daily_budget: to, access_token: token });
+      changed.push({ scope: 'adset', from, to });
+    }
+    if (changed.length === 0) {
+      throw new BadRequestException('Não encontrei orçamento diário pra ajustar nesta campanha.');
+    }
+    return changed;
+  }
+
   // ────────────────────────────────────────────
   // Image upload (/adimages → hash)
   // ────────────────────────────────────────────
