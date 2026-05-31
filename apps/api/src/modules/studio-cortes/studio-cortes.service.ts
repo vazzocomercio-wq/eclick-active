@@ -6,6 +6,7 @@ import { CopyRunnerService } from './copy/copy-runner.service';
 import { PublishRunnerService } from './publish/publish-runner.service';
 import { ClipMetricsRunnerService } from './publish/clip-metrics-runner.service';
 import { SocialChannelCredentialsService } from '../social/publishing/social-channel-credentials.service';
+import { CortesYouTubeService } from './publish/cortes-youtube.service';
 import type {
   Clip,
   ClipPlatform,
@@ -37,7 +38,20 @@ export class StudioCortesService {
     private readonly publish: PublishRunnerService,
     private readonly clipMetrics: ClipMetricsRunnerService,
     private readonly socialCreds: SocialChannelCredentialsService,
+    private readonly cortesYouTube: CortesYouTubeService,
   ) {}
+
+  // ── Canais do YouTube (multi-canal) ───────────────────────
+  getYouTubeAuthUrl(orgId: string): { url: string } {
+    return { url: this.cortesYouTube.getAuthUrl(orgId) };
+  }
+  youtubeChannels(orgId: string) {
+    return this.cortesYouTube.listChannels(orgId);
+  }
+  async youtubeDisconnect(orgId: string, credId: string): Promise<{ ok: true }> {
+    await this.cortesYouTube.disconnect(orgId, credId);
+    return { ok: true };
+  }
 
   /** Contas conectadas por rede (pro seletor de conta+rede no corte). */
   async listAccounts(orgId: string): Promise<{
@@ -50,11 +64,12 @@ export class StudioCortesService {
       creds
         .filter((c) => c.channel === channel && c.is_active)
         .map((c) => ({ id: c.id, username: c.external_username, name: c.external_account_name }));
-    const ytStatus = await this.drive.getStatus(orgId);
-    const youtube =
-      ytStatus.connected && (await this.drive.hasYouTubeScope(orgId))
-        ? [{ id: 'google', username: ytStatus.email, name: 'YouTube' }]
-        : [];
+    const ytChannels = await this.cortesYouTube.listChannels(orgId);
+    const youtube = ytChannels.map((c) => ({
+      id: c.id,
+      username: c.title,
+      name: 'YouTube',
+    }));
     return {
       instagram: map('instagram_business'),
       tiktok: map('tiktok_business'),

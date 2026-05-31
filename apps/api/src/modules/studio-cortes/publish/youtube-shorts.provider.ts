@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CortesDriveClient } from '../cortes-drive.client';
+import { CortesYouTubeService } from './cortes-youtube.service';
 import type { PublishResult } from '../../social/publishing/publishing.types';
 
 export interface YouTubeShortInput {
@@ -32,26 +33,54 @@ export class YouTubeShortsProvider {
   private readonly log = new Logger(YouTubeShortsProvider.name);
   private quotaUsedToday = 0;
 
-  constructor(private readonly drive: CortesDriveClient) {}
+  constructor(
+    private readonly drive: CortesDriveClient,
+    private readonly youtube: CortesYouTubeService,
+  ) {}
 
-  async isAvailable(orgId: string): Promise<boolean> {
-    return this.drive.hasYouTubeScope(orgId);
+  async isAvailable(orgId: string, channelCredId?: string | null): Promise<boolean> {
+    if (channelCredId) return true;
+    const channels = await this.youtube.listChannels(orgId);
+    if (channels.length > 0) return true;
+    return this.drive.hasYouTubeScope(orgId); // fallback: canal padrão do Drive
   }
 
-  async publish(orgId: string, input: YouTubeShortInput): Promise<PublishResult> {
-    if (!(await this.drive.hasYouTubeScope(orgId))) {
+  /**
+   * channelCredId = id do canal escolhido (cortes_youtube_channels). Se null,
+   * cai no canal PADRÃO da conta Google do Drive (fallback legado) — que pode
+   * não ser o canal certo; por isso a UI sugere conectar o canal específico.
+   */
+  async publish(
+    orgId: string,
+    input: YouTubeShortInput,
+    channelCredId?: string | null,
+  ): Promise<PublishResult> {
+    let token: string;
+    try {
+      if (channelCredId) {
+        token = await this.youtube.getValidAccessToken(orgId, channelCredId);
+      } else {
+        if (!(await this.drive.hasYouTubeScope(orgId))) {
+          return {
+            success: false,
+            error_code: 'no_youtube_channel',
+            error_message:
+              'Conecte o canal do YouTube no painel do corte (aba YouTube → Conectar canal) pra escolher onde publicar.',
+            provider_response: {},
+          };
+        }
+        token = await this.drive.getAccessTokenForOrg(orgId);
+      }
+    } catch (err) {
       return {
         success: false,
-        error_code: 'no_youtube_scope',
-        error_message:
-          'Conta Google sem permissão de upload no YouTube. Reconecte o Drive pra ampliar o consentimento (youtube.upload).',
+        error_code: 'yt_auth',
+        error_message: err instanceof Error ? err.message : String(err),
         provider_response: {},
       };
     }
 
     try {
-      const token = await this.drive.getAccessTokenForOrg(orgId);
-
       // 1. Baixa o vídeo do corte (URL do provedor de corte ou Drive).
       const videoRes = await fetch(input.video_url, { signal: AbortSignal.timeout(120_000) });
       if (!videoRes.ok) {

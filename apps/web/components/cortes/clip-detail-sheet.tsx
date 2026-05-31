@@ -327,6 +327,17 @@ function PlatformCopyEditor({
     }
   }
 
+  async function connectYouTube() {
+    try {
+      const { url } = await cortesApi.youtubeConnect();
+      window.location.href = url;
+    } catch (err) {
+      toast.error('Falha ao conectar canal', {
+        description: err instanceof ApiError ? err.message : String(err),
+      });
+    }
+  }
+
   if (!post) {
     return (
       <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
@@ -384,30 +395,41 @@ function PlatformCopyEditor({
           {enabled ? 'Publicar nesta rede' : 'Rede desligada'}
         </button>
 
-        {platform === 'youtube' ? (
-          <span className="ml-auto truncate text-[11px] text-muted-foreground">
-            {accounts[0]
-              ? accounts[0].username
-                ? `Conta: ${accounts[0].username}`
-                : 'YouTube conectado ✓'
-              : 'Conecte o Google Drive p/ habilitar o YouTube'}
-          </span>
-        ) : accounts.length > 0 ? (
-          <select
-            value={accountId}
-            onChange={(e) => {
-              setAccountId(e.target.value);
-              void persist({ account_id: e.target.value || null });
-            }}
-            className="ml-auto rounded-md border border-border bg-background px-2 py-1 text-xs"
+        {accounts.length > 0 ? (
+          <div className="ml-auto flex items-center gap-1.5">
+            <select
+              value={accountId}
+              onChange={(e) => {
+                setAccountId(e.target.value);
+                void persist({ account_id: e.target.value || null });
+              }}
+              className="rounded-md border border-border bg-background px-2 py-1 text-xs"
+            >
+              {platform === 'youtube' ? null : <option value="">Conta padrão</option>}
+              {accounts.map((a, i) => (
+                <option key={a.id} value={a.id}>
+                  {a.username || a.name || `Conta ${i + 1}`}
+                </option>
+              ))}
+            </select>
+            {platform === 'youtube' && (
+              <button
+                type="button"
+                onClick={connectYouTube}
+                className="whitespace-nowrap text-[11px] text-primary hover:underline"
+              >
+                + canal
+              </button>
+            )}
+          </div>
+        ) : platform === 'youtube' ? (
+          <button
+            type="button"
+            onClick={connectYouTube}
+            className="ml-auto whitespace-nowrap rounded-md border border-primary/40 px-2 py-1 text-[11px] font-medium text-primary hover:bg-primary/5"
           >
-            <option value="">Conta padrão</option>
-            {accounts.map((a, i) => (
-              <option key={a.id} value={a.id}>
-                {a.username || a.name || `Conta conectada ${i + 1}`}
-              </option>
-            ))}
-          </select>
+            Conectar canal do YouTube
+          </button>
         ) : (
           <span className="ml-auto text-[11px] text-amber-600 dark:text-amber-400">
             Nenhuma conta — conecte no Social AI

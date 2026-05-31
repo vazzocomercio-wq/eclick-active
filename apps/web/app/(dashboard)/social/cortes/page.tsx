@@ -79,7 +79,10 @@ export default function CortesPage() {
     const g = params.get('google');
     if (g === 'connected') toast.success('Google Drive conectado! Já pode enviar vídeos.');
     else if (g === 'error') toast.error('Não consegui conectar o Google Drive. Tente de novo.');
-    if (g) window.history.replaceState({}, '', '/social/cortes');
+    const yt = params.get('youtube');
+    if (yt === 'connected') toast.success('Canal do YouTube conectado! Já dá pra escolher ele no corte.');
+    else if (yt === 'error') toast.error('Não consegui conectar o canal do YouTube. Tente de novo.');
+    if (g || yt) window.history.replaceState({}, '', '/social/cortes');
 
     void cortesApi.config().then(setConfig).catch(() => {});
     void fetchBoard();

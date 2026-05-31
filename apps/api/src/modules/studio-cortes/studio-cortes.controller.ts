@@ -52,6 +52,23 @@ export class StudioCortesController {
     return this.service.googleDisconnect(user.org_id);
   }
 
+  // ── Canais do YouTube (multi-canal, OAuth próprio) ────────
+
+  @Get('youtube/connect')
+  youtubeConnect(@CurrentUser() user: AuthUser) {
+    return this.service.getYouTubeAuthUrl(user.org_id);
+  }
+
+  @Get('youtube/channels')
+  youtubeChannels(@CurrentUser() user: AuthUser) {
+    return this.service.youtubeChannels(user.org_id);
+  }
+
+  @Post('youtube/disconnect/:credId')
+  youtubeDisconnect(@CurrentUser() user: AuthUser, @Param('credId', ParseUUIDPipe) credId: string) {
+    return this.service.youtubeDisconnect(user.org_id, credId);
+  }
+
   // ── Upload ────────────────────────────────────────────────
 
   @Post('upload')

@@ -131,6 +131,10 @@ export const cortesApi = {
     api.get<{ connected: boolean; email: string | null }>('/studio-cortes/google/status'),
   googleDisconnect: () => api.post<{ ok: true }>('/studio-cortes/google/disconnect'),
 
+  youtubeConnect: () => api.get<{ url: string }>('/studio-cortes/youtube/connect'),
+  youtubeDisconnect: (credId: string) =>
+    api.post<{ ok: true }>(`/studio-cortes/youtube/disconnect/${credId}`),
+
   board: () => api.get<{ columns: BoardColumns }>('/studio-cortes/board'),
 
   accounts: () => api.get<CortesAccounts>('/studio-cortes/accounts'),

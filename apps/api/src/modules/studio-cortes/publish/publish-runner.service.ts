@@ -113,13 +113,17 @@ export class PublishRunnerService {
         // youtube
         const title = (post.title || clip.title || 'Corte').slice(0, 100);
         const description = buildYouTubeDescription(post.copy, post.hashtags);
-        result = await this.youtube.publish(orgId, {
-          video_url: videoUrl,
-          title,
-          description,
-          tags: post.hashtags,
-          privacy: 'public',
-        });
+        result = await this.youtube.publish(
+          orgId,
+          {
+            video_url: videoUrl,
+            title,
+            description,
+            tags: post.hashtags,
+            privacy: 'public',
+          },
+          post.account_id, // canal escolhido (cortes_youtube_channels.id)
+        );
       }
     } catch (err) {
       result = {

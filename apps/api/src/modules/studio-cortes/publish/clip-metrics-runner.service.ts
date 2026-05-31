@@ -3,6 +3,7 @@ import { SupabaseService } from '../../../common/supabase/supabase.service';
 import { InstagramInsightsService } from '../../social/analytics/instagram-insights.service';
 import { SocialChannelCredentialsService } from '../../social/publishing/social-channel-credentials.service';
 import { CortesDriveClient } from '../cortes-drive.client';
+import { CortesYouTubeService } from './cortes-youtube.service';
 import type { ClipPost } from '../studio-cortes.types';
 
 export interface ClipMetrics {
@@ -28,6 +29,7 @@ export class ClipMetricsRunnerService {
     private readonly igInsights: InstagramInsightsService,
     private readonly creds: SocialChannelCredentialsService,
     private readonly drive: CortesDriveClient,
+    private readonly youtube: CortesYouTubeService,
   ) {}
 
   /** Atualiza métricas de todos os cortes publicados da org (últimos N dias). */
@@ -76,7 +78,7 @@ export class ClipMetricsRunnerService {
       };
     }
     if (post.platform === 'youtube') {
-      return this.youtubeStats(orgId, post.external_post_id);
+      return this.youtubeStats(orgId, post.external_post_id, post.account_id);
     }
     if (post.platform === 'tiktok') {
       return this.tiktokStats(orgId, post.external_post_id);
@@ -84,9 +86,15 @@ export class ClipMetricsRunnerService {
     return null;
   }
 
-  private async youtubeStats(orgId: string, videoId: string): Promise<ClipMetrics | null> {
+  private async youtubeStats(
+    orgId: string,
+    videoId: string,
+    channelCredId: string | null,
+  ): Promise<ClipMetrics | null> {
     try {
-      const token = await this.drive.getAccessTokenForOrg(orgId);
+      const token = channelCredId
+        ? await this.youtube.getValidAccessToken(orgId, channelCredId)
+        : await this.drive.getAccessTokenForOrg(orgId);
       const res = await fetch(
         `https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${videoId}`,
         { headers: { Authorization: `Bearer ${token}` } },
