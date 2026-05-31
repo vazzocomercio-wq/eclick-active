@@ -32,7 +32,8 @@ const DRIVE_UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3';
 // em produção sem verificação o Google mostra aviso "app não verificado" só no
 // YouTube (o usuário avança normal); não afeta o drive.file.
 const YOUTUBE_UPLOAD_SCOPE = 'https://www.googleapis.com/auth/youtube.upload';
-const SCOPE = `https://www.googleapis.com/auth/drive.file ${YOUTUBE_UPLOAD_SCOPE}`;
+// readonly: ler estatísticas dos Shorts publicados (videos.list/statistics) pro Relatórios.
+const SCOPE = `https://www.googleapis.com/auth/drive.file ${YOUTUBE_UPLOAD_SCOPE} https://www.googleapis.com/auth/youtube.readonly`;
 const ROOT_FOLDER_NAME = 'e-Click Cortes';
 const STATE_TTL_MS = 15 * 60 * 1000;
 
