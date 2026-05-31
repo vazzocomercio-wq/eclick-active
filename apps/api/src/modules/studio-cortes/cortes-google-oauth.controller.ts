@@ -19,7 +19,14 @@ export class CortesGoogleOAuthController {
     @Query('state') state?: string,
     @Query('error') error?: string,
   ): Promise<{ url: string }> {
-    const app = (process.env.PUBLIC_APP_URL ?? process.env.FRONTEND_BASE_URL ?? '').replace(/\/$/, '');
+    // WEB_BASE_URL é a convenção do Active (calendar/tiktok/instagram OAuth usam).
+    // Fallback hardcoded pro domínio do front pra nunca redirecionar pro host da API.
+    const app = (
+      process.env.WEB_BASE_URL ??
+      process.env.PUBLIC_APP_URL ??
+      process.env.FRONTEND_BASE_URL ??
+      'https://active.eclick.app.br'
+    ).replace(/\/$/, '');
     const dest = (q: string) => ({ url: `${app}/social/cortes?${q}` });
     if (error || !code || !state) return dest('google=error');
     try {
