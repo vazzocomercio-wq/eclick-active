@@ -115,8 +115,17 @@ export interface AdProvider {
   /** Sincroniza hierarquia campanha→conjunto→anúncio, já normalizada. */
   syncEntities(account: AdAccount): Promise<NormalizedEntity[]>;
 
-  /** Puxa insights de um período → SEMPRE no formato canônico. */
-  fetchInsights(account: AdAccount, range: DateRange): Promise<NormalizedInsight[]>;
+  /**
+   * Puxa insights de um período → SEMPRE no formato canônico.
+   * Recebe as entidades já sincronizadas (objetivo normalizado) pra que o
+   * adaptador escolha a métrica de RESULTADO certa por objetivo — sem refetch
+   * e sem vazar nomes de action-type da plataforma pro motor.
+   */
+  fetchInsights(
+    account: AdAccount,
+    range: DateRange,
+    entities: NormalizedEntity[],
+  ): Promise<NormalizedInsight[]>;
 
   /** Aplica uma decisão aprovada → traduz pro dialeto da plataforma. */
   applyAction(decision: ProviderDecision): Promise<ActionResult>;

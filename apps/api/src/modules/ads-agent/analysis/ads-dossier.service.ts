@@ -20,10 +20,14 @@ export interface EntityDossier {
   };
   averages: {
     daily_spend_brl: number;
+    /** custo por RESULTADO do objetivo (compra, lead, conversa, engajamento...). */
     cpa_brl: number | null;
+    /** só faz sentido em objetivo de venda; null/0 fora disso. */
     roas: number | null;
     ctr_pct: number | null;
     cpm_brl: number | null;
+    /** frequência média (impressões/pessoa) — alta + CTR caindo = fadiga. */
+    avg_frequency: number | null;
   };
   trend: {
     roas_recent: number | null;
@@ -56,6 +60,7 @@ interface InsightRow {
   clicks: number;
   conversions: number;
   revenue_cents: number;
+  frequency: number | null;
 }
 
 const MAX_CAMPAIGNS = 25;
@@ -155,7 +160,7 @@ export class AdsDossierService {
     if (entityIds.length === 0) return map;
     const { data, error } = await this.supabase.adminClient
       .from('ads_insights')
-      .select('entity_id, date, spend_cents, impressions, clicks, conversions, revenue_cents')
+      .select('entity_id, date, spend_cents, impressions, clicks, conversions, revenue_cents, frequency')
       .in('entity_id', entityIds)
       .gte('date', since);
     if (error) {
@@ -201,6 +206,8 @@ export class AdsDossierService {
     const ctr = tot.imp > 0 ? (tot.clk / tot.imp) * 100 : null;
     const cpmCents = tot.imp > 0 ? (tot.spend * 1000) / tot.imp : null;
     const dailySpend = dataDays > 0 ? tot.spend / dataDays : 0;
+    const freqs = rowsDesc.map((r) => r.frequency).filter((f): f is number => f != null);
+    const avgFreq = freqs.length > 0 ? freqs.reduce((a, b) => a + b, 0) / freqs.length : null;
 
     // tendência: 3 dias recentes vs 4 anteriores
     const recent = rowsDesc.slice(0, 3);
@@ -243,6 +250,7 @@ export class AdsDossierService {
         roas: roas != null ? round2(roas) : null,
         ctr_pct: ctr != null ? round2(ctr) : null,
         cpm_brl: cpmCents != null ? c2r(cpmCents) : null,
+        avg_frequency: avgFreq != null ? round2(avgFreq) : null,
       },
       trend: {
         roas_recent: roasRecent != null ? round2(roasRecent) : null,

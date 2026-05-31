@@ -40,6 +40,30 @@ export interface MetaCampaignInsight {
   raw: Record<string, unknown>;
 }
 
+/**
+ * Insight RICO — além das brutas, traz frequency/reach e o mapa completo de
+ * actions/action_values (sem escolher resultado: quem escolhe é o provider,
+ * por objetivo). Usado pelo Ads Performance Agent (F12). NÃO mexe no
+ * fetchInsights legado (que o AdsSyncService usa).
+ */
+export interface MetaRichInsight {
+  campaign_external_id: string;
+  date: string; // YYYY-MM-DD
+  spend: number;
+  impressions: number;
+  clicks: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+  frequency: number | null;
+  reach: number | null;
+  /** action_type → contagem (ex.: purchase, lead, post_engagement, video_view). */
+  actions: Record<string, number>;
+  /** action_type → valor monetário (action_values). */
+  actionValues: Record<string, number>;
+  raw: Record<string, unknown>;
+}
+
 export class MetaApiError extends Error {
   constructor(
     public readonly status: number,
@@ -205,6 +229,88 @@ export class MetaConnector {
     return out;
   }
 
+  /**
+   * Insights RICOS (F12) — mesma janela/granularidade, mas pede frequency +
+   * reach e devolve os mapas de actions/action_values pro provider escolher o
+   * resultado por objetivo. Isolado do fetchInsights legado.
+   */
+  async fetchInsightsRich(
+    accessToken: string,
+    adAccountId: string,
+    since: Date,
+    until: Date,
+  ): Promise<MetaRichInsight[]> {
+    const fields = [
+      'campaign_id',
+      'date_start',
+      'spend',
+      'impressions',
+      'clicks',
+      'ctr',
+      'cpc',
+      'cpm',
+      'frequency',
+      'reach',
+      'actions',
+      'action_values',
+    ].join(',');
+
+    const params = new URLSearchParams({
+      fields,
+      level: 'campaign',
+      time_increment: '1',
+      time_range: JSON.stringify({ since: toYmd(since), until: toYmd(until) }),
+      limit: '500',
+      access_token: accessToken,
+    });
+
+    interface RichPage {
+      data: Array<{
+        campaign_id: string;
+        date_start: string;
+        spend?: string;
+        impressions?: string;
+        clicks?: string;
+        ctr?: string;
+        cpc?: string;
+        cpm?: string;
+        frequency?: string;
+        reach?: string;
+        actions?: Array<{ action_type: string; value: string }>;
+        action_values?: Array<{ action_type: string; value: string }>;
+      }>;
+      paging?: { next?: string };
+    }
+
+    const out: MetaRichInsight[] = [];
+    let url: string | null = `${GRAPH_BASE}/${adAccountId}/insights?${params.toString()}`;
+    let pages = 0;
+
+    while (url && pages < 30) {
+      pages += 1;
+      const json: RichPage = await this.httpGet<RichPage>(url);
+      for (const r of json.data ?? []) {
+        out.push({
+          campaign_external_id: r.campaign_id,
+          date: r.date_start,
+          spend: parseNum(r.spend),
+          impressions: parseNum(r.impressions),
+          clicks: parseNum(r.clicks),
+          ctr: parseNum(r.ctr),
+          cpc: parseNum(r.cpc),
+          cpm: parseNum(r.cpm),
+          frequency: r.frequency != null ? parseNum(r.frequency) : null,
+          reach: r.reach != null ? parseNum(r.reach) : null,
+          actions: actionsToMap(r.actions),
+          actionValues: actionsToMap(r.action_values),
+          raw: r as unknown as Record<string, unknown>,
+        });
+      }
+      url = json.paging?.next ?? null;
+    }
+    return out;
+  }
+
   private normalizeInsightRow(r: {
     campaign_id: string;
     date_start: string;
@@ -288,6 +394,18 @@ function parseNum(v: string | undefined): number {
   if (!v) return 0;
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
+}
+
+/** Converte o array actions/action_values do Meta num mapa action_type→número. */
+function actionsToMap(
+  actions: Array<{ action_type: string; value: string }> | undefined,
+): Record<string, number> {
+  const map: Record<string, number> = {};
+  if (!actions) return map;
+  for (const a of actions) {
+    map[a.action_type] = (map[a.action_type] ?? 0) + parseNum(a.value);
+  }
+  return map;
 }
 
 function sumActions(

@@ -67,7 +67,7 @@ export class AdsIngestService {
       // 2. INGEST insights (janela últimos N dias)
       const until = new Date();
       const since = new Date(until.getTime() - daysBack * 86400_000);
-      const insights = await provider.fetchInsights(account, { since, until });
+      const insights = await provider.fetchInsights(account, { since, until }, entities);
 
       const valid = insights.filter((i) => idMap.has(i.entityExternalId));
       result.insights_orphaned = insights.length - valid.length;
