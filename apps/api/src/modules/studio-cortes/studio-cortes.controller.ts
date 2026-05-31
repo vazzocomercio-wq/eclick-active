@@ -59,6 +59,12 @@ export class StudioCortesController {
     return this.service.getYouTubeAuthUrl(user.org_id);
   }
 
+  /** "Conectar Instagram" de 1 clique (Facebook Login). */
+  @Get('instagram/connect')
+  instagramConnect(@CurrentUser() user: AuthUser) {
+    return this.service.getInstagramAuthUrl(user.org_id);
+  }
+
   @Get('youtube/channels')
   youtubeChannels(@CurrentUser() user: AuthUser) {
     return this.service.youtubeChannels(user.org_id);

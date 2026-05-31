@@ -7,6 +7,7 @@ import { PublishRunnerService } from './publish/publish-runner.service';
 import { ClipMetricsRunnerService } from './publish/clip-metrics-runner.service';
 import { SocialChannelCredentialsService } from '../social/publishing/social-channel-credentials.service';
 import { CortesYouTubeService } from './publish/cortes-youtube.service';
+import { CortesInstagramService } from './publish/cortes-instagram.service';
 import type {
   Clip,
   ClipPlatform,
@@ -39,11 +40,17 @@ export class StudioCortesService {
     private readonly clipMetrics: ClipMetricsRunnerService,
     private readonly socialCreds: SocialChannelCredentialsService,
     private readonly cortesYouTube: CortesYouTubeService,
+    private readonly cortesInstagram: CortesInstagramService,
   ) {}
 
   // ── Canais do YouTube (multi-canal) ───────────────────────
   getYouTubeAuthUrl(orgId: string): { url: string } {
     return { url: this.cortesYouTube.getAuthUrl(orgId) };
+  }
+
+  /** "Conectar Instagram" de 1 clique (descobre as contas via Facebook Login). */
+  getInstagramAuthUrl(orgId: string): { url: string } {
+    return { url: this.cortesInstagram.getAuthUrl(orgId) };
   }
   youtubeChannels(orgId: string) {
     return this.cortesYouTube.listChannels(orgId);

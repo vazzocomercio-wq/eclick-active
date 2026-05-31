@@ -135,6 +135,8 @@ export const cortesApi = {
   youtubeDisconnect: (credId: string) =>
     api.post<{ ok: true }>(`/studio-cortes/youtube/disconnect/${credId}`),
 
+  instagramConnect: () => api.get<{ url: string }>('/studio-cortes/instagram/connect'),
+
   board: () => api.get<{ columns: BoardColumns }>('/studio-cortes/board'),
 
   accounts: () => api.get<CortesAccounts>('/studio-cortes/accounts'),

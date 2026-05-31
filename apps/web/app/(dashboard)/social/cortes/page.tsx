@@ -82,7 +82,14 @@ export default function CortesPage() {
     const yt = params.get('youtube');
     if (yt === 'connected') toast.success('Canal do YouTube conectado! Já dá pra escolher ele no corte.');
     else if (yt === 'error') toast.error('Não consegui conectar o canal do YouTube. Tente de novo.');
-    if (g || yt) window.history.replaceState({}, '', '/social/cortes');
+    const ig = params.get('instagram');
+    if (ig === 'connected') {
+      const n = params.get('count');
+      toast.success(`Instagram conectado!${n ? ` ${n} conta(s) disponíveis no corte.` : ''}`);
+    } else if (ig === 'error') {
+      toast.error('Não consegui conectar o Instagram. Tente de novo.');
+    }
+    if (g || yt || ig) window.history.replaceState({}, '', '/social/cortes');
 
     void cortesApi.config().then(setConfig).catch(() => {});
     void fetchBoard();

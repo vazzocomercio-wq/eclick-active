@@ -339,6 +339,17 @@ function PlatformCopyEditor({
     }
   }
 
+  async function connectInstagram() {
+    try {
+      const { url } = await cortesApi.instagramConnect();
+      window.location.href = url;
+    } catch (err) {
+      toast.error('Falha ao conectar Instagram', {
+        description: err instanceof ApiError ? err.message : String(err),
+      });
+    }
+  }
+
   if (!post) {
     return (
       <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
@@ -421,6 +432,14 @@ function PlatformCopyEditor({
               >
                 + canal
               </button>
+            ) : platform === 'instagram' ? (
+              <button
+                type="button"
+                onClick={connectInstagram}
+                className="whitespace-nowrap text-[11px] text-primary hover:underline"
+              >
+                + conta
+              </button>
             ) : (
               <Link
                 href="/configuracoes/social"
@@ -438,12 +457,20 @@ function PlatformCopyEditor({
           >
             Conectar canal do YouTube
           </button>
+        ) : platform === 'instagram' ? (
+          <button
+            type="button"
+            onClick={connectInstagram}
+            className="ml-auto whitespace-nowrap rounded-md border border-primary/40 px-2 py-1 text-[11px] font-medium text-primary hover:bg-primary/5"
+          >
+            Conectar Instagram
+          </button>
         ) : (
           <Link
             href="/configuracoes/social"
             className="ml-auto whitespace-nowrap rounded-md border border-primary/40 px-2 py-1 text-[11px] font-medium text-primary hover:bg-primary/5"
           >
-            Conectar conta no Social AI →
+            Conectar TikTok no Social AI →
           </Link>
         )}
       </div>
