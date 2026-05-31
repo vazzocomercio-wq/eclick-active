@@ -23,6 +23,7 @@ import {
   type ClipStatus,
 } from '@/lib/api/studio-cortes';
 import { ApiError } from '@/lib/api/client';
+import { useDragToPan } from '@/hooks/use-drag-to-pan';
 import { CortesColumn } from './cortes-column';
 import { ClipCardVisual, STATUS_META } from './clip-card';
 import { ClipDetailSheet } from './clip-detail-sheet';
@@ -34,6 +35,7 @@ interface CortesBoardProps {
 
 export function CortesBoard({ columns, onRefresh }: CortesBoardProps) {
   const [cols, setCols] = useState<BoardColumns>(columns);
+  const panRef = useDragToPan<HTMLDivElement>();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [selected, setSelected] = useState<ClipRow | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -123,7 +125,10 @@ export function CortesBoard({ columns, onRefresh }: CortesBoardProps) {
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
-        <div className="flex h-full gap-3 overflow-x-auto pb-2">
+        <div
+          ref={panRef}
+          className="flex h-full cursor-grab select-none gap-3 overflow-x-auto overflow-y-hidden pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
           {CLIP_STATUS_ORDER.map((status) => (
             <CortesColumn
               key={status}

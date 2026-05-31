@@ -177,6 +177,62 @@ export class StudioCortesService {
     return data as Clip;
   }
 
+  /**
+   * Agenda (ou desagenda) a publicação de um corte. Com data → posts ganham
+   * scheduled_at + status 'agendado', e o corte vai pra coluna "Agendado"
+   * (o worker publica na hora marcada → recompute → "Publicado"). Sem data →
+   * volta pra "A revisar".
+   */
+  async scheduleClip(orgId: string, clipId: string, scheduledAt: string | null): Promise<Clip> {
+    const { data: clipData } = await this.supabase.adminClient
+      .from('clips')
+      .select('id')
+      .eq('id', clipId)
+      .eq('org_id', orgId)
+      .maybeSingle();
+    if (!clipData) throw new NotFoundException('Corte não encontrado.');
+
+    if (scheduledAt) {
+      const when = new Date(scheduledAt);
+      if (Number.isNaN(when.getTime())) throw new BadRequestException('Data inválida.');
+      if (when.getTime() < Date.now() - 60_000) {
+        throw new BadRequestException('Escolha um horário no futuro.');
+      }
+      // Só mexe nos posts ainda não publicados.
+      await this.supabase.adminClient
+        .from('clip_posts')
+        .update({ scheduled_at: when.toISOString(), status: 'agendado', error: null })
+        .eq('clip_id', clipId)
+        .eq('org_id', orgId)
+        .neq('status', 'publicado');
+      await this.supabase.adminClient
+        .from('clips')
+        .update({ status: 'agendado' })
+        .eq('id', clipId)
+        .eq('org_id', orgId);
+    } else {
+      await this.supabase.adminClient
+        .from('clip_posts')
+        .update({ scheduled_at: null, status: 'rascunho' })
+        .eq('clip_id', clipId)
+        .eq('org_id', orgId)
+        .neq('status', 'publicado');
+      await this.supabase.adminClient
+        .from('clips')
+        .update({ status: 'a_revisar' })
+        .eq('id', clipId)
+        .eq('org_id', orgId);
+    }
+
+    const { data } = await this.supabase.adminClient
+      .from('clips')
+      .select('*')
+      .eq('id', clipId)
+      .eq('org_id', orgId)
+      .single();
+    return data as Clip;
+  }
+
   /** Edita a copy de um corte em uma plataforma. */
   async updateClipPost(
     orgId: string,

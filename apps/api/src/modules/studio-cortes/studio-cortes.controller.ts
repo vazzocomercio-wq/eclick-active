@@ -89,6 +89,16 @@ export class StudioCortesController {
     return this.service.setClipStatus(user.org_id, id, body.status);
   }
 
+  /** Agenda/desagenda a publicação do corte (scheduled_at null = desagenda). */
+  @Patch('clips/:id/schedule')
+  scheduleClip(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { scheduled_at: string | null },
+  ) {
+    return this.service.scheduleClip(user.org_id, id, body.scheduled_at ?? null);
+  }
+
   @Patch('posts/:id')
   updatePost(
     @CurrentUser() user: AuthUser,

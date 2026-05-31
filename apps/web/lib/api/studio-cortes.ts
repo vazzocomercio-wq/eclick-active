@@ -132,6 +132,9 @@ export const cortesApi = {
   setClipStatus: (clipId: string, status: ClipStatus) =>
     api.patch<ClipRow>(`/studio-cortes/clips/${clipId}/status`, { status }),
 
+  scheduleClip: (clipId: string, scheduledAt: string | null) =>
+    api.patch<ClipRow>(`/studio-cortes/clips/${clipId}/schedule`, { scheduled_at: scheduledAt }),
+
   updatePost: (
     postId: string,
     patch: {
@@ -229,5 +232,8 @@ export const CLIP_STATUS_ORDER: ClipStatus[] = [
   'falhou',
 ];
 
-/** Colunas pra onde o usuário pode arrastar no Sprint 1 (publicação = Sprint 2). */
-export const DROPPABLE_STATUSES: ClipStatus[] = ['a_revisar', 'aprovado', 'agendado'];
+/**
+ * Colunas que aceitam arraste manual. "Agendado" sai daqui porque exige um
+ * horário (vai pelo botão Agendar no painel); "Publicado"/"Falhou" são automáticos.
+ */
+export const DROPPABLE_STATUSES: ClipStatus[] = ['a_revisar', 'aprovado'];

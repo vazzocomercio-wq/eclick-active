@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import {
   AlertCircle,
+  CalendarClock,
+  CalendarOff,
   ExternalLink,
   Eye,
   Heart,
@@ -51,6 +53,8 @@ export function ClipDetailSheet({ clip, open, onOpenChange, onChanged }: ClipDet
   const [tab, setTab] = useState<ClipPlatform>('instagram');
   const [regenerating, setRegenerating] = useState(false);
   const [approving, setApproving] = useState(false);
+  const [scheduling, setScheduling] = useState(false);
+  const [scheduleAt, setScheduleAt] = useState('');
 
   const postByPlatform = useMemo(() => {
     const map = new Map<ClipPlatform, ClipPost>();
@@ -74,6 +78,40 @@ export function ClipDetailSheet({ clip, open, onOpenChange, onChanged }: ClipDet
       });
     } finally {
       setApproving(false);
+    }
+  }
+
+  async function handleSchedule() {
+    if (!clip || !scheduleAt) return;
+    setScheduling(true);
+    try {
+      await cortesApi.scheduleClip(clip.id, new Date(scheduleAt).toISOString());
+      toast.success('Agendado! Vai publicar no horário marcado.');
+      onChanged();
+      onOpenChange(false);
+    } catch (err) {
+      toast.error('Falha ao agendar', {
+        description: err instanceof ApiError ? err.message : String(err),
+      });
+    } finally {
+      setScheduling(false);
+    }
+  }
+
+  async function handleUnschedule() {
+    if (!clip) return;
+    setScheduling(true);
+    try {
+      await cortesApi.scheduleClip(clip.id, null);
+      toast.success('Agendamento cancelado — voltou pra "A revisar".');
+      onChanged();
+      onOpenChange(false);
+    } catch (err) {
+      toast.error('Falha ao desagendar', {
+        description: err instanceof ApiError ? err.message : String(err),
+      });
+    } finally {
+      setScheduling(false);
     }
   }
 
@@ -102,19 +140,59 @@ export function ClipDetailSheet({ clip, open, onOpenChange, onChanged }: ClipDet
             Edite as copys por plataforma. Ao aprovar o corte, ele é publicado nessas redes.
           </SheetDescription>
           {clip.status === 'a_revisar' && (
-            <Button className="mt-2 w-full" onClick={handleApprove} disabled={approving}>
-              {approving ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Rocket className="h-4 w-4" />
-              )}
-              <span className="ml-1.5">Aprovar e publicar nas redes</span>
-            </Button>
+            <div className="mt-2 flex flex-col gap-2">
+              <Button onClick={handleApprove} disabled={approving || scheduling}>
+                {approving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Rocket className="h-4 w-4" />
+                )}
+                <span className="ml-1.5">Aprovar e publicar agora</span>
+              </Button>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="datetime-local"
+                  value={scheduleAt}
+                  onChange={(e) => setScheduleAt(e.target.value)}
+                  className="h-9 flex-1"
+                />
+                <Button
+                  variant="outline"
+                  onClick={handleSchedule}
+                  disabled={!scheduleAt || scheduling || approving}
+                >
+                  {scheduling ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <CalendarClock className="h-4 w-4" />
+                  )}
+                  <span className="ml-1.5">Agendar</span>
+                </Button>
+              </div>
+            </div>
           )}
           {clip.status === 'aprovado' && (
             <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
               Aprovado — publicando nas redes…
             </p>
+          )}
+          {clip.status === 'agendado' && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 text-xs text-cyan-600 dark:text-cyan-400">
+                <CalendarClock className="h-3.5 w-3.5" />
+                Agendado{scheduledLabel(clip) ? ` para ${scheduledLabel(clip)}` : ''}
+              </span>
+              <div className="ml-auto flex gap-2">
+                <Button variant="outline" size="sm" onClick={handleUnschedule} disabled={scheduling}>
+                  <CalendarOff className="h-3.5 w-3.5" />
+                  <span className="ml-1">Desagendar</span>
+                </Button>
+                <Button size="sm" onClick={handleApprove} disabled={approving}>
+                  <Rocket className="h-3.5 w-3.5" />
+                  <span className="ml-1">Publicar agora</span>
+                </Button>
+              </div>
+            </div>
           )}
         </SheetHeader>
 
@@ -340,6 +418,19 @@ function PlatformCopyEditor({
 }
 
 /** ISO → valor do input datetime-local (no fuso local). */
+function scheduledLabel(clip: ClipRow): string {
+  const at = clip.posts.find((p) => p.scheduled_at)?.scheduled_at;
+  if (!at) return '';
+  const d = new Date(at);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 function toLocalInput(iso: string | null): string {
   if (!iso) return '';
   const d = new Date(iso);
