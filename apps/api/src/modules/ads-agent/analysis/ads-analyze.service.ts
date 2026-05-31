@@ -2,7 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { SupabaseService } from '../../../common/supabase/supabase.service';
 import { LlmService } from '../../../common/llm/llm.service';
 import { AdsAccountsService } from '../ads-accounts.service';
-import { AdsDossierService } from './ads-dossier.service';
+import { AdsKnowledgeService } from '../ads-knowledge.service';
+import { AdsDossierService, EntityDossier } from './ads-dossier.service';
 import {
   ADS_ANALYZE_SYSTEM,
   ANALYZE_MAX_TOKENS,
@@ -53,6 +54,7 @@ export class AdsAnalyzeService {
     private readonly accounts: AdsAccountsService,
     private readonly dossiers: AdsDossierService,
     private readonly llm: LlmService,
+    private readonly knowledge: AdsKnowledgeService,
   ) {}
 
   async analyzeAccount(accountId: string): Promise<AnalyzeResult> {
@@ -74,8 +76,8 @@ export class AdsAnalyzeService {
       return { ...base, reason: `nenhuma campanha com ≥${MIN_DATA_HOURS}h de dados` };
     }
 
-    // RETRIEVE (MVP-3 popula a KB; por ora vazio)
-    const knowledge = await this.retrieveKnowledge(acct.org_id, acct.platform);
+    // RETRIEVE — padrões aprendidos relevantes (RAG)
+    const knowledge = await this.retrieveKnowledge(acct.org_id, acct.platform, ready);
 
     // ANALYZE
     let output: AnalyzeOutput;
@@ -265,10 +267,28 @@ export class AdsAnalyzeService {
   }
 
   /**
-   * RETRIEVE — padrões aprendidos relevantes (RAG). No MVP-2 retorna [].
-   * MVP-3: embedda o contexto e chama active.ads_knowledge_search.
+   * RETRIEVE — padrões aprendidos relevantes (RAG). Monta um resumo semântico
+   * do dossiê (objetivos + tendências) e busca na KB vetorizada da org. Os
+   * padrões voltam pro system prompt e SOBREPÕEM o playbook estático.
+   * Best-effort: sem chave OpenAI / KB vazia → [].
    */
-  private retrieveKnowledge(_orgId: string, _platform: string): Promise<string[]> {
-    return Promise.resolve([]);
+  private async retrieveKnowledge(
+    orgId: string,
+    platform: string,
+    ready: EntityDossier[],
+  ): Promise<string[]> {
+    const objectives = Array.from(
+      new Set(ready.map((e) => e.objective ?? 'geral')),
+    ).slice(0, 6);
+    const situations = ready
+      .slice(0, 8)
+      .map((e) => `${e.objective ?? 'geral'} tendência ${e.trend.label}`)
+      .join('; ');
+    const contextText = `Otimização de anúncios ${platform}. Objetivos: ${objectives.join(', ')}. Situações: ${situations}`;
+    try {
+      return await this.knowledge.retrieve(orgId, platform, contextText, 5);
+    } catch {
+      return [];
+    }
   }
 }

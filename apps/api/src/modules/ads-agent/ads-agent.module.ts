@@ -9,6 +9,7 @@ import { AdsAgentWorker } from './ads-agent.worker';
 import { AdsIngestService } from './ads-ingest.service';
 import { AdsDecisionsService } from './ads-decisions.service';
 import { AdsApplyService } from './ads-apply.service';
+import { AdsKnowledgeService } from './ads-knowledge.service';
 import { AdsOutcomeService } from './ads-outcome.service';
 import { AdsOutcomeWorker } from './ads-outcome.worker';
 import { AdsOverviewService } from './ads-overview.service';
@@ -43,6 +44,7 @@ import { MetaProvider } from './providers/meta.provider';
     AdsAnalyzeService,
     AdsDecisionsService,
     AdsApplyService,
+    AdsKnowledgeService,
     AdsOverviewService,
     AdsOutcomeService,
     AdsAgentWorker,

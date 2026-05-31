@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SupabaseService } from '../../common/supabase/supabase.service';
+import { AdsKnowledgeService } from './ads-knowledge.service';
 
 export type Verdict = 'positive' | 'negative' | 'neutral';
 
@@ -38,7 +39,10 @@ const BEFORE_WINDOW_DAYS = 7;
 export class AdsOutcomeService {
   private readonly logger = new Logger(AdsOutcomeService.name);
 
-  constructor(private readonly supabase: SupabaseService) {}
+  constructor(
+    private readonly supabase: SupabaseService,
+    private readonly knowledge: AdsKnowledgeService,
+  ) {}
 
   async measureDue(limit = 50): Promise<{ measured: number }> {
     const nowIso = new Date().toISOString();
@@ -118,6 +122,34 @@ export class AdsOutcomeService {
     });
     if (insErr) throw new Error(insErr.message);
     this.logger.log(`outcome[${d.id}] ${d.type} → ${verdict}`);
+
+    // loop de aprendizado (MVP-3c) — best-effort
+    const ent = await this.fetchEntityMeta(d.entity_id);
+    const cpaChange = (delta as { cpa_change_pct?: number | null }).cpa_change_pct ?? null;
+    await this.knowledge
+      .learnFromOutcome({
+        orgId: d.org_id,
+        platform: ent.platform,
+        objective: ent.objective,
+        decisionId: d.id,
+        type: d.type,
+        verdict,
+        cpaChangePct: cpaChange,
+        windowHours,
+      })
+      .catch((err) => this.logger.warn(`learnFromOutcome falhou: ${String(err)}`));
+  }
+
+  private async fetchEntityMeta(
+    entityId: string,
+  ): Promise<{ objective: string | null; platform: string }> {
+    const { data } = await this.supabase.adminClient
+      .from('ads_entities')
+      .select('objective, platform')
+      .eq('id', entityId)
+      .maybeSingle();
+    const r = data as { objective: string | null; platform: string } | null;
+    return { objective: r?.objective ?? null, platform: r?.platform ?? 'meta' };
   }
 }
 
