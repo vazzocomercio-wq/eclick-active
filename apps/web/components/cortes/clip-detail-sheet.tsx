@@ -18,6 +18,7 @@ import {
   Save,
   Share2,
   Sparkles,
+  Trash2,
   Youtube,
 } from 'lucide-react';
 import type {
@@ -61,6 +62,7 @@ export function ClipDetailSheet({ clip, open, onOpenChange, onChanged }: ClipDet
   const [regenerating, setRegenerating] = useState(false);
   const [approving, setApproving] = useState(false);
   const [scheduling, setScheduling] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [scheduleAt, setScheduleAt] = useState('');
   const [accounts, setAccounts] = useState<CortesAccounts | null>(null);
 
@@ -124,6 +126,28 @@ export function ClipDetailSheet({ clip, open, onOpenChange, onChanged }: ClipDet
       });
     } finally {
       setScheduling(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!clip) return;
+    const published = clip.posts.some((p) => p.status === 'publicado');
+    const msg = published
+      ? 'Excluir este corte? O vídeo sai do sistema e do Drive definitivamente. Os posts já publicados nas redes continuam no ar (não são removidos).'
+      : 'Excluir este corte definitivamente? O vídeo é apagado do Drive e os registros do sistema. Não tem como desfazer.';
+    if (!window.confirm(msg)) return;
+    setDeleting(true);
+    try {
+      await cortesApi.deleteClip(clip.id);
+      toast.success('Corte excluído do sistema.');
+      onChanged();
+      onOpenChange(false);
+    } catch (err) {
+      toast.error('Falha ao excluir', {
+        description: err instanceof ApiError ? err.message : String(err),
+      });
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -278,6 +302,32 @@ export function ClipDetailSheet({ clip, open, onOpenChange, onChanged }: ClipDet
                 </TabsContent>
               ))}
             </Tabs>
+          </div>
+
+          {/* Excluir corte (definitivo) */}
+          <div className="border-t border-border px-5 py-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">Excluir corte</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Apaga o vídeo do Drive e remove do sistema. Não dá pra desfazer.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="border-red-500/40 text-red-600 hover:bg-red-500/10 hover:text-red-600 dark:text-red-400"
+              >
+                {deleting ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3.5 w-3.5" />
+                )}
+                <span className="ml-1.5">Excluir</span>
+              </Button>
+            </div>
           </div>
         </div>
       </SheetContent>

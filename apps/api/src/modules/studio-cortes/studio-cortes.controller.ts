@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -116,6 +117,12 @@ export class StudioCortesController {
     @Body() body: { status: ClipStatus },
   ) {
     return this.service.setClipStatus(user.org_id, id, body.status);
+  }
+
+  /** Exclui o corte DEFINITIVAMENTE (apaga vídeo do Drive + registros). */
+  @Delete('clips/:id')
+  deleteClip(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.service.deleteClip(user.org_id, id);
   }
 
   /** Agenda/desagenda a publicação do corte (scheduled_at null = desagenda). */

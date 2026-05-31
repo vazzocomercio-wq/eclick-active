@@ -225,6 +225,59 @@ export class StudioCortesService {
   }
 
   /**
+   * Exclui um corte DEFINITIVAMENTE: apaga o arquivo de vídeo do Drive e
+   * remove o corte + suas copys (clip_posts cascateia via FK ON DELETE CASCADE).
+   * Idempotente no Drive (404 tolerado). NÃO "despublica" o que já foi postado
+   * nas redes — isso removeria o post público (ação separada e arriscada); aqui
+   * só limpamos o sistema/armazenamento.
+   */
+  async deleteClip(
+    orgId: string,
+    clipId: string,
+  ): Promise<{ ok: true; drive_deleted: boolean }> {
+    const { data: clip } = await this.supabase.adminClient
+      .from('clips')
+      .select('id, drive_file_id, work_file_deleted_at')
+      .eq('id', clipId)
+      .eq('org_id', orgId)
+      .maybeSingle();
+    if (!clip) throw new NotFoundException('Corte não encontrado.');
+    const c = clip as {
+      id: string;
+      drive_file_id: string | null;
+      work_file_deleted_at: string | null;
+    };
+
+    // 1. Apaga o arquivo de trabalho no Drive (se ainda vivo e Drive conectado).
+    //    Não trava a exclusão do registro se o Drive falhar — só logamos, senão
+    //    a linha sumiria e o janitor nunca mais acharia o arquivo pra limpar.
+    let driveDeleted = false;
+    if (c.drive_file_id && !c.work_file_deleted_at) {
+      try {
+        if (await this.drive.isConfiguredForOrg(orgId)) {
+          await this.drive.deleteFile(orgId, c.drive_file_id);
+          driveDeleted = true;
+        }
+      } catch (err) {
+        this.log.warn(
+          `[delete] Drive file ${c.drive_file_id} (clip ${clipId}): ${String(err)}`,
+        );
+      }
+    }
+
+    // 2. Remove o corte — clip_posts cascateia (FK ON DELETE CASCADE).
+    const { error } = await this.supabase.adminClient
+      .from('clips')
+      .delete()
+      .eq('id', clipId)
+      .eq('org_id', orgId);
+    if (error) throw new Error(error.message);
+
+    this.log.log(`[delete] corte ${clipId} excluído (drive_deleted=${driveDeleted})`);
+    return { ok: true, drive_deleted: driveDeleted };
+  }
+
+  /**
    * Agenda (ou desagenda) a publicação de um corte. Com data → posts ganham
    * scheduled_at + status 'agendado', e o corte vai pra coluna "Agendado"
    * (o worker publica na hora marcada → recompute → "Publicado"). Sem data →

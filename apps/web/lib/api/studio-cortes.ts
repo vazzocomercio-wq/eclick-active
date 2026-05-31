@@ -156,6 +156,10 @@ export const cortesApi = {
   scheduleClip: (clipId: string, scheduledAt: string | null) =>
     api.patch<ClipRow>(`/studio-cortes/clips/${clipId}/schedule`, { scheduled_at: scheduledAt }),
 
+  /** Exclui o corte DEFINITIVAMENTE (vídeo no Drive + registros). */
+  deleteClip: (clipId: string) =>
+    api.delete<{ ok: true; drive_deleted: boolean }>(`/studio-cortes/clips/${clipId}`),
+
   updatePost: (
     postId: string,
     patch: {
