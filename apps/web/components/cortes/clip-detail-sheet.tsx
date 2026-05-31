@@ -19,7 +19,13 @@ import {
   Sparkles,
   Youtube,
 } from 'lucide-react';
-import type { ClipPlatform, ClipPost, ClipRow } from '@/lib/api/studio-cortes';
+import type {
+  ClipPlatform,
+  ClipPost,
+  ClipRow,
+  CortesAccounts,
+  PublishAccount,
+} from '@/lib/api/studio-cortes';
 import { cortesApi } from '@/lib/api/studio-cortes';
 import { ApiError } from '@/lib/api/client';
 import {
@@ -55,6 +61,11 @@ export function ClipDetailSheet({ clip, open, onOpenChange, onChanged }: ClipDet
   const [approving, setApproving] = useState(false);
   const [scheduling, setScheduling] = useState(false);
   const [scheduleAt, setScheduleAt] = useState('');
+  const [accounts, setAccounts] = useState<CortesAccounts | null>(null);
+
+  useEffect(() => {
+    if (open && !accounts) void cortesApi.accounts().then(setAccounts).catch(() => {});
+  }, [open, accounts]);
 
   const postByPlatform = useMemo(() => {
     const map = new Map<ClipPlatform, ClipPost>();
@@ -260,6 +271,7 @@ export function ClipDetailSheet({ clip, open, onOpenChange, onChanged }: ClipDet
                   <PlatformCopyEditor
                     platform={id}
                     post={postByPlatform.get(id) ?? null}
+                    accounts={accounts ? accounts[id] : []}
                     onSaved={onChanged}
                   />
                 </TabsContent>
@@ -277,10 +289,12 @@ export function ClipDetailSheet({ clip, open, onOpenChange, onChanged }: ClipDet
 function PlatformCopyEditor({
   platform,
   post,
+  accounts,
   onSaved,
 }: {
   platform: ClipPlatform;
   post: ClipPost | null;
+  accounts: PublishAccount[];
   onSaved: () => void;
 }) {
   const [title, setTitle] = useState('');
@@ -288,13 +302,30 @@ function PlatformCopyEditor({
   const [hashtags, setHashtags] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
   const [saving, setSaving] = useState(false);
+  const [enabled, setEnabled] = useState(true);
+  const [accountId, setAccountId] = useState('');
 
   useEffect(() => {
     setTitle(post?.title ?? '');
     setCopy(post?.copy ?? '');
     setHashtags((post?.hashtags ?? []).join(', '));
     setScheduledAt(toLocalInput(post?.scheduled_at ?? null));
+    setEnabled(post?.enabled ?? true);
+    setAccountId(post?.account_id ?? '');
   }, [post]);
+
+  // Salva conta/toggle na hora (sem precisar do botão Salvar).
+  async function persist(patch: { enabled?: boolean; account_id?: string | null }) {
+    if (!post) return;
+    try {
+      await cortesApi.updatePost(post.id, patch);
+      onSaved();
+    } catch (err) {
+      toast.error('Falha ao salvar', {
+        description: err instanceof ApiError ? err.message : String(err),
+      });
+    }
+  }
 
   if (!post) {
     return (
@@ -333,6 +364,55 @@ function PlatformCopyEditor({
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Conta de destino + ligar/desligar a rede (multi-conta) */}
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/20 p-2.5">
+        <button
+          type="button"
+          onClick={() => {
+            const v = !enabled;
+            setEnabled(v);
+            void persist({ enabled: v });
+          }}
+          className={cn(
+            'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors',
+            enabled
+              ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+              : 'bg-muted text-muted-foreground',
+          )}
+        >
+          <span className={cn('h-2 w-2 rounded-full', enabled ? 'bg-emerald-500' : 'bg-muted-foreground')} />
+          {enabled ? 'Publicar nesta rede' : 'Rede desligada'}
+        </button>
+
+        {platform === 'youtube' ? (
+          <span className="ml-auto truncate text-[11px] text-muted-foreground">
+            {accounts[0]?.username
+              ? `Conta: ${accounts[0].username}`
+              : 'Conecte o Google Drive p/ habilitar o YouTube'}
+          </span>
+        ) : accounts.length > 0 ? (
+          <select
+            value={accountId}
+            onChange={(e) => {
+              setAccountId(e.target.value);
+              void persist({ account_id: e.target.value || null });
+            }}
+            className="ml-auto rounded-md border border-border bg-background px-2 py-1 text-xs"
+          >
+            <option value="">Conta padrão</option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.username || a.name || a.id}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span className="ml-auto text-[11px] text-amber-600 dark:text-amber-400">
+            Nenhuma conta — conecte no Social AI
+          </span>
+        )}
+      </div>
+
       {/* Status da publicação (Sprint 2) */}
       {published && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-xs">

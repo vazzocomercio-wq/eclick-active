@@ -32,6 +32,7 @@ export interface ClipPost {
   org_id: string;
   platform: ClipPlatform;
   account_id: string | null;
+  enabled: boolean;
   title: string | null;
   copy: string | null;
   hashtags: string[];
@@ -44,6 +45,18 @@ export interface ClipPost {
   metrics: ClipPostMetrics;
   created_at: string;
   updated_at: string;
+}
+
+export interface PublishAccount {
+  id: string;
+  username: string | null;
+  name: string | null;
+}
+
+export interface CortesAccounts {
+  instagram: PublishAccount[];
+  tiktok: PublishAccount[];
+  youtube: PublishAccount[];
 }
 
 export interface MetricsSummary {
@@ -120,6 +133,8 @@ export const cortesApi = {
 
   board: () => api.get<{ columns: BoardColumns }>('/studio-cortes/board'),
 
+  accounts: () => api.get<CortesAccounts>('/studio-cortes/accounts'),
+
   jobs: () => api.get<ContentJob[]>('/studio-cortes/jobs'),
 
   upload: (file: File, title?: string) => {
@@ -143,6 +158,7 @@ export const cortesApi = {
       hashtags?: string[];
       scheduled_at?: string | null;
       account_id?: string | null;
+      enabled?: boolean;
     },
   ) => api.patch<ClipPost>(`/studio-cortes/posts/${postId}`, patch),
 

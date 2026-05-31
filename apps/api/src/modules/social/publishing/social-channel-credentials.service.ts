@@ -156,6 +156,56 @@ export class SocialChannelCredentialsService {
     }
   }
 
+  /**
+   * Igual ao getDecryptedToken, mas pra uma credencial ESPECÍFICA (por id) —
+   * usado quando o caller escolhe a conta de destino (multi-conta). Mantém o
+   * auto-refresh do TikTok.
+   */
+  async getDecryptedTokenByCredId(
+    orgId: string,
+    credId: string,
+  ): Promise<{
+    cred: SocialChannelCredential;
+    access_token: string;
+    refresh_token: string | null;
+  } | null> {
+    const { data } = await this.supabase.adminClient
+      .from('social_channel_credentials')
+      .select('*')
+      .eq('id', credId)
+      .eq('org_id', orgId)
+      .eq('is_active', true)
+      .maybeSingle();
+    const cred = data as SocialChannelCredential | null;
+    if (!cred) return null;
+    try {
+      const { data: tok } = await this.supabase.adminClient
+        .from('social_channel_credentials')
+        .select('access_token_ciphertext, refresh_token_ciphertext')
+        .eq('id', cred.id)
+        .single();
+      const row = tok as {
+        access_token_ciphertext: string;
+        refresh_token_ciphertext: string | null;
+      };
+      let accessToken = decryptSecret(row.access_token_ciphertext);
+      const refreshToken = row.refresh_token_ciphertext
+        ? decryptSecret(row.refresh_token_ciphertext)
+        : null;
+      if (cred.channel === 'tiktok_business' && refreshToken) {
+        const expMs = cred.expires_at ? new Date(cred.expires_at).getTime() : 0;
+        if (!expMs || expMs < Date.now() + 5 * 60 * 1000) {
+          const fresh = await this.refreshTikTokToken(cred, refreshToken);
+          if (fresh) accessToken = fresh;
+        }
+      }
+      return { cred, access_token: accessToken, refresh_token: refreshToken };
+    } catch (err) {
+      this.log.warn(`getDecryptedTokenByCredId falhou: ${String(err)}`);
+      return null;
+    }
+  }
+
   /** Renova o access token do TikTok (grant_type=refresh_token). Atualiza o
    *  ciphertext + expires_at (refresh token rotaciona — grava o novo). Devolve o
    *  novo access_token, ou null se falhar (e marca last_error). */

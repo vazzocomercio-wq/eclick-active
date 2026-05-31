@@ -65,12 +65,11 @@ export class InstagramGraphProvider implements PublishingProvider {
     orgId: string,
     input: PublishInput,
     brandId?: string | null,
+    credId?: string | null,
   ): Promise<PublishResult> {
-    const decrypted = await this.creds.getDecryptedToken(
-      orgId,
-      this.channel,
-      brandId,
-    );
+    const decrypted = credId
+      ? await this.creds.getDecryptedTokenByCredId(orgId, credId)
+      : await this.creds.getDecryptedToken(orgId, this.channel, brandId);
     if (!decrypted) {
       return {
         success: false,

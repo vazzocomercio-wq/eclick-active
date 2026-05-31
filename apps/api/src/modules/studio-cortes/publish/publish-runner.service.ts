@@ -67,6 +67,7 @@ export class PublishRunnerService {
     let published = 0;
     let failed = 0;
     for (const post of posts) {
+      if (post.enabled === false) continue; // rede desligada pelo usuário
       if (post.external_post_id || post.status === 'publicado') continue; // idempotência
       if ((post.publish_attempts ?? 0) >= 3) continue; // backoff
       if (!this.isDue(clip, post)) continue; // agendamento
@@ -98,7 +99,8 @@ export class PublishRunnerService {
           is_carousel: false,
           video_url: videoUrl,
         };
-        result = await this.instagram.publish(orgId, input, await this.resolveBrandId(orgId));
+        // account_id = id da credencial escolhida (multi-conta); null → conta default
+        result = await this.instagram.publish(orgId, input, await this.resolveBrandId(orgId), post.account_id);
       } else if (post.platform === 'tiktok') {
         const input: PublishInput = {
           caption,
@@ -106,7 +108,7 @@ export class PublishRunnerService {
           is_carousel: false,
           video_url: videoUrl,
         };
-        result = await this.tiktok.publish(orgId, input, await this.resolveBrandId(orgId));
+        result = await this.tiktok.publish(orgId, input, await this.resolveBrandId(orgId), post.account_id);
       } else {
         // youtube
         const title = (post.title || clip.title || 'Corte').slice(0, 100);
@@ -166,7 +168,8 @@ export class PublishRunnerService {
       .from('clip_posts')
       .select('status')
       .eq('clip_id', clipId)
-      .eq('org_id', orgId);
+      .eq('org_id', orgId)
+      .eq('enabled', true); // só as redes ligadas contam pro status do corte
     const statuses = (data ?? []).map((r: { status: string }) => r.status);
     if (statuses.length === 0) return;
     // Quando todos os posts já resolveram (publicado/falhou): se algum publicou,

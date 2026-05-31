@@ -45,8 +45,11 @@ export class TikTokBusinessProvider implements PublishingProvider {
     orgId: string,
     input: PublishInput,
     brandId?: string | null,
+    credId?: string | null,
   ): Promise<PublishResult> {
-    const tok = await this.creds.getDecryptedToken(orgId, this.channel, brandId);
+    const tok = credId
+      ? await this.creds.getDecryptedTokenByCredId(orgId, credId)
+      : await this.creds.getDecryptedToken(orgId, this.channel, brandId);
     if (!tok) {
       return {
         success: false,

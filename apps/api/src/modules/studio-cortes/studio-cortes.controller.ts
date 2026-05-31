@@ -78,6 +78,12 @@ export class StudioCortesController {
     return this.service.getBoard(user.org_id);
   }
 
+  /** Contas conectadas por rede (seletor de conta+rede). */
+  @Get('accounts')
+  accounts(@CurrentUser() user: AuthUser) {
+    return this.service.listAccounts(user.org_id);
+  }
+
   // ── Mutação ───────────────────────────────────────────────
 
   @Patch('clips/:id/status')
@@ -110,6 +116,7 @@ export class StudioCortesController {
       hashtags?: string[];
       scheduled_at?: string | null;
       account_id?: string | null;
+      enabled?: boolean;
     },
   ) {
     return this.service.updateClipPost(user.org_id, id, body);

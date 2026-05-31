@@ -5,6 +5,7 @@ import { ClippingRunnerService } from './clipping/clipping-runner.service';
 import { CopyRunnerService } from './copy/copy-runner.service';
 import { PublishRunnerService } from './publish/publish-runner.service';
 import { ClipMetricsRunnerService } from './publish/clip-metrics-runner.service';
+import { SocialChannelCredentialsService } from '../social/publishing/social-channel-credentials.service';
 import type {
   Clip,
   ClipPlatform,
@@ -35,7 +36,31 @@ export class StudioCortesService {
     private readonly copyRunner: CopyRunnerService,
     private readonly publish: PublishRunnerService,
     private readonly clipMetrics: ClipMetricsRunnerService,
+    private readonly socialCreds: SocialChannelCredentialsService,
   ) {}
+
+  /** Contas conectadas por rede (pro seletor de conta+rede no corte). */
+  async listAccounts(orgId: string): Promise<{
+    instagram: Array<{ id: string; username: string | null; name: string | null }>;
+    tiktok: Array<{ id: string; username: string | null; name: string | null }>;
+    youtube: Array<{ id: string; username: string | null; name: string | null }>;
+  }> {
+    const creds = await this.socialCreds.list(orgId);
+    const map = (channel: string) =>
+      creds
+        .filter((c) => c.channel === channel && c.is_active)
+        .map((c) => ({ id: c.id, username: c.external_username, name: c.external_account_name }));
+    const ytStatus = await this.drive.getStatus(orgId);
+    const youtube =
+      ytStatus.connected && (await this.drive.hasYouTubeScope(orgId))
+        ? [{ id: 'google', username: ytStatus.email, name: 'YouTube' }]
+        : [];
+    return {
+      instagram: map('instagram_business'),
+      tiktok: map('tiktok_business'),
+      youtube,
+    };
+  }
 
   // ── Upload ────────────────────────────────────────────────
 
@@ -243,6 +268,7 @@ export class StudioCortesService {
       hashtags?: string[];
       scheduled_at?: string | null;
       account_id?: string | null;
+      enabled?: boolean;
     },
   ): Promise<unknown> {
     const fields: Record<string, unknown> = {};
@@ -251,6 +277,7 @@ export class StudioCortesService {
     if (patch.hashtags !== undefined) fields.hashtags = patch.hashtags;
     if (patch.scheduled_at !== undefined) fields.scheduled_at = patch.scheduled_at;
     if (patch.account_id !== undefined) fields.account_id = patch.account_id;
+    if (patch.enabled !== undefined) fields.enabled = patch.enabled;
     if (Object.keys(fields).length === 0) throw new BadRequestException('Nada pra atualizar.');
 
     const { data, error } = await this.supabase.adminClient

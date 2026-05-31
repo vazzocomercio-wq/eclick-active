@@ -77,6 +77,7 @@ export interface ClipPost {
   org_id: string;
   platform: ClipPlatform;
   account_id: string | null;
+  enabled: boolean;
   title: string | null;
   copy: string | null;
   hashtags: string[];
