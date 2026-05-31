@@ -37,7 +37,9 @@ export class ClippingRunnerService {
       sourceUrl = `https://www.youtube.com/watch?v=${job.youtube_video_id}`;
     } else {
       if (!job.drive_file_id) throw new BadRequestException('Job sem master no Drive');
-      sourceUrl = await this.drive.makeSourceUrl(job.org_id, job.drive_file_id);
+      // Proxy assinado nosso (stream do Drive) — evita a página anti-vírus do
+      // Drive que devolve HTML pra arquivos grandes e quebra o download no Vizard.
+      sourceUrl = this.drive.proxySourceUrl(job.id);
     }
 
     const { clipping_job_id } = await this.provider.submit(sourceUrl, {

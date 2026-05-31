@@ -119,6 +119,12 @@ export class StudioCortesController {
     return this.service.regenerateCopy(user.org_id, id);
   }
 
+  /** Reenvia o job ao provedor de corte (reusa o master) — pra jobs presos/falhos. */
+  @Post('jobs/:id/retry-clip')
+  retryClip(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.service.retryClip(user.org_id, id);
+  }
+
   /** Roda o Janitor manualmente pra org do usuário (smoke / on-demand). */
   @Post('janitor/run')
   runJanitor(@CurrentUser() user: AuthUser) {

@@ -7,6 +7,7 @@ import { AlertsModule } from '../alerts/alerts.module';
 import { SocialModule } from '../social/social.module';
 import { StudioCortesController } from './studio-cortes.controller';
 import { CortesGoogleOAuthController } from './cortes-google-oauth.controller';
+import { CortesSourceController } from './cortes-source.controller';
 import { StudioCortesService } from './studio-cortes.service';
 import { CortesDriveClient } from './cortes-drive.client';
 import { CopyRunnerService } from './copy/copy-runner.service';
@@ -35,7 +36,12 @@ import { CLIPPING_PROVIDER } from './studio-cortes.types';
     AlertsModule,
     SocialModule, // Sprint 2: reusa providers IG/TikTok + InstagramInsights + creds
   ],
-  controllers: [StudioCortesController, CortesGoogleOAuthController, ClippingWebhookController],
+  controllers: [
+    StudioCortesController,
+    CortesGoogleOAuthController,
+    CortesSourceController,
+    ClippingWebhookController,
+  ],
   providers: [
     StudioCortesService,
     CortesDriveClient,

@@ -244,6 +244,29 @@ export class StudioCortesService {
     return this.copyRunner.runForJob(orgId, jobId);
   }
 
+  /** Reenvia um job ao provedor de corte (reusa o master no Drive). Pra jobs
+   *  presos/falhos (ex: o provedor não conseguiu baixar a fonte). */
+  async retryClip(orgId: string, jobId: string): Promise<{ ok: true }> {
+    const { data } = await this.supabase.adminClient
+      .from('content_jobs')
+      .select('*')
+      .eq('id', jobId)
+      .eq('org_id', orgId)
+      .maybeSingle();
+    const job = data as ContentJob | null;
+    if (!job) throw new NotFoundException('Job não encontrado.');
+    if (!job.drive_file_id && job.source_type === 'upload') {
+      throw new BadRequestException('Job sem master no Drive — não dá pra reenviar.');
+    }
+    await this.supabase.adminClient
+      .from('content_jobs')
+      .update({ status: 'received', clipping_job_id: null, failure_reason: null })
+      .eq('id', jobId)
+      .eq('org_id', orgId);
+    await this.clipping.submit({ ...job, status: 'received', clipping_job_id: null });
+    return { ok: true };
+  }
+
   /** Status de configuração (Drive + provedor) — útil pro smoke e pra UI. */
   async config(orgId: string): Promise<{
     drive_connected: boolean;

@@ -367,6 +367,46 @@ export class CortesDriveClient {
     return `https://drive.google.com/uc?export=download&id=${fileId}`;
   }
 
+  // ── Proxy de fonte pro provedor de corte ──────────────────
+  // Drive `uc?export=download` mete página anti-vírus em arquivo grande (>~100MB)
+  // → o provedor baixa HTML em vez do vídeo. Solução: o provedor baixa de uma
+  // URL NOSSA (assinada), e a gente faz stream do Drive (autenticado) pra ele.
+
+  private static readonly SOURCE_TTL_MS = 6 * 60 * 60 * 1000; // 6h (cobre o processamento)
+
+  signSourceToken(jobId: string): string {
+    const exp = Date.now() + CortesDriveClient.SOURCE_TTL_MS;
+    const payload = `${jobId}.${exp}`;
+    const mac = createHmac('sha256', this.requireEnv('LLM_CRED_ENCRYPTION_KEY'))
+      .update(payload)
+      .digest('base64url');
+    return `${exp}.${mac}`;
+  }
+
+  verifySourceToken(jobId: string, token: string): boolean {
+    const [expStr, mac] = (token ?? '').split('.');
+    if (!expStr || !mac) return false;
+    const expected = createHmac('sha256', this.requireEnv('LLM_CRED_ENCRYPTION_KEY'))
+      .update(`${jobId}.${expStr}`)
+      .digest('base64url');
+    if (mac !== expected) return false;
+    return Number(expStr) > Date.now();
+  }
+
+  /** URL pública (assinada) que o provedor de corte usa como fonte do master. */
+  proxySourceUrl(jobId: string): string {
+    const base = (process.env.API_PUBLIC_URL ?? process.env.PUBLIC_API_URL ?? '').replace(/\/$/, '');
+    return `${base}/studio-cortes/source/${jobId}?t=${this.signSourceToken(jobId)}`;
+  }
+
+  /** Stream bruto do arquivo do Drive (alt=media, autenticado) — o controller repassa. */
+  async streamMaster(orgId: string, fileId: string): Promise<Response> {
+    const token = await this.getValidAccessToken(orgId);
+    return fetch(`${DRIVE_API}/files/${fileId}?alt=media`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  }
+
   async deleteFile(orgId: string, fileId: string): Promise<void> {
     const token = await this.getValidAccessToken(orgId);
     const res = await fetch(`${DRIVE_API}/files/${fileId}`, {
