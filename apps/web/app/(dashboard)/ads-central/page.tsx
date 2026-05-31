@@ -499,6 +499,15 @@ function DecisionCard({ d, busy, onDecide, onRollback, index }: {
           <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-300">
             <Check className="h-3 w-3" /> Aplicada
           </span>
+          {d.outcome_verdict && (
+            <span className={cn('inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium',
+              d.outcome_verdict === 'positive' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                : d.outcome_verdict === 'negative' ? 'border-red-500/30 bg-red-500/10 text-red-300'
+                  : 'border-border bg-muted text-muted-foreground')}
+              title="Resultado medido 72h após aplicar">
+              {d.outcome_verdict === 'positive' ? '✓ funcionou' : d.outcome_verdict === 'negative' ? '✗ piorou' : '~ neutro'}
+            </span>
+          )}
           <button
             onClick={() => onRollback(d.id)}
             disabled={busy}

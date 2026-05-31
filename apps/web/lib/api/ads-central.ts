@@ -62,6 +62,7 @@ export interface AdsDecision {
   created_at: string;
   entity_name?: string | null;
   entity_external_id?: string | null;
+  outcome_verdict?: 'positive' | 'negative' | 'neutral' | null;
 }
 
 export interface CampaignDossier {

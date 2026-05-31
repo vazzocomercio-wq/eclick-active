@@ -34,6 +34,7 @@ export interface DecisionRow {
   // enriquecido:
   entity_name?: string | null;
   entity_external_id?: string | null;
+  outcome_verdict?: string | null;
 }
 
 const DECISION_COLS =
@@ -149,22 +150,33 @@ export class AdsDecisionsService {
     return enriched as DecisionRow;
   }
 
-  /** Anexa nome/external_id da entidade (1 query batch). */
+  /** Anexa nome/external_id da entidade + veredito do outcome (batch). */
   private async enrich(rows: DecisionRow[]): Promise<DecisionRow[]> {
     if (rows.length === 0) return rows;
-    const ids = Array.from(new Set(rows.map((r) => r.entity_id)));
-    const { data } = await this.supabase.adminClient
-      .from('ads_entities')
-      .select('id, name, external_id')
-      .in('id', ids);
+    const entIds = Array.from(new Set(rows.map((r) => r.entity_id)));
+    const decIds = rows.map((r) => r.id);
+    const [entRes, outRes] = await Promise.all([
+      this.supabase.adminClient.from('ads_entities').select('id, name, external_id').in('id', entIds),
+      this.supabase.adminClient.from('ads_outcomes').select('decision_id, verdict').in('decision_id', decIds),
+    ]);
     const byId = new Map(
-      ((data ?? []) as Array<{ id: string; name: string | null; external_id: string }>).map(
+      ((entRes.data ?? []) as Array<{ id: string; name: string | null; external_id: string }>).map(
         (e) => [e.id, e],
+      ),
+    );
+    const verdictByDec = new Map(
+      ((outRes.data ?? []) as Array<{ decision_id: string; verdict: string }>).map(
+        (o) => [o.decision_id, o.verdict],
       ),
     );
     return rows.map((r) => {
       const e = byId.get(r.entity_id);
-      return { ...r, entity_name: e?.name ?? null, entity_external_id: e?.external_id ?? null };
+      return {
+        ...r,
+        entity_name: e?.name ?? null,
+        entity_external_id: e?.external_id ?? null,
+        outcome_verdict: verdictByDec.get(r.id) ?? null,
+      };
     });
   }
 }

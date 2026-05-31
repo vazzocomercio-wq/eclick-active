@@ -26,6 +26,7 @@ import {
   DecisionStatus,
 } from './ads-decisions.service';
 import { AdsApplyService } from './ads-apply.service';
+import { AdsOutcomeService } from './ads-outcome.service';
 import type { Platform } from './contracts/ad-provider';
 
 interface EnrollBody {
@@ -56,6 +57,7 @@ export class AdsAgentController {
     private readonly overview: AdsOverviewService,
     private readonly dossiers: AdsDossierService,
     private readonly applier: AdsApplyService,
+    private readonly outcomes: AdsOutcomeService,
   ) {}
 
   /** Plataformas com adaptador disponível. */
@@ -248,5 +250,26 @@ export class AdsAgentController {
       throw new BadRequestException('after_budget_brl (número) é obrigatório.');
     }
     return this.decisions.editAfterBudget(user.org_id, id, body.after_budget_brl);
+  }
+
+  // ── Outcomes (loop de aprendizado, MVP-3b) ─────────────────
+
+  /** Mede agora os outcomes vencidos (manual/teste; o worker faz @1h). */
+  @Post('outcomes/run')
+  runOutcomes(): Promise<{ measured: number }> {
+    return this.outcomes.measureDue();
+  }
+
+  /** Outcomes recentes da org. */
+  @Get('outcomes')
+  async listOutcomes(@CurrentUser() user: AuthUser): Promise<unknown[]> {
+    const { data, error } = await this.supabase.adminClient
+      .from('ads_outcomes')
+      .select('id, decision_id, window_hours, before_metrics, after_metrics, delta, verdict, measured_at')
+      .eq('org_id', user.org_id)
+      .order('measured_at', { ascending: false })
+      .limit(50);
+    if (error) throw new BadRequestException(error.message);
+    return data ?? [];
   }
 }
