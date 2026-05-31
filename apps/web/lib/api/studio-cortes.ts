@@ -1,4 +1,7 @@
 import { api } from './client';
+import { createClient } from '../supabase/client';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 // ── Tipos (espelham active.* da Migration 094) ──────────────
 
@@ -157,6 +160,63 @@ export const cortesApi = {
   metrics: () => api.get<MetricsSummary>('/studio-cortes/metrics'),
   refreshMetrics: () => api.post<{ updated: number }>('/studio-cortes/metrics/refresh'),
 };
+
+/**
+ * Upload do master com progresso real (XHR — fetch não expõe upload.onprogress).
+ * onProgress(pct 0-100, bytesEnviados, bytesTotal). Em pct=100 o servidor ainda
+ * está subindo pro Drive + criando o job (fase "processando" até resolver).
+ */
+export async function uploadWithProgress(
+  file: File,
+  title: string | undefined,
+  onProgress: (pct: number, loaded: number, total: number) => void,
+): Promise<ContentJob> {
+  let token: string | undefined;
+  try {
+    const supabase = createClient();
+    const { data } = await supabase.auth.getSession();
+    token = data.session?.access_token;
+  } catch {
+    /* sem token → backend responde 401 */
+  }
+
+  return new Promise<ContentJob>((resolve, reject) => {
+    const form = new FormData();
+    form.append('file', file);
+    if (title) form.append('title', title);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${API_URL.replace(/\/$/, '')}/studio-cortes/upload`);
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        onProgress(Math.round((e.loaded / e.total) * 100), e.loaded, e.total);
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText) as ContentJob);
+        } catch {
+          resolve({} as ContentJob);
+        }
+      } else {
+        let msg = `HTTP ${xhr.status}`;
+        try {
+          const b = JSON.parse(xhr.responseText) as { message?: string };
+          if (b?.message) msg = String(b.message);
+        } catch {
+          /* mantém HTTP n */
+        }
+        reject(new Error(msg));
+      }
+    };
+    xhr.onerror = () => reject(new Error('Falha de rede no upload'));
+    xhr.ontimeout = () => reject(new Error('Tempo de upload esgotado'));
+    xhr.send(form);
+  });
+}
 
 export const CLIP_STATUS_ORDER: ClipStatus[] = [
   'a_revisar',

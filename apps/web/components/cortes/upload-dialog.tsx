@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { FileVideo, Loader2, UploadCloud } from 'lucide-react';
-import { cortesApi } from '@/lib/api/studio-cortes';
+import { uploadWithProgress } from '@/lib/api/studio-cortes';
 import { ApiError } from '@/lib/api/client';
 import {
   Dialog,
@@ -32,6 +32,8 @@ export function UploadDialog({ open, onOpenChange, onUploaded }: UploadDialogPro
   const [title, setTitle] = useState('');
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [sentBytes, setSentBytes] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   function pick(f: File | null) {
@@ -54,18 +56,27 @@ export function UploadDialog({ open, onOpenChange, onUploaded }: UploadDialogPro
     if (uploading) return;
     setFile(null);
     setTitle('');
+    setProgress(0);
+    setSentBytes(0);
     onOpenChange(false);
   }
 
   async function handleUpload() {
     if (!file) return;
     setUploading(true);
+    setProgress(0);
+    setSentBytes(0);
     try {
-      await cortesApi.upload(file, title.trim() || undefined);
+      await uploadWithProgress(file, title.trim() || undefined, (pct, loaded) => {
+        setProgress(pct);
+        setSentBytes(loaded);
+      });
       toast.success('Vídeo enviado! Os cortes vão aparecer no board em alguns minutos.');
       onUploaded();
       setFile(null);
       setTitle('');
+      setProgress(0);
+      setSentBytes(0);
       onOpenChange(false);
     } catch (err) {
       toast.error('Falha no envio', {
@@ -75,6 +86,11 @@ export function UploadDialog({ open, onOpenChange, onUploaded }: UploadDialogPro
       setUploading(false);
     }
   }
+
+  const totalMb = file ? file.size / 1024 / 1024 : 0;
+  const sentMb = sentBytes / 1024 / 1024;
+  // pct=100 mas ainda no try → backend subindo pro Drive + criando job.
+  const processing = uploading && progress >= 100;
 
   return (
     <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(true) : close())}>
@@ -97,9 +113,12 @@ export function UploadDialog({ open, onOpenChange, onUploaded }: UploadDialogPro
             setDragOver(false);
             pick(e.dataTransfer.files?.[0] ?? null);
           }}
-          onClick={() => inputRef.current?.click()}
+          onClick={() => {
+            if (!uploading) inputRef.current?.click();
+          }}
           className={cn(
-            'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-8 text-center transition-colors',
+            'flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-8 text-center transition-colors',
+            uploading ? 'cursor-default opacity-80' : 'cursor-pointer',
             dragOver ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40',
           )}
         >
@@ -128,19 +147,57 @@ export function UploadDialog({ open, onOpenChange, onUploaded }: UploadDialogPro
           />
         </div>
 
-        <div>
-          <Label htmlFor="cortes-title" className="text-xs">
-            Título do job (opcional)
-          </Label>
-          <Input
-            id="cortes-title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Ex: Live de lançamento — 28/05"
-            className="mt-1"
-            disabled={uploading}
-          />
-        </div>
+        {uploading ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="inline-flex items-center gap-1.5 font-medium text-primary">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+                </span>
+                {processing ? 'Processando no Drive…' : 'Enviando pro Drive…'}
+              </span>
+              <span className="tabular-nums text-muted-foreground">
+                {processing
+                  ? `${totalMb.toFixed(1)} MB`
+                  : `${sentMb.toFixed(1)} / ${totalMb.toFixed(1)} MB · ${progress}%`}
+              </span>
+            </div>
+            <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className={cn(
+                  'absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-cyan-500 to-emerald-400 transition-[width] duration-200 ease-out',
+                  processing && 'animate-pulse',
+                )}
+                style={{
+                  width: processing ? '100%' : `${Math.max(progress, 3)}%`,
+                  boxShadow: '0 0 12px rgba(0,229,255,0.55)',
+                }}
+              >
+                {/* brilho deslizante */}
+                <div className="absolute inset-0 -skew-x-12 animate-pulse bg-gradient-to-r from-transparent via-white/30 to-transparent" />
+              </div>
+            </div>
+            {processing && (
+              <p className="text-[11px] text-muted-foreground">
+                Upload concluído — finalizando no Drive e criando o job…
+              </p>
+            )}
+          </div>
+        ) : (
+          <div>
+            <Label htmlFor="cortes-title" className="text-xs">
+              Título do job (opcional)
+            </Label>
+            <Input
+              id="cortes-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Ex: Live de lançamento — 28/05"
+              className="mt-1"
+            />
+          </div>
+        )}
 
         <DialogFooter>
           <Button variant="outline" onClick={close} disabled={uploading}>
@@ -148,7 +205,9 @@ export function UploadDialog({ open, onOpenChange, onUploaded }: UploadDialogPro
           </Button>
           <Button onClick={handleUpload} disabled={!file || uploading}>
             {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
-            <span className="ml-1.5">{uploading ? 'Enviando…' : 'Enviar e cortar'}</span>
+            <span className="ml-1.5 tabular-nums">
+              {processing ? 'Processando…' : uploading ? `Enviando ${progress}%` : 'Enviar e cortar'}
+            </span>
           </Button>
         </DialogFooter>
       </DialogContent>
