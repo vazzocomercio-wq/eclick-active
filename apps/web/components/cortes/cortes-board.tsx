@@ -69,7 +69,7 @@ export function CortesBoard({ columns, onRefresh }: CortesBoardProps) {
     if (!DROPPABLE_STATUSES.includes(target)) {
       toast.info(
         target === 'publicado'
-          ? 'Publicação chega no Sprint 2.'
+          ? 'A coluna Publicado é automática — aprove o corte que o sistema publica.'
           : 'Esta coluna é definida pelo sistema.',
       );
       return;

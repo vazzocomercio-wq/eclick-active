@@ -36,7 +36,7 @@ export function CortesColumn({ status, clips, droppable, onSelectClip }: CortesC
           </span>
         </div>
         {!droppable && (
-          <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground" title="Não arrastável no Sprint 1">
+          <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground" title="Definido pelo sistema (publica ao aprovar)">
             <Lock className="h-3 w-3" />
           </span>
         )}

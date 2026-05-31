@@ -80,7 +80,7 @@ export function ClipDetailSheet({ clip, open, onOpenChange, onChanged }: ClipDet
         <SheetHeader className="border-b border-border px-5 py-4">
           <SheetTitle className="text-base">{clip.title || clip.hook || 'Corte'}</SheetTitle>
           <SheetDescription className="text-xs">
-            Edite as copys por plataforma. A publicação chega no Sprint 2.
+            Edite as copys por plataforma. Ao aprovar o corte, ele é publicado nessas redes.
           </SheetDescription>
         </SheetHeader>
 
@@ -293,7 +293,7 @@ function PlatformCopyEditor({
           className="mt-1"
         />
         <p className="mt-1 text-[11px] text-muted-foreground">
-          A publicação automática chega no Sprint 2 — por ora isto só registra o horário.
+          Vazio = publica ao aprovar o corte. Com horário = vai pra coluna Agendado e publica na hora marcada.
         </p>
       </div>
 
