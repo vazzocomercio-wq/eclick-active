@@ -386,8 +386,10 @@ function PlatformCopyEditor({
 
         {platform === 'youtube' ? (
           <span className="ml-auto truncate text-[11px] text-muted-foreground">
-            {accounts[0]?.username
-              ? `Conta: ${accounts[0].username}`
+            {accounts[0]
+              ? accounts[0].username
+                ? `Conta: ${accounts[0].username}`
+                : 'YouTube conectado ✓'
               : 'Conecte o Google Drive p/ habilitar o YouTube'}
           </span>
         ) : accounts.length > 0 ? (
@@ -400,9 +402,9 @@ function PlatformCopyEditor({
             className="ml-auto rounded-md border border-border bg-background px-2 py-1 text-xs"
           >
             <option value="">Conta padrão</option>
-            {accounts.map((a) => (
+            {accounts.map((a, i) => (
               <option key={a.id} value={a.id}>
-                {a.username || a.name || a.id}
+                {a.username || a.name || `Conta conectada ${i + 1}`}
               </option>
             ))}
           </select>
