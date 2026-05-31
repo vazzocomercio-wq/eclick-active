@@ -11,6 +11,7 @@ import {
   Loader2,
   MessageCircle,
   Music2,
+  Rocket,
   Save,
   Share2,
   Sparkles,
@@ -49,6 +50,7 @@ interface ClipDetailSheetProps {
 export function ClipDetailSheet({ clip, open, onOpenChange, onChanged }: ClipDetailSheetProps) {
   const [tab, setTab] = useState<ClipPlatform>('instagram');
   const [regenerating, setRegenerating] = useState(false);
+  const [approving, setApproving] = useState(false);
 
   const postByPlatform = useMemo(() => {
     const map = new Map<ClipPlatform, ClipPost>();
@@ -57,6 +59,23 @@ export function ClipDetailSheet({ clip, open, onOpenChange, onChanged }: ClipDet
   }, [clip]);
 
   if (!clip) return null;
+
+  async function handleApprove() {
+    if (!clip) return;
+    setApproving(true);
+    try {
+      await cortesApi.setClipStatus(clip.id, 'aprovado');
+      toast.success('Corte aprovado! Publicando nas redes…');
+      onChanged();
+      onOpenChange(false);
+    } catch (err) {
+      toast.error('Falha ao aprovar', {
+        description: err instanceof ApiError ? err.message : String(err),
+      });
+    } finally {
+      setApproving(false);
+    }
+  }
 
   async function handleRegenerate() {
     if (!clip) return;
@@ -82,6 +101,21 @@ export function ClipDetailSheet({ clip, open, onOpenChange, onChanged }: ClipDet
           <SheetDescription className="text-xs">
             Edite as copys por plataforma. Ao aprovar o corte, ele é publicado nessas redes.
           </SheetDescription>
+          {clip.status === 'a_revisar' && (
+            <Button className="mt-2 w-full" onClick={handleApprove} disabled={approving}>
+              {approving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Rocket className="h-4 w-4" />
+              )}
+              <span className="ml-1.5">Aprovar e publicar nas redes</span>
+            </Button>
+          )}
+          {clip.status === 'aprovado' && (
+            <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
+              Aprovado — publicando nas redes…
+            </p>
+          )}
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto">
