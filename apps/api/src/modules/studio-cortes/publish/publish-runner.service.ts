@@ -152,7 +152,10 @@ export class PublishRunnerService {
         .eq('id', post.id)
         .eq('org_id', orgId);
       this.log.warn(`[publish] ${post.platform} falhou (clip ${clip.id}): ${result.error_message}`);
-      void this.alertFailure(orgId, clip, post.platform, result.error_message ?? 'erro').catch(() => {});
+      // Alerta só na 1ª falha (não a cada retry do worker) — evita spam.
+      if ((post.publish_attempts ?? 0) === 0) {
+        void this.alertFailure(orgId, clip, post.platform, result.error_message ?? 'erro').catch(() => {});
+      }
     }
     return result;
   }

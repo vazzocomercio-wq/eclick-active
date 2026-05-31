@@ -58,7 +58,9 @@ export class PublishWorker implements OnModuleInit, OnModuleDestroy {
         .from('clip_posts')
         .select('clip_id, org_id, status, scheduled_at, publish_attempts, clip:clips(status)')
         .is('external_post_id', null)
-        .in('status', ['rascunho', 'agendado'])
+        // inclui 'falhou' p/ retry automático (ex: depois de habilitar a API
+        // do YouTube); o cap de publish_attempts evita loop infinito.
+        .in('status', ['rascunho', 'agendado', 'falhou'])
         .lt('publish_attempts', 3)
         .or(`scheduled_at.is.null,scheduled_at.lte.${nowIso}`)
         .limit(200);
