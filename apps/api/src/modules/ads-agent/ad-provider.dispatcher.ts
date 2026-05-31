@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { MetaProvider } from './providers/meta.provider';
+import { GoogleProvider } from './providers/google.provider';
 import type { AdProvider, Platform } from './contracts/ad-provider';
 
 /**
@@ -13,8 +14,9 @@ export class AdProviderDispatcher {
   private readonly logger = new Logger(AdProviderDispatcher.name);
   private readonly providers = new Map<Platform, AdProvider>();
 
-  constructor(meta: MetaProvider) {
+  constructor(meta: MetaProvider, google: GoogleProvider) {
     this.register(meta);
+    this.register(google);
     // Futuro: this.register(tiktok), this.register(mercadoLivre), ...
   }
 

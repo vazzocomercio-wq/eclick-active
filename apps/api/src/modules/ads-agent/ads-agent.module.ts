@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AuthModule } from '../../common/auth/auth.module';
 import { AdsModule } from '../ads/ads.module';
 import { MetaConnector } from '../ads/connectors/meta.connector';
+import { GoogleConnector } from '../ads/connectors/google.connector';
 import { AdProviderDispatcher } from './ad-provider.dispatcher';
 import { AdsAccountsService } from './ads-accounts.service';
 import { AdsAgentController } from './ads-agent.controller';
@@ -16,6 +17,7 @@ import { AdsOverviewService } from './ads-overview.service';
 import { AdsDossierService } from './analysis/ads-dossier.service';
 import { AdsAnalyzeService } from './analysis/ads-analyze.service';
 import { MetaProvider } from './providers/meta.provider';
+import { GoogleProvider } from './providers/google.provider';
 
 /**
  * Ads Performance Agent (F12) — motor de OTIMIZAÇÃO de anúncios
@@ -36,7 +38,9 @@ import { MetaProvider } from './providers/meta.provider';
   controllers: [AdsAgentController],
   providers: [
     MetaConnector,
+    GoogleConnector,
     MetaProvider,
+    GoogleProvider,
     AdProviderDispatcher,
     AdsAccountsService,
     AdsIngestService,
