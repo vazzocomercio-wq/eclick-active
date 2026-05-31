@@ -15,6 +15,14 @@ export type JobStatus =
   | 'done'
   | 'failed';
 
+export interface ClipPostMetrics {
+  views?: number;
+  likes?: number;
+  comments?: number;
+  shares?: number;
+  fetched_at?: string;
+}
+
 export interface ClipPost {
   id: string;
   clip_id: string;
@@ -26,10 +34,24 @@ export interface ClipPost {
   hashtags: string[];
   scheduled_at: string | null;
   external_post_id: string | null;
+  external_post_url: string | null;
+  published_at: string | null;
+  error: string | null;
   status: ClipPostStatus;
-  metrics: Record<string, unknown>;
+  metrics: ClipPostMetrics;
   created_at: string;
   updated_at: string;
+}
+
+export interface MetricsSummary {
+  by_platform: Array<{
+    platform: ClipPlatform;
+    posts: number;
+    views: number;
+    likes: number;
+    comments: number;
+    shares: number;
+  }>;
 }
 
 export interface ClipJobRef {
@@ -78,6 +100,7 @@ export interface ContentJob {
 export interface CortesConfig {
   drive_connected: boolean;
   drive_email: string | null;
+  youtube_ready: boolean;
   vizard_configured: boolean;
   platforms: ClipPlatform[];
 }
@@ -130,6 +153,9 @@ export const cortesApi = {
       quota_percent: number | null;
       alerted: boolean;
     }>('/studio-cortes/janitor/run'),
+
+  metrics: () => api.get<MetricsSummary>('/studio-cortes/metrics'),
+  refreshMetrics: () => api.post<{ updated: number }>('/studio-cortes/metrics/refresh'),
 };
 
 export const CLIP_STATUS_ORDER: ClipStatus[] = [

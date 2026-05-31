@@ -27,7 +27,12 @@ const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_USERINFO = 'https://www.googleapis.com/oauth2/v2/userinfo';
 const DRIVE_API = 'https://www.googleapis.com/drive/v3';
 const DRIVE_UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3';
-const SCOPE = 'https://www.googleapis.com/auth/drive.file';
+// drive.file (storage dos cortes) + youtube.upload (publicar Shorts no Sprint 2).
+// Mesma conta Google, consentimento ampliado. youtube.upload é escopo sensível →
+// em produção sem verificação o Google mostra aviso "app não verificado" só no
+// YouTube (o usuário avança normal); não afeta o drive.file.
+const YOUTUBE_UPLOAD_SCOPE = 'https://www.googleapis.com/auth/youtube.upload';
+const SCOPE = `https://www.googleapis.com/auth/drive.file ${YOUTUBE_UPLOAD_SCOPE}`;
 const ROOT_FOLDER_NAME = 'e-Click Cortes';
 const STATE_TTL_MS = 15 * 60 * 1000;
 
@@ -39,6 +44,7 @@ interface ConnectionRow {
   refresh_token: string | null;
   token_expires_at: string | null;
   root_folder_id: string | null;
+  scopes: string[] | null;
   status: string;
 }
 
@@ -46,6 +52,8 @@ interface GoogleTokens {
   access_token: string;
   refresh_token?: string;
   expires_in: number;
+  /** Escopos concedidos (space-separated). */
+  scope?: string;
 }
 
 export interface DriveFile {
@@ -154,6 +162,8 @@ export class CortesDriveClient {
     const email = await this.fetchEmail(tokens.access_token);
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
 
+    const grantedScopes = (tokens.scope ?? SCOPE).split(/\s+/).filter(Boolean);
+
     await this.supabase.adminClient.from('cortes_drive_connections').upsert(
       {
         org_id: orgId,
@@ -161,6 +171,7 @@ export class CortesDriveClient {
         access_token: encryptApiKey(tokens.access_token),
         refresh_token: encryptApiKey(tokens.refresh_token),
         token_expires_at: expiresAt,
+        scopes: grantedScopes,
         status: 'active',
         last_error: null,
       },
@@ -194,6 +205,19 @@ export class CortesDriveClient {
   async isConfiguredForOrg(orgId: string): Promise<boolean> {
     const conn = await this.loadConnection(orgId);
     return Boolean(conn && conn.status === 'active' && conn.refresh_token);
+  }
+
+  /** True se a conexão Google da org concedeu o escopo de upload do YouTube. */
+  async hasYouTubeScope(orgId: string): Promise<boolean> {
+    const conn = await this.loadConnection(orgId);
+    return Boolean(
+      conn && conn.status === 'active' && (conn.scopes ?? []).includes(YOUTUBE_UPLOAD_SCOPE),
+    );
+  }
+
+  /** Token de acesso Google válido (refresh automático) — usado pelo YouTubeShortsProvider. */
+  getAccessTokenForOrg(orgId: string): Promise<string> {
+    return this.getValidAccessToken(orgId);
   }
 
   // ── Token management ──────────────────────────────────────

@@ -124,4 +124,16 @@ export class StudioCortesController {
   runJanitor(@CurrentUser() user: AuthUser) {
     return this.janitor.runForOrg(user.org_id);
   }
+
+  // ── Métricas (Sprint 2) ───────────────────────────────────
+
+  @Get('metrics')
+  metrics(@CurrentUser() user: AuthUser) {
+    return this.service.metricsSummary(user.org_id);
+  }
+
+  @Post('metrics/refresh')
+  refreshMetrics(@CurrentUser() user: AuthUser) {
+    return this.service.refreshMetrics(user.org_id);
+  }
 }

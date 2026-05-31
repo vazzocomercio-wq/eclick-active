@@ -2,7 +2,20 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Instagram, Loader2, Music2, Save, Sparkles, Youtube } from 'lucide-react';
+import {
+  AlertCircle,
+  ExternalLink,
+  Eye,
+  Heart,
+  Instagram,
+  Loader2,
+  MessageCircle,
+  Music2,
+  Save,
+  Share2,
+  Sparkles,
+  Youtube,
+} from 'lucide-react';
 import type { ClipPlatform, ClipPost, ClipRow } from '@/lib/api/studio-cortes';
 import { cortesApi } from '@/lib/api/studio-cortes';
 import { ApiError } from '@/lib/api/client';
@@ -202,8 +215,41 @@ function PlatformCopyEditor({
     }
   }
 
+  const published = post.status === 'publicado';
+  const failed = post.status === 'falhou';
+  const m = post.metrics ?? {};
+
   return (
     <div className="flex flex-col gap-3">
+      {/* Status da publicação (Sprint 2) */}
+      {published && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-xs">
+          <span className="font-medium text-emerald-600 dark:text-emerald-400">Publicado</span>
+          {post.external_post_url && (
+            <a
+              href={post.external_post_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-primary hover:underline"
+            >
+              <ExternalLink className="h-3 w-3" /> ver post
+            </a>
+          )}
+          <span className="ml-auto inline-flex items-center gap-3 tabular-nums text-muted-foreground">
+            <span className="inline-flex items-center gap-1"><Eye className="h-3 w-3" />{m.views ?? 0}</span>
+            <span className="inline-flex items-center gap-1"><Heart className="h-3 w-3" />{m.likes ?? 0}</span>
+            <span className="inline-flex items-center gap-1"><MessageCircle className="h-3 w-3" />{m.comments ?? 0}</span>
+            <span className="inline-flex items-center gap-1"><Share2 className="h-3 w-3" />{m.shares ?? 0}</span>
+          </span>
+        </div>
+      )}
+      {failed && (
+        <div className="flex items-start gap-1.5 rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-600 dark:text-red-300">
+          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>Falha ao publicar: {post.error ?? 'erro'}</span>
+        </div>
+      )}
+
       {platform === 'youtube' && (
         <div>
           <Label className="text-xs">Título (YouTube Shorts)</Label>

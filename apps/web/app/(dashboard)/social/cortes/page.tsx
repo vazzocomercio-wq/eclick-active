@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   AlertTriangle,
+  BarChart3,
   Check,
   Loader2,
   Plug,
@@ -12,11 +13,14 @@ import {
   Trash2,
   UploadCloud,
 } from 'lucide-react';
+import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import {
   cortesApi,
   CLIP_STATUS_ORDER,
   type BoardColumns,
+  type ClipPlatform,
   type CortesConfig,
+  type MetricsSummary,
 } from '@/lib/api/studio-cortes';
 import { ApiError } from '@/lib/api/client';
 import { Button } from '@/components/ui/button';
@@ -24,6 +28,12 @@ import { CortesBoard } from '@/components/cortes/cortes-board';
 import { UploadDialog } from '@/components/cortes/upload-dialog';
 
 const POLL_MS = 15000; // reconciliação (real-time fica pro Sprint 2)
+
+const PLATFORM_LABEL: Record<ClipPlatform, string> = {
+  instagram: 'Instagram',
+  tiktok: 'TikTok',
+  youtube: 'YouTube',
+};
 
 const EMPTY_COLUMNS: BoardColumns = {
   a_revisar: [],
@@ -85,6 +95,41 @@ export default function CortesPage() {
     }
   }
 
+  // Relatórios (Sprint 2)
+  const [showMetrics, setShowMetrics] = useState(false);
+  const [metrics, setMetrics] = useState<MetricsSummary | null>(null);
+  const [metricsLoading, setMetricsLoading] = useState(false);
+
+  async function loadMetrics() {
+    setMetricsLoading(true);
+    try {
+      setMetrics(await cortesApi.metrics());
+    } catch {
+      /* silencioso */
+    } finally {
+      setMetricsLoading(false);
+    }
+  }
+  function toggleMetrics() {
+    const next = !showMetrics;
+    setShowMetrics(next);
+    if (next && !metrics) void loadMetrics();
+  }
+  async function refreshMetrics() {
+    setMetricsLoading(true);
+    try {
+      const r = await cortesApi.refreshMetrics();
+      toast.success(`Métricas atualizadas (${r.updated} post(s)).`);
+      setMetrics(await cortesApi.metrics());
+    } catch (err) {
+      toast.error('Falha ao atualizar métricas', {
+        description: err instanceof ApiError ? err.message : String(err),
+      });
+    } finally {
+      setMetricsLoading(false);
+    }
+  }
+
   async function runJanitor() {
     setJanitorRunning(true);
     try {
@@ -123,6 +168,14 @@ export default function CortesPage() {
           <Button variant="outline" size="sm" onClick={() => void fetchBoard()}>
             <RefreshCw className="h-3.5 w-3.5" />
             <span className="ml-1 hidden md:inline">Atualizar</span>
+          </Button>
+          <Button
+            variant={showMetrics ? 'default' : 'outline'}
+            size="sm"
+            onClick={toggleMetrics}
+          >
+            <BarChart3 className="h-3.5 w-3.5" />
+            <span className="ml-1 hidden md:inline">Relatórios</span>
           </Button>
           <Button variant="outline" size="sm" onClick={runJanitor} disabled={janitorRunning}>
             {janitorRunning ? (
@@ -170,6 +223,55 @@ export default function CortesPage() {
               <AlertTriangle className="h-3.5 w-3.5" />
               Provedor de corte (Vizard) não configurado — cortes não serão gerados.
             </span>
+          )}
+          {!config.youtube_ready && (
+            <button
+              onClick={connectDrive}
+              className="inline-flex items-center gap-1.5 text-[11px] text-amber-700 hover:underline dark:text-amber-300"
+            >
+              <AlertTriangle className="h-3.5 w-3.5" />
+              Reconecte o Drive pra publicar no YouTube (amplia o consentimento)
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Relatórios (Sprint 2) */}
+      {showMetrics && (
+        <div className="border-b border-border bg-card/40 px-4 py-3 md:px-6">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-sm font-semibold">Desempenho por plataforma</h2>
+            <Button variant="outline" size="sm" onClick={refreshMetrics} disabled={metricsLoading}>
+              {metricsLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5" />
+              )}
+              <span className="ml-1">Atualizar métricas</span>
+            </Button>
+          </div>
+          {!metrics || metrics.by_platform.every((p) => p.posts === 0) ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Nenhum corte publicado ainda — os números aparecem aqui depois da primeira publicação.
+            </p>
+          ) : (
+            <div className="h-56 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={metrics.by_platform.map((p) => ({ ...p, name: PLATFORM_LABEL[p.platform] }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#a1a1aa' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: '#71717a' }} axisLine={false} tickLine={false} width={36} />
+                  <Tooltip
+                    contentStyle={{ background: '#18181b', border: '1px solid #27272a', borderRadius: 8, fontSize: 12 }}
+                    labelStyle={{ color: '#fafafa' }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Bar dataKey="views" name="Views" fill="#00E5FF" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="likes" name="Curtidas" fill="#4ADE50" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="comments" name="Comentários" fill="#a5f3fc" radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           )}
         </div>
       )}

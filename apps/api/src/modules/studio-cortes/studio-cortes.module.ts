@@ -4,6 +4,7 @@ import { LlmModule } from '../../common/llm/llm.module';
 import { AuthModule } from '../../common/auth/auth.module';
 import { ChannelsModule as ChannelDispatcherModule } from '../../common/channels/channels.module';
 import { AlertsModule } from '../alerts/alerts.module';
+import { SocialModule } from '../social/social.module';
 import { StudioCortesController } from './studio-cortes.controller';
 import { CortesGoogleOAuthController } from './cortes-google-oauth.controller';
 import { StudioCortesService } from './studio-cortes.service';
@@ -14,6 +15,11 @@ import { ClippingWebhookController } from './clipping/clipping-webhook.controlle
 import { ClippingReconcilerWorker } from './clipping/clipping-reconciler.worker';
 import { VizardProvider } from './clipping/vizard.provider';
 import { StorageJanitorWorker } from './janitor/storage-janitor.worker';
+import { YouTubeShortsProvider } from './publish/youtube-shorts.provider';
+import { PublishRunnerService } from './publish/publish-runner.service';
+import { PublishWorker } from './publish/publish-worker';
+import { ClipMetricsRunnerService } from './publish/clip-metrics-runner.service';
+import { ClipMetricsWorker } from './publish/clip-metrics.worker';
 import { CLIPPING_PROVIDER } from './studio-cortes.types';
 
 /**
@@ -21,7 +27,14 @@ import { CLIPPING_PROVIDER } from './studio-cortes.types';
  * → fila de revisão (kanban). Publicação fica pro Sprint 2.
  */
 @Module({
-  imports: [SupabaseModule, LlmModule, AuthModule, ChannelDispatcherModule, AlertsModule],
+  imports: [
+    SupabaseModule,
+    LlmModule,
+    AuthModule,
+    ChannelDispatcherModule,
+    AlertsModule,
+    SocialModule, // Sprint 2: reusa providers IG/TikTok + InstagramInsights + creds
+  ],
   controllers: [StudioCortesController, CortesGoogleOAuthController, ClippingWebhookController],
   providers: [
     StudioCortesService,
@@ -33,6 +46,12 @@ import { CLIPPING_PROVIDER } from './studio-cortes.types';
     { provide: CLIPPING_PROVIDER, useExisting: VizardProvider },
     StorageJanitorWorker,
     ClippingReconcilerWorker,
+    // Sprint 2 — publicação nativa + métricas
+    YouTubeShortsProvider,
+    PublishRunnerService,
+    PublishWorker,
+    ClipMetricsRunnerService,
+    ClipMetricsWorker,
   ],
   exports: [StudioCortesService],
 })

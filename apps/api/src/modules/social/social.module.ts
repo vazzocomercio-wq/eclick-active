@@ -134,6 +134,10 @@ import { BridgeModule } from '../bridge/bridge.module';
     SocialHashtagsService,
     SocialAdBoostService,
     ImageGenerationService,
+    // Sprint 2 do Studio de Cortes reusa estes diretamente:
+    InstagramGraphProvider,
+    TikTokBusinessProvider,
+    InstagramInsightsService,
   ],
 })
 export class SocialModule {}

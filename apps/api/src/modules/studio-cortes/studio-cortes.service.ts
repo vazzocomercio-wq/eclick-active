@@ -3,6 +3,8 @@ import { SupabaseService } from '../../common/supabase/supabase.service';
 import { CortesDriveClient } from './cortes-drive.client';
 import { ClippingRunnerService } from './clipping/clipping-runner.service';
 import { CopyRunnerService } from './copy/copy-runner.service';
+import { PublishRunnerService } from './publish/publish-runner.service';
+import { ClipMetricsRunnerService } from './publish/clip-metrics-runner.service';
 import type {
   Clip,
   ClipPlatform,
@@ -31,6 +33,8 @@ export class StudioCortesService {
     private readonly drive: CortesDriveClient,
     private readonly clipping: ClippingRunnerService,
     private readonly copyRunner: CopyRunnerService,
+    private readonly publish: PublishRunnerService,
+    private readonly clipMetrics: ClipMetricsRunnerService,
   ) {}
 
   // ── Upload ────────────────────────────────────────────────
@@ -146,9 +150,12 @@ export class StudioCortesService {
   /** Move um corte de coluna (só muda estado — publicação é Sprint 2). */
   async setClipStatus(orgId: string, clipId: string, status: ClipStatus): Promise<Clip> {
     if (!CLIP_STATUSES.includes(status)) throw new BadRequestException(`Status inválido: ${status}`);
-    // Sprint 1: mover pra 'publicado' direto não é permitido (publicação = Sprint 2).
+    // 'publicado' é definido pelo sistema após publicar — não é destino de
+    // arraste manual (a UI já bloqueia; isto é defesa extra).
     if (status === 'publicado') {
-      throw new BadRequestException('Publicação só no Sprint 2. Use Aprovado/Agendado por enquanto.');
+      throw new BadRequestException(
+        'Mover pra "Publicado" é automático: aprove o corte e o sistema publica + marca como publicado.',
+      );
     }
     const { data, error } = await this.supabase.adminClient
       .from('clips')
@@ -159,6 +166,14 @@ export class StudioCortesService {
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) throw new NotFoundException('Corte não encontrado.');
+
+    // Aprovado dispara a publicação nativa (async — não bloqueia a resposta).
+    // 'agendado' fica pro worker disparar na hora do scheduled_at.
+    if (status === 'aprovado') {
+      void this.publish.publishClip(orgId, clipId).catch((err) => {
+        this.log.error(`[publish] disparo no aprovar falhou (clip ${clipId}): ${String(err)}`);
+      });
+    }
     return data as Clip;
   }
 
@@ -233,6 +248,7 @@ export class StudioCortesService {
   async config(orgId: string): Promise<{
     drive_connected: boolean;
     drive_email: string | null;
+    youtube_ready: boolean;
     vizard_configured: boolean;
     platforms: ClipPlatform[];
   }> {
@@ -240,9 +256,52 @@ export class StudioCortesService {
     return {
       drive_connected: status.connected,
       drive_email: status.email,
+      youtube_ready: await this.drive.hasYouTubeScope(orgId),
       vizard_configured: Boolean(process.env.VIZARD_API_KEY?.trim()),
       platforms: PLATFORMS,
     };
+  }
+
+  // ── Métricas (Sprint 2) ───────────────────────────────────
+
+  /** Refaz a coleta de métricas dos cortes publicados da org (manual/smoke). */
+  refreshMetrics(orgId: string): Promise<{ updated: number }> {
+    return this.clipMetrics.refreshForOrg(orgId);
+  }
+
+  /** Agregado de métricas por plataforma (pro módulo Relatórios). */
+  async metricsSummary(orgId: string): Promise<{
+    by_platform: Array<{
+      platform: ClipPlatform;
+      posts: number;
+      views: number;
+      likes: number;
+      comments: number;
+      shares: number;
+    }>;
+  }> {
+    const { data } = await this.supabase.adminClient
+      .from('clip_posts')
+      .select('platform, metrics')
+      .eq('org_id', orgId)
+      .eq('status', 'publicado')
+      .limit(2000);
+    const rows = (data ?? []) as Array<{ platform: ClipPlatform; metrics: Record<string, number> }>;
+    const acc = new Map<
+      ClipPlatform,
+      { platform: ClipPlatform; posts: number; views: number; likes: number; comments: number; shares: number }
+    >();
+    for (const p of PLATFORMS) acc.set(p, { platform: p, posts: 0, views: 0, likes: 0, comments: 0, shares: 0 });
+    for (const r of rows) {
+      const a = acc.get(r.platform);
+      if (!a) continue;
+      a.posts += 1;
+      a.views += Number(r.metrics?.views ?? 0);
+      a.likes += Number(r.metrics?.likes ?? 0);
+      a.comments += Number(r.metrics?.comments ?? 0);
+      a.shares += Number(r.metrics?.shares ?? 0);
+    }
+    return { by_platform: Array.from(acc.values()) };
   }
 
   // ── OAuth do Google Drive (passthrough pro client) ─────────
