@@ -5,6 +5,7 @@ import { AuthModule } from '../../common/auth/auth.module';
 import { ChannelsModule as ChannelDispatcherModule } from '../../common/channels/channels.module';
 import { AlertsModule } from '../alerts/alerts.module';
 import { StudioCortesController } from './studio-cortes.controller';
+import { CortesGoogleOAuthController } from './cortes-google-oauth.controller';
 import { StudioCortesService } from './studio-cortes.service';
 import { CortesDriveClient } from './cortes-drive.client';
 import { CopyRunnerService } from './copy/copy-runner.service';
@@ -21,7 +22,7 @@ import { CLIPPING_PROVIDER } from './studio-cortes.types';
  */
 @Module({
   imports: [SupabaseModule, LlmModule, AuthModule, ChannelDispatcherModule, AlertsModule],
-  controllers: [StudioCortesController, ClippingWebhookController],
+  controllers: [StudioCortesController, CortesGoogleOAuthController, ClippingWebhookController],
   providers: [
     StudioCortesService,
     CortesDriveClient,

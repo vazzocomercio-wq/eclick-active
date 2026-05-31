@@ -37,7 +37,7 @@ export class ClippingRunnerService {
       sourceUrl = `https://www.youtube.com/watch?v=${job.youtube_video_id}`;
     } else {
       if (!job.drive_file_id) throw new BadRequestException('Job sem master no Drive');
-      sourceUrl = await this.drive.makeSourceUrl(job.drive_file_id);
+      sourceUrl = await this.drive.makeSourceUrl(job.org_id, job.drive_file_id);
     }
 
     const { clipping_job_id } = await this.provider.submit(sourceUrl, {

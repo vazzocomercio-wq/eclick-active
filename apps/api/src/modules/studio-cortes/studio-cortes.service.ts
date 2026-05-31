@@ -50,9 +50,9 @@ export class StudioCortesService {
     if (file.size > MAX_MASTER_BYTES) {
       throw new BadRequestException('Master maior que 2GB. Reduza ou use a fonte por YouTube/Drive.');
     }
-    if (!this.drive.isConfigured()) {
+    if (!(await this.drive.isConfiguredForOrg(orgId))) {
       throw new BadRequestException(
-        'Google Drive não configurado (GOOGLE_SA_KEY + CORTES_DRIVE_ID). Configure no Railway active-api.',
+        'Google Drive não conectado. Conecte sua conta Google no Studio de Cortes.',
       );
     }
 
@@ -74,9 +74,10 @@ export class StudioCortesService {
 
     // 2. Grava o master no Shared Drive.
     try {
-      const folderId = await this.drive.ensureJobFolder(job.id);
+      const folderId = await this.drive.ensureJobFolder(orgId, job.id);
       const ext = file.originalname.split('.').pop()?.toLowerCase() || 'mp4';
       const driveFile = await this.drive.uploadFile(
+        orgId,
         folderId,
         `master.${ext}`,
         file.buffer,
@@ -229,15 +230,33 @@ export class StudioCortesService {
   }
 
   /** Status de configuração (Drive + provedor) — útil pro smoke e pra UI. */
-  async config(): Promise<{
-    drive_configured: boolean;
+  async config(orgId: string): Promise<{
+    drive_connected: boolean;
+    drive_email: string | null;
     vizard_configured: boolean;
     platforms: ClipPlatform[];
   }> {
+    const status = await this.drive.getStatus(orgId);
     return {
-      drive_configured: this.drive.isConfigured(),
+      drive_connected: status.connected,
+      drive_email: status.email,
       vizard_configured: Boolean(process.env.VIZARD_API_KEY?.trim()),
       platforms: PLATFORMS,
     };
+  }
+
+  // ── OAuth do Google Drive (passthrough pro client) ─────────
+
+  getGoogleAuthUrl(orgId: string): { url: string } {
+    return { url: this.drive.getAuthUrl(orgId) };
+  }
+
+  googleStatus(orgId: string): Promise<{ connected: boolean; email: string | null }> {
+    return this.drive.getStatus(orgId);
+  }
+
+  async googleDisconnect(orgId: string): Promise<{ ok: true }> {
+    await this.drive.disconnect(orgId);
+    return { ok: true };
   }
 }

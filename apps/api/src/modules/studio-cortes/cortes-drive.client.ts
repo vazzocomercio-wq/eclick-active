@@ -1,33 +1,51 @@
 import {
+  BadRequestException,
   Injectable,
-  Logger,
-  ServiceUnavailableException,
   InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
-import { createSign } from 'node:crypto';
+import { createHmac } from 'node:crypto';
+import { SupabaseService } from '../../common/supabase/supabase.service';
+import { encryptApiKey, decryptApiKey } from '../../common/llm/crypto.util';
 
 /**
- * Cliente do Google Drive pro Studio de Cortes. Diferente do DriveClient do
- * prospect (pasta comum), este fala com um **Shared Drive (Team Drive)** de
- * verdade — necessário pra (a) cota pertencer à org e não à Service Account e
- * (b) o monitor de cota funcionar.
+ * Cliente do Google Drive do Studio de Cortes — autentica via **OAuth do
+ * usuário** (não Service Account), porque conta Gmail pessoal não tem Shared
+ * Drive e SA não tem cota de storage. Escopo `drive.file` (não-sensível: o app
+ * só enxerga/gerencia o que ele mesmo cria). Arquivos ficam no Drive do
+ * usuário e contam a cota dele.
  *
- * Reusa a mesma Service Account (GOOGLE_SA_KEY) — a SA precisa ser membro do
- * Shared Drive (Content Manager). Todas as chamadas levam
- * supportsAllDrives=true (exigência da API pra Shared Drives).
+ * Conexão (refresh_token cifrado + pasta raiz) vive em
+ * active.cortes_drive_connections, 1 por org.
  *
- * Envs:
- *   GOOGLE_SA_KEY    — JSON completo da Service Account (stringified)
- *   CORTES_DRIVE_ID  — ID do Shared Drive `cortes` (driveId)
- *
- * Estrutura: {SharedDrive}/cortes/{job_id}/master.mp4
+ * Envs: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, API_PUBLIC_URL,
+ *       LLM_CRED_ENCRYPTION_KEY (cripto dos tokens).
  */
 
-interface ServiceAccountKey {
-  type: 'service_account';
-  client_email: string;
-  private_key: string;
-  token_uri?: string;
+const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
+const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
+const GOOGLE_USERINFO = 'https://www.googleapis.com/oauth2/v2/userinfo';
+const DRIVE_API = 'https://www.googleapis.com/drive/v3';
+const DRIVE_UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3';
+const SCOPE = 'https://www.googleapis.com/auth/drive.file';
+const ROOT_FOLDER_NAME = 'e-Click Cortes';
+const STATE_TTL_MS = 15 * 60 * 1000;
+
+interface ConnectionRow {
+  id: string;
+  org_id: string;
+  google_email: string | null;
+  access_token: string | null;
+  refresh_token: string | null;
+  token_expires_at: string | null;
+  root_folder_id: string | null;
+  status: string;
+}
+
+interface GoogleTokens {
+  access_token: string;
+  refresh_token?: string;
+  expires_in: number;
 }
 
 export interface DriveFile {
@@ -39,163 +57,246 @@ export interface DriveFile {
 }
 
 export interface DriveQuota {
-  /** bytes; null = ilimitado/desconhecido. */
   limit: number | null;
   usage: number;
-  /** 0–100; 0 se ilimitado. */
   percent: number;
 }
-
-const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
-const TOKEN_URI = 'https://oauth2.googleapis.com/token';
-const DRIVE_API = 'https://www.googleapis.com/drive/v3';
-const DRIVE_UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3';
-const TOKEN_TTL_MS = 55 * 60 * 1000;
-// Params obrigatórios pra operar em Shared Drives.
-const ALL_DRIVES = 'supportsAllDrives=true&includeItemsFromAllDrives=true';
 
 @Injectable()
 export class CortesDriveClient {
   private readonly log = new Logger(CortesDriveClient.name);
-  private cachedToken: { value: string; expiresAt: number } | null = null;
 
-  /** true se as envs estão setadas (sem validar acesso). */
-  isConfigured(): boolean {
-    return Boolean(process.env.GOOGLE_SA_KEY?.trim() && process.env.CORTES_DRIVE_ID?.trim());
-  }
+  constructor(private readonly supabase: SupabaseService) {}
 
-  private resolveKey(): ServiceAccountKey {
-    const raw = process.env.GOOGLE_SA_KEY?.trim();
-    if (!raw) {
-      throw new ServiceUnavailableException(
-        'GOOGLE_SA_KEY não configurada no Railway active-api. ' +
-          'Setar o JSON da Service Account com acesso ao Shared Drive de cortes.',
+  // ── Env helpers ───────────────────────────────────────────
+
+  private requireEnv(name: string): string {
+    const v = process.env[name]?.trim();
+    if (!v) {
+      throw new BadRequestException(
+        `${name} não configurada no Railway active-api — necessária pro OAuth do Google Drive.`,
       );
     }
-    try {
-      return JSON.parse(raw) as ServiceAccountKey;
-    } catch (e) {
-      throw new InternalServerErrorException(
-        `GOOGLE_SA_KEY inválida (não é JSON): ${(e as Error).message}`,
-      );
-    }
+    return v;
   }
 
-  private resolveDriveId(): string {
-    const id = process.env.CORTES_DRIVE_ID?.trim();
-    if (!id) {
-      throw new ServiceUnavailableException(
-        'CORTES_DRIVE_ID não configurada. Setar o ID do Shared Drive `cortes` no Railway active-api.',
-      );
-    }
-    return id;
+  private redirectUri(): string {
+    const base = (process.env.API_PUBLIC_URL ?? process.env.PUBLIC_API_URL ?? '').replace(/\/$/, '');
+    if (!base) throw new BadRequestException('API_PUBLIC_URL não configurada.');
+    return `${base}/studio-cortes/google/callback`;
   }
 
-  private async getAccessToken(): Promise<string> {
-    if (this.cachedToken && this.cachedToken.expiresAt > Date.now()) {
-      return this.cachedToken.value;
-    }
-    const key = this.resolveKey();
-    const now = Math.floor(Date.now() / 1000);
-    const claim = {
-      iss: key.client_email,
-      scope: DRIVE_SCOPE,
-      aud: key.token_uri ?? TOKEN_URI,
-      iat: now,
-      exp: now + 3600,
+  // ── OAuth: state assinado (anti-tamper) ───────────────────
+
+  private signState(orgId: string): string {
+    const payload = Buffer.from(JSON.stringify({ org_id: orgId, ts: Date.now() })).toString('base64url');
+    const mac = createHmac('sha256', this.requireEnv('LLM_CRED_ENCRYPTION_KEY'))
+      .update(payload)
+      .digest('base64url');
+    return `${payload}.${mac}`;
+  }
+
+  private verifyState(state: string): string {
+    const [payload, mac] = state.split('.');
+    if (!payload || !mac) throw new BadRequestException('State inválido.');
+    const expected = createHmac('sha256', this.requireEnv('LLM_CRED_ENCRYPTION_KEY'))
+      .update(payload)
+      .digest('base64url');
+    if (mac !== expected) throw new BadRequestException('State adulterado.');
+    const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString()) as {
+      org_id: string;
+      ts: number;
     };
-    const b64url = (obj: object) =>
-      Buffer.from(JSON.stringify(obj))
-        .toString('base64')
-        .replace(/=/g, '')
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_');
-    const signingInput = `${b64url({ alg: 'RS256', typ: 'JWT' })}.${b64url(claim)}`;
-    const signer = createSign('RSA-SHA256');
-    signer.update(signingInput);
-    signer.end();
-    const signature = signer
-      .sign(key.private_key)
-      .toString('base64')
-      .replace(/=/g, '')
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_');
-    const assertion = `${signingInput}.${signature}`;
+    if (Date.now() - decoded.ts > STATE_TTL_MS) throw new BadRequestException('State expirado.');
+    return decoded.org_id;
+  }
 
-    const res = await fetch(key.token_uri ?? TOKEN_URI, {
+  // ── OAuth: connect / callback ─────────────────────────────
+
+  getAuthUrl(orgId: string): string {
+    const params = new URLSearchParams({
+      client_id: this.requireEnv('GOOGLE_CLIENT_ID'),
+      redirect_uri: this.redirectUri(),
+      response_type: 'code',
+      scope: SCOPE,
+      access_type: 'offline',
+      prompt: 'consent',
+      include_granted_scopes: 'true',
+      state: this.signState(orgId),
+    });
+    return `${GOOGLE_AUTH_URL}?${params.toString()}`;
+  }
+
+  async handleCallback(code: string, state: string): Promise<{ orgId: string }> {
+    const orgId = this.verifyState(state);
+
+    const res = await fetch(GOOGLE_TOKEN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
-        grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-        assertion,
+        code,
+        client_id: this.requireEnv('GOOGLE_CLIENT_ID'),
+        client_secret: this.requireEnv('GOOGLE_CLIENT_SECRET'),
+        redirect_uri: this.redirectUri(),
+        grant_type: 'authorization_code',
       }).toString(),
     });
     if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new InternalServerErrorException(
-        `Drive auth falhou (HTTP ${res.status}): ${text.slice(0, 200)}`,
+      throw new InternalServerErrorException(`Google token exchange falhou: ${await res.text()}`);
+    }
+    const tokens = (await res.json()) as GoogleTokens;
+    if (!tokens.refresh_token) {
+      throw new BadRequestException(
+        'Google não retornou refresh_token. Remova o acesso em myaccount.google.com/permissions e conecte de novo.',
       );
     }
-    const json = (await res.json()) as { access_token?: string };
-    if (!json.access_token) {
-      throw new InternalServerErrorException('Drive auth retornou sem access_token');
-    }
-    this.cachedToken = { value: json.access_token, expiresAt: Date.now() + TOKEN_TTL_MS };
-    return json.access_token;
+
+    const email = await this.fetchEmail(tokens.access_token);
+    const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
+
+    await this.supabase.adminClient.from('cortes_drive_connections').upsert(
+      {
+        org_id: orgId,
+        google_email: email,
+        access_token: encryptApiKey(tokens.access_token),
+        refresh_token: encryptApiKey(tokens.refresh_token),
+        token_expires_at: expiresAt,
+        status: 'active',
+        last_error: null,
+      },
+      { onConflict: 'org_id' },
+    );
+
+    // Garante a pasta raiz já na conexão.
+    await this.ensureRootFolder(orgId);
+    this.log.log(`[cortes-drive] org ${orgId} conectado como ${email}`);
+    return { orgId };
   }
 
-  /** Cria (idempotente) a sub-pasta do job dentro de /cortes no Shared Drive. */
-  async ensureJobFolder(jobId: string): Promise<string> {
-    const token = await this.getAccessToken();
-    const driveId = this.resolveDriveId();
-    const cortesRoot = await this.ensureFolder('cortes', driveId, driveId, token);
-    return this.ensureFolder(jobId, cortesRoot, driveId, token);
+  private async fetchEmail(accessToken: string): Promise<string | null> {
+    const res = await fetch(GOOGLE_USERINFO, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!res.ok) return null;
+    return ((await res.json()) as { email?: string }).email ?? null;
   }
 
-  private async ensureFolder(
-    name: string,
-    parentId: string,
-    driveId: string,
-    token: string,
-  ): Promise<string> {
-    const q = encodeURIComponent(
-      `'${parentId}' in parents and name='${name}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-    );
-    const findRes = await fetch(
-      `${DRIVE_API}/files?q=${q}&fields=files(id)&corpora=drive&driveId=${driveId}&${ALL_DRIVES}`,
-      { headers: { Authorization: `Bearer ${token}` } },
-    );
-    if (findRes.ok) {
-      const { files } = (await findRes.json()) as { files?: Array<{ id: string }> };
-      if (files && files.length > 0) return files[0]!.id;
+  async getStatus(orgId: string): Promise<{ connected: boolean; email: string | null }> {
+    const conn = await this.loadConnection(orgId);
+    return { connected: Boolean(conn && conn.status === 'active'), email: conn?.google_email ?? null };
+  }
+
+  async disconnect(orgId: string): Promise<void> {
+    await this.supabase.adminClient
+      .from('cortes_drive_connections')
+      .delete()
+      .eq('org_id', orgId);
+  }
+
+  async isConfiguredForOrg(orgId: string): Promise<boolean> {
+    const conn = await this.loadConnection(orgId);
+    return Boolean(conn && conn.status === 'active' && conn.refresh_token);
+  }
+
+  // ── Token management ──────────────────────────────────────
+
+  private async loadConnection(orgId: string): Promise<ConnectionRow | null> {
+    const { data } = await this.supabase.adminClient
+      .from('cortes_drive_connections')
+      .select('*')
+      .eq('org_id', orgId)
+      .maybeSingle();
+    return (data as ConnectionRow | null) ?? null;
+  }
+
+  private async getValidAccessToken(orgId: string): Promise<string> {
+    const conn = await this.loadConnection(orgId);
+    if (!conn || conn.status !== 'active' || !conn.refresh_token) {
+      throw new BadRequestException('Google Drive não conectado. Conecte em Studio de Cortes.');
     }
-    const createRes = await fetch(`${DRIVE_API}/files?fields=id&${ALL_DRIVES}`, {
+    const expiresAt = conn.token_expires_at ? new Date(conn.token_expires_at).getTime() : 0;
+    if (expiresAt - Date.now() > 2 * 60_000 && conn.access_token) {
+      const cached = decryptApiKey(conn.access_token);
+      if (cached) return cached;
+    }
+    // Refresh
+    const refreshToken = decryptApiKey(conn.refresh_token);
+    const res = await fetch(GOOGLE_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: this.requireEnv('GOOGLE_CLIENT_ID'),
+        client_secret: this.requireEnv('GOOGLE_CLIENT_SECRET'),
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token',
+      }).toString(),
+    });
+    if (!res.ok) {
+      const msg = await res.text();
+      await this.supabase.adminClient
+        .from('cortes_drive_connections')
+        .update({ status: 'error', last_error: msg.slice(0, 400) })
+        .eq('org_id', orgId);
+      throw new InternalServerErrorException(`Refresh do Google Drive falhou: ${msg.slice(0, 160)}`);
+    }
+    const t = (await res.json()) as GoogleTokens;
+    await this.supabase.adminClient
+      .from('cortes_drive_connections')
+      .update({
+        access_token: encryptApiKey(t.access_token),
+        token_expires_at: new Date(Date.now() + t.expires_in * 1000).toISOString(),
+        status: 'active',
+        last_error: null,
+      })
+      .eq('org_id', orgId);
+    return t.access_token;
+  }
+
+  // ── Pasta raiz + pasta do job ─────────────────────────────
+
+  private async ensureRootFolder(orgId: string): Promise<string> {
+    const conn = await this.loadConnection(orgId);
+    if (conn?.root_folder_id) return conn.root_folder_id;
+    const token = await this.getValidAccessToken(orgId);
+    const id = await this.createFolder(token, ROOT_FOLDER_NAME, null);
+    await this.supabase.adminClient
+      .from('cortes_drive_connections')
+      .update({ root_folder_id: id })
+      .eq('org_id', orgId);
+    return id;
+  }
+
+  async ensureJobFolder(orgId: string, jobId: string): Promise<string> {
+    const token = await this.getValidAccessToken(orgId);
+    const root = await this.ensureRootFolder(orgId);
+    return this.createFolder(token, jobId, root);
+  }
+
+  private async createFolder(token: string, name: string, parentId: string | null): Promise<string> {
+    const res = await fetch(`${DRIVE_API}/files?fields=id`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name,
-        parents: [parentId],
         mimeType: 'application/vnd.google-apps.folder',
+        ...(parentId ? { parents: [parentId] } : {}),
       }),
     });
-    if (!createRes.ok) {
-      const text = await createRes.text().catch(() => '');
-      throw new InternalServerErrorException(
-        `Drive mkdir falhou: ${createRes.status} ${text.slice(0, 200)}`,
-      );
+    if (!res.ok) {
+      throw new InternalServerErrorException(`Drive mkdir falhou: ${res.status} ${(await res.text()).slice(0, 160)}`);
     }
-    return ((await createRes.json()) as { id: string }).id;
+    return ((await res.json()) as { id: string }).id;
   }
 
-  /** Upload do master pra pasta do job (multipart). Retorna o arquivo criado. */
+  // ── Upload / fonte / delete / cota ────────────────────────
+
   async uploadFile(
+    orgId: string,
     folderId: string,
     fileName: string,
     content: Buffer,
     mimeType: string,
   ): Promise<DriveFile> {
-    const token = await this.getAccessToken();
-    const boundary = '-------eclick-cortes-' + Buffer.from(folderId).toString('hex').slice(0, 12);
+    const token = await this.getValidAccessToken(orgId);
+    const boundary = '----eclick-cortes-' + Buffer.from(folderId).toString('hex').slice(0, 12);
     const metadata = { name: fileName, parents: [folderId], mimeType };
     const body = Buffer.concat([
       Buffer.from(
@@ -209,7 +310,7 @@ export class CortesDriveClient {
       Buffer.from(`\r\n--${boundary}--`),
     ]);
     const res = await fetch(
-      `${DRIVE_UPLOAD_API}/files?uploadType=multipart&fields=id,name,mimeType,size,webViewLink&${ALL_DRIVES}`,
+      `${DRIVE_UPLOAD_API}/files?uploadType=multipart&fields=id,name,mimeType,size,webViewLink`,
       {
         method: 'POST',
         headers: {
@@ -221,99 +322,52 @@ export class CortesDriveClient {
       },
     );
     if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new InternalServerErrorException(
-        `Drive upload falhou: ${res.status} ${text.slice(0, 200)}`,
-      );
+      throw new InternalServerErrorException(`Drive upload falhou: ${res.status} ${(await res.text()).slice(0, 200)}`);
     }
     const file = (await res.json()) as DriveFile;
     this.log.log(`[cortes-drive] uploaded ${fileName} → id=${file.id}`);
     return file;
   }
 
-  /**
-   * Torna o arquivo legível por link e devolve uma URL de download direto, pra
-   * passar como FONTE pro provedor de corte (que precisa baixar o vídeo).
-   *
-   * ⚠️ Drive não tem "signed URL" como o GCS. Usamos permissão anyone-reader
-   * temporária + link `uc?export=download`. O Janitor apaga o master depois
-   * (N dias), o que revoga o acesso. Pra arquivos grandes o Drive pode meter
-   * uma página de confirmação anti-vírus; se o provedor não seguir, migrar pra
-   * GCS signed URL no Sprint 2.
-   */
-  async makeSourceUrl(fileId: string): Promise<string> {
-    const token = await this.getAccessToken();
-    const res = await fetch(`${DRIVE_API}/files/${fileId}/permissions?${ALL_DRIVES}`, {
+  /** Torna o arquivo legível por link e devolve URL de download direto (fonte pro provedor). */
+  async makeSourceUrl(orgId: string, fileId: string): Promise<string> {
+    const token = await this.getValidAccessToken(orgId);
+    const res = await fetch(`${DRIVE_API}/files/${fileId}/permissions`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'anyone', role: 'reader' }),
     });
     if (!res.ok && res.status !== 409) {
-      const text = await res.text().catch(() => '');
-      this.log.warn(`[cortes-drive] permission falhou (segue): ${res.status} ${text.slice(0, 160)}`);
+      this.log.warn(`[cortes-drive] permission falhou (segue): ${res.status}`);
     }
     return `https://drive.google.com/uc?export=download&id=${fileId}`;
   }
 
-  /** Apaga arquivo (Janitor). Idempotente — 404 não é erro. */
-  async deleteFile(fileId: string): Promise<void> {
-    const token = await this.getAccessToken();
-    const res = await fetch(`${DRIVE_API}/files/${fileId}?${ALL_DRIVES}`, {
+  async deleteFile(orgId: string, fileId: string): Promise<void> {
+    const token = await this.getValidAccessToken(orgId);
+    const res = await fetch(`${DRIVE_API}/files/${fileId}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok && res.status !== 404) {
-      const text = await res.text().catch(() => '');
-      throw new InternalServerErrorException(
-        `Drive delete falhou: ${res.status} ${text.slice(0, 200)}`,
-      );
+      throw new InternalServerErrorException(`Drive delete falhou: ${res.status}`);
     }
   }
 
-  /**
-   * Cota da storage pooled da org (Workspace). Em Shared Drive a cota é da org;
-   * `about.storageQuota` reflete o pool quando a SA é membro do Workspace.
-   * limit ausente/"0" = ilimitado → percent 0.
-   */
-  async getQuota(): Promise<DriveQuota> {
-    const token = await this.getAccessToken();
+  /** Cota do Drive do usuário (5TB etc). limit null = ilimitado/desconhecido. */
+  async getQuota(orgId: string): Promise<DriveQuota> {
+    const token = await this.getValidAccessToken(orgId);
     const res = await fetch(`${DRIVE_API}/about?fields=storageQuota`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new InternalServerErrorException(
-        `Drive about falhou: ${res.status} ${text.slice(0, 200)}`,
-      );
+      throw new InternalServerErrorException(`Drive about falhou: ${res.status}`);
     }
-    const json = (await res.json()) as {
-      storageQuota?: { limit?: string; usage?: string };
-    };
+    const json = (await res.json()) as { storageQuota?: { limit?: string; usage?: string } };
     const limitRaw = json.storageQuota?.limit;
     const usage = Number(json.storageQuota?.usage ?? '0') || 0;
     const limit = limitRaw && limitRaw !== '0' ? Number(limitRaw) : null;
     const percent = limit && limit > 0 ? Math.round((usage / limit) * 100) : 0;
     return { limit, usage, percent };
-  }
-
-  async healthCheck(): Promise<{ ok: boolean; sa_email: string | null; error?: string }> {
-    try {
-      const key = this.resolveKey();
-      const driveId = this.resolveDriveId();
-      const token = await this.getAccessToken();
-      const res = await fetch(`${DRIVE_API}/drives/${driveId}?${ALL_DRIVES}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) {
-        return {
-          ok: false,
-          sa_email: key.client_email,
-          error: `Shared Drive inacessível (${res.status}). A SA ${key.client_email} é membro do Drive?`,
-        };
-      }
-      return { ok: true, sa_email: key.client_email };
-    } catch (e) {
-      return { ok: false, sa_email: null, error: (e as Error).message };
-    }
   }
 }

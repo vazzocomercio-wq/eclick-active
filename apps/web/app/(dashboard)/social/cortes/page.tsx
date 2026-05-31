@@ -4,7 +4,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   AlertTriangle,
+  Check,
   Loader2,
+  Plug,
   RefreshCw,
   Scissors,
   Trash2,
@@ -56,11 +58,32 @@ export default function CortesPage() {
   }, []);
 
   useEffect(() => {
+    // Retorno do OAuth do Google (?google=connected|error)
+    const params = new URLSearchParams(window.location.search);
+    const g = params.get('google');
+    if (g === 'connected') toast.success('Google Drive conectado! Já pode enviar vídeos.');
+    else if (g === 'error') toast.error('Não consegui conectar o Google Drive. Tente de novo.');
+    if (g) window.history.replaceState({}, '', '/social/cortes');
+
     void cortesApi.config().then(setConfig).catch(() => {});
     void fetchBoard();
     const t = setInterval(() => void fetchBoard(), POLL_MS);
     return () => clearInterval(t);
   }, [fetchBoard]);
+
+  const [connecting, setConnecting] = useState(false);
+  async function connectDrive() {
+    setConnecting(true);
+    try {
+      const { url } = await cortesApi.googleConnect();
+      window.location.href = url;
+    } catch (err) {
+      setConnecting(false);
+      toast.error('Falha ao iniciar conexão', {
+        description: err instanceof ApiError ? err.message : String(err),
+      });
+    }
+  }
 
   async function runJanitor() {
     setJanitorRunning(true);
@@ -109,26 +132,43 @@ export default function CortesPage() {
             )}
             <span className="ml-1 hidden md:inline">Limpar Drive</span>
           </Button>
-          <Button size="sm" onClick={() => setUploadOpen(true)}>
-            <UploadCloud className="h-3.5 w-3.5" />
-            <span className="ml-1">Enviar vídeo</span>
-          </Button>
+          {config && !config.drive_connected ? (
+            <Button size="sm" onClick={connectDrive} disabled={connecting}>
+              {connecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plug className="h-3.5 w-3.5" />}
+              <span className="ml-1">Conectar Google Drive</span>
+            </Button>
+          ) : (
+            <Button size="sm" onClick={() => setUploadOpen(true)}>
+              <UploadCloud className="h-3.5 w-3.5" />
+              <span className="ml-1">Enviar vídeo</span>
+            </Button>
+          )}
         </div>
       </header>
 
-      {/* Avisos de configuração */}
-      {config && (!config.drive_configured || !config.vizard_configured) && (
-        <div className="flex flex-wrap gap-2 border-b border-amber-500/20 bg-amber-500/5 px-4 py-2 md:px-6">
-          {!config.drive_configured && (
-            <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-300">
-              <AlertTriangle className="h-3.5 w-3.5" />
-              Google Drive não configurado (GOOGLE_SA_KEY + CORTES_DRIVE_ID).
-            </span>
-          )}
+      {/* Status de conexão / avisos */}
+      {config && !config.drive_connected && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-cyan-500/20 bg-cyan-500/5 px-4 py-2.5 md:px-6">
+          <span className="inline-flex items-center gap-1.5 text-xs text-cyan-700 dark:text-cyan-300">
+            <Plug className="h-3.5 w-3.5" />
+            Conecte sua conta Google pra guardar os vídeos no seu Drive (usa seus 5TB).
+          </span>
+          <Button size="sm" variant="outline" onClick={connectDrive} disabled={connecting}>
+            {connecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plug className="h-3.5 w-3.5" />}
+            <span className="ml-1">Conectar Google Drive</span>
+          </Button>
+        </div>
+      )}
+      {config && config.drive_connected && (
+        <div className="flex flex-wrap items-center gap-3 border-b border-border bg-background px-4 py-1.5 md:px-6">
+          <span className="inline-flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400">
+            <Check className="h-3.5 w-3.5" />
+            Drive conectado{config.drive_email ? ` · ${config.drive_email}` : ''}
+          </span>
           {!config.vizard_configured && (
-            <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-300">
+            <span className="inline-flex items-center gap-1.5 text-[11px] text-amber-700 dark:text-amber-300">
               <AlertTriangle className="h-3.5 w-3.5" />
-              Provedor de corte (VIZARD_API_KEY) não configurado.
+              Provedor de corte (Vizard) não configurado — cortes não serão gerados.
             </span>
           )}
         </div>

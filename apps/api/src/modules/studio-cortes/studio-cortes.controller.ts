@@ -31,8 +31,25 @@ export class StudioCortesController {
 
   /** Status de configuração (Drive/provedor) — usado pela UI e pelo smoke. */
   @Get('config')
-  config() {
-    return this.service.config();
+  config(@CurrentUser() user: AuthUser) {
+    return this.service.config(user.org_id);
+  }
+
+  // ── OAuth Google Drive ────────────────────────────────────
+
+  @Get('google/connect')
+  googleConnect(@CurrentUser() user: AuthUser) {
+    return this.service.getGoogleAuthUrl(user.org_id);
+  }
+
+  @Get('google/status')
+  googleStatus(@CurrentUser() user: AuthUser) {
+    return this.service.googleStatus(user.org_id);
+  }
+
+  @Post('google/disconnect')
+  googleDisconnect(@CurrentUser() user: AuthUser) {
+    return this.service.googleDisconnect(user.org_id);
   }
 
   // ── Upload ────────────────────────────────────────────────

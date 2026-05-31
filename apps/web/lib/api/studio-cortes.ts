@@ -76,7 +76,8 @@ export interface ContentJob {
 }
 
 export interface CortesConfig {
-  drive_configured: boolean;
+  drive_connected: boolean;
+  drive_email: string | null;
   vizard_configured: boolean;
   platforms: ClipPlatform[];
 }
@@ -85,6 +86,11 @@ export interface CortesConfig {
 
 export const cortesApi = {
   config: () => api.get<CortesConfig>('/studio-cortes/config'),
+
+  googleConnect: () => api.get<{ url: string }>('/studio-cortes/google/connect'),
+  googleStatus: () =>
+    api.get<{ connected: boolean; email: string | null }>('/studio-cortes/google/status'),
+  googleDisconnect: () => api.post<{ ok: true }>('/studio-cortes/google/disconnect'),
 
   board: () => api.get<{ columns: BoardColumns }>('/studio-cortes/board'),
 

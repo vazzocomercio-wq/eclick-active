@@ -92,7 +92,7 @@ export class StorageJanitorWorker implements OnModuleInit, OnModuleDestroy {
 
   /** Executa o housekeeping pra UMA org (também usado pelo endpoint manual). */
   async runForOrg(orgId: string): Promise<JanitorResult> {
-    const driveOn = this.drive.isConfigured();
+    const driveOn = await this.drive.isConfiguredForOrg(orgId);
     const masters_deleted = driveOn ? await this.cleanMasters(orgId) : 0;
     const workfiles_deleted = driveOn ? await this.cleanWorkFiles(orgId) : 0;
 
@@ -100,7 +100,7 @@ export class StorageJanitorWorker implements OnModuleInit, OnModuleDestroy {
     let alerted = false;
     if (driveOn) {
       try {
-        const quota = await this.drive.getQuota();
+        const quota = await this.drive.getQuota(orgId);
         quota_percent = quota.percent;
         if (quota.percent >= QUOTA_ALERT_PCT) {
           alerted = await this.alertQuota(orgId, quota.percent);
@@ -132,7 +132,7 @@ export class StorageJanitorWorker implements OnModuleInit, OnModuleDestroy {
     let n = 0;
     for (const j of jobs) {
       try {
-        if (j.drive_file_id) await this.drive.deleteFile(j.drive_file_id);
+        if (j.drive_file_id) await this.drive.deleteFile(orgId, j.drive_file_id);
         await this.supabase.adminClient
           .from('content_jobs')
           .update({ master_deleted_at: new Date().toISOString() })
@@ -160,7 +160,7 @@ export class StorageJanitorWorker implements OnModuleInit, OnModuleDestroy {
     let n = 0;
     for (const c of clips) {
       try {
-        if (c.drive_file_id) await this.drive.deleteFile(c.drive_file_id);
+        if (c.drive_file_id) await this.drive.deleteFile(orgId, c.drive_file_id);
         await this.supabase.adminClient
           .from('clips')
           .update({ work_file_deleted_at: new Date().toISOString() })
