@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { AdsAccountsService } from './ads-accounts.service';
 import { AdsIngestService } from './ads-ingest.service';
+import { AdsAnalyzeService } from './analysis/ads-analyze.service';
 
 /**
  * Worker de polling do Ads Performance Agent. Tick de hora em hora; a cadência
@@ -37,6 +38,7 @@ export class AdsAgentWorker implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly accounts: AdsAccountsService,
     private readonly ingest: AdsIngestService,
+    private readonly analyze: AdsAnalyzeService,
   ) {}
 
   onModuleInit(): void {
@@ -73,6 +75,16 @@ export class AdsAgentWorker implements OnModuleInit, OnModuleDestroy {
           // markError já foi chamado dentro do ingest. Aqui só seguimos.
           this.logger.warn(
             `conta=${account.id} falhou: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          continue; // sem ingest não faz sentido analisar
+        }
+        // ANALYZE (copiloto) — best-effort. O service já barra quando não há
+        // ≥48h de dados, então não queima token à toa.
+        try {
+          await this.analyze.analyzeAccount(account.id);
+        } catch (err) {
+          this.logger.warn(
+            `analyze conta=${account.id} falhou: ${err instanceof Error ? err.message : String(err)}`,
           );
         }
       }

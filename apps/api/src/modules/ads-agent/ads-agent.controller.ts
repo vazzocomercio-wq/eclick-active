@@ -17,6 +17,12 @@ import { SupabaseService } from '../../common/supabase/supabase.service';
 import { AdProviderDispatcher } from './ad-provider.dispatcher';
 import { AdsAccountsService, AdsAccountRow } from './ads-accounts.service';
 import { AdsIngestService, IngestResult } from './ads-ingest.service';
+import { AdsAnalyzeService, AnalyzeResult } from './analysis/ads-analyze.service';
+import {
+  AdsDecisionsService,
+  DecisionRow,
+  DecisionStatus,
+} from './ads-decisions.service';
 import type { Platform } from './contracts/ad-provider';
 
 interface EnrollBody {
@@ -24,6 +30,9 @@ interface EnrollBody {
 }
 interface StatusBody {
   status?: string;
+}
+interface EditBudgetBody {
+  after_budget_brl?: number;
 }
 
 /**
@@ -39,6 +48,8 @@ export class AdsAgentController {
     private readonly ingest: AdsIngestService,
     private readonly dispatcher: AdProviderDispatcher,
     private readonly supabase: SupabaseService,
+    private readonly analyze: AdsAnalyzeService,
+    private readonly decisions: AdsDecisionsService,
   ) {}
 
   /** Plataformas com adaptador disponível. */
@@ -145,5 +156,64 @@ export class AdsAgentController {
       .order('date', { ascending: false });
     if (error) throw new BadRequestException(error.message);
     return data ?? [];
+  }
+
+  // ── ANALYZE + fila de decisões (MVP-2, copiloto) ───────────
+
+  /** Roda a análise IA agora (síncrono) → grava sugestões pendentes. */
+  @Post('accounts/:id/analyze')
+  async analyzeNow(
+    @CurrentUser() user: AuthUser,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<AnalyzeResult> {
+    await this.accounts.getForOrg(user.org_id, id); // valida posse
+    return this.analyze.analyzeAccount(id);
+  }
+
+  /** Fila de decisões. ?status=pending|approved|rejected|... (default pending). */
+  @Get('decisions')
+  listDecisions(
+    @CurrentUser() user: AuthUser,
+    @Query('status') status?: string,
+  ): Promise<DecisionRow[]> {
+    const s = (status as DecisionStatus) || 'pending';
+    return this.decisions.list(user.org_id, { status: s });
+  }
+
+  @Get('decisions/:id')
+  getDecision(
+    @CurrentUser() user: AuthUser,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<DecisionRow> {
+    return this.decisions.get(user.org_id, id);
+  }
+
+  @Post('decisions/:id/approve')
+  approveDecision(
+    @CurrentUser() user: AuthUser,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<DecisionRow> {
+    return this.decisions.approve(user.org_id, id);
+  }
+
+  @Post('decisions/:id/reject')
+  rejectDecision(
+    @CurrentUser() user: AuthUser,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<DecisionRow> {
+    return this.decisions.reject(user.org_id, id);
+  }
+
+  /** Edita o orçamento proposto (drag na UI) antes de aprovar. */
+  @Patch('decisions/:id')
+  editDecision(
+    @CurrentUser() user: AuthUser,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: EditBudgetBody,
+  ): Promise<DecisionRow> {
+    if (typeof body.after_budget_brl !== 'number') {
+      throw new BadRequestException('after_budget_brl (número) é obrigatório.');
+    }
+    return this.decisions.editAfterBudget(user.org_id, id, body.after_budget_brl);
   }
 }

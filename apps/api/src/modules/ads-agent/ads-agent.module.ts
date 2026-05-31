@@ -7,6 +7,9 @@ import { AdsAccountsService } from './ads-accounts.service';
 import { AdsAgentController } from './ads-agent.controller';
 import { AdsAgentWorker } from './ads-agent.worker';
 import { AdsIngestService } from './ads-ingest.service';
+import { AdsDecisionsService } from './ads-decisions.service';
+import { AdsDossierService } from './analysis/ads-dossier.service';
+import { AdsAnalyzeService } from './analysis/ads-analyze.service';
 import { MetaProvider } from './providers/meta.provider';
 
 /**
@@ -32,8 +35,17 @@ import { MetaProvider } from './providers/meta.provider';
     AdProviderDispatcher,
     AdsAccountsService,
     AdsIngestService,
+    AdsDossierService,
+    AdsAnalyzeService,
+    AdsDecisionsService,
     AdsAgentWorker,
   ],
-  exports: [AdProviderDispatcher, AdsIngestService, AdsAccountsService],
+  exports: [
+    AdProviderDispatcher,
+    AdsIngestService,
+    AdsAccountsService,
+    AdsAnalyzeService,
+    AdsDecisionsService,
+  ],
 })
 export class AdsAgentModule {}
