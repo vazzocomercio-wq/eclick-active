@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { toast } from 'sonner';
 import {
   AlertCircle,
@@ -412,7 +413,7 @@ function PlatformCopyEditor({
                 </option>
               ))}
             </select>
-            {platform === 'youtube' && (
+            {platform === 'youtube' ? (
               <button
                 type="button"
                 onClick={connectYouTube}
@@ -420,6 +421,13 @@ function PlatformCopyEditor({
               >
                 + canal
               </button>
+            ) : (
+              <Link
+                href="/configuracoes/social"
+                className="whitespace-nowrap text-[11px] text-primary hover:underline"
+              >
+                + conta
+              </Link>
             )}
           </div>
         ) : platform === 'youtube' ? (
@@ -431,9 +439,12 @@ function PlatformCopyEditor({
             Conectar canal do YouTube
           </button>
         ) : (
-          <span className="ml-auto text-[11px] text-amber-600 dark:text-amber-400">
-            Nenhuma conta — conecte no Social AI
-          </span>
+          <Link
+            href="/configuracoes/social"
+            className="ml-auto whitespace-nowrap rounded-md border border-primary/40 px-2 py-1 text-[11px] font-medium text-primary hover:bg-primary/5"
+          >
+            Conectar conta no Social AI →
+          </Link>
         )}
       </div>
 
