@@ -169,9 +169,14 @@ export class PublishRunnerService {
       .eq('org_id', orgId);
     const statuses = (data ?? []).map((r: { status: string }) => r.status);
     if (statuses.length === 0) return;
+    // Quando todos os posts já resolveram (publicado/falhou): se algum publicou,
+    // o corte vai pra 'publicado' (a falha por plataforma fica visível no detalhe);
+    // se todos falharam, 'falhou'. Se ainda tem post pendente, mantém.
+    const allTerminal = statuses.every((s) => s === 'publicado' || s === 'falhou');
     let next: string | null = null;
-    if (statuses.every((s) => s === 'publicado')) next = 'publicado';
-    else if (statuses.every((s) => s === 'falhou')) next = 'falhou';
+    if (allTerminal) {
+      next = statuses.some((s) => s === 'publicado') ? 'publicado' : 'falhou';
+    }
     if (next) {
       await this.supabase.adminClient
         .from('clips')
