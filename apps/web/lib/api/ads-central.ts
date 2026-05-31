@@ -82,6 +82,7 @@ export interface CampaignDossier {
   averages: {
     daily_spend_brl: number; cpa_brl: number | null; roas: number | null;
     ctr_pct: number | null; cpm_brl: number | null; avg_frequency: number | null;
+    acos_pct: number | null;
   };
   trend: {
     roas_recent: number | null; roas_prior: number | null; roas_change_pct: number | null;

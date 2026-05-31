@@ -28,6 +28,8 @@ export interface EntityDossier {
     cpm_brl: number | null;
     /** frequência média (impressões/pessoa) — alta + CTR caindo = fadiga. */
     avg_frequency: number | null;
+    /** ACOS % (gasto÷receita) = inverso do ROAS — métrica soberana no ML Ads. */
+    acos_pct: number | null;
   };
   trend: {
     roas_recent: number | null;
@@ -202,6 +204,7 @@ export class AdsDossierService {
 
     const tot = sum(rowsDesc);
     const roas = tot.spend > 0 ? tot.rev / tot.spend : null;
+    const acosPct = tot.rev > 0 ? (tot.spend / tot.rev) * 100 : null;
     const cpaCents = tot.conv > 0 ? tot.spend / tot.conv : null;
     const ctr = tot.imp > 0 ? (tot.clk / tot.imp) * 100 : null;
     const cpmCents = tot.imp > 0 ? (tot.spend * 1000) / tot.imp : null;
@@ -251,6 +254,7 @@ export class AdsDossierService {
         ctr_pct: ctr != null ? round2(ctr) : null,
         cpm_brl: cpmCents != null ? c2r(cpmCents) : null,
         avg_frequency: avgFreq != null ? round2(avgFreq) : null,
+        acos_pct: acosPct != null ? round2(acosPct) : null,
       },
       trend: {
         roas_recent: roasRecent != null ? round2(roasRecent) : null,

@@ -11,6 +11,7 @@ import {
   ANALYZE_TEMPERATURE,
   AnalyzeOutput,
   knowledgeBlock,
+  platformOverrideBlock,
   MAX_BUDGET_CHANGE_PCT,
   MIN_DATA_HOURS,
   MIN_DECISION_CONFIDENCE,
@@ -96,13 +97,20 @@ export class AdsAnalyzeService {
     // RETRIEVE — padrões aprendidos relevantes (RAG)
     const knowledge = await this.retrieveKnowledge(acct.org_id, acct.platform, ready);
 
+    // Especialista por plataforma (ML = ACOS vs margem real da org)
+    let marginPct: number | null = null;
+    if (acct.platform === 'mercadolivre') {
+      marginPct = await this.getMlMarginTarget(acct.credential_ref).catch(() => null);
+    }
+    const platformBlock = platformOverrideBlock(acct.platform, { marginTargetPct: marginPct });
+
     // ANALYZE
     let output: AnalyzeOutput;
     try {
       const res = await this.llm.chat({
         orgId: acct.org_id,
         feature: 'ads_agent_analyze',
-        system: ADS_ANALYZE_SYSTEM + knowledgeBlock(knowledge),
+        system: ADS_ANALYZE_SYSTEM + platformBlock + knowledgeBlock(knowledge),
         user: JSON.stringify({
           platform: dossier.platform,
           currency: dossier.currency,
@@ -202,7 +210,8 @@ export class AdsAnalyzeService {
         after = { status: 'active' };
         break;
       case 'adjust_bid':
-        after = { note: 'adjust_bid requer nível adset (MVP futuro)' };
+        // ML: ajuste de lance/ACOS-alvo. Aplicação real chega no apply do ML (Fase 3).
+        after = { note: 'ajuste de lance/ACOS — sugestão (aplicação no provider em fase futura)' };
         break;
       default:
         return { persisted: false };
@@ -283,6 +292,18 @@ export class AdsAnalyzeService {
       map.set(r.external_id, r);
     }
     return map;
+  }
+
+  /** Margem-alvo do ML (= ACOS-alvo) da org no SaaS — public.organizations.min_campaign_margin_pct. */
+  private async getMlMarginTarget(saasOrgId: string): Promise<number | null> {
+    const { data } = await this.supabase.adminClient
+      .schema('public')
+      .from('organizations')
+      .select('min_campaign_margin_pct')
+      .eq('id', saasOrgId)
+      .maybeSingle();
+    const v = (data as { min_campaign_margin_pct: number | null } | null)?.min_campaign_margin_pct;
+    return typeof v === 'number' ? v : null;
   }
 
   private async loadPendingKeys(accountId: string): Promise<Set<string>> {

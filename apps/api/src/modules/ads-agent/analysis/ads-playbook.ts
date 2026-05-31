@@ -111,6 +111,35 @@ averages e trend. ATENÇÃO à semântica normalizada:
 Se NENHUMA campanha justifica ação (dados insuficientes, tudo saudável, ou só ruído), devolva {"decisions": []}. Não invente ação pra preencher.`;
 
 /**
+ * Override por PLATAFORMA (o "especialista"). Anexado ao system prompt quando
+ * a plataforma tem dinâmica própria. Meta/Google usam o playbook base
+ * (objetivo-aware); Mercado Livre tem leilão/ACOS e precisa de regras próprias.
+ */
+export function platformOverrideBlock(
+  platform: string,
+  opts: { marginTargetPct?: number | null } = {},
+): string {
+  if (platform !== 'mercadolivre') return '';
+  const margin = opts.marginTargetPct ?? null;
+  const marginLine =
+    margin != null
+      ? `A margem de contribuição da org é ≈ ${margin}% → use isso como ACOS-alvo: a campanha é LUCRATIVA enquanto acos_pct < ${margin}%.`
+      : `A margem da org não foi informada → use ACOS-alvo padrão conservador de 25% (campanha lucrativa enquanto acos_pct < 25%).`;
+  return `
+
+# OVERRIDE — MERCADO LIVRE ADS (especialista, TEM PRIORIDADE sobre o playbook base)
+Estas campanhas são de Mercado Livre Ads (Product Ads — leilão por palavra-chave, fundo de funil de VENDA). A dinâmica é diferente de mídia social:
+1. ALAVANCA: no ML a alavanca primária é o LANCE / ACOS-alvo, NÃO o orçamento/dia. Muitas campanhas vêm com budget_brl = null (são geridas por lance). Para essas, NÃO proponha scale_budget/reduce_budget — use type "adjust_bid" e descreva no rationale subir ou baixar o ACOS-alvo/lance. Só use scale/reduce_budget quando budget_brl existir.
+2. MÉTRICA SOBERANA = ACOS (averages.acos_pct = gasto÷receita). Menor é melhor. ACOS é o INVERSO do ROAS (ACOS 20% ≈ ROAS 5×).
+3. JULGUE ACOS CONTRA A MARGEM — nunca contra a variação de ROAS. ${marginLine}
+   - acos_pct bem abaixo da margem + volume bom → ESCALAR (subir ACOS-alvo/lance p/ ganhar impressão) → "adjust_bid" (ou "scale_budget" se tiver budget).
+   - acos_pct acima da margem → REDUZIR lance / baixar ACOS-alvo → "adjust_bid" (ou "reduce_budget" se tiver budget); "pause" só se acos_pct >> margem de forma sustentada com volume.
+4. ⚠️ NUNCA pause/corte uma campanha só porque o ROAS CAIU, se o acos_pct AINDA está abaixo da margem — ela continua dando LUCRO. Ex.: ROAS caiu de 11 para 5.7, mas acos_pct ~17% < margem → AINDA LUCRA → manter (no máximo monitorar). Pausar aqui seria ERRO.
+5. Pausar só quando: acos_pct muito acima da margem de forma sustentada, OU gasto relevante com ~zero vendas há vários dias.
+6. roas/cpa_brl no dossiê continuam válidos como apoio, mas o veredito final no ML é pelo acos_pct vs margem.`;
+}
+
+/**
  * Bloco de conhecimento (RAG). No MVP-2 a KB está vazia → string vazia.
  * MVP-3 injeta padrões aprendidos aqui, com prioridade sobre as heurísticas.
  */
