@@ -7,6 +7,7 @@ import {
   AlertCircle,
   CalendarClock,
   CalendarOff,
+  Check,
   ExternalLink,
   Eye,
   Heart,
@@ -19,6 +20,7 @@ import {
   Share2,
   Sparkles,
   Trash2,
+  X,
   Youtube,
 } from 'lucide-react';
 import type {
@@ -65,10 +67,24 @@ export function ClipDetailSheet({ clip, open, onOpenChange, onChanged }: ClipDet
   const [deleting, setDeleting] = useState(false);
   const [scheduleAt, setScheduleAt] = useState('');
   const [accounts, setAccounts] = useState<CortesAccounts | null>(null);
+  const [netEnabled, setNetEnabled] = useState<Record<ClipPlatform, boolean>>({
+    instagram: true,
+    tiktok: true,
+    youtube: true,
+  });
+  const [netBusy, setNetBusy] = useState<ClipPlatform | null>(null);
 
   useEffect(() => {
     if (open && !accounts) void cortesApi.accounts().then(setAccounts).catch(() => {});
   }, [open, accounts]);
+
+  // Semeia o seletor de redes a partir do estado salvo de cada post.
+  useEffect(() => {
+    if (!clip) return;
+    const next: Record<ClipPlatform, boolean> = { instagram: true, tiktok: true, youtube: true };
+    for (const p of clip.posts) next[p.platform] = p.enabled;
+    setNetEnabled(next);
+  }, [clip]);
 
   const postByPlatform = useMemo(() => {
     const map = new Map<ClipPlatform, ClipPost>();
@@ -78,8 +94,47 @@ export function ClipDetailSheet({ clip, open, onOpenChange, onChanged }: ClipDet
 
   if (!clip) return null;
 
+  /** Liga/desliga uma rede de destino (persiste post.enabled na hora). */
+  async function toggleNetwork(platform: ClipPlatform) {
+    if (!clip) return;
+    const post = clip.posts.find((p) => p.platform === platform);
+    if (!post) {
+      toast.error('Sem copy gerada pra esta rede ainda.');
+      return;
+    }
+    if (post.status === 'publicado') return; // já publicado — não dá pra desligar
+    const v = !netEnabled[platform];
+    setNetEnabled((m) => ({ ...m, [platform]: v }));
+    setNetBusy(platform);
+    try {
+      await cortesApi.updatePost(post.id, { enabled: v });
+      onChanged();
+    } catch (err) {
+      setNetEnabled((m) => ({ ...m, [platform]: !v })); // rollback
+      toast.error('Falha ao mudar a rede', {
+        description: err instanceof ApiError ? err.message : String(err),
+      });
+    } finally {
+      setNetBusy(null);
+    }
+  }
+
+  /** Redes que de fato vão receber (tem copy + estão ligadas + não publicadas). */
+  function activeTargets(): ClipPlatform[] {
+    if (!clip) return [];
+    return clip.posts
+      .filter((p) => p.enabled && p.status !== 'publicado')
+      .map((p) => p.platform);
+  }
+
   async function handleApprove() {
     if (!clip) return;
+    if (activeTargets().length === 0) {
+      toast.error('Nenhuma rede selecionada', {
+        description: 'Ligue ao menos uma rede em "Publicar em" antes de aprovar.',
+      });
+      return;
+    }
     setApproving(true);
     try {
       await cortesApi.setClipStatus(clip.id, 'aprovado');
@@ -173,8 +228,65 @@ export function ClipDetailSheet({ clip, open, onOpenChange, onChanged }: ClipDet
         <SheetHeader className="border-b border-border px-5 py-4">
           <SheetTitle className="text-base">{clip.title || clip.hook || 'Corte'}</SheetTitle>
           <SheetDescription className="text-xs">
-            Edite as copys por plataforma. Ao aprovar o corte, ele é publicado nessas redes.
+            Escolha as redes de destino e edite a copy de cada uma. Ao aprovar, publica só nas redes ligadas.
           </SheetDescription>
+
+          {/* Seletor de redes de destino — liga/desliga cada uma num clique */}
+          <div className="mt-3">
+            <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Publicar em
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {PLATFORMS.map(({ id, label, Icon }) => {
+                const post = clip.posts.find((p) => p.platform === id);
+                const hasPost = Boolean(post);
+                const published = post?.status === 'publicado';
+                const on = hasPost && netEnabled[id];
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    disabled={!hasPost || netBusy === id || published}
+                    onClick={() => toggleNetwork(id)}
+                    title={
+                      !hasPost
+                        ? 'Sem copy gerada pra esta rede'
+                        : published
+                          ? 'Já publicado nesta rede'
+                          : on
+                            ? 'Clique para NÃO enviar nesta rede'
+                            : 'Clique para enviar nesta rede'
+                    }
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
+                      on
+                        ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                        : 'border-border bg-muted/40 text-muted-foreground',
+                      (!hasPost || published) && 'cursor-not-allowed opacity-50',
+                    )}
+                  >
+                    {netBusy === id ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Icon className="h-3.5 w-3.5" />
+                    )}
+                    {label}
+                    {hasPost &&
+                      !published &&
+                      (on ? (
+                        <Check className="h-3.5 w-3.5" />
+                      ) : (
+                        <X className="h-3.5 w-3.5" />
+                      ))}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-1.5 text-[11px] text-muted-foreground">
+              Verde = vai publicar. Cinza = não envia. Ajuste a copy e a conta de cada rede nas abas abaixo.
+            </p>
+          </div>
+
           {clip.status === 'a_revisar' && (
             <div className="mt-2 flex flex-col gap-2">
               <Button onClick={handleApprove} disabled={approving || scheduling}>
@@ -437,25 +549,19 @@ function PlatformCopyEditor({
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Conta de destino + ligar/desligar a rede (multi-conta) */}
+      {/* Conta de destino (liga/desliga a rede é no topo, em "Publicar em") */}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/20 p-2.5">
-        <button
-          type="button"
-          onClick={() => {
-            const v = !enabled;
-            setEnabled(v);
-            void persist({ enabled: v });
-          }}
+        <span
           className={cn(
-            'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors',
+            'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium',
             enabled
               ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
               : 'bg-muted text-muted-foreground',
           )}
         >
           <span className={cn('h-2 w-2 rounded-full', enabled ? 'bg-emerald-500' : 'bg-muted-foreground')} />
-          {enabled ? 'Publicar nesta rede' : 'Rede desligada'}
-        </button>
+          {enabled ? 'Vai publicar' : 'Rede desligada (ligue em "Publicar em")'}
+        </span>
 
         {accounts.length > 0 ? (
           <div className="ml-auto flex items-center gap-1.5">
