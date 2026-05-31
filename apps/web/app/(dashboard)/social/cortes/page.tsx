@@ -19,6 +19,7 @@ import {
   CLIP_STATUS_ORDER,
   type BoardColumns,
   type ClipPlatform,
+  type ContentJob,
   type CortesConfig,
   type MetricsSummary,
 } from '@/lib/api/studio-cortes';
@@ -26,6 +27,7 @@ import { ApiError } from '@/lib/api/client';
 import { Button } from '@/components/ui/button';
 import { CortesBoard } from '@/components/cortes/cortes-board';
 import { UploadDialog } from '@/components/cortes/upload-dialog';
+import { JobsStrip } from '@/components/cortes/jobs-strip';
 
 const POLL_MS = 15000; // reconciliação (real-time fica pro Sprint 2)
 
@@ -52,6 +54,8 @@ export default function CortesPage() {
   const [janitorRunning, setJanitorRunning] = useState(false);
   const firstLoad = useRef(true);
 
+  const [jobs, setJobs] = useState<ContentJob[]>([]);
+
   const fetchBoard = useCallback(async () => {
     try {
       const res = await cortesApi.board();
@@ -65,6 +69,8 @@ export default function CortesPage() {
       firstLoad.current = false;
       setLoading(false);
     }
+    // jobs em andamento (visibilidade do pipeline) — best-effort
+    void cortesApi.jobs().then(setJobs).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -275,6 +281,9 @@ export default function CortesPage() {
           )}
         </div>
       )}
+
+      {/* Jobs em andamento (visibilidade do pipeline) */}
+      <JobsStrip jobs={jobs} onRefresh={() => void fetchBoard()} />
 
       {/* Conteúdo */}
       <div className="flex-1 overflow-hidden p-4 md:p-6">

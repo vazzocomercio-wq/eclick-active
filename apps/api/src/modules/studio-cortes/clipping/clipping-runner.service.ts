@@ -116,12 +116,26 @@ export class ClippingRunnerService {
       metadata: c.extra ?? {},
     }));
 
-    const { error } = await this.supabase.adminClient
+    // Idempotência manual: o índice unique de (job_id, provider_clip_id) é
+    // PARCIAL (WHERE provider_clip_id IS NOT NULL) e o Postgres não aceita
+    // índice parcial como alvo de ON CONFLICT. Então filtramos o que já existe
+    // e inserimos só o novo (re-rodar o webhook não duplica).
+    const { data: existing } = await this.supabase.adminClient
       .from('clips')
-      .upsert(rows, { onConflict: 'job_id,provider_clip_id', ignoreDuplicates: true });
-    if (error) {
-      this.log.error(`[clipping] insert clips falhou: ${error.message}`);
-      throw new Error(error.message);
+      .select('provider_clip_id')
+      .eq('job_id', job.id);
+    const existingIds = new Set(
+      (existing ?? [])
+        .map((r: { provider_clip_id: string | null }) => r.provider_clip_id)
+        .filter(Boolean),
+    );
+    const newRows = rows.filter((r) => !existingIds.has(r.provider_clip_id));
+    if (newRows.length > 0) {
+      const { error } = await this.supabase.adminClient.from('clips').insert(newRows);
+      if (error) {
+        this.log.error(`[clipping] insert clips falhou: ${error.message}`);
+        throw new Error(error.message);
+      }
     }
 
     await this.supabase.adminClient

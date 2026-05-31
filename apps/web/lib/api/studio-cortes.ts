@@ -149,6 +149,9 @@ export const cortesApi = {
   regenerateCopy: (jobId: string) =>
     api.post<{ generated: number }>(`/studio-cortes/jobs/${jobId}/regenerate-copy`),
 
+  retryClip: (jobId: string) =>
+    api.post<{ ok: true }>(`/studio-cortes/jobs/${jobId}/retry-clip`),
+
   runJanitor: () =>
     api.post<{
       masters_deleted: number;

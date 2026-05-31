@@ -2,10 +2,10 @@ import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/commo
 import { SupabaseService } from '../../../common/supabase/supabase.service';
 import { ClippingRunnerService } from './clipping-runner.service';
 
-const TICK_INTERVAL_MS = 10 * 60 * 1000; // 10min
-const STARTUP_DELAY_MS = 5 * 60 * 1000; // 5min
-// Só reconcilia jobs parados em 'clipping' há mais que isto (webhook teve chance).
-const STUCK_AFTER_MS = 12 * 60 * 1000; // 12min
+const TICK_INTERVAL_MS = 2 * 60 * 1000; // 2min — sem webhook da Vizard, o reconciler é o caminho
+const STARTUP_DELAY_MS = 2 * 60 * 1000; // 2min
+// Só reconcilia jobs parados em 'clipping' há mais que isto (dá chance pro webhook).
+const STUCK_AFTER_MS = 3 * 60 * 1000; // 3min
 
 /**
  * Reconciler — fallback do webhook. Se o webhook de conclusão não chegar,
