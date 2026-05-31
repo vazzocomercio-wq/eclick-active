@@ -11,6 +11,7 @@ import type { AdAccount, Platform } from './contracts/ad-provider';
 
 export type AccountStatus = 'active' | 'paused' | 'error' | 'disconnected';
 export type SpendTier = 'low' | 'standard' | 'high';
+export type DecisionMode = 'copilot' | 'auto';
 
 export interface AdsAccountRow {
   id: string;
@@ -23,6 +24,7 @@ export interface AdsAccountRow {
   credential_ref: string;
   status: AccountStatus;
   spend_tier: SpendTier;
+  decision_mode: DecisionMode;
   last_polled_at: string | null;
   error_message: string | null;
   created_at: string;
@@ -37,7 +39,7 @@ const TIER_CADENCE_MS: Record<SpendTier, number> = {
 };
 
 const ACCOUNT_COLS =
-  'id, org_id, platform, external_account_id, name, currency, timezone, credential_ref, status, spend_tier, last_polled_at, error_message, created_at, updated_at';
+  'id, org_id, platform, external_account_id, name, currency, timezone, credential_ref, status, spend_tier, decision_mode, last_polled_at, error_message, created_at, updated_at';
 
 /**
  * CRUD + kill-switch das contas do Ads Performance Agent (active.ads_accounts).
@@ -162,6 +164,20 @@ export class AdsAccountsService {
     const { data, error } = await this.supabase.adminClient
       .from('ads_accounts')
       .update({ status, error_message: status === 'error' ? undefined : null })
+      .eq('id', accountId)
+      .eq('org_id', orgId)
+      .select(ACCOUNT_COLS)
+      .single();
+    if (error || !data) throw new InternalServerErrorException(error?.message);
+    return data as unknown as AdsAccountRow;
+  }
+
+  /** Alterna copiloto ↔ auto (opt-in do modo automático). */
+  async setMode(orgId: string, accountId: string, mode: DecisionMode): Promise<AdsAccountRow> {
+    await this.getForOrg(orgId, accountId);
+    const { data, error } = await this.supabase.adminClient
+      .from('ads_accounts')
+      .update({ decision_mode: mode })
       .eq('id', accountId)
       .eq('org_id', orgId)
       .select(ACCOUNT_COLS)

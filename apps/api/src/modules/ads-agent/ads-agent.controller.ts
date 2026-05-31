@@ -35,6 +35,9 @@ interface EnrollBody {
 interface StatusBody {
   status?: string;
 }
+interface ModeBody {
+  mode?: string;
+}
 interface EditBudgetBody {
   after_budget_brl?: number;
 }
@@ -119,6 +122,19 @@ export class AdsAgentController {
       throw new BadRequestException('status deve ser "active" ou "paused".');
     }
     return this.accounts.setStatus(user.org_id, id, body.status);
+  }
+
+  /** Alterna o modo de decisão da conta (copilot ↔ auto). */
+  @Patch('accounts/:id/mode')
+  setMode(
+    @CurrentUser() user: AuthUser,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: ModeBody,
+  ): Promise<AdsAccountRow> {
+    if (body.mode !== 'copilot' && body.mode !== 'auto') {
+      throw new BadRequestException('mode deve ser "copilot" ou "auto".');
+    }
+    return this.accounts.setMode(user.org_id, id, body.mode);
   }
 
   /** Coleta manual (síncrona) — útil pra testar/forçar refresh. */

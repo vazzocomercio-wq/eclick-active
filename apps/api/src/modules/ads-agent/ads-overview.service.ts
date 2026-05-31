@@ -7,6 +7,7 @@ export interface AccountOverview {
   platform: string;
   status: string;
   spend_tier: string;
+  decision_mode: string;
   last_polled_at: string | null;
   campaigns: number;
   active_campaigns: number;
@@ -58,7 +59,7 @@ export class AdsOverviewService {
     const [accRes, entRes, decRes] = await Promise.all([
       db
         .from('ads_accounts')
-        .select('id, name, platform, status, spend_tier, last_polled_at')
+        .select('id, name, platform, status, spend_tier, decision_mode, last_polled_at')
         .eq('org_id', orgId)
         .neq('status', 'disconnected')
         .order('created_at', { ascending: true }),
@@ -76,7 +77,7 @@ export class AdsOverviewService {
 
     const accounts = (accRes.data ?? []) as unknown as Array<{
       id: string; name: string | null; platform: string; status: string;
-      spend_tier: string; last_polled_at: string | null;
+      spend_tier: string; decision_mode: string; last_polled_at: string | null;
     }>;
     const entities = (entRes.data ?? []) as unknown as EntRow[];
 
@@ -131,6 +132,7 @@ export class AdsOverviewService {
         platform: a.platform,
         status: a.status,
         spend_tier: a.spend_tier,
+        decision_mode: a.decision_mode,
         last_polled_at: a.last_polled_at,
         campaigns: campCount.get(a.id) ?? 0,
         active_campaigns: activeCampCount.get(a.id) ?? 0,

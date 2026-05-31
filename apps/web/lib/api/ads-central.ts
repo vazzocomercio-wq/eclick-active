@@ -9,6 +9,7 @@ export type Platform =
 
 export type AccountStatus = 'active' | 'paused' | 'error' | 'disconnected';
 export type SpendTier = 'low' | 'standard' | 'high';
+export type DecisionMode = 'copilot' | 'auto';
 export type DecisionType =
   | 'scale_budget' | 'reduce_budget' | 'pause' | 'activate' | 'adjust_bid' | 'reallocate';
 export type DecisionStatus =
@@ -20,6 +21,7 @@ export interface AccountOverview {
   platform: Platform;
   status: AccountStatus;
   spend_tier: SpendTier;
+  decision_mode: DecisionMode;
   last_polled_at: string | null;
   campaigns: number;
   active_campaigns: number;
@@ -122,6 +124,8 @@ export const adsCentralApi = {
     api.post<AccountOverview>('/ads-agent/accounts/enroll', { integration_id }),
   setAccountStatus: (id: string, status: 'active' | 'paused') =>
     api.patch<AccountOverview>(`/ads-agent/accounts/${id}/status`, { status }),
+  setMode: (id: string, mode: DecisionMode) =>
+    api.patch<AccountOverview>(`/ads-agent/accounts/${id}/mode`, { mode }),
   sync: (id: string) => api.post<IngestResult>(`/ads-agent/accounts/${id}/sync`),
   analyze: (id: string) => api.post<AnalyzeResult>(`/ads-agent/accounts/${id}/analyze`),
 

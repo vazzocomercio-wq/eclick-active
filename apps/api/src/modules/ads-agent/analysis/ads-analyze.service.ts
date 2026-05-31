@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { SupabaseService } from '../../../common/supabase/supabase.service';
 import { LlmService } from '../../../common/llm/llm.service';
 import { AdsAccountsService } from '../ads-accounts.service';
+import { AdsApplyService } from '../ads-apply.service';
 import { AdsKnowledgeService } from '../ads-knowledge.service';
 import { AdsDossierService, EntityDossier } from './ads-dossier.service';
 import {
@@ -21,7 +22,14 @@ export interface AnalyzeResult {
   proposed: number;
   persisted: number;
   skipped: number;
+  auto_applied?: number;
   reason?: string;
+}
+
+interface RouteResult {
+  persisted: boolean;
+  decisionId?: string;
+  autoEligible?: boolean;
 }
 
 interface EntityState {
@@ -34,6 +42,14 @@ interface EntityState {
 
 const BUDGET_FLOOR_CENTS = 100; // R$1/dia piso prático
 const r2c = (reais: number): number => Math.round(reais * 100);
+
+// ── modo auto (MVP-4) — conservador ────────────────────────
+/** Confiança mínima pra auto-aplicar (sem humano). */
+const AUTO_CONFIDENCE = 0.8;
+/** SÓ ações de proteção/redução de custo aplicam sozinhas. Escalar = manual. */
+const AUTO_TYPES = new Set(['reduce_budget', 'pause']);
+/** Teto de auto-aplicações por ciclo de análise (anti-tempestade). */
+const AUTO_MAX_PER_RUN = 2;
 
 /**
  * ANALYZE + GUARD + ROUTE. Para uma conta:
@@ -55,6 +71,7 @@ export class AdsAnalyzeService {
     private readonly dossiers: AdsDossierService,
     private readonly llm: LlmService,
     private readonly knowledge: AdsKnowledgeService,
+    private readonly applier: AdsApplyService,
   ) {}
 
   async analyzeAccount(accountId: string): Promise<AnalyzeResult> {
@@ -110,20 +127,28 @@ export class AdsAnalyzeService {
     const stateByExt = await this.loadEntityStates(accountId);
     const pendingKeys = await this.loadPendingKeys(accountId);
 
+    const autoMode = acct.decision_mode === 'auto';
+    let autoApplied = 0;
     for (const p of proposals) {
-      const persisted = await this.routeDecision(
-        acct.org_id,
-        accountId,
-        p,
-        stateByExt,
-        pendingKeys,
-      );
-      if (persisted) base.persisted += 1;
-      else base.skipped += 1;
+      const res = await this.routeDecision(acct.org_id, accountId, p, stateByExt, pendingKeys, autoMode);
+      if (!res.persisted) { base.skipped += 1; continue; }
+      base.persisted += 1;
+      // modo auto: aplica sozinho ações conservadoras de alta confiança (cap/ciclo)
+      if (autoMode && res.autoEligible && res.decisionId && autoApplied < AUTO_MAX_PER_RUN) {
+        try {
+          await this.applier.apply(acct.org_id, res.decisionId);
+          autoApplied += 1;
+        } catch (err) {
+          this.logger.warn(
+            `auto-apply[${res.decisionId}] falhou: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
     }
+    base.auto_applied = autoApplied;
 
     this.logger.log(
-      `analyze[${accountId}] propostas=${base.proposed} gravadas=${base.persisted} puladas=${base.skipped}`,
+      `analyze[${accountId}] propostas=${base.proposed} gravadas=${base.persisted} auto=${autoApplied} puladas=${base.skipped}`,
     );
     return base;
   }
@@ -136,15 +161,16 @@ export class AdsAnalyzeService {
     p: ProposedDecision,
     stateByExt: Map<string, EntityState>,
     pendingKeys: Set<string>,
-  ): Promise<boolean> {
+    autoMode: boolean,
+  ): Promise<RouteResult> {
     if (typeof p.confidence !== 'number' || p.confidence < MIN_DECISION_CONFIDENCE) {
-      return false;
+      return { persisted: false };
     }
     const state = stateByExt.get(p.entity_external_id);
-    if (!state) return false;
+    if (!state) return { persisted: false };
 
     const key = `${state.id}:${p.type}`;
-    if (pendingKeys.has(key)) return false; // dedup: já tem pendente igual
+    if (pendingKeys.has(key)) return { persisted: false }; // dedup: já tem pendente igual
 
     const before: Record<string, unknown> = {
       status: state.status,
@@ -157,10 +183,10 @@ export class AdsAnalyzeService {
       case 'scale_budget':
       case 'reduce_budget':
       case 'reallocate': {
-        if (state.budget_cents == null || p.after_budget_brl == null) return false;
+        if (state.budget_cents == null || p.after_budget_brl == null) return { persisted: false };
         const proposedCents = r2c(p.after_budget_brl);
         const clamped = this.clampBudget(state.budget_cents, proposedCents, p.type);
-        if (clamped == null || clamped === state.budget_cents) return false;
+        if (clamped == null || clamped === state.budget_cents) return { persisted: false };
         after = { budget_cents: clamped };
         if (p.type === 'reallocate' && p.reallocate_to_external_id) {
           after.reallocate_to_external_id = p.reallocate_to_external_id;
@@ -168,41 +194,47 @@ export class AdsAnalyzeService {
         break;
       }
       case 'pause':
-        if (state.status !== 'active') return false;
+        if (state.status !== 'active') return { persisted: false };
         after = { status: 'paused' };
         break;
       case 'activate':
-        if (state.status === 'active') return false;
+        if (state.status === 'active') return { persisted: false };
         after = { status: 'active' };
         break;
       case 'adjust_bid':
-        // MVP-2 não mexe em lance (precisa de adset/ad). Registra como nota.
         after = { note: 'adjust_bid requer nível adset (MVP futuro)' };
         break;
       default:
-        return false;
+        return { persisted: false };
     }
-    if (!after) return false;
+    if (!after) return { persisted: false };
 
-    const { error } = await this.supabase.adminClient.from('ads_decisions').insert({
-      org_id: orgId,
-      entity_id: state.id,
-      account_id: accountId,
-      type: p.type,
-      rationale: (p.rationale ?? '').slice(0, 1000),
-      signals: p.signals ?? {},
-      before,
-      after,
-      confidence: Math.min(Math.max(p.confidence, 0), 1),
-      mode: 'copilot',
-      status: 'pending',
-    });
-    if (error) {
-      this.logger.warn(`routeDecision insert falhou: ${error.message}`);
-      return false;
+    // auto-elegível: conta em auto + alta confiança + ação conservadora
+    const autoEligible = autoMode && p.confidence >= AUTO_CONFIDENCE && AUTO_TYPES.has(p.type);
+
+    const { data, error } = await this.supabase.adminClient
+      .from('ads_decisions')
+      .insert({
+        org_id: orgId,
+        entity_id: state.id,
+        account_id: accountId,
+        type: p.type,
+        rationale: (p.rationale ?? '').slice(0, 1000),
+        signals: p.signals ?? {},
+        before,
+        after,
+        confidence: Math.min(Math.max(p.confidence, 0), 1),
+        mode: autoEligible ? 'auto' : 'copilot',
+        status: 'pending',
+      })
+      .select('id')
+      .single();
+    if (error || !data) {
+      this.logger.warn(`routeDecision insert falhou: ${error?.message}`);
+      return { persisted: false };
     }
     pendingKeys.add(key);
-    return true;
+    return { persisted: true, decisionId: (data as { id: string }).id, autoEligible };
   }
 
   /** Garante o teto de ±MAX_BUDGET_CHANGE_PCT e o piso de R$1/dia. */

@@ -143,6 +143,26 @@ export default function AdsCentralPage() {
     } finally { setB(`${action}:${id}`, false); }
   };
 
+  const onSetMode = async (id: string, mode: 'copilot' | 'auto') => {
+    if (
+      mode === 'auto' &&
+      !window.confirm(
+        'Modo AUTOMÁTICO: o motor vai aplicar sozinho ações de proteção (pausar / reduzir orçamento) de alta confiança, dentro de ±20% e reversíveis. Escalar orçamento continua manual. Ativar?',
+      )
+    ) {
+      return;
+    }
+    setB(`mode:${id}`, true);
+    try {
+      await adsCentralApi.setMode(id, mode);
+      await loadCore(decFilter);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Falha ao trocar o modo.');
+    } finally {
+      setB(`mode:${id}`, false);
+    }
+  };
+
   const analyzeAll = async () => {
     const active = (overview?.accounts ?? []).filter((a) => a.status === 'active');
     setB('analyzeAll', true);
@@ -322,7 +342,7 @@ export default function AdsCentralPage() {
                 {overview.accounts.map((a) => (
                   <AccountCard
                     key={a.id} a={a} busy={busy} selected={selected === a.id}
-                    onAction={onAccountAction} onOpen={() => openCampaigns(a.id)}
+                    onAction={onAccountAction} onOpen={() => openCampaigns(a.id)} onSetMode={onSetMode}
                   />
                 ))}
               </div>
@@ -540,10 +560,11 @@ function statusPill(status: string): { label: string; cls: string } {
 }
 const TIER_LABEL: Record<string, string> = { low: 'baixo', standard: 'padrão', high: 'alto' };
 
-function AccountCard({ a, busy, selected, onAction, onOpen }: {
+function AccountCard({ a, busy, selected, onAction, onOpen, onSetMode }: {
   a: AccountOverview; busy: Record<string, boolean>; selected: boolean;
   onAction: (id: string, action: 'sync' | 'analyze' | 'toggle', acc: AccountOverview) => void;
   onOpen: () => void;
+  onSetMode: (id: string, mode: 'copilot' | 'auto') => void;
 }) {
   const sp = statusPill(a.status);
   return (
@@ -569,6 +590,27 @@ function AccountCard({ a, busy, selected, onAction, onOpen }: {
         >
           <Power className="h-4 w-4" />
         </button>
+      </div>
+
+      <div className="mt-2 flex items-center gap-2">
+        <div className="inline-flex rounded-lg border border-border bg-background/40 p-0.5 text-[11px]">
+          {(['copilot', 'auto'] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => a.decision_mode !== m && onSetMode(a.id, m)}
+              disabled={busy[`mode:${a.id}`]}
+              className={cn('rounded-md px-2 py-0.5 font-medium transition-colors disabled:opacity-40',
+                a.decision_mode === m
+                  ? m === 'auto' ? 'bg-amber-500/20 text-amber-300' : 'bg-primary/15 text-primary'
+                  : 'text-muted-foreground hover:text-foreground')}
+            >
+              {m === 'copilot' ? 'Copiloto' : '⚡ Auto'}
+            </button>
+          ))}
+        </div>
+        {a.decision_mode === 'auto' && (
+          <span className="text-[10px] text-amber-300/80">aplica proteção sozinho</span>
+        )}
       </div>
 
       <div className="mt-3 grid grid-cols-4 gap-2 text-center">
