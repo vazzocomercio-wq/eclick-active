@@ -18,6 +18,8 @@ import { AdProviderDispatcher } from './ad-provider.dispatcher';
 import { AdsAccountsService, AdsAccountRow } from './ads-accounts.service';
 import { AdsIngestService, IngestResult } from './ads-ingest.service';
 import { AdsAnalyzeService, AnalyzeResult } from './analysis/ads-analyze.service';
+import { AdsDossierService, AccountDossier } from './analysis/ads-dossier.service';
+import { AdsOverviewService, AdsOverview } from './ads-overview.service';
 import {
   AdsDecisionsService,
   DecisionRow,
@@ -50,12 +52,31 @@ export class AdsAgentController {
     private readonly supabase: SupabaseService,
     private readonly analyze: AdsAnalyzeService,
     private readonly decisions: AdsDecisionsService,
+    private readonly overview: AdsOverviewService,
+    private readonly dossiers: AdsDossierService,
   ) {}
 
   /** Plataformas com adaptador disponível. */
   @Get('providers')
   providers(): { platforms: Platform[] } {
     return { platforms: this.dispatcher.supported() };
+  }
+
+  /** KPIs agregados (hero + grid de contas) numa chamada só. */
+  @Get('overview')
+  overviewKpis(@CurrentUser() user: AuthUser): Promise<AdsOverview> {
+    return this.overview.getOverview(user.org_id);
+  }
+
+  /** Campanhas de uma conta com métricas agregadas (dossiê, em BRL). */
+  @Get('accounts/:id/campaigns')
+  async campaigns(
+    @CurrentUser() user: AuthUser,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<AccountDossier | { account_id: string; platform: string; currency: string; entities: [] }> {
+    await this.accounts.getForOrg(user.org_id, id);
+    const dossier = await this.dossiers.buildAccountDossier(id);
+    return dossier ?? { account_id: id, platform: 'meta', currency: 'BRL', entities: [] };
   }
 
   /** Matricula uma ad_integration conectada no motor. */

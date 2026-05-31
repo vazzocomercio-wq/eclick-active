@@ -8,6 +8,7 @@ import { AdsAgentController } from './ads-agent.controller';
 import { AdsAgentWorker } from './ads-agent.worker';
 import { AdsIngestService } from './ads-ingest.service';
 import { AdsDecisionsService } from './ads-decisions.service';
+import { AdsOverviewService } from './ads-overview.service';
 import { AdsDossierService } from './analysis/ads-dossier.service';
 import { AdsAnalyzeService } from './analysis/ads-analyze.service';
 import { MetaProvider } from './providers/meta.provider';
@@ -38,6 +39,7 @@ import { MetaProvider } from './providers/meta.provider';
     AdsDossierService,
     AdsAnalyzeService,
     AdsDecisionsService,
+    AdsOverviewService,
     AdsAgentWorker,
   ],
   exports: [
