@@ -11,6 +11,7 @@ import { AgencyModule } from './modules/agency/agency.module';
 import { WhatsAppCommerceModule } from './modules/whatsapp-commerce/whatsapp-commerce.module';
 import { EventsModule } from './gateways/events.module';
 import { AdsModule } from './modules/ads/ads.module';
+import { AdsAgentModule } from './modules/ads-agent/ads-agent.module';
 import { AlertsModule } from './modules/alerts/alerts.module';
 import { BridgeModule } from './modules/bridge/bridge.module';
 import { AiModule } from './modules/ai/ai.module';
@@ -92,6 +93,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     WebhooksModule,
     InternalModule,
     AdsModule,
+    AdsAgentModule,
     AlertsModule,
     BridgeModule,
     SacModule,
