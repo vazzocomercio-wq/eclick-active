@@ -97,6 +97,61 @@ export class AdsAccountsService {
     return data as unknown as AdsAccountRow;
   }
 
+  /**
+   * Matricula os advertisers de ML Ads da org no motor. O ML não usa
+   * ad_integrations (Active) — os dados vêm do SaaS via views-ponte
+   * (v_saas_ml_ads_*). Resolve o saas_org_id, lista os advertisers e cria
+   * uma ads_accounts por advertiser (credential_ref = saas_org_id).
+   */
+  async enrollMlAdvertisers(orgId: string): Promise<AdsAccountRow[]> {
+    const { data: org } = await this.supabase.adminClient
+      .from('organizations')
+      .select('saas_org_id')
+      .eq('id', orgId)
+      .maybeSingle();
+    const saasOrg = (org as { saas_org_id: string | null } | null)?.saas_org_id;
+    if (!saasOrg) {
+      throw new BadRequestException(
+        'Org sem saas_org_id vinculado — não dá pra puxar ML Ads do SaaS.',
+      );
+    }
+
+    const { data: camps, error } = await this.supabase.adminClient
+      .from('v_saas_ml_ads_campaigns')
+      .select('advertiser_id')
+      .eq('organization_id', saasOrg);
+    if (error) throw new InternalServerErrorException(error.message);
+
+    const advertisers = Array.from(
+      new Set(
+        ((camps ?? []) as Array<{ advertiser_id: string | null }>)
+          .map((c) => (c.advertiser_id != null ? String(c.advertiser_id) : ''))
+          .filter(Boolean),
+      ),
+    );
+    if (advertisers.length === 0) {
+      throw new BadRequestException(
+        'Nenhum advertiser de ML Ads encontrado pra esta org no SaaS (conecte/rode o sync de ML Ads no SaaS primeiro).',
+      );
+    }
+
+    const rows = advertisers.map((adv) => ({
+      org_id: orgId,
+      platform: 'mercadolivre' as Platform,
+      external_account_id: adv,
+      name: `ML Ads · ${adv}`,
+      credential_ref: saasOrg,
+      status: 'active' as const,
+    }));
+    const { data, error: upErr } = await this.supabase.adminClient
+      .from('ads_accounts')
+      .upsert(rows, { onConflict: 'platform,external_account_id' })
+      .select(ACCOUNT_COLS);
+    if (upErr) throw new InternalServerErrorException(upErr.message);
+    this.logger.log(`enrollMlAdvertisers org=${orgId} saas=${saasOrg} → ${advertisers.length} advertiser(s)`);
+    return data as unknown as AdsAccountRow[];
+  }
+
   async list(orgId: string): Promise<AdsAccountRow[]> {
     const { data, error } = await this.supabase.adminClient
       .from('ads_accounts')

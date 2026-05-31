@@ -98,6 +98,12 @@ export class AdsAgentController {
     return this.accounts.enrollFromIntegration(user.org_id, body.integration_id);
   }
 
+  /** Matricula todos os advertisers de ML Ads da org (dados vêm do SaaS). */
+  @Post('accounts/enroll-ml')
+  enrollMl(@CurrentUser() user: AuthUser): Promise<AdsAccountRow[]> {
+    return this.accounts.enrollMlAdvertisers(user.org_id);
+  }
+
   @Get('accounts')
   listAccounts(@CurrentUser() user: AuthUser): Promise<AdsAccountRow[]> {
     return this.accounts.list(user.org_id);
