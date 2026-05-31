@@ -294,8 +294,23 @@ export class AdsAnalyzeService {
     return map;
   }
 
-  /** Margem-alvo do ML (= ACOS-alvo) da org no SaaS — public.organizations.min_campaign_margin_pct. */
+  /**
+   * Margem-alvo do ML (= teto de ACOS) da org. Financeiro Fase 4: usa a margem
+   * de contribuição REAL (blended 60d, motor de DRE) via a ponte
+   * `active.v_saas_org_margins` — fecha o loop "financeiro guia o anúncio".
+   * Fallback: min_campaign_margin_pct estático (public.organizations).
+   */
   private async getMlMarginTarget(saasOrgId: string): Promise<number | null> {
+    // 1. margem de contribuição REAL (DRE / orders últimos 60d)
+    const { data: m } = await this.supabase.adminClient
+      .from('v_saas_org_margins')
+      .select('contribution_margin_pct')
+      .eq('organization_id', saasOrgId)
+      .maybeSingle();
+    const real = (m as { contribution_margin_pct: number | null } | null)?.contribution_margin_pct;
+    if (typeof real === 'number' && real > 0) return real;
+
+    // 2. fallback estático
     const { data } = await this.supabase.adminClient
       .schema('public')
       .from('organizations')
