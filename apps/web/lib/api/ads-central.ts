@@ -108,6 +108,7 @@ export interface IngestResult {
 export interface AnalyzeResult {
   account_id: string; proposed: number; persisted: number; skipped: number; reason?: string;
 }
+export interface ApplyResult { id: string; status: string; message: string }
 
 export const adsCentralApi = {
   overview: () => api.get<AdsOverview>('/ads-agent/overview'),
@@ -126,8 +127,9 @@ export const adsCentralApi = {
   // decisões
   decisions: (status: DecisionStatus = 'pending') =>
     api.get<AdsDecision[]>('/ads-agent/decisions', { query: { status } }),
-  approve: (id: string) => api.post<AdsDecision>(`/ads-agent/decisions/${id}/approve`),
+  approve: (id: string) => api.post<ApplyResult>(`/ads-agent/decisions/${id}/approve`),
   reject: (id: string) => api.post<AdsDecision>(`/ads-agent/decisions/${id}/reject`),
+  rollback: (id: string) => api.post<ApplyResult>(`/ads-agent/decisions/${id}/rollback`),
   editBudget: (id: string, after_budget_brl: number) =>
     api.patch<AdsDecision>(`/ads-agent/decisions/${id}`, { after_budget_brl }),
 };

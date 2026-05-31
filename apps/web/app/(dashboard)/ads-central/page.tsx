@@ -4,11 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Gauge, RefreshCw, Sparkles, TrendingUp, TrendingDown, Minus, Wallet,
   Target, DollarSign, Layers, Building2, ListChecks, Check, X, Play, Pause,
-  Plus, ChevronRight, Activity, AlertTriangle, Zap, ArrowRight, Power,
+  Plus, ChevronRight, Activity, AlertTriangle, Zap, ArrowRight, Power, RotateCcw,
 } from 'lucide-react';
 import {
   adsCentralApi, AdsOverview, AccountOverview, AdsDecision, AccountCampaigns,
-  CampaignDossier, EnrollableIntegration, DecisionType,
+  CampaignDossier, EnrollableIntegration, DecisionType, DecisionStatus,
 } from '@/lib/api/ads-central';
 import { ApiError } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
@@ -68,13 +68,14 @@ export default function AdsCentralPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [campaigns, setCampaigns] = useState<AccountCampaigns | null>(null);
   const [campLoading, setCampLoading] = useState(false);
+  const [decFilter, setDecFilter] = useState<DecisionStatus>('pending');
 
   const setB = (k: string, v: boolean) => setBusy((p) => ({ ...p, [k]: v }));
 
-  const loadCore = useCallback(async () => {
+  const loadCore = useCallback(async (filter: DecisionStatus = 'pending') => {
     const [ov, dec, ints] = await Promise.all([
       adsCentralApi.overview(),
-      adsCentralApi.decisions('pending'),
+      adsCentralApi.decisions(filter),
       adsCentralApi.integrations().catch(() => [] as EnrollableIntegration[]),
     ]);
     setOverview(ov);
@@ -82,11 +83,18 @@ export default function AdsCentralPage() {
     setIntegrations(ints);
   }, []);
 
+  const switchFilter = async (f: DecisionStatus) => {
+    setDecFilter(f);
+    setB('decFilter', true);
+    try { setDecisions(await adsCentralApi.decisions(f)); } catch { /* mantém */ }
+    finally { setB('decFilter', false); }
+  };
+
   useEffect(() => {
     (async () => {
       try {
         setLoading(true);
-        await loadCore();
+        await loadCore(decFilter);
         setError(null);
       } catch (e) {
         setError(e instanceof ApiError ? e.message : 'Falha ao carregar a Central de Ads.');
@@ -129,7 +137,7 @@ export default function AdsCentralPage() {
       if (action === 'sync') await adsCentralApi.sync(id);
       else if (action === 'analyze') await adsCentralApi.analyze(id);
       else await adsCentralApi.setAccountStatus(id, acc.status === 'active' ? 'paused' : 'active');
-      await loadCore();
+      await loadCore(decFilter);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Ação falhou.');
     } finally { setB(`${action}:${id}`, false); }
@@ -140,7 +148,7 @@ export default function AdsCentralPage() {
     setB('analyzeAll', true);
     try {
       await Promise.all(active.map((a) => adsCentralApi.analyze(a.id).catch(() => null)));
-      await loadCore();
+      await loadCore(decFilter);
     } finally { setB('analyzeAll', false); }
   };
 
@@ -162,11 +170,24 @@ export default function AdsCentralPage() {
       } else {
         await adsCentralApi.reject(id);
       }
-      const [ov, dec] = await Promise.all([adsCentralApi.overview(), adsCentralApi.decisions('pending')]);
+      const [ov, dec] = await Promise.all([adsCentralApi.overview(), adsCentralApi.decisions(decFilter)]);
       setOverview(ov); setDecisions(dec);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Falha ao decidir.');
-      setDecisions(await adsCentralApi.decisions('pending').catch(() => []));
+      setError(e instanceof ApiError ? e.message : 'Falha ao aplicar a decisão.');
+      setDecisions(await adsCentralApi.decisions(decFilter).catch(() => []));
+    } finally { setB(`dec:${id}`, false); }
+  };
+
+  const onRollback = async (id: string) => {
+    setB(`dec:${id}`, true);
+    setDecisions((p) => p.filter((d) => d.id !== id));
+    try {
+      await adsCentralApi.rollback(id);
+      const [ov, dec] = await Promise.all([adsCentralApi.overview(), adsCentralApi.decisions(decFilter)]);
+      setOverview(ov); setDecisions(dec);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Falha ao reverter.');
+      setDecisions(await adsCentralApi.decisions(decFilter).catch(() => []));
     } finally { setB(`dec:${id}`, false); }
   };
 
@@ -259,19 +280,36 @@ export default function AdsCentralPage() {
 
             {/* DECISÕES */}
             <section>
-              <SectionTitle icon={ListChecks} title="Fila de decisões" count={decisions.length}
-                hint="O copiloto sugere; você decide. Nada é aplicado sem aprovação." />
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <ListChecks className="h-4 w-4 text-primary" />
+                <h2 className="text-sm font-semibold">Fila de decisões</h2>
+                <span className="rounded-full bg-muted px-1.5 text-[11px] font-medium text-muted-foreground tabular-nums">{decisions.length}</span>
+                <div className="ml-auto inline-flex rounded-lg border border-border bg-card p-0.5">
+                  {([['pending', 'Pendentes'], ['applied', 'Aplicadas'], ['rejected', 'Rejeitadas']] as const).map(([f, label]) => (
+                    <button key={f} onClick={() => switchFilter(f)} disabled={busy.decFilter}
+                      className={cn('rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                        decFilter === f ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground')}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {decFilter === 'pending' && (
+                <p className="mb-3 text-xs text-muted-foreground">O copiloto sugere; você decide. Ao aprovar, a mudança é aplicada de verdade no Meta — e pode ser revertida em 1 clique.</p>
+              )}
               {decisions.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-border bg-muted/10 p-8 text-center">
                   <ListChecks className="mx-auto mb-2 h-7 w-7 text-muted-foreground/50" />
                   <p className="text-sm text-muted-foreground">
-                    Nenhuma sugestão pendente. O motor analisa as contas a cada ciclo e enfileira aqui o que valer a pena.
+                    {decFilter === 'pending'
+                      ? 'Nenhuma sugestão pendente. O motor analisa as contas a cada ciclo e enfileira aqui o que valer a pena.'
+                      : decFilter === 'applied' ? 'Nenhuma decisão aplicada ainda.' : 'Nenhuma decisão rejeitada.'}
                   </p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                   {decisions.map((d, i) => (
-                    <DecisionCard key={d.id} d={d} busy={!!busy[`dec:${d.id}`]} onDecide={onDecide} index={i} />
+                    <DecisionCard key={d.id} d={d} busy={!!busy[`dec:${d.id}`]} onDecide={onDecide} onRollback={onRollback} index={i} />
                   ))}
                 </div>
               )}
@@ -352,10 +390,12 @@ function ConfidenceBar({ value }: { value: number }) {
   );
 }
 
-function DecisionCard({ d, busy, onDecide, index }: {
+function DecisionCard({ d, busy, onDecide, onRollback, index }: {
   d: AdsDecision; busy: boolean; index: number;
   onDecide: (id: string, v: 'approve' | 'reject', edited?: number) => void;
+  onRollback: (id: string) => void;
 }) {
+  const isPending = d.status === 'pending';
   const meta = DECISION_META[d.type] ?? DECISION_META.adjust_bid;
   const tn = TONE[meta.tone];
   const Icon = meta.icon;
@@ -404,18 +444,22 @@ function DecisionCard({ d, busy, onDecide, index }: {
               <span className="tabular-nums">
                 <span className="text-muted-foreground line-through">{brlFromCents(beforeCents)}</span>
                 <ArrowRight className="mx-1 inline h-3 w-3 text-muted-foreground" />
-                <span className={cn('font-semibold', tn.text)}>{brl(edited)}</span>
+                <span className={cn('font-semibold', tn.text)}>{isPending ? brl(edited) : brlFromCents(afterCents)}</span>
                 <span className="ml-1 text-[10px] text-muted-foreground">/dia</span>
               </span>
             </div>
-            <input
-              type="range" min={minB} max={maxB} step={1} value={edited}
-              onChange={(e) => setEdited(Number(e.target.value))}
-              className="mt-2 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-muted accent-cyan-400"
-            />
-            <div className="mt-0.5 flex justify-between text-[10px] text-muted-foreground tabular-nums">
-              <span>{brl(minB)}</span><span>arraste p/ ajustar (±20%)</span><span>{brl(maxB)}</span>
-            </div>
+            {isPending && (
+              <>
+                <input
+                  type="range" min={minB} max={maxB} step={1} value={edited}
+                  onChange={(e) => setEdited(Number(e.target.value))}
+                  className="mt-2 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-muted accent-cyan-400"
+                />
+                <div className="mt-0.5 flex justify-between text-[10px] text-muted-foreground tabular-nums">
+                  <span>{brl(minB)}</span><span>arraste p/ ajustar (±20%)</span><span>{brl(maxB)}</span>
+                </div>
+              </>
+            )}
           </>
         ) : statusAfter ? (
           <div className="flex items-center justify-between text-xs">
@@ -433,22 +477,46 @@ function DecisionCard({ d, busy, onDecide, index }: {
 
       <div className="mt-3"><ConfidenceBar value={d.confidence} /></div>
 
-      <div className="mt-3 flex gap-2">
-        <button
-          onClick={() => onDecide(d.id, 'approve', isBudget && edited !== Math.round((afterCents ?? 0) / 100) ? edited : undefined)}
-          disabled={busy}
-          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/20 disabled:opacity-40"
-        >
-          <Check className="h-3.5 w-3.5" /> Aprovar
-        </button>
-        <button
-          onClick={() => onDecide(d.id, 'reject')}
-          disabled={busy}
-          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-300 disabled:opacity-40"
-        >
-          <X className="h-3.5 w-3.5" /> Rejeitar
-        </button>
-      </div>
+      {isPending ? (
+        <div className="mt-3 flex gap-2">
+          <button
+            onClick={() => onDecide(d.id, 'approve', isBudget && edited !== Math.round((afterCents ?? 0) / 100) ? edited : undefined)}
+            disabled={busy}
+            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/20 disabled:opacity-40"
+          >
+            <Check className="h-3.5 w-3.5" /> Aprovar e aplicar
+          </button>
+          <button
+            onClick={() => onDecide(d.id, 'reject')}
+            disabled={busy}
+            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-300 disabled:opacity-40"
+          >
+            <X className="h-3.5 w-3.5" /> Rejeitar
+          </button>
+        </div>
+      ) : d.status === 'applied' ? (
+        <div className="mt-3 flex items-center gap-2">
+          <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-300">
+            <Check className="h-3 w-3" /> Aplicada
+          </span>
+          <button
+            onClick={() => onRollback(d.id)}
+            disabled={busy}
+            className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-amber-500/10 hover:text-amber-300 disabled:opacity-40"
+          >
+            <RotateCcw className="h-3.5 w-3.5" /> Reverter
+          </button>
+        </div>
+      ) : (
+        <div className="mt-3">
+          <span className={cn('inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium',
+            d.status === 'rejected' ? 'border-border bg-muted text-muted-foreground'
+              : d.status === 'failed' ? 'border-red-500/30 bg-red-500/10 text-red-300'
+                : 'border-border bg-muted text-muted-foreground')}>
+            {d.status === 'rejected' ? 'Rejeitada' : d.status === 'failed' ? 'Falhou' : d.status === 'rolled_back' ? 'Revertida' : d.status}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

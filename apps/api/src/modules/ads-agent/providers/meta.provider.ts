@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AdIntegrationsService } from '../../ads/ad-integrations.service';
 import { MetaConnector } from '../../ads/connectors/meta.connector';
+import { MetaPublishService } from '../../ads/publish/meta-publish.service';
 import type {
   AdAccount,
   AdProvider,
@@ -32,6 +33,7 @@ export class MetaProvider implements AdProvider {
   constructor(
     private readonly integrations: AdIntegrationsService,
     private readonly connector: MetaConnector,
+    private readonly publisher: MetaPublishService,
   ) {}
 
   capabilities(): ProviderCapabilities {
@@ -124,15 +126,40 @@ export class MetaProvider implements AdProvider {
     });
   }
 
-  applyAction(decision: ProviderDecision): Promise<ActionResult> {
-    // MVP-3: ligar no MetaPublishService (setCampaignStatus / adjustCampaignBudgetByPct).
-    this.logger.warn(
-      `applyAction(${decision.type}) chamado mas não implementado no MVP-1`,
-    );
-    return Promise.resolve({
-      ok: false,
-      message: 'applyAction do Meta chega no MVP-3 (escrita ainda desligada).',
-    });
+  async applyAction(decision: ProviderDecision): Promise<ActionResult> {
+    const orgId = decision.account.orgId;
+    const integrationId = decision.account.credentialRef;
+    const campaignId = decision.entityExternalId;
+    try {
+      switch (decision.type) {
+        case 'pause':
+          await this.publisher.setCampaignStatus(orgId, integrationId, campaignId, 'PAUSED');
+          return { ok: true, message: 'Campanha pausada', raw: { status: 'PAUSED' } };
+        case 'activate':
+          await this.publisher.setCampaignStatus(orgId, integrationId, campaignId, 'ACTIVE');
+          return { ok: true, message: 'Campanha reativada', raw: { status: 'ACTIVE' } };
+        case 'scale_budget':
+        case 'reduce_budget':
+        case 'reallocate': {
+          const before = numOf(decision.before.budget_cents);
+          const after = numOf(decision.after.budget_cents);
+          if (before == null || after == null || before <= 0) {
+            return { ok: false, message: 'Orçamento antes/depois ausente — não dá pra ajustar.' };
+          }
+          const pct = (after - before) / before;
+          const changed = await this.publisher.adjustCampaignBudgetByPct(
+            orgId, integrationId, campaignId, pct,
+          );
+          return { ok: true, message: `Orçamento ajustado ${(pct * 100).toFixed(0)}%`, raw: { changed } };
+        }
+        default:
+          return { ok: false, message: `Tipo "${decision.type}" ainda não aplicável (requer nível adset).` };
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`applyAction(${decision.type}) falhou: ${message}`);
+      return { ok: false, message };
+    }
   }
 }
 
@@ -217,6 +244,10 @@ function sumTypes(map: Record<string, number>, types: string[]): number {
   let s = 0;
   for (const t of types) s += map[t] ?? 0;
   return s;
+}
+
+function numOf(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
 /**

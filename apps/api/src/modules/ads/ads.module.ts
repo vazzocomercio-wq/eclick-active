@@ -89,6 +89,7 @@ import { AdAutopilotService } from './publish/ad-autopilot.service';
     SignalDetectorService,
     AdLeadsService,
     AdCompositionsService,
+    MetaPublishService,
   ],
 })
 export class AdsModule {}

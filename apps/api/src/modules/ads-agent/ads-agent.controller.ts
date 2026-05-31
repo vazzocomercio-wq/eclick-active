@@ -25,6 +25,7 @@ import {
   DecisionRow,
   DecisionStatus,
 } from './ads-decisions.service';
+import { AdsApplyService } from './ads-apply.service';
 import type { Platform } from './contracts/ad-provider';
 
 interface EnrollBody {
@@ -54,6 +55,7 @@ export class AdsAgentController {
     private readonly decisions: AdsDecisionsService,
     private readonly overview: AdsOverviewService,
     private readonly dossiers: AdsDossierService,
+    private readonly applier: AdsApplyService,
   ) {}
 
   /** Plataformas com adaptador disponível. */
@@ -209,12 +211,22 @@ export class AdsAgentController {
     return this.decisions.get(user.org_id, id);
   }
 
+  /** Aprovar = APLICAR de verdade no provedor (com guardrails). */
   @Post('decisions/:id/approve')
   approveDecision(
     @CurrentUser() user: AuthUser,
     @Param('id', new ParseUUIDPipe()) id: string,
-  ): Promise<DecisionRow> {
-    return this.decisions.approve(user.org_id, id);
+  ): Promise<{ id: string; status: string; message: string }> {
+    return this.applier.apply(user.org_id, id);
+  }
+
+  /** Reverte uma decisão já aplicada ao estado anterior. */
+  @Post('decisions/:id/rollback')
+  rollbackDecision(
+    @CurrentUser() user: AuthUser,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<{ id: string; status: string; message: string }> {
+    return this.applier.rollback(user.org_id, id);
   }
 
   @Post('decisions/:id/reject')
