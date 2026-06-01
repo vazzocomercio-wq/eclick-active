@@ -10,6 +10,8 @@ export interface EntityDossier {
   status: string;
   budget_brl: number | null;
   budget_type: string | null;
+  /** ML: ACOS-alvo ATUAL configurado (%, setting de lance) — base pro adjust_bid. */
+  acos_target: number | null;
   data_days: number;
   window: {
     spend_brl: number;
@@ -132,18 +134,19 @@ export class AdsDossierService {
       status: string;
       budget_cents: number | null;
       budget_type: string | null;
+      acos_target: number | null;
     }>
   > {
     const { data, error } = await this.supabase.adminClient
       .from('ads_entities')
-      .select('id, external_id, name, objective, status, budget_cents, budget_type')
+      .select('id, external_id, name, objective, status, budget_cents, budget_type, raw')
       .eq('account_id', accountId)
       .eq('level', 'campaign');
     if (error) {
       this.logger.warn(`loadCampaignEntities falhou: ${error.message}`);
       return [];
     }
-    return (data ?? []) as unknown as Array<{
+    return ((data ?? []) as unknown as Array<{
       id: string;
       external_id: string;
       name: string | null;
@@ -151,7 +154,26 @@ export class AdsDossierService {
       status: string;
       budget_cents: number | null;
       budget_type: string | null;
-    }>;
+      raw: Record<string, unknown> | null;
+    }>).map((r) => {
+      const rawAcos = r.raw?.acos_target;
+      const acos =
+        typeof rawAcos === 'number' && Number.isFinite(rawAcos)
+          ? rawAcos
+          : typeof rawAcos === 'string' && Number.isFinite(Number(rawAcos))
+            ? Number(rawAcos)
+            : null;
+      return {
+        id: r.id,
+        external_id: r.external_id,
+        name: r.name,
+        objective: r.objective,
+        status: r.status,
+        budget_cents: r.budget_cents,
+        budget_type: r.budget_type,
+        acos_target: acos,
+      };
+    });
   }
 
   private async loadInsights(
@@ -185,6 +207,7 @@ export class AdsDossierService {
       status: string;
       budget_cents: number | null;
       budget_type: string | null;
+      acos_target: number | null;
     },
     rowsDesc: InsightRow[],
   ): EntityDossier {
@@ -239,6 +262,7 @@ export class AdsDossierService {
       status: e.status,
       budget_brl: e.budget_cents != null ? c2r(e.budget_cents) : null,
       budget_type: e.budget_type,
+      acos_target: e.acos_target,
       data_days: dataDays,
       window: {
         spend_brl: c2r(tot.spend),

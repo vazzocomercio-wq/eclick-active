@@ -426,6 +426,8 @@ function DecisionCard({ d, busy, onDecide, onRollback, index }: {
   const maxB = beforeCents != null ? Math.round((beforeCents * 1.2) / 100) : 0;
   const [edited, setEdited] = useState<number>(afterCents != null ? Math.round(afterCents / 100) : 0);
   const statusAfter = typeof d.after?.status === 'string' ? (d.after.status as string) : null;
+  const acosAfter = typeof d.after?.acos_target === 'number' ? (d.after.acos_target as number) : null;
+  const acosBefore = typeof d.before?.acos_target === 'number' ? (d.before.acos_target as number) : null;
   const signalChips = Object.entries(d.signals ?? {}).slice(0, 4);
 
   return (
@@ -488,6 +490,19 @@ function DecisionCard({ d, busy, onDecide, onRollback, index }: {
               <span className="text-muted-foreground">{String(d.before?.status ?? '—')}</span>
               <ArrowRight className="mx-1 inline h-3 w-3 text-muted-foreground" />
               <span className={cn('font-semibold', tn.text)}>{statusAfter}</span>
+            </span>
+          </div>
+        ) : acosAfter != null ? (
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">ACOS-alvo</span>
+            <span className="tabular-nums">
+              {acosBefore != null && (
+                <>
+                  <span className="text-muted-foreground line-through">{acosBefore}%</span>
+                  <ArrowRight className="mx-1 inline h-3 w-3 text-muted-foreground" />
+                </>
+              )}
+              <span className={cn('font-semibold', tn.text)}>{acosAfter}%</span>
             </span>
           </div>
         ) : (

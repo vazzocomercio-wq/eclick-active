@@ -39,10 +39,21 @@ interface EntityState {
   status: string;
   budget_cents: number | null;
   budget_type: string | null;
+  /** ML: ACOS-alvo atual (%) da campanha (setting de lance), de ads_entities.raw. */
+  acos_target: number | null;
 }
 
 const BUDGET_FLOOR_CENTS = 100; // R$1/dia piso prático
 const r2c = (reais: number): number => Math.round(reais * 100);
+
+// ── adjust_bid (ML ACOS-alvo) ──────────────────────────────
+/** ML exige ACOS-alvo > 3 e < 500. Pisos/tetos práticos nossos. */
+const ACOS_MIN = 4;
+const ACOS_MAX = 100;
+/** Teto de variação de ACOS-alvo por ciclo (pontos percentuais ABSOLUTOS). */
+const ACOS_MAX_STEP_PTS = 5;
+/** Fallback de ACOS-alvo quando a margem da org não veio. */
+const ACOS_DEFAULT_CEILING = 25;
 
 // ── modo auto (MVP-4) — conservador ────────────────────────
 /** Confiança mínima pra auto-aplicar (sem humano). */
@@ -138,7 +149,7 @@ export class AdsAnalyzeService {
     const autoMode = acct.decision_mode === 'auto';
     let autoApplied = 0;
     for (const p of proposals) {
-      const res = await this.routeDecision(acct.org_id, accountId, p, stateByExt, pendingKeys, autoMode);
+      const res = await this.routeDecision(acct.org_id, accountId, p, stateByExt, pendingKeys, autoMode, marginPct);
       if (!res.persisted) { base.skipped += 1; continue; }
       base.persisted += 1;
       // modo auto: aplica sozinho ações conservadoras de alta confiança (cap/ciclo)
@@ -170,6 +181,7 @@ export class AdsAnalyzeService {
     stateByExt: Map<string, EntityState>,
     pendingKeys: Set<string>,
     autoMode: boolean,
+    marginPct: number | null,
   ): Promise<RouteResult> {
     if (typeof p.confidence !== 'number' || p.confidence < MIN_DECISION_CONFIDENCE) {
       return { persisted: false };
@@ -184,6 +196,7 @@ export class AdsAnalyzeService {
       status: state.status,
       budget_cents: state.budget_cents,
       budget_type: state.budget_type,
+      acos_target: state.acos_target,
     };
     let after: Record<string, unknown> | null = null;
 
@@ -209,10 +222,16 @@ export class AdsAnalyzeService {
         if (state.status === 'active') return { persisted: false };
         after = { status: 'active' };
         break;
-      case 'adjust_bid':
-        // ML: ajuste de lance/ACOS-alvo. Aplicação real chega no apply do ML (Fase 3).
-        after = { note: 'ajuste de lance/ACOS — sugestão (aplicação no provider em fase futura)' };
+      case 'adjust_bid': {
+        // ML: ajuste de lance via ACOS-alvo. Precisa de um alvo numérico aplicável
+        // (Fase 3). Sem after_acos_target não há o que aplicar → não cria decisão.
+        if (p.after_acos_target == null) return { persisted: false };
+        const clamped = this.clampAcos(state.acos_target, p.after_acos_target, marginPct);
+        if (clamped == null) return { persisted: false };
+        if (state.acos_target != null && clamped === state.acos_target) return { persisted: false };
+        after = { acos_target: clamped };
         break;
+      }
       default:
         return { persisted: false };
     }
@@ -265,6 +284,37 @@ export class AdsAnalyzeService {
     return after;
   }
 
+  /**
+   * Clampa o ACOS-alvo proposto (adjust_bid no ML). Regras de segurança:
+   *  - nunca acima do TETO = margem real da org (acima disso a venda dá prejuízo);
+   *    sem margem informada, usa ACOS_DEFAULT_CEILING. Hard cap em ACOS_MAX.
+   *  - nunca abaixo de ACOS_MIN (ML rejeita ≤ 3; mantemos folga).
+   *  - passo limitado a ±ACOS_MAX_STEP_PTS pontos por ciclo vs o alvo atual.
+   * Retorna o alvo (%) arredondado a 1 casa, ou null se inválido.
+   */
+  private clampAcos(
+    currentAcos: number | null,
+    proposedAcos: number,
+    marginPct: number | null,
+  ): number | null {
+    if (!Number.isFinite(proposedAcos)) return null;
+    const ceiling = Math.min(
+      marginPct != null && marginPct > 0 ? marginPct : ACOS_DEFAULT_CEILING,
+      ACOS_MAX,
+    );
+    let target = Math.min(Math.max(proposedAcos, ACOS_MIN), ceiling);
+    // passo limitado vs alvo atual (quando conhecido)
+    if (currentAcos != null && Number.isFinite(currentAcos)) {
+      const up = currentAcos + ACOS_MAX_STEP_PTS;
+      const down = currentAcos - ACOS_MAX_STEP_PTS;
+      target = Math.min(Math.max(target, down), up);
+      // re-aplica os limites duros depois do passo
+      target = Math.min(Math.max(target, ACOS_MIN), ceiling);
+    }
+    const rounded = Math.round(target * 10) / 10;
+    return rounded > ACOS_MIN - 0.001 ? rounded : null;
+  }
+
   // ── helpers de dados ───────────────────────────────────────
 
   private parseOutput(text: string): AnalyzeOutput {
@@ -280,7 +330,7 @@ export class AdsAnalyzeService {
   private async loadEntityStates(accountId: string): Promise<Map<string, EntityState>> {
     const { data, error } = await this.supabase.adminClient
       .from('ads_entities')
-      .select('id, external_id, status, budget_cents, budget_type')
+      .select('id, external_id, status, budget_cents, budget_type, raw')
       .eq('account_id', accountId)
       .eq('level', 'campaign');
     const map = new Map<string, EntityState>();
@@ -288,8 +338,24 @@ export class AdsAnalyzeService {
       this.logger.warn(`loadEntityStates falhou: ${error.message}`);
       return map;
     }
-    for (const r of (data ?? []) as unknown as EntityState[]) {
-      map.set(r.external_id, r);
+    for (const r of (data ?? []) as unknown as Array<
+      Omit<EntityState, 'acos_target'> & { raw: Record<string, unknown> | null }
+    >) {
+      const rawAcos = r.raw?.acos_target;
+      const acos =
+        typeof rawAcos === 'number' && Number.isFinite(rawAcos)
+          ? rawAcos
+          : typeof rawAcos === 'string' && Number.isFinite(Number(rawAcos))
+            ? Number(rawAcos)
+            : null;
+      map.set(r.external_id, {
+        id: r.id,
+        external_id: r.external_id,
+        status: r.status,
+        budget_cents: r.budget_cents,
+        budget_type: r.budget_type,
+        acos_target: acos,
+      });
     }
     return map;
   }

@@ -37,6 +37,8 @@ export interface ProposedDecision {
   after_budget_brl?: number;
   /** reallocate: pra onde mover (external_id de outra campanha). */
   reallocate_to_external_id?: string;
+  /** SÓ pra "adjust_bid" (Mercado Livre). Novo ACOS-alvo (%) proposto. Aplicável de verdade. */
+  after_acos_target?: number;
 }
 
 export interface AnalyzeOutput {
@@ -103,7 +105,8 @@ averages e trend. ATENÇÃO à semântica normalizada:
       "rationale": "1-2 frases em PT-BR citando o número que disparou",
       "signals": { "roas": 0.8, "cpa_brl": 45.0, "trend": "declining", "daily_spend_brl": 50.0 },
       "after_budget_brl": 60.0,
-      "reallocate_to_external_id": "<id destino, só pra reallocate>"
+      "reallocate_to_external_id": "<id destino, só pra reallocate>",
+      "after_acos_target": 16.0
     }
   ]
 }
@@ -129,7 +132,7 @@ export function platformOverrideBlock(
 
 # OVERRIDE — MERCADO LIVRE ADS (especialista, TEM PRIORIDADE sobre o playbook base)
 Estas campanhas são de Mercado Livre Ads (Product Ads — leilão por palavra-chave, fundo de funil de VENDA). A dinâmica é diferente de mídia social:
-1. ALAVANCA: no ML a alavanca primária é o LANCE / ACOS-alvo, NÃO o orçamento/dia. Muitas campanhas vêm com budget_brl = null (são geridas por lance). Para essas, NÃO proponha scale_budget/reduce_budget — use type "adjust_bid" e descreva no rationale subir ou baixar o ACOS-alvo/lance. Só use scale/reduce_budget quando budget_brl existir.
+1. ALAVANCA: no ML a alavanca primária é o LANCE / ACOS-alvo, NÃO o orçamento/dia. Muitas campanhas vêm com budget_brl = null (são geridas por lance). Para essas, NÃO proponha scale_budget/reduce_budget — use type "adjust_bid". O dossiê traz "acos_target" = ACOS-alvo ATUAL configurado (em %, é o SETTING de lance; diferente de acos_pct que é o REALIZADO). Para "adjust_bid" devolva OBRIGATORIAMENTE "after_acos_target" = novo ACOS-alvo numérico (%). Sem esse número a decisão NÃO pode ser aplicada. Mexa no máximo ±5 pontos percentuais por ciclo (ex.: de 13% para 16%) e NUNCA acima da margem da org. Só use scale/reduce_budget quando budget_brl existir.
 2. MÉTRICA SOBERANA = ACOS (averages.acos_pct = gasto÷receita). Menor é melhor. ACOS é o INVERSO do ROAS (ACOS 20% ≈ ROAS 5×).
 3. JULGUE ACOS CONTRA A MARGEM — nunca contra a variação de ROAS. ${marginLine}
    - acos_pct bem abaixo da margem + volume bom → ESCALAR (subir ACOS-alvo/lance p/ ganhar impressão) → "adjust_bid" (ou "scale_budget" se tiver budget).

@@ -64,6 +64,8 @@ export class AdsApplyService {
 
     // re-guard de orçamento (±20%)
     this.assertBudgetWithinBounds(dec.type, dec.before, dec.after);
+    // re-guard de ACOS-alvo (ML adjust_bid): ML exige > 3 e < 500
+    this.assertAcosWithinBounds(dec.type, dec.after);
 
     const externalId = await this.entityExternalId(dec.entity_id);
     if (!externalId) throw new NotFoundException('Entidade da decisão não encontrada.');
@@ -158,6 +160,18 @@ export class AdsApplyService {
       throw new BadRequestException(
         `Variação de orçamento ${(change * 100).toFixed(0)}% excede o teto de ${MAX_BUDGET_CHANGE_PCT * 100}% por ciclo.`,
       );
+    }
+  }
+
+  /** ML adjust_bid: o ACOS-alvo precisa ser número > 3 e < 500 (regra da API ML). */
+  private assertAcosWithinBounds(type: DecisionType, after: Record<string, unknown>): void {
+    if (type !== 'adjust_bid') return;
+    const a = typeof after.acos_target === 'number' ? after.acos_target : null;
+    if (a == null || !Number.isFinite(a)) {
+      throw new BadRequestException('ACOS-alvo ausente na decisão — rode a análise novamente.');
+    }
+    if (a <= 3 || a >= 500) {
+      throw new BadRequestException(`ACOS-alvo ${a}% fora da faixa permitida pelo Mercado Livre (>3 e <500).`);
     }
   }
 
