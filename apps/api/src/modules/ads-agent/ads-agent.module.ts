@@ -20,6 +20,7 @@ import { AdsAdAnalyzeService } from './analysis/ads-ad-analyze.service';
 import { MetaProvider } from './providers/meta.provider';
 import { GoogleProvider } from './providers/google.provider';
 import { MercadoLivreAdsProvider } from './providers/mercadolivre.provider';
+import { TikTokAdsProvider } from './providers/tiktok.provider';
 
 /**
  * Ads Performance Agent (F12) — motor de OTIMIZAÇÃO de anúncios
@@ -44,6 +45,7 @@ import { MercadoLivreAdsProvider } from './providers/mercadolivre.provider';
     MetaProvider,
     GoogleProvider,
     MercadoLivreAdsProvider,
+    TikTokAdsProvider,
     AdProviderDispatcher,
     AdsAccountsService,
     AdsIngestService,

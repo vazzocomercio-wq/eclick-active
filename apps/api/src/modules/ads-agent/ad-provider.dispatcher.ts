@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { MetaProvider } from './providers/meta.provider';
 import { GoogleProvider } from './providers/google.provider';
 import { MercadoLivreAdsProvider } from './providers/mercadolivre.provider';
+import { TikTokAdsProvider } from './providers/tiktok.provider';
 import type { AdProvider, Platform } from './contracts/ad-provider';
 
 /**
@@ -15,11 +16,16 @@ export class AdProviderDispatcher {
   private readonly logger = new Logger(AdProviderDispatcher.name);
   private readonly providers = new Map<Platform, AdProvider>();
 
-  constructor(meta: MetaProvider, google: GoogleProvider, ml: MercadoLivreAdsProvider) {
+  constructor(
+    meta: MetaProvider,
+    google: GoogleProvider,
+    ml: MercadoLivreAdsProvider,
+    tiktok: TikTokAdsProvider,
+  ) {
     this.register(meta);
     this.register(google);
     this.register(ml);
-    // Futuro: this.register(tiktok), ...
+    this.register(tiktok); // GMV Max (TikTok Shop ads)
   }
 
   private register(provider: AdProvider): void {

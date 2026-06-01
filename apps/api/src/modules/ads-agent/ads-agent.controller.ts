@@ -106,6 +106,12 @@ export class AdsAgentController {
     return this.accounts.enrollMlAdvertisers(user.org_id);
   }
 
+  /** Matricula os advertisers de TikTok Ads (GMV Max) — IDs vêm de env (scaffold). */
+  @Post('accounts/enroll-tiktok')
+  enrollTikTok(@CurrentUser() user: AuthUser): Promise<AdsAccountRow[]> {
+    return this.accounts.enrollTikTokAdvertisers(user.org_id);
+  }
+
   @Get('accounts')
   listAccounts(@CurrentUser() user: AuthUser): Promise<AdsAccountRow[]> {
     return this.accounts.list(user.org_id);

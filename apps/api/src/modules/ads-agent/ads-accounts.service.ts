@@ -152,6 +152,44 @@ export class AdsAccountsService {
     return data as unknown as AdsAccountRow[];
   }
 
+  /**
+   * Matricula os advertisers de TikTok Ads (GMV Max) da org. SCAFFOLD: os IDs
+   * vêm de env (TIKTOK_ADS_ADVERTISER_ID, separados por vírgula) enquanto o
+   * OAuth self-service não existe; o TikTokAdsProvider lê o token de
+   * TIKTOK_ADS_ACCESS_TOKEN. credential_ref = advertiser_id (placeholder até a
+   * conexão via ad_integrations/OAuth). Idempotente por (platform, advertiser).
+   */
+  async enrollTikTokAdvertisers(orgId: string): Promise<AdsAccountRow[]> {
+    const advertisers = Array.from(
+      new Set(
+        (process.env.TIKTOK_ADS_ADVERTISER_ID ?? '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+      ),
+    );
+    if (advertisers.length === 0) {
+      throw new BadRequestException(
+        'Nenhum advertiser de TikTok Ads configurado (defina TIKTOK_ADS_ADVERTISER_ID no ambiente após aprovar o app de Marketing API).',
+      );
+    }
+    const rows = advertisers.map((adv) => ({
+      org_id: orgId,
+      platform: 'tiktok' as Platform,
+      external_account_id: adv,
+      name: `TikTok GMV Max · ${adv}`,
+      credential_ref: adv,
+      status: 'active' as const,
+    }));
+    const { data, error } = await this.supabase.adminClient
+      .from('ads_accounts')
+      .upsert(rows, { onConflict: 'platform,external_account_id' })
+      .select(ACCOUNT_COLS);
+    if (error) throw new InternalServerErrorException(error.message);
+    this.logger.log(`enrollTikTokAdvertisers org=${orgId} → ${advertisers.length} advertiser(s)`);
+    return data as unknown as AdsAccountRow[];
+  }
+
   async list(orgId: string): Promise<AdsAccountRow[]> {
     const { data, error } = await this.supabase.adminClient
       .from('ads_accounts')

@@ -122,6 +122,25 @@ export function platformOverrideBlock(
   platform: string,
   opts: { marginTargetPct?: number | null } = {},
 ): string {
+  if (platform === 'tiktok') {
+    // TikTok GMV Max (anúncio de venda do Shop, automatizado).
+    const m = opts.marginTargetPct ?? null;
+    const beRoas = m != null && m > 0 ? Math.round((100 / m) * 10) / 10 : 4;
+    const beLine =
+      m != null && m > 0
+        ? `A margem de contribuição da org é ≈ ${m}% → o anúncio só cobre o custo do produto enquanto ROAS/ROI > ${beRoas}× (breakeven = 100/margem). Acima = LUCRO; abaixo = prejuízo.`
+        : `Margem da org não informada → use breakeven conservador de ROAS/ROI 4× (≈ margem 25%).`;
+    return `
+
+# OVERRIDE — TIKTOK GMV MAX (especialista, TEM PRIORIDADE sobre o playbook base)
+Estas campanhas são GMV Max do TikTok Shop (anúncio AUTOMATIZADO de VENDA de produto — não é mídia social/branding). A dinâmica:
+1. ALAVANCA: o GMV Max é AUTOMATIZADO (você define ROI-alvo + orçamento e o TikTok otimiza a entrega, somando alcance pago + orgânico). NÃO há lance por palavra-chave. As alavancas acionáveis são o ORÇAMENTO/dia (scale_budget / reduce_budget) e PAUSAR. Use adjust_bid só se o dossiê expuser um ROI-alvo configurável.
+2. MÉTRICA SOBERANA = ROAS/ROI (receita÷gasto; "ROI da loja" no painel). Maior é melhor. ${beLine}
+   - ROAS bem ACIMA do breakeven + orçamento batendo o teto (gasta ~100% do diário) → ESCALAR ("scale_budget" +15-20%).
+   - ROAS ABAIXO do breakeven de forma sustentada → "reduce_budget"; "pause" só se o ROAS for muito baixo com gasto relevante, ou gasto relevante com ~zero pedidos há vários dias.
+3. ⚠️ NÃO pause por uma queda pontual de ROAS se ele AINDA está acima do breakeven — continua dando lucro. Tendência > foto.
+4. O GMV Max inclui uplift orgânico: trate "revenue_brl"/"roas" do dossiê como a receita ATRIBUÍDA pelo TikTok; pedidos = "conversions".`;
+  }
   if (platform !== 'mercadolivre') return '';
   const margin = opts.marginTargetPct ?? null;
   const marginLine =
