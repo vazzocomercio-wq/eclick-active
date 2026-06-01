@@ -5,6 +5,7 @@ import {
   Gauge, RefreshCw, Sparkles, TrendingUp, TrendingDown, Minus, Wallet,
   Target, DollarSign, Layers, Building2, ListChecks, Check, X, Play, Pause,
   Plus, ChevronRight, Activity, AlertTriangle, Zap, ArrowRight, Power, RotateCcw,
+  ExternalLink,
 } from 'lucide-react';
 import {
   adsCentralApi, AdsOverview, AccountOverview, AdsDecision, AccountCampaigns,
@@ -329,7 +330,8 @@ export default function AdsCentralPage() {
               ) : (
                 <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                   {decisions.map((d, i) => (
-                    <DecisionCard key={d.id} d={d} busy={!!busy[`dec:${d.id}`]} onDecide={onDecide} onRollback={onRollback} index={i} />
+                    <DecisionCard key={d.id} d={d} busy={!!busy[`dec:${d.id}`]} onDecide={onDecide} onRollback={onRollback} index={i}
+                      platform={overview.accounts.find((a) => a.id === d.account_id)?.platform} />
                   ))}
                 </div>
               )}
@@ -410,8 +412,8 @@ function ConfidenceBar({ value }: { value: number }) {
   );
 }
 
-function DecisionCard({ d, busy, onDecide, onRollback, index }: {
-  d: AdsDecision; busy: boolean; index: number;
+function DecisionCard({ d, busy, onDecide, onRollback, index, platform }: {
+  d: AdsDecision; busy: boolean; index: number; platform?: string;
   onDecide: (id: string, v: 'approve' | 'reject', edited?: number) => void;
   onRollback: (id: string) => void;
 }) {
@@ -429,6 +431,26 @@ function DecisionCard({ d, busy, onDecide, onRollback, index }: {
   const acosAfter = typeof d.after?.acos_target === 'number' ? (d.after.acos_target as number) : null;
   const acosBefore = typeof d.before?.acos_target === 'number' ? (d.before.acos_target as number) : null;
   const signalChips = Object.entries(d.signals ?? {}).slice(0, 4);
+
+  // Mercado Livre: aplicação automática (write) ainda pendente de liberação do
+  // Mercado Ads. Vira copiloto — mostramos o ROAS Objetivo (unidade do painel ML,
+  // ROAS = 100/ACOS) + instrução exata + link pro painel.
+  const isMl = platform === 'mercadolivre';
+  const acosToRoas = (a: number) => Math.round((100 / a) * 10) / 10;
+  const roasAfter = acosAfter != null && acosAfter > 0 ? acosToRoas(acosAfter) : null;
+  const roasBefore = acosBefore != null && acosBefore > 0 ? acosToRoas(acosBefore) : null;
+  const campName = d.entity_name ?? 'a campanha';
+  const mlInstruction = !isMl
+    ? null
+    : roasAfter != null
+      ? `Ajuste o ROAS Objetivo de "${campName}" para ${roasAfter}× (ACOS-alvo ≈ ${acosAfter}%).`
+      : statusAfter === 'paused'
+        ? `Pause "${campName}".`
+        : statusAfter === 'active'
+          ? `Ative "${campName}".`
+          : isBudget
+            ? `Ajuste o orçamento diário de "${campName}" para ${brl(edited)}.`
+            : `Abra "${campName}" no Mercado Ads e aplique o ajuste sugerido.`;
 
   return (
     <div
@@ -494,15 +516,30 @@ function DecisionCard({ d, busy, onDecide, onRollback, index }: {
           </div>
         ) : acosAfter != null ? (
           <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">ACOS-alvo</span>
+            <span className="text-muted-foreground">{isMl ? 'ROAS Objetivo' : 'ACOS-alvo'}</span>
             <span className="tabular-nums">
-              {acosBefore != null && (
+              {isMl ? (
                 <>
-                  <span className="text-muted-foreground line-through">{acosBefore}%</span>
-                  <ArrowRight className="mx-1 inline h-3 w-3 text-muted-foreground" />
+                  {roasBefore != null && (
+                    <>
+                      <span className="text-muted-foreground line-through">{roasBefore}×</span>
+                      <ArrowRight className="mx-1 inline h-3 w-3 text-muted-foreground" />
+                    </>
+                  )}
+                  <span className={cn('font-semibold', tn.text)}>{roasAfter}×</span>
+                  <span className="ml-1 text-[10px] text-muted-foreground">(ACOS {acosAfter}%)</span>
+                </>
+              ) : (
+                <>
+                  {acosBefore != null && (
+                    <>
+                      <span className="text-muted-foreground line-through">{acosBefore}%</span>
+                      <ArrowRight className="mx-1 inline h-3 w-3 text-muted-foreground" />
+                    </>
+                  )}
+                  <span className={cn('font-semibold', tn.text)}>{acosAfter}%</span>
                 </>
               )}
-              <span className={cn('font-semibold', tn.text)}>{acosAfter}%</span>
             </span>
           </div>
         ) : (
@@ -513,22 +550,48 @@ function DecisionCard({ d, busy, onDecide, onRollback, index }: {
       <div className="mt-3"><ConfidenceBar value={d.confidence} /></div>
 
       {isPending ? (
-        <div className="mt-3 flex gap-2">
-          <button
-            onClick={() => onDecide(d.id, 'approve', isBudget && edited !== Math.round((afterCents ?? 0) / 100) ? edited : undefined)}
-            disabled={busy}
-            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/20 disabled:opacity-40"
-          >
-            <Check className="h-3.5 w-3.5" /> Aprovar e aplicar
-          </button>
-          <button
-            onClick={() => onDecide(d.id, 'reject')}
-            disabled={busy}
-            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-300 disabled:opacity-40"
-          >
-            <X className="h-3.5 w-3.5" /> Rejeitar
-          </button>
-        </div>
+        isMl ? (
+          <div className="mt-3">
+            <div className="mb-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-[11px] leading-relaxed text-amber-200">
+              <span className="font-semibold text-amber-300">Mercado Livre · ajuste manual</span> — a aplicação automática aguarda liberação de escrita do Mercado Ads. Por ora:
+              <span className="mt-1 block font-medium">{mlInstruction}</span>
+            </div>
+            <div className="flex gap-2">
+              <a
+                href="https://ads.mercadolivre.com.br/productAds"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-300 transition-colors hover:bg-cyan-500/20"
+              >
+                <ExternalLink className="h-3.5 w-3.5" /> Abrir no Mercado Ads
+              </a>
+              <button
+                onClick={() => onDecide(d.id, 'reject')}
+                disabled={busy}
+                className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-300 disabled:opacity-40"
+              >
+                <X className="h-3.5 w-3.5" /> Dispensar
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-3 flex gap-2">
+            <button
+              onClick={() => onDecide(d.id, 'approve', isBudget && edited !== Math.round((afterCents ?? 0) / 100) ? edited : undefined)}
+              disabled={busy}
+              className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/20 disabled:opacity-40"
+            >
+              <Check className="h-3.5 w-3.5" /> Aprovar e aplicar
+            </button>
+            <button
+              onClick={() => onDecide(d.id, 'reject')}
+              disabled={busy}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-300 disabled:opacity-40"
+            >
+              <X className="h-3.5 w-3.5" /> Rejeitar
+            </button>
+          </div>
+        )
       ) : d.status === 'applied' ? (
         <div className="mt-3 flex items-center gap-2">
           <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-300">
