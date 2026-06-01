@@ -451,6 +451,11 @@ function DecisionCard({ d, busy, onDecide, onRollback, index, platform }: {
           : isBudget
             ? `Ajuste o orçamento diário de "${campName}" para ${brl(edited)}.`
             : `Abra "${campName}" no Mercado Ads e aplique o ajuste sugerido.`;
+  // Deep-link: abre direto o dashboard DA campanha no painel do Mercado Ads
+  // (edição é por campanha). Fallback: lista de campanhas.
+  const mlCampaignUrl = d.entity_external_id
+    ? `https://www.mercadolivre.com.br/publicidade/product-ads/admin/campaigns/${d.entity_external_id}/dashboard?navigate_to=seller_central`
+    : 'https://www.mercadolivre.com.br/publicidade/product-ads/admin/campaigns?navigate_to=seller_central';
 
   return (
     <div
@@ -558,7 +563,7 @@ function DecisionCard({ d, busy, onDecide, onRollback, index, platform }: {
             </div>
             <div className="flex gap-2">
               <a
-                href="https://ads.mercadolivre.com.br/productAds"
+                href={mlCampaignUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-300 transition-colors hover:bg-cyan-500/20"
