@@ -16,6 +16,7 @@ import { AdsOutcomeWorker } from './ads-outcome.worker';
 import { AdsOverviewService } from './ads-overview.service';
 import { AdsDossierService } from './analysis/ads-dossier.service';
 import { AdsAnalyzeService } from './analysis/ads-analyze.service';
+import { AdsAdAnalyzeService } from './analysis/ads-ad-analyze.service';
 import { MetaProvider } from './providers/meta.provider';
 import { GoogleProvider } from './providers/google.provider';
 import { MercadoLivreAdsProvider } from './providers/mercadolivre.provider';
@@ -48,6 +49,7 @@ import { MercadoLivreAdsProvider } from './providers/mercadolivre.provider';
     AdsIngestService,
     AdsDossierService,
     AdsAnalyzeService,
+    AdsAdAnalyzeService,
     AdsDecisionsService,
     AdsApplyService,
     AdsKnowledgeService,

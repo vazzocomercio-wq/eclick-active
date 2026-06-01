@@ -166,6 +166,17 @@ export class MercadoLivreAdsProvider implements AdProvider {
         patch.acos_target = acos;
         break;
       }
+      // Nível ANÚNCIO (Fase 4): SÃO COPILOTO. A escrita no Product Ads do ML
+      // (pausar/remover/incluir anúncio) está bloqueada (401 mclics — falta o
+      // Mercado Ads liberar). O usuário aplica manual pelo deep-link do card.
+      case 'pause_ad':
+      case 'remove_ad':
+      case 'boost_ad':
+        return {
+          ok: false,
+          message:
+            'Sugestão de nível-anúncio (copiloto): a aplicação automática no Mercado Ads ainda não está liberada. Use o link do card para aplicar manualmente no painel.',
+        };
       default:
         return { ok: false, message: `Tipo "${decision.type}" não aplicável no Mercado Livre.` };
     }

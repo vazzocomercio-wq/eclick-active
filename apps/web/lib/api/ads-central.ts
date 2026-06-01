@@ -11,7 +11,9 @@ export type AccountStatus = 'active' | 'paused' | 'error' | 'disconnected';
 export type SpendTier = 'low' | 'standard' | 'high';
 export type DecisionMode = 'copilot' | 'auto';
 export type DecisionType =
-  | 'scale_budget' | 'reduce_budget' | 'pause' | 'activate' | 'adjust_bid' | 'reallocate';
+  | 'scale_budget' | 'reduce_budget' | 'pause' | 'activate' | 'adjust_bid' | 'reallocate'
+  // nível ANÚNCIO (ML copiloto — write bloqueado)
+  | 'pause_ad' | 'remove_ad' | 'boost_ad';
 export type DecisionStatus =
   | 'pending' | 'approved' | 'rejected' | 'applied' | 'failed' | 'rolled_back';
 

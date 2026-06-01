@@ -18,6 +18,7 @@ import { AdProviderDispatcher } from './ad-provider.dispatcher';
 import { AdsAccountsService, AdsAccountRow } from './ads-accounts.service';
 import { AdsIngestService, IngestResult } from './ads-ingest.service';
 import { AdsAnalyzeService, AnalyzeResult } from './analysis/ads-analyze.service';
+import { AdsAdAnalyzeService } from './analysis/ads-ad-analyze.service';
 import { AdsDossierService, AccountDossier } from './analysis/ads-dossier.service';
 import { AdsOverviewService, AdsOverview } from './ads-overview.service';
 import {
@@ -56,6 +57,7 @@ export class AdsAgentController {
     private readonly dispatcher: AdProviderDispatcher,
     private readonly supabase: SupabaseService,
     private readonly analyze: AdsAnalyzeService,
+    private readonly adAnalyze: AdsAdAnalyzeService,
     private readonly decisions: AdsDecisionsService,
     private readonly overview: AdsOverviewService,
     private readonly dossiers: AdsDossierService,
@@ -214,7 +216,15 @@ export class AdsAgentController {
     @Param('id', new ParseUUIDPipe()) id: string,
   ): Promise<AnalyzeResult> {
     await this.accounts.getForOrg(user.org_id, id); // valida posse
-    return this.analyze.analyzeAccount(id);
+    const result = await this.analyze.analyzeAccount(id);
+    // Nível-anúncio (ML copiloto) — best-effort, soma as contagens na resposta.
+    const ad = await this.adAnalyze.analyzeAccount(id).catch(() => null);
+    if (ad) {
+      result.proposed += ad.proposed;
+      result.persisted += ad.persisted;
+      result.skipped += ad.skipped;
+    }
+    return result;
   }
 
   /** Fila de decisões. ?status=pending|approved|rejected|... (default pending). */

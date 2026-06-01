@@ -5,7 +5,7 @@ import {
   Gauge, RefreshCw, Sparkles, TrendingUp, TrendingDown, Minus, Wallet,
   Target, DollarSign, Layers, Building2, ListChecks, Check, X, Play, Pause,
   Plus, ChevronRight, Activity, AlertTriangle, Zap, ArrowRight, Power, RotateCcw,
-  ExternalLink,
+  ExternalLink, Trash2, Rocket,
 } from 'lucide-react';
 import {
   adsCentralApi, AdsOverview, AccountOverview, AdsDecision, AccountCampaigns,
@@ -44,6 +44,10 @@ const DECISION_META: Record<DecisionType, { label: string; tone: Tone; icon: typ
   activate: { label: 'Reativar', tone: 'cyan', icon: Play },
   adjust_bid: { label: 'Ajustar lance', tone: 'cyan', icon: Activity },
   reallocate: { label: 'Realocar verba', tone: 'violet', icon: ArrowRight },
+  // nível ANÚNCIO (ML copiloto)
+  pause_ad: { label: 'Pausar anúncio', tone: 'red', icon: Pause },
+  remove_ad: { label: 'Remover anúncio', tone: 'red', icon: Trash2 },
+  boost_ad: { label: 'Impulsionar anúncio', tone: 'emerald', icon: Rocket },
 };
 
 type Tone = 'cyan' | 'emerald' | 'amber' | 'red' | 'violet' | 'zinc';
@@ -432,30 +436,49 @@ function DecisionCard({ d, busy, onDecide, onRollback, index, platform }: {
   const acosBefore = typeof d.before?.acos_target === 'number' ? (d.before.acos_target as number) : null;
   const signalChips = Object.entries(d.signals ?? {}).slice(0, 4);
 
+  // Nível ANÚNCIO (F12 Fase 4): pause_ad / remove_ad / boost_ad. before carrega
+  // a campanha-pai (campaign_id) e o link público do anúncio (permalink).
+  const isAdLevel = d.type === 'pause_ad' || d.type === 'remove_ad' || d.type === 'boost_ad';
+  const adCampaignId = typeof d.before?.campaign_id === 'string' ? (d.before.campaign_id as string) : null;
+  const adPermalink = typeof d.before?.permalink === 'string' ? (d.before.permalink as string) : null;
+  const adName = d.entity_name ?? 'o anúncio';
+
   // Mercado Livre: aplicação automática (write) ainda pendente de liberação do
   // Mercado Ads. Vira copiloto — mostramos o ROAS Objetivo (unidade do painel ML,
-  // ROAS = 100/ACOS) + instrução exata + link pro painel.
-  const isMl = platform === 'mercadolivre';
+  // ROAS = 100/ACOS) + instrução exata + link pro painel. Decisões de anúncio
+  // são SEMPRE copiloto ML (escrita no Product Ads bloqueada).
+  const isMl = platform === 'mercadolivre' || isAdLevel;
   const acosToRoas = (a: number) => Math.round((100 / a) * 10) / 10;
   const roasAfter = acosAfter != null && acosAfter > 0 ? acosToRoas(acosAfter) : null;
   const roasBefore = acosBefore != null && acosBefore > 0 ? acosToRoas(acosBefore) : null;
   const campName = d.entity_name ?? 'a campanha';
   const mlInstruction = !isMl
     ? null
-    : roasAfter != null
-      ? `Ajuste o ROAS Objetivo de "${campName}" para ${roasAfter}× (ACOS-alvo ≈ ${acosAfter}%).`
-      : statusAfter === 'paused'
-        ? `Pause "${campName}".`
-        : statusAfter === 'active'
-          ? `Ative "${campName}".`
-          : isBudget
-            ? `Ajuste o orçamento diário de "${campName}" para ${brl(edited)}.`
-            : `Abra "${campName}" no Mercado Ads e aplique o ajuste sugerido.`;
+    : isAdLevel
+      ? d.type === 'pause_ad'
+        ? `Pause o anúncio "${adName}" dentro da campanha — está consumindo verba sem converter.`
+        : d.type === 'remove_ad'
+          ? `Remova o anúncio "${adName}" da campanha — gasto relevante e sem retorno.`
+          : adCampaignId
+            ? `Reative/impulsione o anúncio "${adName}" — o Mercado Livre recomenda anunciá-lo.`
+            : `Inclua o item "${adName}" em uma campanha de Product Ads para impulsioná-lo.`
+      : roasAfter != null
+        ? `Ajuste o ROAS Objetivo de "${campName}" para ${roasAfter}× (ACOS-alvo ≈ ${acosAfter}%).`
+        : statusAfter === 'paused'
+          ? `Pause "${campName}".`
+          : statusAfter === 'active'
+            ? `Ative "${campName}".`
+            : isBudget
+              ? `Ajuste o orçamento diário de "${campName}" para ${brl(edited)}.`
+              : `Abra "${campName}" no Mercado Ads e aplique o ajuste sugerido.`;
   // Deep-link: abre direto o dashboard DA campanha no painel do Mercado Ads
-  // (edição é por campanha). Fallback: lista de campanhas.
-  const mlCampaignUrl = d.entity_external_id
-    ? `https://www.mercadolivre.com.br/publicidade/product-ads/admin/campaigns/${d.entity_external_id}/dashboard?navigate_to=seller_central`
-    : 'https://www.mercadolivre.com.br/publicidade/product-ads/admin/campaigns?navigate_to=seller_central';
+  // (edição é por campanha — inclusive pausar/remover anúncio dela). Pra anúncio,
+  // usa a campanha-pai (before.campaign_id). Fallback: lista de campanhas.
+  const mlAdminBase = 'https://www.mercadolivre.com.br/publicidade/product-ads/admin/campaigns';
+  const mlDeepLinkId = isAdLevel ? adCampaignId : d.entity_external_id;
+  const mlCampaignUrl = mlDeepLinkId
+    ? `${mlAdminBase}/${mlDeepLinkId}/dashboard?navigate_to=seller_central`
+    : `${mlAdminBase}?navigate_to=seller_central`;
 
   return (
     <div
@@ -486,7 +509,20 @@ function DecisionCard({ d, busy, onDecide, onRollback, index, platform }: {
 
       {/* antes → depois */}
       <div className="mt-3 rounded-lg border border-border bg-background/40 p-2.5">
-        {isBudget ? (
+        {isAdLevel ? (
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Anúncio</span>
+            <span className="tabular-nums">
+              {d.before?.status ? (
+                <span className="text-muted-foreground">{String(d.before.status)}</span>
+              ) : null}
+              <ArrowRight className="mx-1 inline h-3 w-3 text-muted-foreground" />
+              <span className={cn('font-semibold', tn.text)}>
+                {d.type === 'pause_ad' ? 'pausar' : d.type === 'remove_ad' ? 'remover' : 'impulsionar'}
+              </span>
+            </span>
+          </div>
+        ) : isBudget ? (
           <>
             <div className="flex items-center justify-between text-xs">
               <span className="text-muted-foreground">Orçamento</span>
@@ -560,6 +596,16 @@ function DecisionCard({ d, busy, onDecide, onRollback, index, platform }: {
             <div className="mb-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-[11px] leading-relaxed text-amber-200">
               <span className="font-semibold text-amber-300">Mercado Livre · ajuste manual</span> — a aplicação automática aguarda liberação de escrita do Mercado Ads. Por ora:
               <span className="mt-1 block font-medium">{mlInstruction}</span>
+              {adPermalink && (
+                <a
+                  href={adPermalink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1 inline-flex items-center gap-1 font-medium text-cyan-300 hover:underline"
+                >
+                  <ExternalLink className="h-3 w-3" /> ver anúncio
+                </a>
+              )}
             </div>
             <div className="flex gap-2">
               <a

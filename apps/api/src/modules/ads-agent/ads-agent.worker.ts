@@ -7,6 +7,7 @@ import {
 import { AdsAccountsService } from './ads-accounts.service';
 import { AdsIngestService } from './ads-ingest.service';
 import { AdsAnalyzeService } from './analysis/ads-analyze.service';
+import { AdsAdAnalyzeService } from './analysis/ads-ad-analyze.service';
 
 /**
  * Worker de polling do Ads Performance Agent. Tick de hora em hora; a cadência
@@ -39,6 +40,7 @@ export class AdsAgentWorker implements OnModuleInit, OnModuleDestroy {
     private readonly accounts: AdsAccountsService,
     private readonly ingest: AdsIngestService,
     private readonly analyze: AdsAnalyzeService,
+    private readonly adAnalyze: AdsAdAnalyzeService,
   ) {}
 
   onModuleInit(): void {
@@ -85,6 +87,14 @@ export class AdsAgentWorker implements OnModuleInit, OnModuleDestroy {
         } catch (err) {
           this.logger.warn(
             `analyze conta=${account.id} falhou: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+        // ANALYZE nível-anúncio (ML copiloto) — best-effort, no-op fora do ML.
+        try {
+          await this.adAnalyze.analyzeAccount(account.id);
+        } catch (err) {
+          this.logger.warn(
+            `ad-analyze conta=${account.id} falhou: ${err instanceof Error ? err.message : String(err)}`,
           );
         }
       }

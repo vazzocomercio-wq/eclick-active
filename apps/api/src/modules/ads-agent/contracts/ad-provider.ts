@@ -32,7 +32,11 @@ export type DecisionType =
   | 'pause'
   | 'activate'
   | 'adjust_bid'
-  | 'reallocate';
+  | 'reallocate'
+  // ── nível ANÚNCIO (F12 ML Fase 4 — copiloto; write ML bloqueado) ──
+  | 'pause_ad' // pausar um anúncio ruim dentro da campanha
+  | 'remove_ad' // tirar o anúncio da campanha (desperdício forte/sustentado)
+  | 'boost_ad'; // impulsionar item recomendado/orgânico forte fora de campanha
 
 /** Conta de anúncio normalizada (espelho de active.ads_accounts). */
 export interface AdAccount {
