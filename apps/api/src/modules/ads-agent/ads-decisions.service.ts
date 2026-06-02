@@ -34,6 +34,8 @@ export interface DecisionRow {
   // enriquecido:
   entity_name?: string | null;
   entity_external_id?: string | null;
+  /** Nível anúncio (ML): nome da campanha-pai (resolvido de before.campaign_id). */
+  campaign_name?: string | null;
   outcome_verdict?: string | null;
 }
 
@@ -155,13 +157,34 @@ export class AdsDecisionsService {
     if (rows.length === 0) return rows;
     const entIds = Array.from(new Set(rows.map((r) => r.entity_id)));
     const decIds = rows.map((r) => r.id);
-    const [entRes, outRes] = await Promise.all([
+    // Nível anúncio (ML): a decisão guarda before.campaign_id (id da campanha-pai)
+    // mas não o NOME — resolvemos aqui pra mostrar no card.
+    const campaignExtIds = Array.from(
+      new Set(
+        rows
+          .map((r) => (typeof r.before?.campaign_id === 'string' ? (r.before.campaign_id as string) : null))
+          .filter((v): v is string => !!v),
+      ),
+    );
+    const [entRes, outRes, campRes] = await Promise.all([
       this.supabase.adminClient.from('ads_entities').select('id, name, external_id').in('id', entIds),
       this.supabase.adminClient.from('ads_outcomes').select('decision_id, verdict').in('decision_id', decIds),
+      campaignExtIds.length > 0
+        ? this.supabase.adminClient
+            .from('ads_entities')
+            .select('external_id, name')
+            .eq('level', 'campaign')
+            .in('external_id', campaignExtIds)
+        : Promise.resolve({ data: [] as Array<{ external_id: string; name: string | null }> }),
     ]);
     const byId = new Map(
       ((entRes.data ?? []) as Array<{ id: string; name: string | null; external_id: string }>).map(
         (e) => [e.id, e],
+      ),
+    );
+    const campNameByExt = new Map(
+      ((campRes.data ?? []) as Array<{ external_id: string; name: string | null }>).map(
+        (c) => [c.external_id, c.name],
       ),
     );
     const verdictByDec = new Map(
@@ -171,10 +194,12 @@ export class AdsDecisionsService {
     );
     return rows.map((r) => {
       const e = byId.get(r.entity_id);
+      const campExt = typeof r.before?.campaign_id === 'string' ? (r.before.campaign_id as string) : null;
       return {
         ...r,
         entity_name: e?.name ?? null,
         entity_external_id: e?.external_id ?? null,
+        campaign_name: campExt ? campNameByExt.get(campExt) ?? null : null,
         outcome_verdict: verdictByDec.get(r.id) ?? null,
       };
     });

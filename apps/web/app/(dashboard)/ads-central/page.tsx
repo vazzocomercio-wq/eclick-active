@@ -442,6 +442,9 @@ function DecisionCard({ d, busy, onDecide, onRollback, index, platform }: {
   const adCampaignId = typeof d.before?.campaign_id === 'string' ? (d.before.campaign_id as string) : null;
   const adPermalink = typeof d.before?.permalink === 'string' ? (d.before.permalink as string) : null;
   const adName = d.entity_name ?? 'o anúncio';
+  // MLB do anúncio (item_id) + nome da campanha-pai — pra operar manualmente no painel.
+  const adItemMlb = (typeof d.before?.item_id === 'string' ? (d.before.item_id as string) : null) ?? d.entity_external_id ?? null;
+  const adCampaignName = d.campaign_name ?? null;
 
   // Mercado Livre: aplicação automática (write) ainda pendente de liberação do
   // Mercado Ads. Vira copiloto — mostramos o ROAS Objetivo (unidade do painel ML,
@@ -492,6 +495,18 @@ function DecisionCard({ d, busy, onDecide, onRollback, index, platform }: {
             <Icon className="h-3 w-3" /> {meta.label}
           </div>
           <h3 className="truncate text-sm font-medium" title={d.entity_name ?? ''}>{d.entity_name ?? 'Campanha'}</h3>
+          {isAdLevel && (adCampaignName || adItemMlb) && (
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground">
+              {adCampaignName && (
+                <span className="inline-flex items-center gap-1 truncate" title={adCampaignName}>
+                  <Layers className="h-3 w-3 shrink-0 opacity-70" />
+                  <span className="truncate">{adCampaignName}</span>
+                </span>
+              )}
+              {adCampaignName && adItemMlb && <span className="opacity-40">·</span>}
+              {adItemMlb && <span className="font-mono tabular-nums text-muted-foreground/90">{adItemMlb}</span>}
+            </div>
+          )}
         </div>
       </div>
 
