@@ -216,7 +216,7 @@ export class SocialAiGeneratorService {
       system: await this.prompts.getSystemPrompt(orgId, 'POST_SYSTEM_PROMPT', POST_SYSTEM_PROMPT),
       user: userPrompt,
       json_mode: true,
-      max_tokens: 1500,
+      max_tokens: 4000,
       temperature: 0.7,
     });
 
@@ -445,7 +445,7 @@ export class SocialAiGeneratorService {
       system: await this.prompts.getSystemPrompt(orgId, 'REEL_SCRIPT_SYSTEM_PROMPT', REEL_SCRIPT_SYSTEM_PROMPT),
       user: userPrompt,
       json_mode: true,
-      max_tokens: 1500,
+      max_tokens: 2500,
       temperature: 0.7,
     });
     const parsed = this.parseJson<GeneratedReel>(result.text);
@@ -964,10 +964,22 @@ export class SocialAiGeneratorService {
     if (!raw) return null;
     const trimmed = raw.trim();
     const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/.exec(trimmed);
-    const candidate = fenced ? fenced[1] : trimmed;
+    let candidate = fenced ? fenced[1] : trimmed;
+    // descarta qualquer preâmbulo antes do 1º '{'
+    const start = candidate.indexOf('{');
+    if (start > 0) candidate = candidate.slice(start);
     try {
       return JSON.parse(candidate) as T;
     } catch {
+      // tenta REPARAR JSON truncado no max_tokens (fecha string/chaves abertas)
+      const repaired = repairTruncatedJson(candidate);
+      if (repaired) {
+        try {
+          return JSON.parse(repaired) as T;
+        } catch {
+          /* segue pro fallback */
+        }
+      }
       const m = /\{[\s\S]*\}/.exec(candidate);
       if (m) {
         try {
@@ -1005,3 +1017,34 @@ export class SocialAiGeneratorService {
 
 // Type guards exportados
 export type { ContentPillar };
+
+/**
+ * Repara um objeto JSON truncado no max_tokens: fecha a string aberta e os
+ * `{`/`[` pendentes (na ordem certa), removendo vírgula solta no fim. Recupera
+ * o caso comum de uma legenda longa cortada no meio — preserva o conteúdo
+ * gerado até ali. Retorna null se não havia nada a fechar.
+ */
+function repairTruncatedJson(s: string): string | null {
+  let inStr = false;
+  let esc = false;
+  const stack: string[] = [];
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    else if (ch === '{') stack.push('}');
+    else if (ch === '[') stack.push(']');
+    else if (ch === '}' || ch === ']') stack.pop();
+  }
+  if (!inStr && stack.length === 0) return null;
+  let out = s;
+  if (inStr) out += '"';
+  out = out.replace(/,\s*$/, '');
+  while (stack.length) out += stack.pop();
+  return out;
+}
