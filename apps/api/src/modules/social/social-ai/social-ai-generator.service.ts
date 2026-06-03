@@ -6,6 +6,7 @@ import { SocialCalendarsService } from '../social-calendars.service';
 import { ImageGenerationService } from '../image-generation/image-generation.service';
 import { BridgeService } from '../../bridge/bridge.service';
 import { SocialPromptsService } from '../prompts/social-prompts.service';
+import { ReverseEngineerService } from '../trends/reverse-engineer.service';
 import { asUuidOrNull } from '../../../common/uuid.util';
 import {
   CALENDAR_SYSTEM_PROMPT,
@@ -74,7 +75,21 @@ export class SocialAiGeneratorService {
     private readonly images: ImageGenerationService,
     private readonly bridge: BridgeService,
     private readonly prompts: SocialPromptsService,
+    private readonly reverse: ReverseEngineerService,
   ) {}
+
+  /**
+   * Bloco com os PADRÕES VENCEDORES (engenharia reversa do Radar) pra injetar
+   * em TODA geração — é o que faz o conteúdo modelar "o que já performa no
+   * nicho" em vez de sair genérico. Best-effort: vazio se não houver padrões.
+   */
+  private async exemplarBlock(orgId: string, category?: string): Promise<string> {
+    try {
+      return await this.reverse.buildExemplarContext(orgId, { category });
+    } catch {
+      return '';
+    }
+  }
 
   // ─── Calendário ──────────────────────────────────
 
@@ -89,9 +104,11 @@ export class SocialAiGeneratorService {
     const t0 = Date.now();
     const ctx = await this.brands.getContext(orgId, dto.brand_id);
     const ctxBlock = buildBrandContextBlock(ctx);
+    const exemplar = await this.exemplarBlock(orgId);
 
     const userPrompt = [
       ctxBlock,
+      exemplar ? `\n${exemplar}` : '',
       '',
       `OBJETIVO: ${dto.objective}`,
       `CANAIS: ${dto.channels.join(', ')}`,
@@ -194,6 +211,7 @@ export class SocialAiGeneratorService {
       visual_style?: string;
     };
 
+    const exemplar = await this.exemplarBlock(orgId);
     const userPrompt = [
       ctxBlock,
       '',
@@ -206,6 +224,7 @@ export class SocialAiGeneratorService {
           : '',
       content.pillar ? `PILAR: ${content.pillar}` : '',
       meta.visual_style ? `ESTILO VISUAL: ${meta.visual_style}` : '',
+      exemplar ? `\n${exemplar}` : '',
     ]
       .filter(Boolean)
       .join('\n');
@@ -300,6 +319,7 @@ export class SocialAiGeneratorService {
     };
 
     const slideCount = meta.slide_count ?? 7;
+    const exemplar = await this.exemplarBlock(orgId);
     const userPrompt = [
       ctxBlock,
       '',
@@ -308,6 +328,7 @@ export class SocialAiGeneratorService {
       `SLIDES: ${slideCount}`,
       meta.structure ? `ESTRUTURA: ${meta.structure}` : '',
       content.pillar ? `PILAR: ${content.pillar}` : '',
+      exemplar ? `\n${exemplar}` : '',
     ]
       .filter(Boolean)
       .join('\n');
@@ -418,9 +439,11 @@ export class SocialAiGeneratorService {
     const contentId = (data as { id: string }).id;
 
     const ctx = await this.brands.getContext(orgId, dto.brand_id);
+    const exemplar = await this.exemplarBlock(orgId, dto.category);
     const userPrompt = [
       buildBrandContextBlock(ctx),
       '',
+      exemplar ? `${exemplar}\n` : '',
       `PRODUTO: ${dto.product_title ?? dto.theme}`,
       dto.category ? `CATEGORIA: ${dto.category}` : '',
       dto.product_description ? `DESCRIÇÃO DO PRODUTO: ${dto.product_description.slice(0, 800)}` : '',
