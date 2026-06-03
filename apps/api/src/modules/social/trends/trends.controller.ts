@@ -152,10 +152,25 @@ export class TrendsController {
     return this.trends.listBriefs(user.org_id);
   }
 
-  /** TR-3 — gera sinais + pautas (IA) cruzando tendências × engajamento × comércio. */
+  /** TR-3 — gera sinais + pautas (IA). `category` escopa só aquele nicho. */
   @Post('generate')
-  generate(@CurrentUser() user: AuthUser): Promise<{ signals: number; briefs: number }> {
-    return this.briefs.generate(user.org_id);
+  generate(
+    @CurrentUser() user: AuthUser,
+    @Body() body?: { category?: string },
+  ): Promise<{ signals: number; briefs: number }> {
+    return this.briefs.generate(user.org_id, body?.category);
+  }
+
+  /** Limpa itens coletados (e sinais) por categoria e/ou mais antigos que N dias. */
+  @Post('items/clear')
+  clearItems(
+    @CurrentUser() user: AuthUser,
+    @Body() body: { category?: string; older_than_days?: number },
+  ): Promise<{ deleted: number }> {
+    return this.trends.clearItems(user.org_id, {
+      category: body?.category,
+      olderThanDays: body?.older_than_days,
+    });
   }
 
   /** Descarta um brief (sai do feed). */

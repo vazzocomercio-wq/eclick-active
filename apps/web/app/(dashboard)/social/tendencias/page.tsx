@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft, Radar, RefreshCw, Loader2, Plus, Trash2, Play, TrendingUp,
@@ -67,6 +67,10 @@ export default function TendenciasPage() {
   const [profiles, setProfiles] = useState<TrendProfile[]>([]);
   const [patterns, setPatterns] = useState<TrendPattern[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // escopo de categoria ('' = todas)
+  const [activeCategory, setActiveCategory] = useState('');
+  const [clearing, setClearing] = useState(false);
 
   // curadoria de perfis (Pilar 1)
   const [pRaw, setPRaw] = useState('');
@@ -176,11 +180,12 @@ export default function TendenciasPage() {
     setGenerating(true);
     setCollectMsg(null);
     try {
-      const r = await socialApi.trends.generate();
+      const r = await socialApi.trends.generate(activeCategory || undefined);
+      const scope = activeCategory ? ` em "${activeCategory}"` : '';
       setCollectMsg(
         r.briefs > 0
-          ? `IA gerou ${r.briefs} pauta(s) e ${r.signals} sinal(is) a partir das tendências.`
-          : 'Sem dados suficientes pra gerar pautas — colete tendências e conecte produtos primeiro.',
+          ? `IA gerou ${r.briefs} pauta(s) e ${r.signals} sinal(is)${scope}.`
+          : 'Sem dados suficientes pra gerar pautas — colete/minere tendências primeiro.',
       );
       await load();
     } catch {
@@ -244,10 +249,13 @@ export default function TendenciasPage() {
     setAnalyzing(true);
     setCollectMsg(null);
     try {
-      const r = await socialApi.trends.analyze({});
+      const r = await socialApi.trends.analyze(
+        activeCategory ? { category: activeCategory } : {},
+      );
+      const scope = activeCategory ? ` em "${activeCategory}"` : '';
       setCollectMsg(
         r.patterns > 0
-          ? `Engenharia reversa: ${r.patterns} padrão(ões) vencedor(es) extraído(s). Já alimentam o roteirista.`
+          ? `Engenharia reversa: ${r.patterns} padrão(ões) vencedor(es)${scope}. Já alimentam o roteirista.`
           : 'Sem itens suficientes pra analisar — minere perfis primeiro.',
       );
       await load();
@@ -255,6 +263,27 @@ export default function TendenciasPage() {
       setCollectMsg('Falha ao analisar padrões.');
     } finally {
       setAnalyzing(false);
+    }
+  };
+
+  const clearItemsAction = async () => {
+    const scoped = activeCategory.trim();
+    const msg = scoped
+      ? `Limpar todos os itens coletados da categoria "${scoped}"?`
+      : 'Sem categoria selecionada — limpar os itens com mais de 30 dias?';
+    if (!confirm(msg)) return;
+    setClearing(true);
+    setCollectMsg(null);
+    try {
+      const r = await socialApi.trends.clearItems(
+        scoped ? { category: scoped } : { older_than_days: 30 },
+      );
+      setCollectMsg(`${r.deleted} item(ns) removido(s)${scoped ? ` de "${scoped}"` : ' (>30 dias)'}.`);
+      await load();
+    } catch {
+      setCollectMsg('Falha ao limpar itens.');
+    } finally {
+      setClearing(false);
     }
   };
 
@@ -277,6 +306,22 @@ export default function TendenciasPage() {
       /* silent */
     }
   };
+
+  // categorias disponíveis (monitores + perfis + itens coletados)
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    monitors.forEach((m) => m.category && set.add(m.category));
+    profiles.forEach((p) => p.category && set.add(p.category));
+    items.forEach((it) => it.category && set.add(it.category));
+    return [...set].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [monitors, profiles, items]);
+
+  // escopo aplicado às seções de dados
+  const fItems = activeCategory ? items.filter((i) => i.category === activeCategory) : items;
+  const fSignals = activeCategory ? signals.filter((s) => s.category === activeCategory) : signals;
+  const fPatterns = activeCategory
+    ? patterns.filter((p) => p.category === activeCategory)
+    : patterns;
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -321,6 +366,38 @@ export default function TendenciasPage() {
         {collectMsg && (
           <div className="mb-4 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-foreground/80">
             {collectMsg}
+          </div>
+        )}
+        {/* ── FILTRO DE CATEGORIA (escopo) ── */}
+        {!loading && categories.length > 0 && (
+          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-3 py-2">
+            <span className="text-[11px] font-medium text-muted-foreground">Categoria:</span>
+            <select
+              value={activeCategory}
+              onChange={(e) => setActiveCategory(e.target.value)}
+              className="rounded-md border border-border bg-background px-2 py-1 text-sm"
+            >
+              <option value="">Todas</option>
+              {categories.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+            {activeCategory && (
+              <span className="text-[11px] text-muted-foreground">
+                Sinais, itens, padrões, <b>Analisar</b> e <b>Gerar pautas</b> agora focam em “{activeCategory}”.
+              </span>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              className="ml-auto text-destructive hover:text-destructive"
+              onClick={() => void clearItemsAction()}
+              disabled={clearing}
+              title={activeCategory ? `Limpar itens de "${activeCategory}"` : 'Limpar itens com mais de 30 dias'}
+            >
+              {clearing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+              <span className="ml-1">{activeCategory ? 'Limpar categoria' : 'Limpar antigos'}</span>
+            </Button>
           </div>
         )}
         {loading ? (
@@ -570,14 +647,14 @@ export default function TendenciasPage() {
               <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
                 <TrendingUp className="h-4 w-4 text-primary" />Sinais de tendência
               </h2>
-              {signals.length === 0 ? (
+              {fSignals.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-border bg-muted/20 p-6 text-center text-sm text-muted-foreground">
                   Sem sinais ainda. Quando os conectores forem ligados (YouTube, Meta Ad Library, TikTok), o radar
                   vai destacar aqui os formatos, sons, temas e criativos em alta na sua categoria.
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                  {signals.map((s) => (
+                  {fSignals.map((s) => (
                     <div key={s.id} className="rounded-lg border border-border bg-card p-3">
                       <div className="flex items-center gap-2">
                         <NetIcon source={s.source} className="h-3.5 w-3.5 text-muted-foreground" />
@@ -596,14 +673,14 @@ export default function TendenciasPage() {
                 <Sparkles className="h-4 w-4 text-primary" />O que está bombando
                 <span className="text-xs font-normal text-muted-foreground">· dados individuais por item</span>
               </h2>
-              {items.length === 0 ? (
+              {fItems.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-border bg-muted/20 p-6 text-center text-sm text-muted-foreground">
                   Nenhum item coletado ainda. Cada vídeo, criativo e som monitorado vai aparecer aqui com suas
                   métricas individuais (views, likes, duração, etc.).
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                  {items.map((it) => (
+                  {fItems.map((it) => (
                     <a
                       key={it.id}
                       href={it.url ?? '#'}
@@ -645,14 +722,14 @@ export default function TendenciasPage() {
                   · engenharia reversa · alimentam o roteirista
                 </span>
               </h2>
-              {patterns.length === 0 ? (
+              {fPatterns.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-border bg-muted/20 p-6 text-center text-sm text-muted-foreground">
                   Sem padrões ainda. Minere os perfis de referência e clique em <span className="font-medium">Analisar</span> —
                   a IA decompõe os posts que mais performaram em gancho, formato, CTA e por que funcionam.
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  {patterns.map((p) => (
+                  {fPatterns.map((p) => (
                     <div key={p.id} className="flex flex-col gap-1.5 rounded-lg border border-border bg-card p-3">
                       <div className="flex items-center gap-2">
                         {p.hook_type && (

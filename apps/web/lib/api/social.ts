@@ -1305,8 +1305,13 @@ export const socialApi = {
       ),
     collectMonitor: (id: string) =>
       api.post<{ items: number }>(`/social/trends/monitors/${id}/collect`, {}),
-    generate: () =>
-      api.post<{ signals: number; briefs: number }>('/social/trends/generate', {}),
+    generate: (category?: string) =>
+      api.post<{ signals: number; briefs: number }>(
+        '/social/trends/generate',
+        category ? { category } : {},
+      ),
+    clearItems: (body: { category?: string; older_than_days?: number }) =>
+      api.post<{ deleted: number }>('/social/trends/items/clear', body),
     dismissBrief: (id: string) =>
       api.post<void>(`/social/trends/briefs/${id}/dismiss`, {}),
 

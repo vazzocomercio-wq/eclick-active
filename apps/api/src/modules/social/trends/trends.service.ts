@@ -203,6 +203,42 @@ export class TrendsService {
       .eq('org_id', orgId);
   }
 
+  /**
+   * Limpa itens coletados (e os sinais derivados) — por categoria e/ou mais
+   * antigos que N dias. Sem filtros, exige olderThanDays pra não apagar tudo
+   * sem querer. Retorna quantos itens foram removidos.
+   */
+  async clearItems(
+    orgId: string,
+    opts: { category?: string; olderThanDays?: number } = {},
+  ): Promise<{ deleted: number }> {
+    const category = opts.category?.trim() || undefined;
+    const days = opts.olderThanDays && opts.olderThanDays > 0 ? opts.olderThanDays : undefined;
+    if (!category && !days) {
+      throw new BadRequestException('informe category ou olderThanDays');
+    }
+    const buildBase = (table: string) => {
+      let q = this.supabase.adminClient.from(table).delete({ count: 'exact' }).eq('org_id', orgId);
+      if (category) q = q.eq('category', category);
+      if (days) {
+        const cutoff = new Date(Date.now() - days * 86400000).toISOString();
+        q = q.lt('collected_at', cutoff);
+      }
+      return q;
+    };
+    const { count, error } = await buildBase('trend_items');
+    if (error) throw error;
+    // sinais são derivados dos itens → limpa os da mesma categoria (best-effort)
+    if (category) {
+      await this.supabase.adminClient
+        .from('trend_signals')
+        .delete()
+        .eq('org_id', orgId)
+        .eq('category', category);
+    }
+    return { deleted: count ?? 0 };
+  }
+
   // ─── Itens / Sinais / Briefs (leitura) ──────────
 
   async listItems(orgId: string, f: TrendItemFilters = {}): Promise<TrendItem[]> {

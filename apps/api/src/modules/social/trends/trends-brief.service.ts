@@ -44,9 +44,18 @@ export class TrendsBriefService {
     private readonly trends: TrendsService,
   ) {}
 
-  async generate(orgId: string): Promise<{ signals: number; briefs: number }> {
+  /**
+   * Gera sinais + pautas. Quando `category` é passado, ESCOPA tudo (itens,
+   * sinais e pautas) àquela categoria — os sinais/pautas das outras categorias
+   * ficam intactos. Sem categoria, regenera o panorama inteiro.
+   */
+  async generate(
+    orgId: string,
+    category?: string,
+  ): Promise<{ signals: number; briefs: number }> {
+    const cat = category?.trim() || undefined;
     const [items, organic, candidates] = await Promise.all([
-      this.trends.listItems(orgId, { limit: 40 }),
+      this.trends.listItems(orgId, { category: cat, limit: 40 }),
       this.bridge.getOrganicSummary(orgId).catch(() => null),
       this.bridge.getCampaignCandidates(orgId, 'mixed', 8).catch(() => []),
     ]);
@@ -55,19 +64,26 @@ export class TrendsBriefService {
       return { signals: 0, briefs: 0 };
     }
 
-    const signals = await this.buildSignals(orgId, items);
-    const briefs = await this.buildBriefs(orgId, items, organic, candidates);
+    const signals = await this.buildSignals(orgId, items, cat);
+    const briefs = await this.buildBriefs(orgId, items, organic, candidates, cat);
     return { signals, briefs };
   }
 
   // ─── Sinais determinísticos (sem custo de IA) ───────────────────
-  private async buildSignals(orgId: string, items: TrendItem[]): Promise<number> {
-    // snapshot fresco: limpa os não-descartados e re-insere
-    await this.supabase.adminClient
+  private async buildSignals(
+    orgId: string,
+    items: TrendItem[],
+    scopedCategory?: string,
+  ): Promise<number> {
+    // snapshot fresco: limpa os não-descartados e re-insere. Se escopado a uma
+    // categoria, só mexe nos sinais DELA (preserva as outras).
+    let del = this.supabase.adminClient
       .from('trend_signals')
       .delete()
       .eq('org_id', orgId)
       .is('dismissed_at', null);
+    if (scopedCategory) del = del.eq('category', scopedCategory);
+    await del;
 
     if (!items.length) return 0;
 
@@ -140,6 +156,51 @@ export class TrendsBriefService {
           evidence_item_ids: [topVid.id],
         });
       }
+
+      // ── Instagram / TikTok (perfis + hashtag): sinais próprios ──
+      // Antes os sinais só vinham de YouTube/Google Trends; nichos só-social
+      // ficavam sem leitura. Agora IG/TikTok geram formato + tópico em alta.
+      const social = list
+        .filter((i) => i.source === 'instagram' || i.source === 'tiktok')
+        .sort((a, b) => b.score - a.score);
+      if (social.length >= 3) {
+        const videos = social.filter(
+          (i) => i.kind === 'video' || i.kind === 'short' || i.media_type === 'video',
+        );
+        const videoShare = videos.length / social.length;
+        if (videoShare >= 0.5) {
+          rows.push({
+            org_id: orgId,
+            source: videos[0]?.source ?? 'instagram',
+            category: cat,
+            signal_type: 'format_rising',
+            title: `Reels/vídeo curto dominando em ${cat}`,
+            summary: `${Math.round(videoShare * 100)}% do que performa em "${cat}" no IG/TikTok é vídeo vertical. Priorize Reels.`,
+            score: Math.round(videoShare * 100),
+            evidence_item_ids: videos.slice(0, 5).map((i) => i.id),
+          });
+        }
+
+        const top = social[0];
+        const eng = Number(top.metrics.views ?? top.metrics.likes ?? 0);
+        const engLabel =
+          eng >= 1_000_000
+            ? `${(eng / 1_000_000).toFixed(1).replace('.', ',')} mi`
+            : eng >= 1_000
+              ? `${Math.round(eng / 1000)} mil`
+              : `${eng}`;
+        const unit = top.metrics.views != null ? 'views' : 'likes';
+        rows.push({
+          org_id: orgId,
+          source: top.source,
+          category: cat,
+          signal_type: 'topic_rising',
+          title: `Conteúdo em alta em ${cat} · ${engLabel} ${unit}`.slice(0, 80),
+          summary: `Post de @${top.author_handle ?? '?'} bombando em "${cat}" (${engLabel} ${unit}). Abra o Radar pra modelar.`,
+          score: top.score,
+          evidence_item_ids: [top.id],
+        });
+      }
     }
 
     if (!rows.length) return 0;
@@ -157,6 +218,7 @@ export class TrendsBriefService {
     items: TrendItem[],
     organic: OrganicSummary | null,
     candidates: CampaignCandidate[],
+    scopedCategory?: string,
   ): Promise<number> {
     const trendText = items.length
       ? items
@@ -190,6 +252,9 @@ export class TrendsBriefService {
     const user = [
       'Gere PAUTAS de conteúdo que aproveitam uma TENDÊNCIA em alta pra VENDER um produto nosso.',
       'Cada pauta cruza: o que bomba lá fora + o que engaja com nosso público + um produto com oportunidade comercial.',
+      scopedCategory
+        ? `FOCO: gere TODAS as pautas para a categoria/nicho "${scopedCategory}". Use o campo category="${scopedCategory}".`
+        : '',
       '',
       'TENDÊNCIAS EM ALTA (coletadas de YouTube / Google Trends):',
       trendText,
@@ -228,12 +293,15 @@ export class TrendsBriefService {
     }
     if (!drafts.length) return 0;
 
-    // regenera: limpa drafts antigos (mantém used/dismissed)
-    await this.supabase.adminClient
+    // regenera: limpa drafts antigos (mantém used/dismissed). Se escopado a
+    // uma categoria, só apaga os drafts DELA (preserva as outras categorias).
+    let delDraft = this.supabase.adminClient
       .from('trend_briefs')
       .delete()
       .eq('org_id', orgId)
       .eq('status', 'draft');
+    if (scopedCategory) delDraft = delDraft.eq('category', scopedCategory);
+    await delDraft;
 
     const perCost = cost / drafts.length;
     const rows = drafts.map((b) => {
@@ -257,7 +325,7 @@ export class TrendsBriefService {
         });
       return {
         org_id: orgId,
-        category: String(b.category ?? '').slice(0, 80) || null,
+        category: (scopedCategory ?? String(b.category ?? '')).slice(0, 80) || null,
         title: String(b.title ?? '').slice(0, 160),
         format,
         hook: String(b.hook ?? '').slice(0, 300) || null,
