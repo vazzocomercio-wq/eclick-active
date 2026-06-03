@@ -27,7 +27,11 @@ import { SocialAdBoostService } from './boost/social-ad-boost.service';
 import { SocialHashtagsService } from './analytics/social-hashtags.service';
 import { SocialCompetitorService } from './analytics/social-competitor.service';
 import { SocialAbTestService } from './ab-test/social-ab-test.service';
-import type { PublishingChannel } from './publishing/publishing.types';
+import type {
+  PublishingChannel,
+  PublishTarget,
+  ConnectedAccount,
+} from './publishing/publishing.types';
 import type { BoostStatus, SocialAdBoostDraft } from './boost/social-ad-boost.types';
 import type { CreateBrandDto, UpdateBrandDto } from './dto/brand.dto';
 import type {
@@ -362,9 +366,19 @@ export class SocialController {
 
   // ─── Publishing — publish actions ────────────────
 
+  /** Lista as contas conectadas (pro seletor multi-rede/multi-conta). */
+  @Get('publish/accounts')
+  publishAccounts(@CurrentUser() user: AuthUser): Promise<ConnectedAccount[]> {
+    return this.creds.listAccounts(user.org_id);
+  }
+
   @Post('contents/:id/publish-now')
-  publishNow(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.publishing.publishContent(user.org_id, id);
+  publishNow(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body?: { targets?: PublishTarget[] },
+  ) {
+    return this.publishing.publishContent(user.org_id, id, body?.targets);
   }
 
   @Get('contents/:id/publish-attempts')

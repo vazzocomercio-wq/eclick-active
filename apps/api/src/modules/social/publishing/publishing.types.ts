@@ -72,5 +72,22 @@ export interface PublishingProvider {
     orgId: string,
     input: PublishInput,
     brandId?: string | null,
+    /** Conta específica (credential id). Sem isso, resolve a conta padrão. */
+    credId?: string,
   ): Promise<PublishResult>;
+}
+
+/** Conta conectada (pra o seletor de publicação multi-rede/multi-conta). */
+export interface ConnectedAccount {
+  credential_id: string;
+  channel: PublishingChannel;
+  external_account_id: string;
+  username: string | null;
+  name: string | null;
+}
+
+/** Alvo explícito de publicação: uma conta de um canal. */
+export interface PublishTarget {
+  channel: PublishingChannel;
+  credential_id: string;
 }

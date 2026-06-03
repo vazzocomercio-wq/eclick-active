@@ -7,6 +7,7 @@ import {
 import type {
   SocialChannelCredential,
   PublishingChannel,
+  ConnectedAccount,
 } from './publishing.types';
 
 interface SaveCredentialInput {
@@ -79,6 +80,25 @@ export class SocialChannelCredentialsService {
       .order('created_at', { ascending: false });
     if (error) throw error;
     return (data ?? []) as SocialChannelCredential[];
+  }
+
+  /** Todas as contas conectadas ativas da org (pro seletor de publicação). */
+  async listAccounts(orgId: string): Promise<ConnectedAccount[]> {
+    const { data, error } = await this.supabase.adminClient
+      .from('social_channel_credentials')
+      .select('id, channel, external_account_id, external_username, external_account_name')
+      .eq('org_id', orgId)
+      .eq('is_active', true)
+      .order('channel', { ascending: true })
+      .order('external_username', { ascending: true });
+    if (error) throw error;
+    return ((data ?? []) as Array<Record<string, unknown>>).map((r) => ({
+      credential_id: r.id as string,
+      channel: r.channel as PublishingChannel,
+      external_account_id: r.external_account_id as string,
+      username: (r.external_username as string | null) ?? null,
+      name: (r.external_account_name as string | null) ?? null,
+    }));
   }
 
   async findActive(

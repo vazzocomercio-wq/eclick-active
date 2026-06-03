@@ -10,6 +10,7 @@ import type {
   PublishInput,
   PublishResult,
   PublishingChannel,
+  PublishTarget,
   SocialPublishAttempt,
 } from './publishing.types';
 import type { SocialContent } from '../social.types';
@@ -60,18 +61,31 @@ export class SocialPublishingService {
   async publishContent(
     orgId: string,
     contentId: string,
+    targets?: PublishTarget[],
   ): Promise<PublishContentResult> {
     const content = await this.contents.findById(orgId, contentId);
-    if (content.status === 'published') {
+    // Bloqueia re-publicação acidental — MAS permite quando o usuário escolhe
+    // alvos explícitos (publicar em conta(s) adicional(is) de propósito).
+    if (content.status === 'published' && !(targets && targets.length)) {
       throw new BadRequestException('Conteúdo já publicado');
     }
 
-    const channels = (content.scheduled_channels ?? content.channels)
-      .map((c) => CHANNEL_MAP[c])
-      .filter((c): c is PublishingChannel => !!c);
+    // Jobs = (canal, conta específica?). Com targets, publica SÓ nas contas
+    // escolhidas; sem targets, cai no comportamento antigo (1 conta/canal).
+    let jobs: Array<{ channel: PublishingChannel; credId?: string }>;
+    if (targets && targets.length) {
+      jobs = targets
+        .map((t) => ({ channel: CHANNEL_MAP[t.channel] ?? t.channel, credId: t.credential_id }))
+        .filter((j) => !!j.credId);
+    } else {
+      jobs = (content.scheduled_channels ?? content.channels)
+        .map((c) => CHANNEL_MAP[c])
+        .filter((c): c is PublishingChannel => !!c)
+        .map((channel) => ({ channel, credId: undefined as string | undefined }));
+    }
 
-    if (channels.length === 0) {
-      throw new BadRequestException('Nenhum canal válido configurado');
+    if (jobs.length === 0) {
+      throw new BadRequestException('Nenhum canal/conta válido pra publicar');
     }
 
     const input = this.buildPublishInput(content);
@@ -80,7 +94,8 @@ export class SocialPublishingService {
       ...((content.external_post_ids as Record<string, string> | null) ?? {}),
     };
 
-    for (const channel of channels) {
+    for (const job of jobs) {
+      const channel = job.channel;
       const provider = this.providers.get(channel);
       if (!provider) {
         outcomes.push({
@@ -96,16 +111,17 @@ export class SocialPublishingService {
       }
 
       const t0 = Date.now();
-      const result = await provider.publish(orgId, input, content.brand_id);
+      const result = await provider.publish(orgId, input, content.brand_id, job.credId);
       const elapsed = Date.now() - t0;
 
-      // Registra attempt
-      const cred = await this.creds.findActive(orgId, channel, content.brand_id);
+      // Registra attempt (conta específica quando escolhida)
+      const credId =
+        job.credId ?? (await this.creds.findActive(orgId, channel, content.brand_id))?.id ?? null;
       await this.supabase.adminClient.from('social_publish_attempts').insert({
         org_id: orgId,
         content_id: contentId,
         channel,
-        credential_id: cred?.id ?? null,
+        credential_id: credId,
         status: result.success ? 'success' : 'failed',
         external_post_id: result.external_post_id ?? null,
         external_post_url: result.external_post_url ?? null,

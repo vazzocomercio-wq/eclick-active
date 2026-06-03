@@ -245,6 +245,18 @@ export interface PublishContentResult {
   any_success: boolean;
 }
 
+export interface ConnectedAccount {
+  credential_id: string;
+  channel: PublishingChannel;
+  external_account_id: string;
+  username: string | null;
+  name: string | null;
+}
+export interface PublishTarget {
+  channel: PublishingChannel;
+  credential_id: string;
+}
+
 // ─── Analytics types ──────────────────────────────
 
 export interface SocialMetricsDaily {
@@ -1169,8 +1181,14 @@ export const socialApi = {
 
   // Publishing — actions
   publish: {
-    now: (id: string) =>
-      api.post<PublishContentResult>(`/social/contents/${id}/publish-now`, {}),
+    /** Publica. Com `targets`, vai SÓ pras contas escolhidas (multi-rede/multi-conta). */
+    now: (id: string, targets?: PublishTarget[]) =>
+      api.post<PublishContentResult>(
+        `/social/contents/${id}/publish-now`,
+        targets && targets.length ? { targets } : {},
+      ),
+    accounts: (signal?: AbortSignal) =>
+      api.get<ConnectedAccount[]>('/social/publish/accounts', { signal }),
     attempts: (id: string, signal?: AbortSignal) =>
       api.get<SocialPublishAttempt[]>(
         `/social/contents/${id}/publish-attempts`,

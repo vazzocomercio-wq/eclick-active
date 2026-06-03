@@ -17,10 +17,11 @@ import {
   AlertTriangle,
   ExternalLink,
   Megaphone,
+  Loader2,
 } from 'lucide-react';
 import { useContent, useBrand } from '@/hooks/use-social';
 import { useSocialPublished } from '@/hooks/use-social-published';
-import { socialApi } from '@/lib/api/social';
+import { socialApi, type ConnectedAccount, type PublishTarget } from '@/lib/api/social';
 import { InstagramMockup } from '@/components/social/instagram-mockup';
 import { StatusBadge, PillarBadge, TypeBadge } from '@/components/social/social-badges';
 import { BoostDialog } from '@/components/social/boost-dialog';
@@ -167,41 +168,6 @@ export default function ContentDetailPage() {
     }
   };
 
-  const publishNow = async () => {
-    if (!id) return;
-    const ok = await confirm({
-      title: 'Publicar agora?',
-      description:
-        'O conteúdo será publicado nos canais selecionados imediatamente. Esta ação é definitiva.',
-      confirmLabel: 'Publicar',
-      cancelLabel: 'Cancelar',
-      icon: Send,
-    });
-    if (!ok) return;
-    setBusy(true);
-    try {
-      const r = await socialApi.publish.now(id);
-      const successes = r.outcomes.filter((o) => o.result.success).length;
-      const failures = r.outcomes.filter((o) => !o.result.success);
-      const failDetail = failures
-        .map((f) => `${f.channel}: ${f.result.error_message}`)
-        .join(' · ');
-      if (successes > 0 && failures.length === 0) {
-        toast.success(`Publicado em ${successes} canal(is)`);
-      } else if (successes > 0) {
-        toast.warning(`Publicado em ${successes}, ${failures.length} falhou`, {
-          description: failDetail,
-        });
-      } else {
-        toast.error('Falha ao publicar em todos os canais', {
-          description: failDetail,
-        });
-      }
-      refresh();
-    } finally {
-      setBusy(false);
-    }
-  };
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -246,8 +212,9 @@ export default function ContentDetailPage() {
             <Button
               size="sm"
               className="bg-blue-600 hover:bg-blue-700"
-              onClick={publishNow}
+              onClick={() => setTab('publish')}
               disabled={busy}
+              title="Escolher redes/contas e publicar"
             >
               <Send className="h-3.5 w-3.5" />
               <span className="hidden md:inline ml-1">Publicar agora</span>
@@ -543,17 +510,88 @@ function PublishPanel({
     }>
   >([]);
   const [loading, setLoading] = useState(true);
+  const [accounts, setAccounts] = useState<ConnectedAccount[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [publishing, setPublishing] = useState(false);
+  const confirm = useConfirm();
+
+  const reload = async () => {
+    try {
+      const [r, accs] = await Promise.all([
+        socialApi.publish.attempts(contentId),
+        socialApi.publish.accounts().catch(() => [] as ConnectedAccount[]),
+      ]);
+      setAttempts(r);
+      setAccounts(accs);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    void (async () => {
-      try {
-        const r = await socialApi.publish.attempts(contentId);
-        setAttempts(r);
-      } finally {
-        setLoading(false);
-      }
-    })();
+    void reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contentId]);
+
+  const toggle = (credId: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(credId)) next.delete(credId);
+      else next.add(credId);
+      return next;
+    });
+
+  const publishSelected = async () => {
+    const targets: PublishTarget[] = accounts
+      .filter((a) => selected.has(a.credential_id))
+      .map((a) => ({ channel: a.channel, credential_id: a.credential_id }));
+    if (!targets.length) {
+      toast.error('Selecione ao menos uma conta');
+      return;
+    }
+    const labels = accounts
+      .filter((a) => selected.has(a.credential_id))
+      .map((a) => `@${a.username ?? a.external_account_id}`)
+      .join(', ');
+    const ok = await confirm({
+      title: 'Publicar agora?',
+      description: `Vai publicar em: ${labels}. Esta ação é definitiva.`,
+      confirmLabel: 'Publicar',
+      cancelLabel: 'Cancelar',
+      icon: Send,
+    });
+    if (!ok) return;
+    setPublishing(true);
+    try {
+      const r = await socialApi.publish.now(contentId, targets);
+      const ok2 = r.outcomes.filter((o) => o.result.success).length;
+      const fail = r.outcomes.filter((o) => !o.result.success);
+      if (ok2 > 0 && fail.length === 0) toast.success(`Publicado em ${ok2} conta(s)`);
+      else if (ok2 > 0)
+        toast.warning(`Publicado em ${ok2}, ${fail.length} falhou`, {
+          description: fail.map((f) => `${f.channel}: ${f.result.error_message}`).join(' · '),
+        });
+      else
+        toast.error('Falha ao publicar', {
+          description: fail.map((f) => `${f.channel}: ${f.result.error_message}`).join(' · '),
+        });
+      await reload();
+    } catch {
+      toast.error('Erro ao publicar');
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const CHANNEL_LABEL: Record<string, string> = {
+    instagram_business: 'Instagram',
+    tiktok_business: 'TikTok',
+    facebook_page: 'Facebook',
+  };
+  const byChannel = accounts.reduce<Record<string, ConnectedAccount[]>>((acc, a) => {
+    (acc[a.channel] ??= []).push(a);
+    return acc;
+  }, {});
 
   const externalIds = content.external_post_ids as Record<string, string>;
 
@@ -590,6 +628,67 @@ function PublishPanel({
         <p className="mt-1 text-[10px] text-muted-foreground">
           {content.publish_attempts_count} tentativa(s) totais
         </p>
+      </div>
+
+      {/* Seletor multi-rede / multi-conta */}
+      <div className="rounded-md border border-border bg-background p-2">
+        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+          Publicar em — escolha as contas
+        </p>
+        {accounts.length === 0 ? (
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Nenhuma conta conectada. Conecte em{' '}
+            <Link href="/configuracoes/social" className="text-primary underline">
+              /configuracoes/social
+            </Link>
+            .
+          </p>
+        ) : (
+          <div className="mt-2 flex flex-col gap-2">
+            {Object.entries(byChannel).map(([channel, accs]) => (
+              <div key={channel}>
+                <p className="mb-1 text-[10px] font-semibold text-muted-foreground">
+                  {CHANNEL_LABEL[channel] ?? channel}
+                </p>
+                <div className="flex flex-col gap-1">
+                  {accs.map((a) => (
+                    <label
+                      key={a.credential_id}
+                      className="flex cursor-pointer items-center gap-2 rounded border border-border bg-card px-2 py-1 hover:bg-muted/40"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selected.has(a.credential_id)}
+                        onChange={() => toggle(a.credential_id)}
+                        className="h-3.5 w-3.5"
+                      />
+                      <span className="text-[12px] font-medium">@{a.username ?? a.external_account_id}</span>
+                      {a.name && <span className="text-[10px] text-muted-foreground">· {a.name}</span>}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+            <Button
+              size="sm"
+              className="mt-1 w-full"
+              onClick={() => void publishSelected()}
+              disabled={publishing || selected.size === 0}
+            >
+              {publishing ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Send className="h-3.5 w-3.5" />
+              )}
+              <span className="ml-1">
+                {publishing ? 'Publicando…' : `Publicar nas selecionadas (${selected.size})`}
+              </span>
+            </Button>
+            <p className="text-[10px] text-muted-foreground">
+              Só vai pras contas marcadas. Marque uma ou várias (de redes diferentes também).
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Histórico de attempts */}
