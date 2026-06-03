@@ -279,14 +279,21 @@ export class TrendsBriefService {
         system: BRIEF_SYSTEM,
         user,
         json_mode: true,
-        max_tokens: 2200,
+        max_tokens: 4096,
         temperature: 0.7,
       });
       cost = (r as { cost_usd?: number }).cost_usd ?? 0;
-      const parsed = JSON.parse(
-        r.text.replace(/```json/gi, '').replace(/```/g, '').trim(),
-      ) as { briefs?: BriefDraft[] };
-      drafts = (parsed.briefs ?? []).slice(0, 6);
+      const clean = r.text.replace(/```json/gi, '').replace(/```/g, '').trim();
+      try {
+        const parsed = JSON.parse(clean) as { briefs?: BriefDraft[] };
+        drafts = (parsed.briefs ?? []).slice(0, 6);
+      } catch {
+        // resposta truncada (max_tokens) → recupera os objetos completos
+        drafts = salvageBriefs(clean).slice(0, 6);
+        if (drafts.length) {
+          this.log.warn(`buildBriefs: JSON truncado, recuperadas ${drafts.length} pautas`);
+        }
+      }
     } catch (e) {
       this.log.warn(`buildBriefs LLM falhou: ${(e as Error).message}`);
       return 0;
@@ -358,4 +365,39 @@ export class TrendsBriefService {
       .eq('id', id)
       .eq('org_id', orgId);
   }
+}
+
+/**
+ * Recupera pautas de um JSON possivelmente truncado (max_tokens): varre os
+ * blocos { } balanceados (ignorando chaves dentro de strings) e parseia cada
+ * um. O objeto externo truncado nunca fecha, então só as pautas completas saem.
+ */
+function salvageBriefs(text: string): BriefDraft[] {
+  const out: BriefDraft[] = [];
+  const stack: number[] = [];
+  let inStr = false;
+  let esc = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    else if (ch === '{') stack.push(i);
+    else if (ch === '}') {
+      const s = stack.pop();
+      if (s != null) {
+        try {
+          const obj = JSON.parse(text.slice(s, i + 1)) as BriefDraft;
+          if (obj && (obj.title || obj.hook || obj.script)) out.push(obj);
+        } catch {
+          /* objeto incompleto/aninhado — ignora */
+        }
+      }
+    }
+  }
+  return out;
 }
