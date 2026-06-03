@@ -107,7 +107,7 @@ export class ReverseEngineerService {
       '',
       itemsText,
       '',
-      'Extraia de 4 a 8 PADRÕES VENCEDORES recorrentes. Para cada padrão, preencha:',
+      'Extraia de 4 a 6 PADRÕES VENCEDORES recorrentes. Seja CONCISO — no máximo 1 frase por campo. Para cada padrão, preencha:',
       '- hook: um gancho de abertura no MESMO espírito (adaptável, em PT-BR)',
       '- hook_type: tipo do gancho (ex: quebra_de_padrão, verdade_oculta, alerta, transformação, lista)',
       '- format: formato do vídeo (ex: "talking-head 15s", "antes/depois", "demonstração", "listicle")',
@@ -130,14 +130,21 @@ export class ReverseEngineerService {
         system: RE_SYSTEM,
         user,
         json_mode: true,
-        max_tokens: 2600,
+        max_tokens: 4096,
         temperature: 0.6,
       });
       cost = (r as { cost_usd?: number }).cost_usd ?? 0;
-      const parsed = JSON.parse(
-        r.text.replace(/```json/gi, '').replace(/```/g, '').trim(),
-      ) as { patterns?: PatternDraft[] };
-      drafts = (parsed.patterns ?? []).slice(0, 8);
+      const clean = r.text.replace(/```json/gi, '').replace(/```/g, '').trim();
+      try {
+        const parsed = JSON.parse(clean) as { patterns?: PatternDraft[] };
+        drafts = (parsed.patterns ?? []).slice(0, 6);
+      } catch {
+        // resposta truncada (max_tokens) → salva os objetos completos
+        drafts = salvageObjects(clean).slice(0, 6);
+        if (drafts.length) {
+          this.log.warn(`analyze: JSON truncado, recuperados ${drafts.length} padrões`);
+        }
+      }
     } catch (e) {
       this.log.warn(`analyze LLM falhou: ${(e as Error).message}`);
       return { patterns: 0 };
@@ -241,4 +248,42 @@ function str(v: unknown, max: number): string | null {
   const s = String(v).trim();
   if (!s || s.toLowerCase() === 'null') return null;
   return s.slice(0, max);
+}
+
+/**
+ * Recupera objetos-padrão de um JSON possivelmente truncado (max_tokens):
+ * varre os blocos { } balanceados (ignorando chaves dentro de strings) e
+ * parseia cada um isoladamente. O objeto externo truncado nunca fecha, então
+ * só os padrões completos são recuperados.
+ */
+function salvageObjects(text: string): PatternDraft[] {
+  const out: PatternDraft[] = [];
+  const stack: number[] = [];
+  let inStr = false;
+  let esc = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    else if (ch === '{') stack.push(i);
+    else if (ch === '}') {
+      const s = stack.pop();
+      if (s != null) {
+        try {
+          const obj = JSON.parse(text.slice(s, i + 1)) as PatternDraft;
+          if (obj && (obj.hook || obj.format || obj.hook_type || obj.why_it_works)) {
+            out.push(obj);
+          }
+        } catch {
+          /* objeto incompleto/aninhado inválido — ignora */
+        }
+      }
+    }
+  }
+  return out;
 }
