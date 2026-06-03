@@ -7,6 +7,18 @@ import { api } from './client';
 
 // ─── Tipos ────────────────────────────────────────
 
+/**
+ * URL proxiada de thumbnail de tendência. As capas do IG/TikTok bloqueiam
+ * hotlink → buscamos server-side e servimos do nosso domínio. Retorna a URL
+ * original como fallback se o base da API não estiver configurado.
+ */
+export function trendThumbUrl(url?: string | null): string | undefined {
+  if (!url) return undefined;
+  const base = (process.env.NEXT_PUBLIC_API_URL ?? '').replace(/\/$/, '');
+  if (!base) return url;
+  return `${base}/public/social/trends/thumb?u=${encodeURIComponent(url)}`;
+}
+
 export type EmojiUsage = 'none' | 'minimal' | 'moderate' | 'heavy';
 export type HashtagStrategy = 'niche' | 'broad' | 'mixed' | 'minimal';
 

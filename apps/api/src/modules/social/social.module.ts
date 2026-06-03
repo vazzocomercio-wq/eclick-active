@@ -43,6 +43,7 @@ import { SocialKnowledgeService } from './prompts/social-knowledge.service';
 import { SocialIntelligenceController } from './intelligence/social-intelligence.controller';
 import { SocialIntelligenceService } from './intelligence/social-intelligence.service';
 import { TrendsController } from './trends/trends.controller';
+import { TrendsThumbController } from './trends/trends-thumb.controller';
 import { TrendsService } from './trends/trends.service';
 import { TrendsCollectorService } from './trends/trends-collector.service';
 import { TrendsCollectorWorker } from './trends/trends-collector.worker';
@@ -85,6 +86,7 @@ import { BridgeModule } from '../bridge/bridge.module';
     TikTokConnectController,
     SocialIntelligenceController,
     TrendsController,
+    TrendsThumbController,
   ],
   providers: [
     SocialBrandsService,

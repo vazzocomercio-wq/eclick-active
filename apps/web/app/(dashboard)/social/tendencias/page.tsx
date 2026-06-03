@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import {
   socialApi,
+  trendThumbUrl,
   type TrendsOverview,
   type TrendMonitor,
   type TrendSignal,
@@ -612,7 +613,13 @@ export default function TendenciasPage() {
                     >
                       {it.thumbnail_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={it.thumbnail_url} alt="" className="aspect-video w-full object-cover" />
+                        <img
+                          src={trendThumbUrl(it.thumbnail_url)}
+                          alt=""
+                          loading="lazy"
+                          className="aspect-video w-full bg-muted object-cover"
+                          onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }}
+                        />
                       ) : (
                         <div className="flex aspect-video w-full items-center justify-center bg-muted">
                           <NetIcon source={it.source} className="h-6 w-6 text-muted-foreground" />
