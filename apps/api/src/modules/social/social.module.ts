@@ -48,11 +48,16 @@ import { TrendsCollectorService } from './trends/trends-collector.service';
 import { TrendsCollectorWorker } from './trends/trends-collector.worker';
 import { TrendsBriefService } from './trends/trends-brief.service';
 import { TrendsAlerterService } from './trends/trends-alerter.service';
+import { ProfilesService } from './trends/profiles.service';
+import { ProfileMiningService } from './trends/profile-mining.service';
+import { ReverseEngineerService } from './trends/reverse-engineer.service';
 import { YouTubeConnector } from './trends/connectors/youtube.connector';
 import { GoogleTrendsConnector } from './trends/connectors/google-trends.connector';
 import { TikTokConnector } from './trends/connectors/tiktok.connector';
 import { MetaAdsConnector } from './trends/connectors/meta-ads.connector';
 import { InstagramConnector } from './trends/connectors/instagram.connector';
+import { InstagramProfileConnector } from './trends/connectors/instagram-profile.connector';
+import { TikTokProfileConnector } from './trends/connectors/tiktok-profile.connector';
 import { AlertsModule } from '../alerts/alerts.module';
 import { ChannelsModule as ChannelDispatcherModule } from '../../common/channels/channels.module';
 import { SlackModule } from '../../common/slack/slack.module';
@@ -117,11 +122,16 @@ import { BridgeModule } from '../bridge/bridge.module';
     TrendsCollectorWorker,
     TrendsBriefService,
     TrendsAlerterService,
+    ProfilesService,
+    ProfileMiningService,
+    ReverseEngineerService,
     YouTubeConnector,
     GoogleTrendsConnector,
     TikTokConnector,
     MetaAdsConnector,
     InstagramConnector,
+    InstagramProfileConnector,
+    TikTokProfileConnector,
   ],
   exports: [
     SocialBrandsService,

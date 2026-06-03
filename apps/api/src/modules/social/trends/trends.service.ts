@@ -262,12 +262,16 @@ export class TrendsService {
   // ─── Overview (estado do Radar) ─────────────────
 
   async getOverview(orgId: string): Promise<TrendsOverview> {
-    const [monitors, itemsAgg, signals, briefs] = await Promise.all([
-      this.listMonitors(orgId),
-      this.itemsAggregateBySource(orgId),
-      this.countTable('trend_signals', orgId),
-      this.countTable('trend_briefs', orgId),
-    ]);
+    const [monitors, itemsAgg, signals, briefs, profiles, activeProfiles, patterns] =
+      await Promise.all([
+        this.listMonitors(orgId),
+        this.itemsAggregateBySource(orgId),
+        this.countTable('trend_signals', orgId),
+        this.countTable('trend_briefs', orgId),
+        this.countTable('trend_profiles', orgId),
+        this.countActiveProfiles(orgId),
+        this.countActivePatterns(orgId),
+      ]);
 
     const categories = [...new Set(monitors.map((m) => m.category))].sort();
     const totalItems = [...itemsAgg.values()].reduce((s, v) => s + v.count, 0);
@@ -294,7 +298,30 @@ export class TrendsService {
       categories,
       by_source,
       generated_at: new Date().toISOString(),
+      profiles,
+      active_profiles: activeProfiles,
+      patterns,
     };
+  }
+
+  private async countActiveProfiles(orgId: string): Promise<number> {
+    const { count, error } = await this.supabase.adminClient
+      .from('trend_profiles')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId)
+      .eq('is_active', true);
+    if (error) return 0;
+    return count ?? 0;
+  }
+
+  private async countActivePatterns(orgId: string): Promise<number> {
+    const { count, error } = await this.supabase.adminClient
+      .from('trend_patterns')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId)
+      .eq('is_active', true);
+    if (error) return 0;
+    return count ?? 0;
   }
 
   private async itemsAggregateBySource(

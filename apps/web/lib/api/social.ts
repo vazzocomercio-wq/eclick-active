@@ -951,6 +951,9 @@ export interface TrendsOverview {
   categories: string[];
   by_source: TrendSourceStatus[];
   generated_at: string;
+  profiles?: number;
+  active_profiles?: number;
+  patterns?: number;
 }
 export interface CreateMonitorPayload {
   network: TrendNetwork;
@@ -968,6 +971,71 @@ export interface UpdateMonitorPayload {
   region?: string;
   language?: string;
   is_active?: boolean;
+}
+
+// ─── Pilar 1: Perfis de referência (Inteligência Global) ──────────
+export type ProfileNetwork = 'instagram' | 'tiktok' | 'youtube' | 'x';
+export interface TrendProfile {
+  id: string;
+  org_id: string;
+  brand_id: string | null;
+  network: ProfileNetwork;
+  handle: string;
+  display_name: string | null;
+  url: string | null;
+  country: string | null;
+  category: string | null;
+  followers: number | null;
+  is_active: boolean;
+  notes: string | null;
+  last_collected_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+export interface CreateProfilePayload {
+  network: ProfileNetwork;
+  handle?: string;
+  url?: string;
+  display_name?: string;
+  country?: string;
+  category?: string;
+  brand_id?: string | null;
+}
+export interface BulkImportProfilesPayload {
+  raw: string;
+  network?: ProfileNetwork;
+  category?: string;
+  country?: string;
+  brand_id?: string | null;
+}
+export interface MineResult {
+  profiles: number;
+  items: number;
+  by_network: Record<string, number>;
+}
+
+// ─── Pilar 2: Padrões vencedores (Engenharia Reversa) ─────────────
+export interface TrendPattern {
+  id: string;
+  org_id: string;
+  brand_id: string | null;
+  category: string | null;
+  network: string | null;
+  source_item_ids: string[];
+  hook: string | null;
+  hook_type: string | null;
+  format: string | null;
+  structure: string | null;
+  cta: string | null;
+  sound: string | null;
+  scenario: string | null;
+  why_it_works: string | null;
+  example_caption: string | null;
+  score: number;
+  is_active: boolean;
+  cost_usd: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export const socialApi = {
@@ -1229,6 +1297,30 @@ export const socialApi = {
       api.post<{ signals: number; briefs: number }>('/social/trends/generate', {}),
     dismissBrief: (id: string) =>
       api.post<void>(`/social/trends/briefs/${id}/dismiss`, {}),
+
+    // Pilar 1 — perfis de referência (Inteligência Global)
+    profiles: (
+      params: { network?: ProfileNetwork; category?: string } = {},
+      signal?: AbortSignal,
+    ) => api.get<TrendProfile[]>('/social/trends/profiles', { query: params, signal }),
+    createProfile: (body: CreateProfilePayload) =>
+      api.post<TrendProfile>('/social/trends/profiles', body),
+    importProfiles: (body: BulkImportProfilesPayload) =>
+      api.post<{ imported: number; skipped: number }>('/social/trends/profiles/import', body),
+    updateProfile: (
+      id: string,
+      body: Partial<Pick<TrendProfile, 'display_name' | 'country' | 'category' | 'followers' | 'is_active' | 'notes'>>,
+    ) => api.patch<TrendProfile>(`/social/trends/profiles/${id}`, body),
+    deleteProfile: (id: string) =>
+      api.delete<void>(`/social/trends/profiles/${id}`),
+    mineProfiles: () =>
+      api.post<MineResult>('/social/trends/profiles/mine', {}),
+
+    // Pilar 2 — engenharia reversa (padrões vencedores)
+    patterns: (params: { category?: string } = {}, signal?: AbortSignal) =>
+      api.get<TrendPattern[]>('/social/trends/patterns', { query: params, signal }),
+    analyze: (body: { category?: string; network?: TrendNetwork; limit?: number } = {}) =>
+      api.post<{ patterns: number }>('/social/trends/analyze', body),
   },
 
   // A/B Testing

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import {
   ArrowLeft, Radar, RefreshCw, Loader2, Plus, Trash2, Play, TrendingUp,
   Megaphone, AtSign, Music, Sparkles, CheckCircle2, CircleDashed, Eye, DownloadCloud,
-  Wand2, X, Brain, Hash,
+  Wand2, X, Brain, Hash, Users, FlaskConical, Globe2,
 } from 'lucide-react';
 import {
   socialApi,
@@ -16,6 +16,9 @@ import {
   type TrendBrief,
   type TrendBriefProduct,
   type TrendNetwork,
+  type TrendProfile,
+  type TrendPattern,
+  type ProfileNetwork,
 } from '@/lib/api/social';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -60,7 +63,18 @@ export default function TendenciasPage() {
   const [signals, setSignals] = useState<TrendSignal[]>([]);
   const [items, setItems] = useState<TrendItem[]>([]);
   const [briefs, setBriefs] = useState<TrendBrief[]>([]);
+  const [profiles, setProfiles] = useState<TrendProfile[]>([]);
+  const [patterns, setPatterns] = useState<TrendPattern[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // curadoria de perfis (Pilar 1)
+  const [pRaw, setPRaw] = useState('');
+  const [pNetwork, setPNetwork] = useState<ProfileNetwork>('instagram');
+  const [pCategory, setPCategory] = useState('');
+  const [pCountry, setPCountry] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [mining, setMining] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
 
   // add-monitor form
   const [showForm, setShowForm] = useState(false);
@@ -77,18 +91,22 @@ export default function TendenciasPage() {
 
   const load = async () => {
     try {
-      const [o, m, s, it, b] = await Promise.all([
+      const [o, m, s, it, b, pf, pt] = await Promise.all([
         socialApi.trends.overview(),
         socialApi.trends.monitors(),
         socialApi.trends.signals(),
         socialApi.trends.items({ limit: 60 }),
         socialApi.trends.briefs(),
+        socialApi.trends.profiles(),
+        socialApi.trends.patterns(),
       ]);
       setOverview(o);
       setMonitors(m);
       setSignals(s);
       setItems(it);
       setBriefs(b);
+      setProfiles(pf);
+      setPatterns(pt);
     } catch {
       /* silent */
     } finally {
@@ -180,6 +198,74 @@ export default function TendenciasPage() {
     }
   };
 
+  const importProfiles = async () => {
+    if (!pRaw.trim()) return;
+    setImporting(true);
+    setCollectMsg(null);
+    try {
+      const r = await socialApi.trends.importProfiles({
+        raw: pRaw,
+        network: pNetwork,
+        category: pCategory.trim() || undefined,
+        country: pCountry.trim() || undefined,
+      });
+      setCollectMsg(
+        `Perfis importados: ${r.imported}${r.skipped ? ` · ${r.skipped} ignorados (formato inválido)` : ''}.`,
+      );
+      setPRaw('');
+      await load();
+    } catch {
+      setCollectMsg('Falha ao importar perfis.');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const mineProfiles = async () => {
+    setMining(true);
+    setCollectMsg(null);
+    try {
+      const r = await socialApi.trends.mineProfiles();
+      setCollectMsg(
+        r.profiles === 0
+          ? 'Nenhum perfil ativo de IG/TikTok pra minerar. Adicione perfis primeiro.'
+          : `Mineração concluída: ${r.items} posts de ${r.profiles} perfil(is).`,
+      );
+      await load();
+    } catch {
+      setCollectMsg('Falha na mineração. Verifique o APIFY_TOKEN.');
+    } finally {
+      setMining(false);
+    }
+  };
+
+  const analyzePatterns = async () => {
+    setAnalyzing(true);
+    setCollectMsg(null);
+    try {
+      const r = await socialApi.trends.analyze({});
+      setCollectMsg(
+        r.patterns > 0
+          ? `Engenharia reversa: ${r.patterns} padrão(ões) vencedor(es) extraído(s). Já alimentam o roteirista.`
+          : 'Sem itens suficientes pra analisar — minere perfis primeiro.',
+      );
+      await load();
+    } catch {
+      setCollectMsg('Falha ao analisar padrões.');
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const removeProfile = async (id: string) => {
+    setProfiles((prev) => prev.filter((p) => p.id !== id));
+    try {
+      await socialApi.trends.deleteProfile(id);
+    } catch {
+      /* silent */
+    }
+  };
+
   const removeMonitor = async (id: string) => {
     if (!confirm('Remover este monitor de tendência?')) return;
     try {
@@ -210,6 +296,14 @@ export default function TendenciasPage() {
           <Button size="sm" variant="outline" onClick={() => void load()} disabled={loading}>
             <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
             <span className="ml-1">Atualizar</span>
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => void mineProfiles()} disabled={mining || loading} title="Minerar os posts recentes dos perfis de referência">
+            {mining ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Users className="h-3.5 w-3.5" />}
+            <span className="ml-1">{mining ? 'Minerando…' : 'Minerar perfis'}</span>
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => void analyzePatterns()} disabled={analyzing || loading} title="Engenharia reversa dos posts vencedores">
+            {analyzing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FlaskConical className="h-3.5 w-3.5" />}
+            <span className="ml-1">{analyzing ? 'Analisando…' : 'Analisar'}</span>
           </Button>
           <Button size="sm" variant="outline" onClick={() => void collectAll()} disabled={collecting || loading}>
             {collecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <DownloadCloud className="h-3.5 w-3.5" />}
@@ -278,6 +372,89 @@ export default function TendenciasPage() {
                   </div>
                 ))}
               </div>
+            </section>
+
+            {/* ── PERFIS DE REFERÊNCIA (Inteligência Global) ── */}
+            <section className="mb-6">
+              <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold">
+                <Globe2 className="h-4 w-4 text-primary" />Perfis de referência
+                <span className="text-xs font-normal text-muted-foreground">
+                  · {overview?.active_profiles ?? profiles.length} ativos · modele quem já performa
+                </span>
+              </h2>
+              <p className="mb-3 text-[11px] text-muted-foreground">
+                Cole 20-100 perfis do seu nicho (do mundo todo). O radar minera os posts recentes deles e a
+                engenharia reversa extrai o que faz performar — pra você ser pioneiro no Brasil.
+              </p>
+
+              <div className="mb-3 flex flex-col gap-2 rounded-lg border border-primary/30 bg-primary/5 p-3">
+                <textarea
+                  value={pRaw}
+                  onChange={(e) => setPRaw(e.target.value)}
+                  rows={3}
+                  placeholder={'Cole URLs ou @handles (1 por linha)\nhttps://www.instagram.com/perfil/\nhttps://www.tiktok.com/@perfil\n@outro_perfil'}
+                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                />
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] text-muted-foreground">Rede (p/ @handle sem URL)</label>
+                    <select
+                      value={pNetwork}
+                      onChange={(e) => setPNetwork(e.target.value as ProfileNetwork)}
+                      className="rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                    >
+                      <option value="instagram">Instagram</option>
+                      <option value="tiktok">TikTok</option>
+                      <option value="youtube">YouTube</option>
+                      <option value="x">X (Twitter)</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] text-muted-foreground">Nicho</label>
+                    <input
+                      value={pCategory}
+                      onChange={(e) => setPCategory(e.target.value)}
+                      placeholder="ex: iluminação"
+                      className="rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] text-muted-foreground">País (opcional)</label>
+                    <input
+                      value={pCountry}
+                      onChange={(e) => setPCountry(e.target.value)}
+                      placeholder="ex: EUA, Japão"
+                      className="w-28 rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                    />
+                  </div>
+                  <Button size="sm" onClick={() => void importProfiles()} disabled={importing || !pRaw.trim()}>
+                    {importing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                    <span className="ml-1">Importar</span>
+                  </Button>
+                </div>
+              </div>
+
+              {profiles.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border bg-muted/20 p-6 text-center text-sm text-muted-foreground">
+                  Nenhum perfil de referência ainda. Cole os perfis que te inspiram — eles são a base do método.
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {profiles.map((p) => (
+                    <div key={p.id} className="flex items-center gap-2 rounded-full border border-border bg-card py-1 pl-2 pr-1 text-xs">
+                      <NetIcon source={(p.network === 'x' || p.network === 'youtube') ? 'youtube' : p.network as TrendNetwork} className="h-3 w-3 text-muted-foreground" />
+                      <a href={p.url ?? '#'} target="_blank" rel="noreferrer" className="font-medium hover:underline">
+                        @{p.handle}
+                      </a>
+                      {p.country && <span className="text-[10px] text-muted-foreground">· {p.country}</span>}
+                      {!p.is_active && <span className="text-[10px] text-amber-500">pausado</span>}
+                      <button onClick={() => void removeProfile(p.id)} className="text-muted-foreground hover:text-destructive" title="Remover">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
 
             {/* ── CATEGORIAS MONITORADAS ── */}
@@ -448,6 +625,42 @@ export default function TendenciasPage() {
                         </p>
                       </div>
                     </a>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {/* ── PADRÕES VENCEDORES (Engenharia Reversa) ── */}
+            <section className="mb-6">
+              <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                <FlaskConical className="h-4 w-4 text-primary" />Padrões vencedores
+                <span className="text-xs font-normal text-muted-foreground">
+                  · engenharia reversa · alimentam o roteirista
+                </span>
+              </h2>
+              {patterns.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border bg-muted/20 p-6 text-center text-sm text-muted-foreground">
+                  Sem padrões ainda. Minere os perfis de referência e clique em <span className="font-medium">Analisar</span> —
+                  a IA decompõe os posts que mais performaram em gancho, formato, CTA e por que funcionam.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  {patterns.map((p) => (
+                    <div key={p.id} className="flex flex-col gap-1.5 rounded-lg border border-border bg-card p-3">
+                      <div className="flex items-center gap-2">
+                        {p.hook_type && (
+                          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-primary">
+                            {p.hook_type}
+                          </span>
+                        )}
+                        {p.format && (
+                          <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">{p.format}</span>
+                        )}
+                      </div>
+                      {p.hook && <p className="text-[13px] font-medium italic leading-snug">“{p.hook}”</p>}
+                      {p.structure && <p className="text-[11px] text-muted-foreground"><span className="font-medium">Estrutura:</span> {p.structure}</p>}
+                      {p.why_it_works && <p className="text-[11px] leading-relaxed text-muted-foreground">{p.why_it_works}</p>}
+                    </div>
                   ))}
                 </div>
               )}

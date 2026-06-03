@@ -44,6 +44,41 @@ export function buildBrandContextBlock(ctx: BrandContext): string {
   return parts.join('\n');
 }
 
+/**
+ * Framework de roteiro VIRAL (Maestros — Aula 30): estrutura psicológica de
+ * 10 linhas. Injetado no roteiro quando o framework escolhido é 'viral_psico'.
+ * O algoritmo recompensa PERFORMANCE, não originalidade — esta estrutura
+ * modela o que comprovadamente prende e converte.
+ */
+export const VIRAL_FRAMEWORK_BLOCK = `FRAMEWORK VIRAL (estrutura psicológica de 10 momentos — siga na construção do roteiro/legenda):
+1-2 ATENÇÃO: quebra de padrão / dissonância. Pare o scroll e abra uma lacuna de informação (contraste, confissão, afirmação contraintuitiva).
+3-5 TENSÃO: escalada emocional por identificação ("isso pode ser você"), elevando o que está em jogo.
+6-7 REVELAÇÃO: a virada de perspectiva / solução inesperada — o "momento aha" (verdade oculta, segredo, detalhe ignorado).
+8-9 TRANSFORMAÇÃO: prova social + possibilidade. Antes/depois, resultado específico, método.
+10 RETENÇÃO: takeaway memorável ou CTA (desafio, sabedoria, "salva isso", "comenta X").
+
+GANCHOS (escolha 1 conforme o tema):
+- Quebra de mito: "Todo mundo acredita que [crença], mas..."
+- Verdade oculta: "Ninguém te conta isso sobre [tema]..."
+- Transformação: "Como [método inesperado] mudou [resultado]..."
+- Alerta: "O erro que [público] comete sem perceber..."
+- Descoberta: "Descobri algo sobre [tema] que..."
+
+GATILHOS (use 2-3): lacuna de curiosidade, prova social, FOMO, promessa de transformação, autoridade, controvérsia, vulnerabilidade, urgência.
+QUALIDADE: os 3 primeiros segundos criam curiosidade; cada linha avança a narrativa; a revelação parece merecida; específico > genérico; emoção > informação.`;
+
+/**
+ * Modo VOZ NEUTRA (Maestros — Aula 30, prompt 2): roteiro para narração/avatar
+ * (faceless). ~90s, 150-180 palavras, 1 frase por linha, voz neutra, sem 1ª
+ * pessoa, com checagem de fatos. Injetado quando o framework é 'neutral_vo'.
+ */
+export const NEUTRAL_VOICEOVER_BLOCK = `MODO VOZ NEUTRA (roteiro para narração/avatar — faceless):
+- Alvo: 150-180 palavras (~90s falados). Ritmo fluido, frases curtas, transições naturais.
+- Uma frase por linha. Voz NEUTRA e objetiva — SEM primeira pessoa ("eu testei" → "é possível...").
+- Sem identificadores de locutor. Tom adequado a teleprompter/locução.
+- CHECAGEM: para qualquer marca/ferramenta/dado que possa enganar, só afirme se tiver certeza; senão use fraseado neutro ("segundo informações oficiais...") ou remova.
+- Evite exageros ("revolucionário", "sem precedentes", "garantido"). Preserve o conteúdo técnico/factual.`;
+
 export const CALENDAR_SYSTEM_PROMPT = `Você é um estrategista de conteúdo digital sênior. Crie calendários editoriais para Instagram/TikTok que sejam estratégicos, variados e direcionados ao objetivo da marca.
 
 REGRAS:

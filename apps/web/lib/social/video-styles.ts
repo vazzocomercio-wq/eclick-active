@@ -96,6 +96,8 @@ export const VIDEO_STYLES: VideoStyle[] = [
 ];
 
 export const SCRIPT_FRAMEWORKS: ScriptFramework[] = [
+  { id: 'viral_psico', label: '🔥 Viral (10 momentos)', hint: 'Estrutura psicológica viral (Maestros): Atenção (1-2, quebra de padrão que para o scroll) → Tensão (3-5, "isso pode ser você") → Revelação (6-7, o aha) → Transformação (8-9, antes/depois + prova) → Retenção (10, CTA memorável). Gatilhos de curiosidade/prova social; emoção > informação.' },
+  { id: 'neutral_vo', label: '🎙️ Voz neutra (faceless/avatar)', hint: 'Roteiro para narração/avatar (faceless): ~150-180 palavras (~90s), 1 frase por linha, voz NEUTRA e objetiva (sem 1ª pessoa), com checagem de fatos. Ideal para canais sem rosto / avatar de IA.' },
   { id: 'dsb', label: 'Dor + Solução + Benefício', hint: 'Estruture: a DOR do público → o produto como SOLUÇÃO → o BENEFÍCIO concreto. (referência preferida)' },
   { id: 'aida', label: 'AIDA', hint: 'Estruture: Atenção (hook) → Interesse → Desejo → Ação (CTA).' },
   { id: 'pas', label: 'PAS', hint: 'Estruture: Problema → Agitação (intensifica a dor) → Solução (o produto).' },

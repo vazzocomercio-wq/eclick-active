@@ -87,10 +87,16 @@ export interface TrendItem {
   published_at: string | null;
   metrics: TrendItemMetrics;
   score: number;
+  /** de onde veio: hashtag (monitor) | profile (perfil curado) | trend | ad. */
+  origin?: TrendItemOrigin | null;
+  /** liga ao perfil de referência quando origin='profile'. */
+  profile_id?: string | null;
   collected_at: string;
   created_at: string;
   updated_at: string;
 }
+
+export type TrendItemOrigin = 'hashtag' | 'profile' | 'trend' | 'ad';
 
 /** Item pronto pra upsert (sem campos gerados pelo banco/coletor). */
 export type NewTrendItem = Omit<
@@ -191,4 +197,118 @@ export interface TrendsOverview {
   categories: string[];
   by_source: TrendSourceStatus[];
   generated_at: string;
+  profiles?: number;
+  active_profiles?: number;
+  patterns?: number;
+}
+
+// ─── Pilar 1: Perfis de referência (Inteligência Global) ──────────
+// Redes que suportam mineração POR PERFIL hoje. IG + TikTok agora; X/
+// YouTube entram só adicionando um conector (registry) — sem tocar no motor.
+export type ProfileNetwork = 'instagram' | 'tiktok' | 'youtube' | 'x';
+
+export interface TrendProfile {
+  id: string;
+  org_id: string;
+  brand_id: string | null;
+  network: ProfileNetwork;
+  handle: string;
+  display_name: string | null;
+  url: string | null;
+  country: string | null;
+  category: string | null;
+  followers: number | null;
+  is_active: boolean;
+  notes: string | null;
+  last_collected_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateProfileDto {
+  network: ProfileNetwork;
+  handle?: string;
+  url?: string;
+  display_name?: string;
+  country?: string;
+  category?: string;
+  followers?: number;
+  brand_id?: string | null;
+}
+
+/** Importação em lote: cola uma lista de URLs/handles (a "Google Sheets" do método). */
+export interface BulkImportProfilesDto {
+  /** linhas livres: URLs (instagram.com/x, tiktok.com/@x) ou "@handle". */
+  raw: string;
+  /** rede default p/ entradas que não dão pra inferir pela URL. */
+  network?: ProfileNetwork;
+  category?: string;
+  country?: string;
+  brand_id?: string | null;
+}
+
+export interface UpdateProfileDto {
+  display_name?: string;
+  country?: string;
+  category?: string;
+  followers?: number;
+  is_active?: boolean;
+  notes?: string;
+}
+
+export interface ProfileFilters {
+  network?: ProfileNetwork;
+  category?: string;
+  is_active?: boolean;
+}
+
+// ─── Pilar 2: Padrões vencedores (Engenharia Reversa) ─────────────
+export interface TrendPattern {
+  id: string;
+  org_id: string;
+  brand_id: string | null;
+  category: string | null;
+  network: string | null;
+  source_item_ids: string[];
+  hook: string | null;
+  hook_type: string | null;
+  format: string | null;
+  structure: string | null;
+  cta: string | null;
+  sound: string | null;
+  scenario: string | null;
+  why_it_works: string | null;
+  example_caption: string | null;
+  score: number;
+  is_active: boolean;
+  cost_usd: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AnalyzePatternsDto {
+  category?: string;
+  network?: TrendNetwork;
+  /** quantos itens vencedores analisar (default 15). */
+  limit?: number;
+  brand_id?: string | null;
+}
+
+// ─── Registry de mineração por perfil (platform-agnostic) ─────────
+// Cada rede = 1 conector que implementa esta interface. Adicionar X =
+// criar a classe + registrar no ProfileMiningService. ZERO no motor.
+export interface ProfileMiningOptions {
+  /** só posts dos últimos N dias (Aula 29 usa 7 — conteúdo recente vende). */
+  newerThanDays: number;
+  /** quantos posts puxar por perfil. */
+  resultsPerProfile: number;
+}
+
+export interface ProfileMiningConnector {
+  readonly network: ProfileNetwork;
+  isConfigured(): boolean;
+  collectProfiles(
+    profiles: TrendProfile[],
+    opts: ProfileMiningOptions,
+  ): Promise<NewTrendItem[]>;
 }

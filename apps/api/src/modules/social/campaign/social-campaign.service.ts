@@ -13,6 +13,7 @@ import { BridgeService } from '../../bridge/bridge.service';
 import type { CommercialSignal } from '../../bridge/bridge.types';
 import { SocialAdBoostService } from '../boost/social-ad-boost.service';
 import { SocialKnowledgeService } from '../prompts/social-knowledge.service';
+import { ReverseEngineerService } from '../trends/reverse-engineer.service';
 import { SocialCampaignRecipesService } from './social-campaign-recipes.service';
 import type {
   SocialContent,
@@ -103,6 +104,7 @@ export class SocialCampaignService {
     private readonly bridge: BridgeService,
     private readonly boost: SocialAdBoostService,
     private readonly knowledge: SocialKnowledgeService,
+    private readonly reverse: ReverseEngineerService,
   ) {}
 
   // ─── Disparo ────────────────────────────────────
@@ -639,6 +641,19 @@ export class SocialCampaignService {
       }
     } catch (e) {
       this.log.warn(`buildKnowledgeContext: ${(e as Error).message}`);
+    }
+
+    // Pilar 2: padrões vencedores da engenharia reversa (default ON quando
+    // existem; a receita pode desligar com metadata.use_trend_patterns=false).
+    if ((recipe?.metadata as { use_trend_patterns?: boolean })?.use_trend_patterns !== false) {
+      try {
+        const exemplars = await this.reverse.buildExemplarContext(orgId, {
+          category: dto.category,
+        });
+        if (exemplars) parts.push(exemplars);
+      } catch (e) {
+        this.log.warn(`buildExemplarContext: ${(e as Error).message}`);
+      }
     }
     return parts.join('\n');
   }

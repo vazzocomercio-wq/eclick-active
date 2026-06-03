@@ -17,16 +17,26 @@ import type { AuthUser } from '../../../common/auth/auth.types';
 import { TrendsService } from './trends.service';
 import { TrendsCollectorService, type CollectResult } from './trends-collector.service';
 import { TrendsBriefService } from './trends-brief.service';
+import { ProfilesService } from './profiles.service';
+import { ProfileMiningService, type MineResult } from './profile-mining.service';
+import { ReverseEngineerService } from './reverse-engineer.service';
 import type {
+  AnalyzePatternsDto,
+  BulkImportProfilesDto,
   CreateMonitorDto,
+  CreateProfileDto,
+  ProfileNetwork,
   TrendBrief,
   TrendItem,
   TrendItemKind,
   TrendMonitor,
   TrendNetwork,
+  TrendPattern,
+  TrendProfile,
   TrendSignal,
   TrendsOverview,
   UpdateMonitorDto,
+  UpdateProfileDto,
 } from './trends.types';
 
 /**
@@ -41,6 +51,9 @@ export class TrendsController {
     private readonly trends: TrendsService,
     private readonly collector: TrendsCollectorService,
     private readonly briefs: TrendsBriefService,
+    private readonly profiles: ProfilesService,
+    private readonly mining: ProfileMiningService,
+    private readonly reverse: ReverseEngineerService,
   ) {}
 
   /** Estado do Radar: contadores + catálogo de fontes (live/planejada). */
@@ -153,5 +166,76 @@ export class TrendsController {
     @Param('id') id: string,
   ): Promise<void> {
     await this.briefs.dismissBrief(user.org_id, id);
+  }
+
+  // ─── Pilar 1: Perfis de referência (Inteligência Global) ────────
+
+  @Get('profiles')
+  listProfiles(
+    @CurrentUser() user: AuthUser,
+    @Query('network') network?: ProfileNetwork,
+    @Query('category') category?: string,
+  ): Promise<TrendProfile[]> {
+    return this.profiles.list(user.org_id, { network, category });
+  }
+
+  @Post('profiles')
+  createProfile(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: CreateProfileDto,
+  ): Promise<TrendProfile> {
+    return this.profiles.create(user.org_id, dto);
+  }
+
+  /** Importa em lote (cola URLs/handles — a "Google Sheets" do método). */
+  @Post('profiles/import')
+  importProfiles(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: BulkImportProfilesDto,
+  ): Promise<{ imported: number; skipped: number }> {
+    return this.profiles.bulkImport(user.org_id, dto);
+  }
+
+  @Patch('profiles/:id')
+  updateProfile(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateProfileDto,
+  ): Promise<TrendProfile> {
+    return this.profiles.update(user.org_id, id, dto);
+  }
+
+  @Delete('profiles/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteProfile(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ): Promise<void> {
+    await this.profiles.remove(user.org_id, id);
+  }
+
+  /** Minera os perfis ativos AGORA (botão manual ignora a trava de frequência). */
+  @Post('profiles/mine')
+  mineProfiles(@CurrentUser() user: AuthUser): Promise<MineResult> {
+    return this.mining.mineAll(user.org_id, true);
+  }
+
+  // ─── Pilar 2: Engenharia reversa (padrões vencedores) ───────────
+
+  @Get('patterns')
+  listPatterns(
+    @CurrentUser() user: AuthUser,
+    @Query('category') category?: string,
+  ): Promise<TrendPattern[]> {
+    return this.reverse.list(user.org_id, category);
+  }
+
+  /** Decompõe os itens vencedores em padrões reutilizáveis (1 chamada IA). */
+  @Post('analyze')
+  analyze(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: AnalyzePatternsDto,
+  ): Promise<{ patterns: number }> {
+    return this.reverse.analyze(user.org_id, dto ?? {});
   }
 }

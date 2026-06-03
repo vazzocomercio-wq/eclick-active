@@ -12,6 +12,8 @@ import {
   POST_SYSTEM_PROMPT,
   CAROUSEL_SYSTEM_PROMPT,
   REEL_SCRIPT_SYSTEM_PROMPT,
+  VIRAL_FRAMEWORK_BLOCK,
+  NEUTRAL_VOICEOVER_BLOCK,
   buildBrandContextBlock,
 } from './prompts';
 import type {
@@ -428,6 +430,9 @@ export class SocialAiGeneratorService {
         : 'MODO: animar a foto real do produto',
       dto.style_label ? `ESTILO DE VÍDEO: ${dto.style_label}${dto.style_prompt ? ` — ${dto.style_prompt}` : ''}` : '',
       dto.framework_label ? `ESTRUTURA DE ROTEIRO: ${dto.framework_label}${dto.framework_prompt ? ` — ${dto.framework_prompt}` : ''}` : '',
+      // Pilar 3: framework viral / modo voz-neutra injetados por inteiro
+      dto.framework === 'viral_psico' ? `\n${VIRAL_FRAMEWORK_BLOCK}` : '',
+      dto.framework === 'neutral_vo' ? `\n${NEUTRAL_VOICEOVER_BLOCK}` : '',
       dto.hook ? `HOOK SUGERIDO: ${dto.hook}` : '',
       dto.cta ? `CTA: ${dto.cta}` : ctx.business.main_cta ? `CTA: ${ctx.business.main_cta}` : '',
     ]
