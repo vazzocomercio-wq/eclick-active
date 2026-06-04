@@ -67,6 +67,35 @@ const SOURCE_CATALOG: Array<{
 ];
 
 /**
+ * Remove surrogates UTF-16 ÓRFÃOS (high sem low, ou low sem high) de qualquer
+ * string, recursivamente em objetos/arrays. Legendas de redes sociais (IG/TikTok)
+ * às vezes trazem emoji quebrado/half-surrogate → o Postgres recusa o jsonb com
+ * `22P02 invalid input syntax for type json: Unicode low surrogate must follow a
+ * high surrogate`, derrubando a gravação do LOTE INTEIRO. Sanitiza no choke-point
+ * (upsertItems) p/ proteger TODOS os coletores de uma vez.
+ */
+function stripLoneSurrogates<T>(value: T): T {
+  if (typeof value === 'string') {
+    return value
+      // high surrogate NÃO seguido de low
+      .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, '')
+      // low surrogate NÃO precedido de high
+      .replace(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '') as unknown as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map((v) => stripLoneSurrogates(v)) as unknown as T;
+  }
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = stripLoneSurrogates(v);
+    }
+    return out as unknown as T;
+  }
+  return value;
+}
+
+/**
  * Radar de Conteúdo — service de fundação (TR-0).
  * CRUD de monitores + leitura de itens/sinais/briefs (vazios até os conectores
  * de TR-1/TR-2/TR-5 popularem trend_items). Tudo escopo por org via RLS, mas o
@@ -181,12 +210,16 @@ export class TrendsService {
     const byKey = new Map<string, NewTrendItem>();
     for (const it of items) byKey.set(`${it.source}|${it.external_id}`, it);
     const now = new Date().toISOString();
-    const rows = [...byKey.values()].map((it) => ({
-      ...it,
-      org_id: orgId,
-      collected_at: now,
-      updated_at: now,
-    }));
+    const rows = [...byKey.values()].map((it) =>
+      // strip de surrogates órfãos (emoji quebrado de legenda) — senão o jsonb
+      // recusa o lote inteiro com 22P02. Protege todos os coletores.
+      stripLoneSurrogates({
+        ...it,
+        org_id: orgId,
+        collected_at: now,
+        updated_at: now,
+      }),
+    );
     const { data, error } = await this.supabase.adminClient
       .from('trend_items')
       .upsert(rows, { onConflict: 'org_id,source,external_id' })
