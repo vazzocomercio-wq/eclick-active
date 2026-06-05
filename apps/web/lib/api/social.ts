@@ -973,17 +973,24 @@ export interface HeyGenVoice {
   gender: string | null;
   preview_audio: string | null;
 }
+export interface HeyGenTemplate {
+  template_id: string;
+  name: string | null;
+  thumbnail_image_url: string | null;
+}
 export interface HeyGenOptions {
   configured: boolean;
   avatars: HeyGenAvatar[];
   voices: HeyGenVoice[];
+  templates: HeyGenTemplate[];
 }
 export interface HeyGenJob {
   id: string;
   org_id: string;
   brief_id: string | null;
-  avatar_id: string;
-  voice_id: string;
+  avatar_id: string | null;
+  voice_id: string | null;
+  template_id: string | null;
   title: string | null;
   script: string;
   dimension: { width: number; height: number };
@@ -1000,8 +1007,9 @@ export interface CreateHeyGenJobPayload {
   brief_id?: string;
   script?: string;
   title?: string;
-  avatar_id: string;
-  voice_id: string;
+  template_id?: string;
+  avatar_id?: string;
+  voice_id?: string;
   width?: number;
   height?: number;
 }

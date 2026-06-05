@@ -2,8 +2,15 @@ import { Injectable, Logger } from '@nestjs/common';
 import type {
   HeyGenAvatar,
   HeyGenDimension,
+  HeyGenTemplate,
   HeyGenVoice,
 } from './heygen.types';
+
+/** Variável de um template (GET /v2/template/{id}) — tipo + valor atual. */
+export interface HeyGenTemplateVariable {
+  name: string;
+  type: string; // text | image | video | audio …
+}
 
 const HEYGEN_BASE = 'https://api.heygen.com';
 /** Limite de texto por cena no /v2/video/generate — chunkamos abaixo disso. */
@@ -163,5 +170,67 @@ export class HeyGenProvider {
       gender: v.gender ?? null,
       preview_audio: v.preview_audio ?? null,
     }));
+  }
+
+  // ─── Templates (ambiente fixo montado no Studio) ───────────────
+
+  async listTemplates(): Promise<HeyGenTemplate[]> {
+    const data = await this.call<{
+      templates?: Array<{
+        template_id: string;
+        name?: string;
+        thumbnail_image_url?: string;
+      }>;
+    }>('/v2/templates');
+    return (data?.templates ?? []).map((t) => ({
+      template_id: t.template_id,
+      name: t.name ?? null,
+      thumbnail_image_url: t.thumbnail_image_url ?? null,
+    }));
+  }
+
+  /** Variáveis declaradas no template (pra saber onde injetar o roteiro). */
+  async getTemplateVariables(templateId: string): Promise<HeyGenTemplateVariable[]> {
+    const data = await this.call<{
+      variables?: Record<string, { name?: string; type?: string }>;
+    }>(`/v2/template/${encodeURIComponent(templateId)}`);
+    const vars = data?.variables ?? {};
+    return Object.entries(vars).map(([key, v]) => ({
+      name: v?.name ?? key,
+      type: v?.type ?? 'text',
+    }));
+  }
+
+  /**
+   * Gera a partir de um template, preenchendo as variáveis de texto com o
+   * roteiro. `variables` mapeia nome→conteúdo. Dimensão é opcional (o template
+   * já define o layout); só enviamos se vier explícita.
+   */
+  async generateFromTemplate(
+    templateId: string,
+    variables: Record<string, string>,
+    dimension?: HeyGenDimension,
+    title?: string,
+  ): Promise<string> {
+    const body: Record<string, unknown> = {
+      test: false,
+      caption: false,
+      variables: Object.fromEntries(
+        Object.entries(variables).map(([name, content]) => [
+          name,
+          { name, type: 'text', properties: { content } },
+        ]),
+      ),
+    };
+    if (dimension) body.dimension = dimension;
+    if (title) body.title = title.slice(0, 200);
+    const data = await this.call<{ video_id: string }>(
+      `/v2/template/${encodeURIComponent(templateId)}/generate`,
+      { method: 'POST', body },
+    );
+    if (!data?.video_id) {
+      throw new Error('HeyGen (template) não retornou video_id.');
+    }
+    return data.video_id;
   }
 }

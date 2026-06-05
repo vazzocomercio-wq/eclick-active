@@ -14,8 +14,9 @@ export interface HeyGenJob {
   id: string;
   org_id: string;
   brief_id: string | null;
-  avatar_id: string;
-  voice_id: string;
+  avatar_id: string | null;
+  voice_id: string | null;
+  template_id: string | null;
   title: string | null;
   script: string;
   dimension: HeyGenDimension;
@@ -47,11 +48,23 @@ export interface HeyGenVoice {
   preview_audio: string | null;
 }
 
-/** Opções pro modal de criação (avatares + vozes + se a integração está ligada). */
+/**
+ * Template do HeyGen (GET /v2/templates): "ambiente fixo" montado no Studio
+ * (avatar + voz + fundo + cena), com a fala marcada como variável. A automação
+ * gera SEMPRE nesse ambiente, passando só o roteiro.
+ */
+export interface HeyGenTemplate {
+  template_id: string;
+  name: string | null;
+  thumbnail_image_url: string | null;
+}
+
+/** Opções pro modal de criação (avatares + vozes + templates + se está ligado). */
 export interface HeyGenOptions {
   configured: boolean;
   avatars: HeyGenAvatar[];
   voices: HeyGenVoice[];
+  templates: HeyGenTemplate[];
 }
 
 // ─── DTOs ─────────────────────────────────────────
@@ -62,9 +75,16 @@ export interface CreateHeyGenJobDto {
   /** roteiro cru (alternativa ao brief_id). */
   script?: string;
   title?: string;
-  avatar_id: string;
-  voice_id: string;
-  /** sobrescreve a dimensão inferida do formato da pauta. */
+  /**
+   * Modo TEMPLATE: gera a partir de um template do Studio (avatar/voz/fundo já
+   * fixos nele) — o roteiro entra na variável de texto. Quando setado, avatar_id
+   * e voice_id são ignorados.
+   */
+  template_id?: string;
+  /** Modo avulso: avatar + voz escolhidos na hora (quando não há template_id). */
+  avatar_id?: string;
+  voice_id?: string;
+  /** sobrescreve a dimensão inferida do formato da pauta (ignorado no template). */
   width?: number;
   height?: number;
 }

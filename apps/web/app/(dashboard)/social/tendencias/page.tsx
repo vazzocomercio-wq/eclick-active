@@ -116,6 +116,7 @@ export default function TendenciasPage() {
   const [hgLoadingOpts, setHgLoadingOpts] = useState(false);
   const [hgAvatar, setHgAvatar] = useState('');
   const [hgVoice, setHgVoice] = useState('');
+  const [hgTemplate, setHgTemplate] = useState(''); // '' = avatar+voz avulsos
   const [hgCreating, setHgCreating] = useState(false);
 
   const load = async () => {
@@ -262,23 +263,26 @@ export default function TendenciasPage() {
     }
   };
 
-  // Abre o modal HeyGen pra uma pauta e carrega avatares/vozes.
+  // Abre o modal HeyGen pra uma pauta e carrega avatares/vozes/templates.
   const openHeygen = async (b: TrendBrief) => {
     setHgBrief(b);
     setHgOptions(null);
     setHgAvatar('');
     setHgVoice('');
+    setHgTemplate('');
     setHgLoadingOpts(true);
     try {
       const o = await socialApi.heygen.options();
       setHgOptions(o);
+      // se houver templates, já seleciona o primeiro (ambiente fixo)
+      if (o.templates[0]) setHgTemplate(o.templates[0].template_id);
       if (o.avatars[0]) setHgAvatar(o.avatars[0].avatar_id);
       // default: prioriza uma voz em português
       const pt = o.voices.find((v) => (v.language ?? '').toLowerCase().includes('port'))
         ?? o.voices[0];
       if (pt) setHgVoice(pt.voice_id);
     } catch {
-      setHgOptions({ configured: false, avatars: [], voices: [] });
+      setHgOptions({ configured: false, avatars: [], voices: [], templates: [] });
     } finally {
       setHgLoadingOpts(false);
     }
@@ -286,14 +290,16 @@ export default function TendenciasPage() {
 
   // Dispara a geração REAL do vídeo (custo $) — só por clique explícito aqui.
   const createHeygen = async () => {
-    if (!hgBrief || !hgAvatar || !hgVoice) return;
+    // modo template: precisa do template; modo avulso: avatar + voz
+    if (!hgBrief || (hgTemplate ? false : !hgAvatar || !hgVoice)) return;
     setHgCreating(true);
     setCollectMsg(null);
     try {
       const job = await socialApi.heygen.createJob({
         brief_id: hgBrief.id,
-        avatar_id: hgAvatar,
-        voice_id: hgVoice,
+        ...(hgTemplate
+          ? { template_id: hgTemplate }
+          : { avatar_id: hgAvatar, voice_id: hgVoice }),
       });
       setHeygenJobs((prev) => [job, ...prev]);
       setHgBrief(null);
@@ -1071,46 +1077,71 @@ export default function TendenciasPage() {
 
             {hgLoadingOpts ? (
               <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> Carregando avatares e vozes…
+                <Loader2 className="h-4 w-4 animate-spin" /> Carregando templates, avatares e vozes…
               </div>
             ) : !hgOptions?.configured ? (
               <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-foreground/80">
                 HeyGen não configurado. Defina a <span className="font-mono">HEYGEN_API_KEY</span> na active-api pra liberar a geração de vídeo com avatar.
               </div>
-            ) : hgOptions.avatars.length === 0 || hgOptions.voices.length === 0 ? (
+            ) : hgOptions.avatars.length === 0 && hgOptions.voices.length === 0 && hgOptions.templates.length === 0 ? (
               <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-foreground/80">
-                Sua conta HeyGen não retornou avatares/vozes disponíveis. Verifique o plano e as permissões da chave.
+                Sua conta HeyGen não retornou templates/avatares/vozes. Verifique o plano e as permissões da chave.
               </div>
             ) : (
               <>
-                <div className="flex flex-col gap-1">
-                  <label className="text-[11px] text-muted-foreground">Avatar</label>
-                  <select
-                    value={hgAvatar}
-                    onChange={(e) => setHgAvatar(e.target.value)}
-                    className="rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-                  >
-                    {hgOptions.avatars.map((a) => (
-                      <option key={a.avatar_id} value={a.avatar_id}>
-                        {a.name ?? a.avatar_id}{a.gender ? ` · ${a.gender}` : ''}{a.premium ? ' · premium' : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-[11px] text-muted-foreground">Voz</label>
-                  <select
-                    value={hgVoice}
-                    onChange={(e) => setHgVoice(e.target.value)}
-                    className="rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-                  >
-                    {hgOptions.voices.map((v) => (
-                      <option key={v.voice_id} value={v.voice_id}>
-                        {v.name ?? v.voice_id}{v.language ? ` · ${v.language}` : ''}{v.gender ? ` · ${v.gender}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {hgOptions.templates.length > 0 && (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] text-muted-foreground">Template (ambiente fixo)</label>
+                    <select
+                      value={hgTemplate}
+                      onChange={(e) => setHgTemplate(e.target.value)}
+                      className="rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                    >
+                      {hgOptions.templates.map((t) => (
+                        <option key={t.template_id} value={t.template_id}>
+                          {t.name ?? t.template_id}
+                        </option>
+                      ))}
+                      <option value="">— Avatar + voz avulsos —</option>
+                    </select>
+                  </div>
+                )}
+                {hgTemplate ? (
+                  <p className="rounded-md border border-primary/30 bg-primary/5 p-2 text-[11px] text-foreground/80">
+                    Usando o template selecionado: avatar, voz, fundo e ambiente vêm dele. Só o roteiro da pauta é injetado.
+                  </p>
+                ) : (
+                  <>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11px] text-muted-foreground">Avatar</label>
+                      <select
+                        value={hgAvatar}
+                        onChange={(e) => setHgAvatar(e.target.value)}
+                        className="rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                      >
+                        {hgOptions.avatars.map((a) => (
+                          <option key={a.avatar_id} value={a.avatar_id}>
+                            {a.name ?? a.avatar_id}{a.gender ? ` · ${a.gender}` : ''}{a.premium ? ' · premium' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11px] text-muted-foreground">Voz</label>
+                      <select
+                        value={hgVoice}
+                        onChange={(e) => setHgVoice(e.target.value)}
+                        className="rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                      >
+                        {hgOptions.voices.map((v) => (
+                          <option key={v.voice_id} value={v.voice_id}>
+                            {v.name ?? v.voice_id}{v.language ? ` · ${v.language}` : ''}{v.gender ? ` · ${v.gender}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
+                )}
                 <p className="text-[11px] text-muted-foreground">
                   A narração do roteiro será falada pelo avatar (timestamps e rubricas de cena são removidos automaticamente). A geração tem custo no HeyGen.
                 </p>
@@ -1118,7 +1149,7 @@ export default function TendenciasPage() {
                   <Button variant="ghost" size="sm" onClick={() => setHgBrief(null)} disabled={hgCreating}>
                     Cancelar
                   </Button>
-                  <Button size="sm" onClick={() => void createHeygen()} disabled={hgCreating || !hgAvatar || !hgVoice}>
+                  <Button size="sm" onClick={() => void createHeygen()} disabled={hgCreating || (hgTemplate ? false : (!hgAvatar || !hgVoice))}>
                     {hgCreating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Clapperboard className="h-3.5 w-3.5" />}
                     <span className="ml-1">{hgCreating ? 'Enviando…' : 'Gerar vídeo'}</span>
                   </Button>

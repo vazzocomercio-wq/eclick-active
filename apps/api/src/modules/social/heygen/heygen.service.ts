@@ -37,12 +37,12 @@ export class HeyGenService {
     return this.provider.isConfigured();
   }
 
-  /** Catálogo de avatares + vozes pro modal. Sem key → listas vazias. */
+  /** Catálogo de avatares + vozes + templates pro modal. Sem key → listas vazias. */
   async options(): Promise<HeyGenOptions> {
     if (!this.provider.isConfigured()) {
-      return { configured: false, avatars: [], voices: [] };
+      return { configured: false, avatars: [], voices: [], templates: [] };
     }
-    const [avatars, voices] = await Promise.all([
+    const [avatars, voices, templates] = await Promise.all([
       this.provider.listAvatars().catch((e) => {
         this.log.warn(`listAvatars falhou: ${(e as Error).message}`);
         return [];
@@ -51,8 +51,12 @@ export class HeyGenService {
         this.log.warn(`listVoices falhou: ${(e as Error).message}`);
         return [];
       }),
+      this.provider.listTemplates().catch((e) => {
+        this.log.warn(`listTemplates falhou: ${(e as Error).message}`);
+        return [];
+      }),
     ]);
-    return { configured: true, avatars, voices };
+    return { configured: true, avatars, voices, templates };
   }
 
   async listJobs(orgId: string, limit = 40): Promise<HeyGenJob[]> {
@@ -88,8 +92,11 @@ export class HeyGenService {
         'HeyGen não configurado: defina HEYGEN_API_KEY na active-api pra gerar vídeos com avatar.',
       );
     }
-    if (!dto.avatar_id || !dto.voice_id) {
-      throw new BadRequestException('Escolha um avatar e uma voz do HeyGen.');
+    const useTemplate = !!dto.template_id;
+    if (!useTemplate && (!dto.avatar_id || !dto.voice_id)) {
+      throw new BadRequestException(
+        'Escolha um template, ou então um avatar e uma voz do HeyGen.',
+      );
     }
 
     // Roteiro-fonte: pauta ou texto cru.
@@ -120,7 +127,6 @@ export class HeyGenService {
         'O roteiro está vazio ou sem narração aproveitável pra gerar o vídeo.',
       );
     }
-    const scenes = chunkScript(narration);
 
     // Dimensão: vertical p/ Short, 16:9 p/ vídeo longo; override por dto.
     const vertical =
@@ -131,8 +137,28 @@ export class HeyGenService {
     };
 
     let videoId: string;
+    let sceneCount = 1;
     try {
-      videoId = await this.provider.createVideo(scenes, dto.avatar_id, dto.voice_id, dimension);
+      if (useTemplate) {
+        // Modo template: injeta o roteiro na variável de texto do template.
+        const variable = await this.resolveTemplateTextVariable(dto.template_id as string);
+        const dim = dto.width && dto.height ? dimension : undefined; // template define o layout
+        videoId = await this.provider.generateFromTemplate(
+          dto.template_id as string,
+          { [variable]: narration },
+          dim,
+          title ?? undefined,
+        );
+      } else {
+        const scenes = chunkScript(narration);
+        sceneCount = scenes.length;
+        videoId = await this.provider.createVideo(
+          scenes,
+          dto.avatar_id as string,
+          dto.voice_id as string,
+          dimension,
+        );
+      }
     } catch (e) {
       throw new BadRequestException(`HeyGen recusou a geração: ${(e as Error).message}`);
     }
@@ -142,8 +168,9 @@ export class HeyGenService {
       .insert({
         org_id: orgId,
         brief_id: dto.brief_id ?? null,
-        avatar_id: dto.avatar_id,
-        voice_id: dto.voice_id,
+        avatar_id: useTemplate ? null : dto.avatar_id,
+        voice_id: useTemplate ? null : dto.voice_id,
+        template_id: dto.template_id ?? null,
         title: (title ?? '').slice(0, 200) || null,
         script: narration.slice(0, 20000),
         dimension,
@@ -156,8 +183,30 @@ export class HeyGenService {
       this.log.warn(`heygen_jobs insert falhou: ${error.message}`);
       throw new BadRequestException('Vídeo criado no HeyGen, mas falhou ao salvar o job.');
     }
-    this.log.log(`job criado org=${orgId} video=${videoId} cenas=${scenes.length}`);
+    this.log.log(
+      `job criado org=${orgId} video=${videoId} ${useTemplate ? `template=${dto.template_id}` : `cenas=${sceneCount}`}`,
+    );
     return data as HeyGenJob;
+  }
+
+  /**
+   * Descobre em qual variável do template o roteiro deve entrar: pega as
+   * variáveis de texto e prefere a que parece ser a fala (script/fala/roteiro/
+   * texto/narração); senão, a primeira. Erro acionável se o template não tiver
+   * nenhuma variável de texto.
+   */
+  private async resolveTemplateTextVariable(templateId: string): Promise<string> {
+    const vars = await this.provider.getTemplateVariables(templateId);
+    const textVars = vars.filter((v) => (v.type || 'text').toLowerCase() === 'text');
+    if (!textVars.length) {
+      throw new BadRequestException(
+        'Esse template não tem nenhuma variável de texto. No HeyGen Studio, marque a fala/roteiro do avatar como variável.',
+      );
+    }
+    const preferred = textVars.find((v) =>
+      /script|fala|roteiro|texto|narra|speech|caption/i.test(v.name),
+    );
+    return (preferred ?? textVars[0]).name;
   }
 
   /** Atualiza 1 job consultando o status no HeyGen. Retorna a row atualizada. */
