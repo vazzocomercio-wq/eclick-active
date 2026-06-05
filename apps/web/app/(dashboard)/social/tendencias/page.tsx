@@ -166,11 +166,17 @@ export default function TendenciasPage() {
 
   const collectMonitor = async (id: string) => {
     setCollectingId(id);
+    setCollectMsg(null);
     try {
-      await socialApi.trends.collectMonitor(id);
+      const r = await socialApi.trends.collectMonitor(id);
+      setCollectMsg(
+        r.items > 0
+          ? `Coleta deste monitor concluída: ${r.items} item(ns).`
+          : 'Coleta concluída, mas nenhum item novo veio (revise as palavras-chave do monitor).',
+      );
       await load();
-    } catch {
-      /* silent */
+    } catch (e) {
+      setCollectMsg(`Falha ao coletar este monitor: ${(e as Error)?.message ?? 'erro desconhecido'}`);
     } finally {
       setCollectingId(null);
     }
@@ -620,17 +626,18 @@ export default function TendenciasPage() {
                       </span>
                       {(m.network === 'youtube' || m.network === 'google_trends' || m.network === 'tiktok' || m.network === 'meta_ads' || m.network === 'instagram') && (
                         <Button
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
                           onClick={() => void collectMonitor(m.id)}
                           disabled={collectingId === m.id}
-                          title="Coletar agora"
+                          title="Coletar agora só deste monitor (ignora a trava de custo de 7 dias do Apify)"
                         >
                           {collectingId === m.id ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
                           ) : (
                             <DownloadCloud className="h-3.5 w-3.5" />
                           )}
+                          <span className="ml-1 text-xs">{collectingId === m.id ? 'Coletando…' : 'Coletar'}</span>
                         </Button>
                       )}
                       <Button variant="ghost" size="sm" onClick={() => void removeMonitor(m.id)} title="Remover">
