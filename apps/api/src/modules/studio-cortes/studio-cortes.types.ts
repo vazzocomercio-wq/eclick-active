@@ -2,7 +2,7 @@
 // Studio de Cortes — tipos do domínio (Migration 094)
 // ═══════════════════════════════════════════════════
 
-export type JobSourceType = 'upload' | 'youtube' | 'drive';
+export type JobSourceType = 'upload' | 'youtube' | 'drive' | 'heygen';
 
 export type JobStatus =
   | 'received'
@@ -33,6 +33,10 @@ export interface ContentJob {
   drive_file_id: string | null;
   drive_folder_id: string | null;
   youtube_video_id: string | null;
+  /** Master remoto direto (ex: mp4 do HeyGen) — usado quando source_type='heygen'. */
+  source_url: string | null;
+  /** Vínculo de volta ao job HeyGen que originou este corte (rastreio). */
+  heygen_job_id: string | null;
   resolution: string | null;
   status: JobStatus;
   failure_reason: string | null;

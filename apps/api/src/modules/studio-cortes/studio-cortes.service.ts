@@ -157,6 +157,77 @@ export class StudioCortesService {
     }
   }
 
+  // ── Ponte HeyGen → Cortes ─────────────────────────────────
+
+  /**
+   * Cria um job de corte a partir de um vídeo já gerado no HeyGen. A URL do mp4
+   * do HeyGen vai DIRETO pro Vizard (fonte remota, sem Drive). Idempotente: se o
+   * job HeyGen já originou um corte (cortes_job_id), devolve o existente em vez
+   * de cortar (= gastar crédito) de novo. Chamado pelo botão manual e pela
+   * automação (bridge worker).
+   */
+  async createJobFromHeyGen(orgId: string, heygenJobId: string): Promise<ContentJob> {
+    const { data } = await this.supabase.adminClient
+      .from('heygen_jobs')
+      .select('id, status, video_url, title, cortes_job_id')
+      .eq('id', heygenJobId)
+      .eq('org_id', orgId)
+      .maybeSingle();
+    const hg = data as {
+      id: string;
+      status: string;
+      video_url: string | null;
+      title: string | null;
+      cortes_job_id: string | null;
+    } | null;
+    if (!hg) throw new NotFoundException('Vídeo HeyGen não encontrado.');
+    if (hg.status !== 'completed' || !hg.video_url) {
+      throw new BadRequestException('O vídeo do HeyGen ainda não está pronto pra cortar.');
+    }
+
+    // Idempotência: já gerou corte → devolve o mesmo (não corta de novo).
+    if (hg.cortes_job_id) {
+      const { data: existing } = await this.supabase.adminClient
+        .from('content_jobs')
+        .select('*')
+        .eq('id', hg.cortes_job_id)
+        .eq('org_id', orgId)
+        .maybeSingle();
+      if (existing) return existing as ContentJob;
+    }
+
+    const { data: created, error: insErr } = await this.supabase.adminClient
+      .from('content_jobs')
+      .insert({
+        org_id: orgId,
+        title: hg.title || 'Vídeo HeyGen',
+        source_type: 'heygen' as JobSourceType,
+        source_url: hg.video_url,
+        heygen_job_id: hg.id,
+        status: 'received',
+        metadata: { from_heygen: true, heygen_video_url: hg.video_url },
+      })
+      .select('*')
+      .single();
+    if (insErr) throw new Error(`Falha ao criar job de corte: ${insErr.message}`);
+    const job = created as ContentJob;
+
+    // Carimba o vínculo de volta (rastreio + idempotência do bridge worker).
+    await this.supabase.adminClient
+      .from('heygen_jobs')
+      .update({ cortes_job_id: job.id })
+      .eq('id', hg.id)
+      .eq('org_id', orgId);
+
+    // Submete o corte async (webhook conclui depois) — não bloqueia a resposta.
+    void this.clipping.submit(job).catch((err) => {
+      this.log.error(`[heygen→cortes] submit do corte falhou (job ${job.id}): ${String(err)}`);
+    });
+
+    this.log.log(`[heygen→cortes] job de corte ${job.id} criado de heygen=${hg.id}`);
+    return job;
+  }
+
   // ── Leitura ───────────────────────────────────────────────
 
   async listJobs(orgId: string): Promise<ContentJob[]> {

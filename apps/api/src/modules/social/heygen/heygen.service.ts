@@ -200,6 +200,7 @@ export class HeyGenService {
         dimension,
         heygen_video_id: videoId,
         status: 'processing',
+        auto_cortes: dto.auto_cortes ?? false,
       })
       .select('*')
       .single();

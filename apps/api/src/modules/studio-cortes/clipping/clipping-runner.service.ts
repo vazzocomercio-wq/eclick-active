@@ -35,6 +35,11 @@ export class ClippingRunnerService {
     if (job.source_type === 'youtube') {
       if (!job.youtube_video_id) throw new BadRequestException('Job sem youtube_video_id');
       sourceUrl = `https://www.youtube.com/watch?v=${job.youtube_video_id}`;
+    } else if (job.source_type === 'heygen' || job.source_url) {
+      // Fonte remota direta (ex: mp4 do HeyGen). O Vizard baixa a URL como
+      // arquivo remoto (videoType=1) — não precisa do Drive nem do proxy.
+      if (!job.source_url) throw new BadRequestException('Job sem source_url (master remoto)');
+      sourceUrl = job.source_url;
     } else {
       if (!job.drive_file_id) throw new BadRequestException('Job sem master no Drive');
       // Proxy assinado nosso (stream do Drive) — evita a página anti-vírus do

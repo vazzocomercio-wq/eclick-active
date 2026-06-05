@@ -26,6 +26,10 @@ export interface HeyGenJob {
   thumbnail_url: string | null;
   duration_sec: number | null;
   error: string | null;
+  /** Automação: ao concluir, gerar cortes verticais no Studio de Cortes. */
+  auto_cortes: boolean;
+  /** Job de corte gerado a partir deste vídeo (vínculo da ponte). */
+  cortes_job_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -87,4 +91,10 @@ export interface CreateHeyGenJobDto {
   /** sobrescreve a dimensão inferida do formato da pauta (ignorado no template). */
   width?: number;
   height?: number;
+  /**
+   * Automação completa: ao concluir o vídeo, gerar cortes verticais no Studio de
+   * Cortes automaticamente. O disparo só roda se a env CORTES_AUTO_FROM_HEYGEN
+   * estiver ligada (em validação) — senão fica registrado mas inerte.
+   */
+  auto_cortes?: boolean;
 }

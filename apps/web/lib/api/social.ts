@@ -1000,6 +1000,8 @@ export interface HeyGenJob {
   thumbnail_url: string | null;
   duration_sec: number | null;
   error: string | null;
+  auto_cortes: boolean;
+  cortes_job_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -1012,6 +1014,8 @@ export interface CreateHeyGenJobPayload {
   voice_id?: string;
   width?: number;
   height?: number;
+  /** Automação completa: ao concluir, gerar cortes verticais (gated no backend). */
+  auto_cortes?: boolean;
 }
 export interface TrendSourceStatus {
   source: TrendNetwork;

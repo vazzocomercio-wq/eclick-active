@@ -90,6 +90,17 @@ export class StudioCortesController {
     return this.service.createUploadJob(user.org_id, user.id, file, body?.title);
   }
 
+  /**
+   * Cria um job de corte a partir de um vídeo já gerado no HeyGen (botão
+   * "Gerar cortes"). Dispara o Vizard (custo $) — só por ação explícita.
+   */
+  @Post('jobs/from-heygen')
+  @HttpCode(HttpStatus.CREATED)
+  createFromHeygen(@CurrentUser() user: AuthUser, @Body() body: { heygen_job_id?: string }) {
+    if (!body?.heygen_job_id) throw new BadRequestException('Informe o heygen_job_id.');
+    return this.service.createJobFromHeyGen(user.org_id, body.heygen_job_id);
+  }
+
   // ── Leitura ───────────────────────────────────────────────
 
   @Get('jobs')

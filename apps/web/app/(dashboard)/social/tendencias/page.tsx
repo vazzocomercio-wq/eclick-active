@@ -5,7 +5,7 @@ import Link from 'next/link';
 import {
   ArrowLeft, Radar, RefreshCw, Loader2, Plus, Trash2, Play, TrendingUp,
   Megaphone, AtSign, Music, Sparkles, CheckCircle2, CircleDashed, Eye, DownloadCloud,
-  Wand2, X, Brain, Hash, Users, FlaskConical, Globe2, Clapperboard, ExternalLink, AlertTriangle,
+  Wand2, X, Brain, Hash, Users, FlaskConical, Globe2, Clapperboard, ExternalLink, AlertTriangle, Scissors,
 } from 'lucide-react';
 import {
   socialApi,
@@ -23,6 +23,7 @@ import {
   type HeyGenJob,
   type HeyGenOptions,
 } from '@/lib/api/social';
+import { cortesApi } from '@/lib/api/studio-cortes';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -117,7 +118,9 @@ export default function TendenciasPage() {
   const [hgAvatar, setHgAvatar] = useState('');
   const [hgVoice, setHgVoice] = useState('');
   const [hgTemplate, setHgTemplate] = useState(''); // '' = avatar+voz avulsos
+  const [hgAutoCortes, setHgAutoCortes] = useState(false); // automação completa → cortes
   const [hgCreating, setHgCreating] = useState(false);
+  const [cortesBusyId, setCortesBusyId] = useState<string | null>(null); // job HeyGen gerando corte
 
   const load = async () => {
     try {
@@ -270,6 +273,7 @@ export default function TendenciasPage() {
     setHgAvatar('');
     setHgVoice('');
     setHgTemplate('');
+    setHgAutoCortes(false);
     setHgLoadingOpts(true);
     try {
       const o = await socialApi.heygen.options();
@@ -300,14 +304,37 @@ export default function TendenciasPage() {
         brief_id: hgBrief.id,
         voice_id: hgVoice,
         ...(hgTemplate ? { template_id: hgTemplate } : { avatar_id: hgAvatar }),
+        auto_cortes: hgAutoCortes,
       });
       setHeygenJobs((prev) => [job, ...prev]);
       setHgBrief(null);
-      setCollectMsg('Vídeo enviado pro HeyGen — acompanhe o progresso na seção “Vídeos HeyGen”.');
+      setCollectMsg(
+        hgAutoCortes
+          ? 'Vídeo enviado pro HeyGen — ao concluir, os cortes serão gerados automaticamente (quando a automação estiver liberada).'
+          : 'Vídeo enviado pro HeyGen — acompanhe o progresso na seção “Vídeos HeyGen”.',
+      );
     } catch (e) {
       setCollectMsg(`Falha ao gerar vídeo no HeyGen: ${(e as Error)?.message ?? 'erro'}`);
     } finally {
       setHgCreating(false);
+    }
+  };
+
+  // Botão manual: gera cortes a partir de um vídeo HeyGen já concluído (custo $).
+  const gerarCortesDoHeygen = async (job: HeyGenJob) => {
+    if (job.status !== 'completed' || cortesBusyId) return;
+    setCortesBusyId(job.id);
+    setCollectMsg(null);
+    try {
+      await cortesApi.createFromHeygen(job.id);
+      setHeygenJobs((prev) =>
+        prev.map((j) => (j.id === job.id ? { ...j, cortes_job_id: 'pending' } : j)),
+      );
+      setCollectMsg('Cortes em geração — acompanhe no Studio de Cortes (Social › Cortes).');
+    } catch (e) {
+      setCollectMsg(`Falha ao gerar cortes: ${(e as Error)?.message ?? 'erro'}`);
+    } finally {
+      setCortesBusyId(null);
     }
   };
 
@@ -1033,6 +1060,29 @@ export default function TendenciasPage() {
                               {j.duration_sec ? ` · ${Math.round(j.duration_sec)}s` : ''}
                             </a>
                           )}
+                          {j.status === 'completed' && j.video_url && (
+                            j.cortes_job_id ? (
+                              <Link
+                                href="/social/cortes"
+                                className="mt-1 flex items-center justify-center gap-1 rounded-md border border-border bg-muted/40 px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted"
+                              >
+                                <CheckCircle2 className="h-3 w-3 text-emerald-500" />Cortes em andamento — ver
+                              </Link>
+                            ) : (
+                              <button
+                                onClick={() => void gerarCortesDoHeygen(j)}
+                                disabled={cortesBusyId === j.id}
+                                title="Recortar este vídeo em cortes verticais (Studio de Cortes)"
+                                className="mt-1 flex items-center justify-center gap-1 rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+                              >
+                                {cortesBusyId === j.id ? (
+                                  <><Loader2 className="h-3 w-3 animate-spin" />Enviando…</>
+                                ) : (
+                                  <><Scissors className="h-3 w-3" />Gerar cortes</>
+                                )}
+                              </button>
+                            )
+                          )}
                         </div>
                       </div>
                     ))}
@@ -1144,6 +1194,28 @@ export default function TendenciasPage() {
                 <p className="text-[11px] text-muted-foreground">
                   A narração do roteiro será falada pelo avatar (timestamps e rubricas de cena são removidos automaticamente). A geração tem custo no HeyGen.
                 </p>
+
+                {/* Automação completa: ao concluir o vídeo, gerar cortes verticais. */}
+                <label className="flex cursor-pointer items-start gap-2 rounded-md border border-border bg-muted/20 p-2.5">
+                  <input
+                    type="checkbox"
+                    checked={hgAutoCortes}
+                    onChange={(e) => setHgAutoCortes(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 accent-primary"
+                  />
+                  <span className="flex flex-col gap-0.5">
+                    <span className="flex items-center gap-1 text-[12px] font-medium">
+                      <Scissors className="h-3.5 w-3.5 text-primary" />
+                      Automação completa — gerar cortes ao concluir
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">
+                      Quando o vídeo ficar pronto, o Studio de Cortes recorta automaticamente em vídeos verticais.
+                      Em validação: fica registrado, mas o disparo automático só roda após liberarmos a automação
+                      (você pode gerar os cortes manualmente no card a qualquer momento).
+                    </span>
+                  </span>
+                </label>
+
                 <div className="flex justify-end gap-2">
                   <Button variant="ghost" size="sm" onClick={() => setHgBrief(null)} disabled={hgCreating}>
                     Cancelar

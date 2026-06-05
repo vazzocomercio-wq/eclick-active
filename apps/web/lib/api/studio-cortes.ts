@@ -150,6 +150,10 @@ export const cortesApi = {
     return api.post<ContentJob>('/studio-cortes/upload', form);
   },
 
+  /** Cria um job de corte a partir de um vídeo já gerado no HeyGen. */
+  createFromHeygen: (heygenJobId: string) =>
+    api.post<ContentJob>('/studio-cortes/jobs/from-heygen', { heygen_job_id: heygenJobId }),
+
   setClipStatus: (clipId: string, status: ClipStatus) =>
     api.patch<ClipRow>(`/studio-cortes/clips/${clipId}/status`, { status }),
 

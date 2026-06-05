@@ -25,6 +25,7 @@ import { PublishRunnerService } from './publish/publish-runner.service';
 import { PublishWorker } from './publish/publish-worker';
 import { ClipMetricsRunnerService } from './publish/clip-metrics-runner.service';
 import { ClipMetricsWorker } from './publish/clip-metrics.worker';
+import { HeygenBridgeWorker } from './heygen-bridge.worker';
 import { CLIPPING_PROVIDER } from './studio-cortes.types';
 
 /**
@@ -66,6 +67,8 @@ import { CLIPPING_PROVIDER } from './studio-cortes.types';
     PublishWorker,
     ClipMetricsRunnerService,
     ClipMetricsWorker,
+    // Ponte automática HeyGen → Cortes (gated por CORTES_AUTO_FROM_HEYGEN)
+    HeygenBridgeWorker,
   ],
   exports: [StudioCortesService],
 })
