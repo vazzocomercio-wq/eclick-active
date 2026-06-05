@@ -59,6 +59,7 @@ export function MemberDetailSheet({
   const [stats, setStats] = useState<MemberStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [role, setRole] = useState<OrgMemberRole>('agent');
+  const [whatsapp, setWhatsapp] = useState<string>('');
   const [specialties, setSpecialties] = useState<string[]>([]);
   const [specialtyInput, setSpecialtyInput] = useState('');
   const [duration, setDuration] = useState<string>('');
@@ -71,6 +72,7 @@ export function MemberDetailSheet({
   useEffect(() => {
     if (!open || !member) return;
     setRole(member.role);
+    setWhatsapp(member.whatsapp_phone ?? '');
     setSpecialties(member.specialties ?? []);
     setSpecialtyInput('');
     setDuration(
@@ -109,6 +111,10 @@ export function MemberDetailSheet({
     if (!member) return;
     const patch: Parameters<typeof teamApi.update>[1] = {};
     if (role !== member.role) patch.role = role;
+
+    if (whatsapp.trim() !== (member.whatsapp_phone ?? '')) {
+      patch.whatsapp_phone = whatsapp.trim();
+    }
 
     // Specialties só envia se mudou (compara como JSON pra cobrir reorder)
     const oldSpec = (member.specialties ?? []).slice().sort();
@@ -192,6 +198,7 @@ export function MemberDetailSheet({
   const newDurationParsed = duration.trim() ? Number(duration) : null;
   const dirty =
     role !== member.role ||
+    whatsapp.trim() !== (member.whatsapp_phone ?? '') ||
     JSON.stringify(oldSpecSorted) !== JSON.stringify(newSpecSorted) ||
     newDurationParsed !== member.default_duration_minutes ||
     Number(buffer) !== (member.default_buffer_minutes ?? 0);
@@ -309,6 +316,26 @@ export function MemberDetailSheet({
             <p className="text-xs text-muted-foreground">
               {isOwner ? t('ownerCantEdit') : t('noPermissionToEdit')}
             </p>
+          )}
+
+          {/* WhatsApp — alerta de tarefa URGENTE (Operação de Cadastro) */}
+          {canEdit && (
+            <section className="mt-5 flex flex-col gap-2 border-t border-border pt-5">
+              <div className="flex items-center gap-2">
+                <MessageCircle className="h-3.5 w-3.5 text-primary" />
+                <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {t('whatsapp')}
+                </h3>
+              </div>
+              <Input
+                type="tel"
+                value={whatsapp}
+                onChange={(e) => setWhatsapp(e.target.value)}
+                placeholder={t('whatsappPlaceholder')}
+                className="h-9"
+              />
+              <span className="text-[10px] text-muted-foreground">{t('whatsappHint')}</span>
+            </section>
           )}
 
           {/* Agendamento — duração + especialidades pra IA Concierge usar */}

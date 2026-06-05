@@ -21,6 +21,8 @@ export interface MemberView {
   role: OrgMemberRole;
   status: 'active' | 'invited' | 'suspended';
   workspace_ids: string[];
+  /** WhatsApp do operador (só dígitos/+). NULL = sem alerta de tarefa urgente. */
+  whatsapp_phone: string | null;
   last_seen_at: string | null;
   /** Especialidades/serviços que o profissional atende (texto livre por org). */
   specialties: string[];
@@ -53,7 +55,7 @@ export class TeamService {
     const { data: members, error } = await this.supabase.adminClient
       .from('org_members')
       .select(
-        'id, user_id, org_id, role, status, workspace_ids, display_name, avatar_url, last_seen_at, specialties, default_duration_minutes, default_buffer_minutes, created_at, updated_at',
+        'id, user_id, org_id, role, status, workspace_ids, display_name, avatar_url, whatsapp_phone, last_seen_at, specialties, default_duration_minutes, default_buffer_minutes, created_at, updated_at',
       )
       .eq('org_id', orgId)
       .order('created_at', { ascending: true });
@@ -122,9 +124,10 @@ export class TeamService {
         role: dto.role,
         status: 'invited',
         display_name: dto.display_name ?? null,
+        whatsapp_phone: normalizeWhatsapp(dto.whatsapp_phone),
       })
       .select(
-        'id, user_id, org_id, role, status, workspace_ids, display_name, avatar_url, last_seen_at, specialties, default_duration_minutes, default_buffer_minutes, created_at, updated_at',
+        'id, user_id, org_id, role, status, workspace_ids, display_name, avatar_url, whatsapp_phone, last_seen_at, specialties, default_duration_minutes, default_buffer_minutes, created_at, updated_at',
       )
       .single();
 
@@ -174,6 +177,8 @@ export class TeamService {
     if (dto.role) patch.role = dto.role;
     if (dto.workspace_ids) patch.workspace_ids = dto.workspace_ids;
     if (dto.display_name !== undefined) patch.display_name = dto.display_name;
+    if (dto.whatsapp_phone !== undefined)
+      patch.whatsapp_phone = normalizeWhatsapp(dto.whatsapp_phone);
     if (dto.specialties !== undefined) patch.specialties = dto.specialties;
     if (dto.default_duration_minutes !== undefined)
       patch.default_duration_minutes = dto.default_duration_minutes;
@@ -186,7 +191,7 @@ export class TeamService {
       .eq('org_id', orgId)
       .eq('id', memberId)
       .select(
-        'id, user_id, org_id, role, status, workspace_ids, display_name, avatar_url, last_seen_at, specialties, default_duration_minutes, default_buffer_minutes, created_at, updated_at',
+        'id, user_id, org_id, role, status, workspace_ids, display_name, avatar_url, whatsapp_phone, last_seen_at, specialties, default_duration_minutes, default_buffer_minutes, created_at, updated_at',
       )
       .single();
 
@@ -445,4 +450,19 @@ export class TeamService {
     }
     return map;
   }
+}
+
+/**
+ * Normaliza WhatsApp pra armazenar: mantém '+' inicial (se houver) e só dígitos.
+ * Vazio/undefined → null (membro sem alerta). Não força DDI BR — o envio
+ * (wa-router/Baileys) já normaliza número brasileiro na hora de mandar.
+ */
+function normalizeWhatsapp(raw?: string | null): string | null {
+  if (raw == null) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const hasPlus = trimmed.startsWith('+');
+  const digits = trimmed.replace(/\D/g, '');
+  if (digits.length < 8) return null;
+  return hasPlus ? `+${digits}` : digits;
 }

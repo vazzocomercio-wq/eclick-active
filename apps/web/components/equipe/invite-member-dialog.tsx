@@ -36,6 +36,7 @@ export function InviteMemberDialog({
   const roleLabel = useRoleLabel();
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
+  const [whatsapp, setWhatsapp] = useState('');
   const [role, setRole] = useState<InviteMemberInput['role']>('agent');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +45,7 @@ export function InviteMemberDialog({
     if (open) {
       setEmail('');
       setName('');
+      setWhatsapp('');
       setRole('agent');
       setError(null);
     }
@@ -59,6 +61,7 @@ export function InviteMemberDialog({
         email: email.trim().toLowerCase(),
         role,
         ...(name.trim() ? { display_name: name.trim() } : {}),
+        ...(whatsapp.trim() ? { whatsapp_phone: whatsapp.trim() } : {}),
       });
       onInvited();
       onOpenChange(false);
@@ -104,6 +107,17 @@ export function InviteMemberDialog({
                 onChange={(e) => setName(e.target.value)}
                 placeholder={t('namePlaceholder')}
               />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">{t('whatsappLabel')}</Label>
+              <Input
+                type="tel"
+                value={whatsapp}
+                onChange={(e) => setWhatsapp(e.target.value)}
+                placeholder={t('whatsappPlaceholder')}
+              />
+              <p className="text-[10px] text-muted-foreground">{t('whatsappHint')}</p>
             </div>
 
             <div className="flex flex-col gap-1.5">

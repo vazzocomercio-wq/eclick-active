@@ -7,10 +7,18 @@ import {
   IsString,
   IsUUID,
   Length,
+  Matches,
   Max,
   MaxLength,
   Min,
 } from 'class-validator';
+
+/**
+ * WhatsApp do operador (alertas de tarefa urgente). Aceita dígitos, +, espaços,
+ * parênteses e hífen — 8 a 20 chars. Vazio é permitido pra LIMPAR o número no
+ * update. Normalização (só dígitos) acontece no service.
+ */
+const WHATSAPP_REGEX = /^$|^[\d+()\s-]{8,20}$/;
 import type { OrgMemberRole } from '@eclick-active/shared';
 
 const INVITABLE_ROLES: OrgMemberRole[] = ['admin', 'manager', 'agent', 'viewer'];
@@ -34,6 +42,14 @@ export class InviteMemberDto {
   @IsString()
   @MaxLength(120)
   display_name?: string;
+
+  /** WhatsApp do operador p/ alerta de tarefa URGENTE (Operação de Cadastro). */
+  @IsOptional()
+  @IsString()
+  @Matches(WHATSAPP_REGEX, {
+    message: 'whatsapp_phone inválido (use dígitos, +, espaços, () ou -).',
+  })
+  whatsapp_phone?: string;
 }
 
 export class UpdateMemberDto {
@@ -50,6 +66,14 @@ export class UpdateMemberDto {
   @IsString()
   @Length(1, 120)
   display_name?: string;
+
+  /** WhatsApp do operador p/ alerta de tarefa URGENTE. Vazio limpa o número. */
+  @IsOptional()
+  @IsString()
+  @Matches(WHATSAPP_REGEX, {
+    message: 'whatsapp_phone inválido (use dígitos, +, espaços, () ou -).',
+  })
+  whatsapp_phone?: string;
 
   /**
    * Especialidades/serviços que o profissional atende. Texto livre por org

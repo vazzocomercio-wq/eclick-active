@@ -11,6 +11,8 @@ export interface MemberView {
   role: OrgMemberRole;
   status: 'active' | 'invited' | 'suspended';
   workspace_ids: string[];
+  /** WhatsApp do operador (só dígitos/+). NULL = sem alerta de tarefa urgente. */
+  whatsapp_phone: string | null;
   last_seen_at: string | null;
   /** Especialidades/serviços que atende. Genérico por nicho. */
   specialties: string[];
@@ -33,12 +35,14 @@ export interface InviteMemberInput {
   email: string;
   role: 'admin' | 'manager' | 'agent' | 'viewer';
   display_name?: string;
+  whatsapp_phone?: string;
 }
 
 export interface UpdateMemberInput {
   role?: OrgMemberRole;
   workspace_ids?: string[];
   display_name?: string;
+  whatsapp_phone?: string;
   specialties?: string[];
   default_duration_minutes?: number | null;
   default_buffer_minutes?: number;
