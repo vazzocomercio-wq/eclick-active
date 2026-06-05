@@ -59,6 +59,10 @@ import { MetaAdsConnector } from './trends/connectors/meta-ads.connector';
 import { InstagramConnector } from './trends/connectors/instagram.connector';
 import { InstagramProfileConnector } from './trends/connectors/instagram-profile.connector';
 import { TikTokProfileConnector } from './trends/connectors/tiktok-profile.connector';
+import { HeyGenController } from './heygen/heygen.controller';
+import { HeyGenService } from './heygen/heygen.service';
+import { HeyGenProvider } from './heygen/heygen.provider';
+import { HeyGenPollWorker } from './heygen/heygen-poll.worker';
 import { AlertsModule } from '../alerts/alerts.module';
 import { ChannelsModule as ChannelDispatcherModule } from '../../common/channels/channels.module';
 import { SlackModule } from '../../common/slack/slack.module';
@@ -87,6 +91,7 @@ import { BridgeModule } from '../bridge/bridge.module';
     SocialIntelligenceController,
     TrendsController,
     TrendsThumbController,
+    HeyGenController,
   ],
   providers: [
     SocialBrandsService,
@@ -134,6 +139,9 @@ import { BridgeModule } from '../bridge/bridge.module';
     InstagramConnector,
     InstagramProfileConnector,
     TikTokProfileConnector,
+    HeyGenProvider,
+    HeyGenService,
+    HeyGenPollWorker,
   ],
   exports: [
     SocialBrandsService,

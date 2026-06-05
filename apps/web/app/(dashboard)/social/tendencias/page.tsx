@@ -5,7 +5,7 @@ import Link from 'next/link';
 import {
   ArrowLeft, Radar, RefreshCw, Loader2, Plus, Trash2, Play, TrendingUp,
   Megaphone, AtSign, Music, Sparkles, CheckCircle2, CircleDashed, Eye, DownloadCloud,
-  Wand2, X, Brain, Hash, Users, FlaskConical, Globe2,
+  Wand2, X, Brain, Hash, Users, FlaskConical, Globe2, Clapperboard, ExternalLink, AlertTriangle,
 } from 'lucide-react';
 import {
   socialApi,
@@ -20,6 +20,8 @@ import {
   type TrendProfile,
   type TrendPattern,
   type ProfileNetwork,
+  type HeyGenJob,
+  type HeyGenOptions,
 } from '@/lib/api/social';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -106,9 +108,19 @@ export default function TendenciasPage() {
   // duração-alvo do roteiro de vídeo longo de YouTube (0 = Auto, deixa a IA decidir)
   const [targetMin, setTargetMin] = useState(0);
 
+  // HeyGen — texto-para-vídeo com avatar
+  const [heygenConfigured, setHeygenConfigured] = useState(false);
+  const [heygenJobs, setHeygenJobs] = useState<HeyGenJob[]>([]);
+  const [hgBrief, setHgBrief] = useState<TrendBrief | null>(null); // pauta do modal aberto
+  const [hgOptions, setHgOptions] = useState<HeyGenOptions | null>(null);
+  const [hgLoadingOpts, setHgLoadingOpts] = useState(false);
+  const [hgAvatar, setHgAvatar] = useState('');
+  const [hgVoice, setHgVoice] = useState('');
+  const [hgCreating, setHgCreating] = useState(false);
+
   const load = async () => {
     try {
-      const [o, m, s, it, b, pf, pt] = await Promise.all([
+      const [o, m, s, it, b, pf, pt, hgStatus, hgJobs] = await Promise.all([
         socialApi.trends.overview(),
         socialApi.trends.monitors(),
         socialApi.trends.signals(),
@@ -116,6 +128,8 @@ export default function TendenciasPage() {
         socialApi.trends.briefs(),
         socialApi.trends.profiles(),
         socialApi.trends.patterns(),
+        socialApi.heygen.status().catch(() => ({ configured: false })),
+        socialApi.heygen.jobs().catch(() => [] as HeyGenJob[]),
       ]);
       setOverview(o);
       setMonitors(m);
@@ -124,6 +138,8 @@ export default function TendenciasPage() {
       setBriefs(b);
       setProfiles(pf);
       setPatterns(pt);
+      setHeygenConfigured(hgStatus.configured);
+      setHeygenJobs(hgJobs);
     } catch {
       /* silent */
     } finally {
@@ -134,6 +150,27 @@ export default function TendenciasPage() {
   useEffect(() => {
     void load();
   }, []);
+
+  // Polling dos jobs HeyGen em andamento (a leitura do job atualiza o status no
+  // servidor). Recria o intervalo só quando o conjunto de jobs abertos muda.
+  const openHeygenIds = heygenJobs
+    .filter((j) => j.status === 'pending' || j.status === 'processing')
+    .map((j) => j.id)
+    .join(',');
+  useEffect(() => {
+    if (!openHeygenIds) return;
+    const ids = openHeygenIds.split(',');
+    const tick = async () => {
+      const updated = await Promise.all(
+        ids.map((id) => socialApi.heygen.job(id).catch(() => null)),
+      );
+      setHeygenJobs((prev) =>
+        prev.map((j) => updated.find((u) => u && u.id === j.id) ?? j),
+      );
+    };
+    const t = setInterval(() => void tick(), 8000);
+    return () => clearInterval(t);
+  }, [openHeygenIds]);
 
   const addMonitor = async () => {
     if (!fCategory.trim()) return;
@@ -222,6 +259,49 @@ export default function TendenciasPage() {
       await socialApi.trends.dismissBrief(id);
     } catch {
       /* silent */
+    }
+  };
+
+  // Abre o modal HeyGen pra uma pauta e carrega avatares/vozes.
+  const openHeygen = async (b: TrendBrief) => {
+    setHgBrief(b);
+    setHgOptions(null);
+    setHgAvatar('');
+    setHgVoice('');
+    setHgLoadingOpts(true);
+    try {
+      const o = await socialApi.heygen.options();
+      setHgOptions(o);
+      if (o.avatars[0]) setHgAvatar(o.avatars[0].avatar_id);
+      // default: prioriza uma voz em português
+      const pt = o.voices.find((v) => (v.language ?? '').toLowerCase().includes('port'))
+        ?? o.voices[0];
+      if (pt) setHgVoice(pt.voice_id);
+    } catch {
+      setHgOptions({ configured: false, avatars: [], voices: [] });
+    } finally {
+      setHgLoadingOpts(false);
+    }
+  };
+
+  // Dispara a geração REAL do vídeo (custo $) — só por clique explícito aqui.
+  const createHeygen = async () => {
+    if (!hgBrief || !hgAvatar || !hgVoice) return;
+    setHgCreating(true);
+    setCollectMsg(null);
+    try {
+      const job = await socialApi.heygen.createJob({
+        brief_id: hgBrief.id,
+        avatar_id: hgAvatar,
+        voice_id: hgVoice,
+      });
+      setHeygenJobs((prev) => [job, ...prev]);
+      setHgBrief(null);
+      setCollectMsg('Vídeo enviado pro HeyGen — acompanhe o progresso na seção “Vídeos HeyGen”.');
+    } catch (e) {
+      setCollectMsg(`Falha ao gerar vídeo no HeyGen: ${(e as Error)?.message ?? 'erro'}`);
+    } finally {
+      setHgCreating(false);
     }
   };
 
@@ -868,18 +948,92 @@ export default function TendenciasPage() {
                             ))}
                           </div>
                         )}
-                        <Button size="sm" className="mt-auto w-full" asChild>
-                          <Link href={briefHref(b, prod)}>
-                            <Wand2 className="h-3.5 w-3.5" />
-                            <span className="ml-1">Gerar conteúdo</span>
-                          </Link>
-                        </Button>
+                        <div className="mt-auto flex flex-col gap-1.5">
+                          <Button size="sm" className="w-full" asChild>
+                            <Link href={briefHref(b, prod)}>
+                              <Wand2 className="h-3.5 w-3.5" />
+                              <span className="ml-1">Gerar conteúdo</span>
+                            </Link>
+                          </Button>
+                          {heygenConfigured && b.script && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="w-full"
+                              onClick={() => void openHeygen(b)}
+                              title="Transformar este roteiro num vídeo com avatar (HeyGen)"
+                            >
+                              <Clapperboard className="h-3.5 w-3.5" />
+                              <span className="ml-1">Vídeo no HeyGen</span>
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
                 </div>
               )}
             </section>
+
+            {/* ── VÍDEOS HEYGEN (avatar a partir do roteiro) ── */}
+            {(heygenConfigured || heygenJobs.length > 0) && (
+              <section className="mb-6">
+                <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                  <Clapperboard className="h-4 w-4 text-primary" />Vídeos HeyGen
+                  <span className="text-xs font-normal text-muted-foreground">· roteiro da pauta → vídeo com avatar</span>
+                </h2>
+                {heygenJobs.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-border bg-muted/20 p-6 text-center text-sm text-muted-foreground">
+                    Nenhum vídeo gerado ainda. Em qualquer pauta com roteiro, clique em{' '}
+                    <span className="font-medium">Vídeo no HeyGen</span> pra transformá-la num vídeo com avatar.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {heygenJobs.map((j) => (
+                      <div key={j.id} className="flex flex-col overflow-hidden rounded-lg border border-border bg-card">
+                        {j.status === 'completed' && j.video_url ? (
+                          // eslint-disable-next-line jsx-a11y/media-has-caption
+                          <video
+                            src={j.video_url}
+                            poster={j.thumbnail_url ?? undefined}
+                            controls
+                            className="aspect-video w-full bg-muted object-cover"
+                          />
+                        ) : (
+                          <div className="flex aspect-video w-full flex-col items-center justify-center gap-1 bg-muted text-muted-foreground">
+                            {j.status === 'failed' ? (
+                              <AlertTriangle className="h-6 w-6 text-destructive" />
+                            ) : (
+                              <Loader2 className="h-6 w-6 animate-spin" />
+                            )}
+                            <span className="text-[11px]">
+                              {j.status === 'failed' ? 'Falhou' : j.status === 'pending' ? 'Na fila…' : 'Gerando…'}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex flex-col gap-1 p-2">
+                          <p className="line-clamp-1 text-[12px] font-medium">{j.title ?? 'Vídeo HeyGen'}</p>
+                          {j.status === 'failed' && j.error && (
+                            <p className="line-clamp-2 text-[10px] text-destructive">{j.error}</p>
+                          )}
+                          {j.status === 'completed' && j.video_url && (
+                            <a
+                              href={j.video_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="flex items-center gap-1 text-[11px] text-primary hover:underline"
+                            >
+                              <ExternalLink className="h-3 w-3" />Abrir vídeo
+                              {j.duration_sec ? ` · ${Math.round(j.duration_sec)}s` : ''}
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
 
             <p className="text-[11px] text-muted-foreground">
               O Radar evolui em fases: conectores YouTube + Google Trends (TR-1), Meta Ad Library + Instagram (TR-2),
@@ -888,6 +1042,92 @@ export default function TendenciasPage() {
           </>
         )}
       </div>
+
+      {/* ── MODAL: gerar vídeo no HeyGen a partir da pauta ── */}
+      {hgBrief && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => !hgCreating && setHgBrief(null)}
+        >
+          <div
+            className="flex max-h-[85vh] w-full max-w-lg flex-col gap-3 overflow-y-auto rounded-xl border border-border bg-background p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Clapperboard className="h-5 w-5 text-primary" />
+                <div>
+                  <h3 className="text-sm font-semibold leading-tight">Gerar vídeo no HeyGen</h3>
+                  <p className="text-[11px] text-muted-foreground line-clamp-1">{hgBrief.title}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => !hgCreating && setHgBrief(null)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {hgLoadingOpts ? (
+              <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Carregando avatares e vozes…
+              </div>
+            ) : !hgOptions?.configured ? (
+              <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-foreground/80">
+                HeyGen não configurado. Defina a <span className="font-mono">HEYGEN_API_KEY</span> na active-api pra liberar a geração de vídeo com avatar.
+              </div>
+            ) : hgOptions.avatars.length === 0 || hgOptions.voices.length === 0 ? (
+              <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-foreground/80">
+                Sua conta HeyGen não retornou avatares/vozes disponíveis. Verifique o plano e as permissões da chave.
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] text-muted-foreground">Avatar</label>
+                  <select
+                    value={hgAvatar}
+                    onChange={(e) => setHgAvatar(e.target.value)}
+                    className="rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                  >
+                    {hgOptions.avatars.map((a) => (
+                      <option key={a.avatar_id} value={a.avatar_id}>
+                        {a.name ?? a.avatar_id}{a.gender ? ` · ${a.gender}` : ''}{a.premium ? ' · premium' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] text-muted-foreground">Voz</label>
+                  <select
+                    value={hgVoice}
+                    onChange={(e) => setHgVoice(e.target.value)}
+                    className="rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                  >
+                    {hgOptions.voices.map((v) => (
+                      <option key={v.voice_id} value={v.voice_id}>
+                        {v.name ?? v.voice_id}{v.language ? ` · ${v.language}` : ''}{v.gender ? ` · ${v.gender}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  A narração do roteiro será falada pelo avatar (timestamps e rubricas de cena são removidos automaticamente). A geração tem custo no HeyGen.
+                </p>
+                <div className="flex justify-end gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => setHgBrief(null)} disabled={hgCreating}>
+                    Cancelar
+                  </Button>
+                  <Button size="sm" onClick={() => void createHeygen()} disabled={hgCreating || !hgAvatar || !hgVoice}>
+                    {hgCreating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Clapperboard className="h-3.5 w-3.5" />}
+                    <span className="ml-1">{hgCreating ? 'Enviando…' : 'Gerar vídeo'}</span>
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

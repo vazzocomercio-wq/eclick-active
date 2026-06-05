@@ -958,6 +958,53 @@ export interface TrendBriefProduct {
   product_id: string | null;
   photo_url: string | null;
 }
+// ─── HeyGen (texto-para-vídeo com avatar) ─────────
+export interface HeyGenAvatar {
+  avatar_id: string;
+  name: string | null;
+  gender: string | null;
+  preview_image_url: string | null;
+  premium: boolean;
+}
+export interface HeyGenVoice {
+  voice_id: string;
+  name: string | null;
+  language: string | null;
+  gender: string | null;
+  preview_audio: string | null;
+}
+export interface HeyGenOptions {
+  configured: boolean;
+  avatars: HeyGenAvatar[];
+  voices: HeyGenVoice[];
+}
+export interface HeyGenJob {
+  id: string;
+  org_id: string;
+  brief_id: string | null;
+  avatar_id: string;
+  voice_id: string;
+  title: string | null;
+  script: string;
+  dimension: { width: number; height: number };
+  heygen_video_id: string | null;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  video_url: string | null;
+  thumbnail_url: string | null;
+  duration_sec: number | null;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+export interface CreateHeyGenJobPayload {
+  brief_id?: string;
+  script?: string;
+  title?: string;
+  avatar_id: string;
+  voice_id: string;
+  width?: number;
+  height?: number;
+}
 export interface TrendSourceStatus {
   source: TrendNetwork;
   label: string;
@@ -1360,6 +1407,20 @@ export const socialApi = {
       api.get<TrendPattern[]>('/social/trends/patterns', { query: params, signal }),
     analyze: (body: { category?: string; network?: TrendNetwork; limit?: number } = {}) =>
       api.post<{ patterns: number }>('/social/trends/analyze', body),
+  },
+
+  // HeyGen — texto-para-vídeo com avatar a partir do roteiro da pauta
+  heygen: {
+    status: (signal?: AbortSignal) =>
+      api.get<{ configured: boolean }>('/social/heygen/status', { signal }),
+    options: (signal?: AbortSignal) =>
+      api.get<HeyGenOptions>('/social/heygen/options', { signal }),
+    jobs: (signal?: AbortSignal) =>
+      api.get<HeyGenJob[]>('/social/heygen/jobs', { signal }),
+    job: (id: string, signal?: AbortSignal) =>
+      api.get<HeyGenJob>(`/social/heygen/jobs/${id}`, { signal }),
+    createJob: (body: CreateHeyGenJobPayload) =>
+      api.post<HeyGenJob>('/social/heygen/jobs', body),
   },
 
   // A/B Testing
