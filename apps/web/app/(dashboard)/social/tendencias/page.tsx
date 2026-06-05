@@ -303,24 +303,32 @@ export default function TendenciasPage() {
   };
 
   const removeMonitor = async (id: string) => {
-    if (!confirm('Remover este monitor de tendência?')) return;
+    const mon = monitors.find((m) => m.id === id);
+    const cat = mon?.category;
+    const shared = cat ? monitors.filter((m) => m.category === cat).length > 1 : false;
+    const msg = cat && !shared
+      ? `Remover a categoria "${cat}"? Isso apaga o monitor e os itens/sinais/pautas dela.`
+      : 'Remover este monitor de tendência?';
+    if (!confirm(msg)) return;
     try {
       await socialApi.trends.deleteMonitor(id);
       setMonitors((prev) => prev.filter((m) => m.id !== id));
+      // se a categoria removida estava selecionada, volta pra "Todas"
+      if (cat && !shared && activeCategory === cat) setActiveCategory('');
       void load();
     } catch {
       /* silent */
     }
   };
 
-  // categorias disponíveis (monitores + perfis + itens coletados)
+  // Categorias do dropdown = SÓ as categorias monitoradas (os monitores).
+  // Excluir um monitor remove a categoria daqui na hora; itens/perfis órfãos
+  // não poluem mais o seletor.
   const categories = useMemo(() => {
     const set = new Set<string>();
     monitors.forEach((m) => m.category && set.add(m.category));
-    profiles.forEach((p) => p.category && set.add(p.category));
-    items.forEach((it) => it.category && set.add(it.category));
     return [...set].sort((a, b) => a.localeCompare(b, 'pt-BR'));
-  }, [monitors, profiles, items]);
+  }, [monitors]);
 
   // escopo aplicado às seções de dados
   const fItems = activeCategory ? items.filter((i) => i.category === activeCategory) : items;

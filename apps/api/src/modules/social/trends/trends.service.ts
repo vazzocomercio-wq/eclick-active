@@ -179,12 +179,38 @@ export class TrendsService {
   }
 
   async deleteMonitor(orgId: string, id: string): Promise<void> {
+    // 1) descobre a categoria do monitor antes de apagar (p/ limpar órfãos)
+    const { data: mon } = await this.supabase.adminClient
+      .from('trend_monitors')
+      .select('category')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .maybeSingle();
+    const category = (mon as { category?: string } | null)?.category ?? null;
+
+    // 2) apaga o monitor
     const { error } = await this.supabase.adminClient
       .from('trend_monitors')
       .delete()
       .eq('id', id)
       .eq('org_id', orgId);
     if (error) throw error;
+
+    // 3) se NENHUM outro monitor usa essa categoria, limpa os dados órfãos dela
+    //    (itens/sinais/pautas) — pra a categoria sumir de vez (dropdown + listas),
+    //    não virar resíduo. Categoria compartilhada por outro monitor é preservada.
+    if (category) {
+      const { count } = await this.supabase.adminClient
+        .from('trend_monitors')
+        .select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId)
+        .eq('category', category);
+      if ((count ?? 0) === 0) {
+        await this.supabase.adminClient.from('trend_items').delete().eq('org_id', orgId).eq('category', category);
+        await this.supabase.adminClient.from('trend_signals').delete().eq('org_id', orgId).eq('category', category);
+        await this.supabase.adminClient.from('trend_briefs').delete().eq('org_id', orgId).eq('category', category);
+      }
+    }
   }
 
   async getMonitor(orgId: string, id: string): Promise<TrendMonitor> {
