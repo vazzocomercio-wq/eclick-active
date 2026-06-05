@@ -25,6 +25,7 @@ import {
   Megaphone,
   MessageSquare,
   Newspaper,
+  Radar,
   Settings,
   TrendingUp,
   UserCog,
@@ -84,6 +85,7 @@ const PRIMARY_NAV: NavEntry[] = [
   {
     type: 'group', key: 'crm', icon: Users, labelKey: 'sections.crm',
     items: [
+      { type: 'item', href: '/prospect',    icon: Radar,    labelKey: 'items.prospeccao', tag: 'AI' },
       { type: 'item', href: '/funis',       icon: Kanban,   labelKey: 'items.funis' },
       { type: 'item', href: '/contatos',    icon: Users,    labelKey: 'items.contatos' },
       { type: 'item', href: '/formularios', icon: FileText, labelKey: 'items.formularios' },
