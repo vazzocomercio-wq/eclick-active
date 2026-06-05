@@ -140,12 +140,36 @@ export class HeyGenService {
     let sceneCount = 1;
     try {
       if (useTemplate) {
-        // Modo template: injeta o roteiro na variável de texto do template.
-        const variable = await this.resolveTemplateTextVariable(dto.template_id as string);
+        // Modo template: injeta o roteiro na variável do template. Variável de
+        // fala é tipo `voice` (exige voice_id); legenda é `text`.
+        const variable = await this.resolveTemplateVariable(dto.template_id as string);
+        let payload: Record<string, unknown>;
+        if (variable.type === 'voice') {
+          if (!dto.voice_id) {
+            throw new BadRequestException(
+              'Escolha uma voz: o roteiro deste template é falado pelo avatar e o HeyGen exige uma voz.',
+            );
+          }
+          payload = {
+            [variable.name]: {
+              name: variable.name,
+              type: 'voice',
+              properties: { type: 'text', input_text: narration, voice_id: dto.voice_id },
+            },
+          };
+        } else {
+          payload = {
+            [variable.name]: {
+              name: variable.name,
+              type: 'text',
+              properties: { content: narration },
+            },
+          };
+        }
         const dim = dto.width && dto.height ? dimension : undefined; // template define o layout
         videoId = await this.provider.generateFromTemplate(
           dto.template_id as string,
-          { [variable]: narration },
+          payload,
           dim,
           title ?? undefined,
         );
@@ -169,7 +193,7 @@ export class HeyGenService {
         org_id: orgId,
         brief_id: dto.brief_id ?? null,
         avatar_id: useTemplate ? null : dto.avatar_id,
-        voice_id: useTemplate ? null : dto.voice_id,
+        voice_id: dto.voice_id ?? null,
         template_id: dto.template_id ?? null,
         title: (title ?? '').slice(0, 200) || null,
         script: narration.slice(0, 20000),
@@ -190,23 +214,27 @@ export class HeyGenService {
   }
 
   /**
-   * Descobre em qual variável do template o roteiro deve entrar: pega as
-   * variáveis de texto e prefere a que parece ser a fala (script/fala/roteiro/
-   * texto/narração); senão, a primeira. Erro acionável se o template não tiver
-   * nenhuma variável de texto.
+   * Descobre em qual variável do template o roteiro deve entrar e de que tipo
+   * ela é. No HeyGen, a fala marcada como "API Variable" vira tipo `voice`
+   * (exige voice_id no generate); uma legenda/texto na tela é `text`. Preferimos
+   * a variável com nome de fala (script/fala/roteiro/…). Erro acionável se o
+   * template não tiver variável aproveitável.
    */
-  private async resolveTemplateTextVariable(templateId: string): Promise<string> {
+  private async resolveTemplateVariable(
+    templateId: string,
+  ): Promise<{ name: string; type: string }> {
     const vars = await this.provider.getTemplateVariables(templateId);
-    const textVars = vars.filter((v) => (v.type || 'text').toLowerCase() === 'text');
-    if (!textVars.length) {
+    const usable = vars.filter((v) => ['voice', 'text'].includes((v.type || 'text').toLowerCase()));
+    if (!usable.length) {
       throw new BadRequestException(
-        'Esse template não tem nenhuma variável de texto. No HeyGen Studio, marque a fala/roteiro do avatar como variável.',
+        'Esse template não tem variável de fala/texto. No HeyGen Studio, selecione o roteiro do avatar e marque como "API Variable".',
       );
     }
-    const preferred = textVars.find((v) =>
-      /script|fala|roteiro|texto|narra|speech|caption/i.test(v.name),
-    );
-    return (preferred ?? textVars[0]).name;
+    const preferred =
+      usable.find((v) => (v.type || '').toLowerCase() === 'voice') ??
+      usable.find((v) => /script|fala|roteiro|texto|narra|speech|caption/i.test(v.name)) ??
+      usable[0];
+    return { name: preferred.name, type: (preferred.type || 'text').toLowerCase() };
   }
 
   /** Atualiza 1 job consultando o status no HeyGen. Retorna a row atualizada. */

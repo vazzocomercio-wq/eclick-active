@@ -202,26 +202,18 @@ export class HeyGenProvider {
   }
 
   /**
-   * Gera a partir de um template, preenchendo as variáveis de texto com o
-   * roteiro. `variables` mapeia nome→conteúdo. Dimensão é opcional (o template
-   * já define o layout); só enviamos se vier explícita.
+   * Gera a partir de um template. `variables` já vem no shape EXATO que o HeyGen
+   * espera (o service monta conforme o tipo de cada variável — text usa
+   * properties.content; voice/script usa properties.{type,input_text,voice_id}).
+   * Dimensão é opcional (o template já define o layout).
    */
   async generateFromTemplate(
     templateId: string,
-    variables: Record<string, string>,
+    variables: Record<string, unknown>,
     dimension?: HeyGenDimension,
     title?: string,
   ): Promise<string> {
-    const body: Record<string, unknown> = {
-      test: false,
-      caption: false,
-      variables: Object.fromEntries(
-        Object.entries(variables).map(([name, content]) => [
-          name,
-          { name, type: 'text', properties: { content } },
-        ]),
-      ),
-    };
+    const body: Record<string, unknown> = { test: false, caption: false, variables };
     if (dimension) body.dimension = dimension;
     if (title) body.title = title.slice(0, 200);
     const data = await this.call<{ video_id: string }>(

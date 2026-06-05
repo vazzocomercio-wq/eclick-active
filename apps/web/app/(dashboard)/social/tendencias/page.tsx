@@ -290,16 +290,16 @@ export default function TendenciasPage() {
 
   // Dispara a geração REAL do vídeo (custo $) — só por clique explícito aqui.
   const createHeygen = async () => {
-    // modo template: precisa do template; modo avulso: avatar + voz
-    if (!hgBrief || (hgTemplate ? false : !hgAvatar || !hgVoice)) return;
+    // tanto template quanto avulso precisam de voz (o HeyGen exige voice_id na
+    // variável de fala do template); avatar/fundo do template vêm dele.
+    if (!hgBrief || !hgVoice || (!hgTemplate && !hgAvatar)) return;
     setHgCreating(true);
     setCollectMsg(null);
     try {
       const job = await socialApi.heygen.createJob({
         brief_id: hgBrief.id,
-        ...(hgTemplate
-          ? { template_id: hgTemplate }
-          : { avatar_id: hgAvatar, voice_id: hgVoice }),
+        voice_id: hgVoice,
+        ...(hgTemplate ? { template_id: hgTemplate } : { avatar_id: hgAvatar }),
       });
       setHeygenJobs((prev) => [job, ...prev]);
       setHgBrief(null);
@@ -1106,42 +1106,41 @@ export default function TendenciasPage() {
                     </select>
                   </div>
                 )}
-                {hgTemplate ? (
+                {hgTemplate && (
                   <p className="rounded-md border border-primary/30 bg-primary/5 p-2 text-[11px] text-foreground/80">
-                    Usando o template selecionado: avatar, voz, fundo e ambiente vêm dele. Só o roteiro da pauta é injetado.
+                    Usando o template selecionado: avatar, fundo e ambiente vêm dele. Só o roteiro é injetado — escolha a voz abaixo (o HeyGen exige uma voz pra fala do template).
                   </p>
-                ) : (
-                  <>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[11px] text-muted-foreground">Avatar</label>
-                      <select
-                        value={hgAvatar}
-                        onChange={(e) => setHgAvatar(e.target.value)}
-                        className="rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-                      >
-                        {hgOptions.avatars.map((a) => (
-                          <option key={a.avatar_id} value={a.avatar_id}>
-                            {a.name ?? a.avatar_id}{a.gender ? ` · ${a.gender}` : ''}{a.premium ? ' · premium' : ''}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[11px] text-muted-foreground">Voz</label>
-                      <select
-                        value={hgVoice}
-                        onChange={(e) => setHgVoice(e.target.value)}
-                        className="rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-                      >
-                        {hgOptions.voices.map((v) => (
-                          <option key={v.voice_id} value={v.voice_id}>
-                            {v.name ?? v.voice_id}{v.language ? ` · ${v.language}` : ''}{v.gender ? ` · ${v.gender}` : ''}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </>
                 )}
+                {!hgTemplate && (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] text-muted-foreground">Avatar</label>
+                    <select
+                      value={hgAvatar}
+                      onChange={(e) => setHgAvatar(e.target.value)}
+                      className="rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                    >
+                      {hgOptions.avatars.map((a) => (
+                        <option key={a.avatar_id} value={a.avatar_id}>
+                          {a.name ?? a.avatar_id}{a.gender ? ` · ${a.gender}` : ''}{a.premium ? ' · premium' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] text-muted-foreground">Voz</label>
+                  <select
+                    value={hgVoice}
+                    onChange={(e) => setHgVoice(e.target.value)}
+                    className="rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                  >
+                    {hgOptions.voices.map((v) => (
+                      <option key={v.voice_id} value={v.voice_id}>
+                        {v.name ?? v.voice_id}{v.language ? ` · ${v.language}` : ''}{v.gender ? ` · ${v.gender}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <p className="text-[11px] text-muted-foreground">
                   A narração do roteiro será falada pelo avatar (timestamps e rubricas de cena são removidos automaticamente). A geração tem custo no HeyGen.
                 </p>
@@ -1149,7 +1148,7 @@ export default function TendenciasPage() {
                   <Button variant="ghost" size="sm" onClick={() => setHgBrief(null)} disabled={hgCreating}>
                     Cancelar
                   </Button>
-                  <Button size="sm" onClick={() => void createHeygen()} disabled={hgCreating || (hgTemplate ? false : (!hgAvatar || !hgVoice))}>
+                  <Button size="sm" onClick={() => void createHeygen()} disabled={hgCreating || !hgVoice || (!hgTemplate && !hgAvatar)}>
                     {hgCreating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Clapperboard className="h-3.5 w-3.5" />}
                     <span className="ml-1">{hgCreating ? 'Enviando…' : 'Gerar vídeo'}</span>
                   </Button>
