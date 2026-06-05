@@ -62,8 +62,15 @@ export class TrendsBriefService {
   async generate(
     orgId: string,
     category?: string,
+    targetMinutes?: number,
   ): Promise<{ signals: number; briefs: number }> {
     const cat = category?.trim() || undefined;
+    // Duração-alvo do roteiro (só faz sentido p/ vídeo longo de YouTube).
+    // Clampa em 1-30 min pra não estourar tokens nem gerar lixo.
+    const mins =
+      targetMinutes != null && Number.isFinite(targetMinutes) && targetMinutes > 0
+        ? Math.min(30, Math.max(1, Math.round(targetMinutes)))
+        : undefined;
     const [items, organic, candidates, monitors] = await Promise.all([
       this.trends.listItems(orgId, { category: cat, limit: 40 }),
       this.bridge.getOrganicSummary(orgId).catch(() => null),
@@ -87,7 +94,7 @@ export class TrendsBriefService {
     }
 
     const signals = await this.buildSignals(orgId, items, cat);
-    const briefs = await this.buildBriefs(orgId, items, organic, candidates, cat, networks);
+    const briefs = await this.buildBriefs(orgId, items, organic, candidates, cat, networks, mins);
     return { signals, briefs };
   }
 
@@ -242,8 +249,17 @@ export class TrendsBriefService {
     candidates: CampaignCandidate[],
     scopedCategory?: string,
     networks: TrendNetwork[] = [],
+    targetMinutes?: number,
   ): Promise<number> {
-    const fmt = formatGuidance(networks);
+    const fmt = formatGuidance(networks, targetMinutes);
+    // Vídeo longo dimensionado: gera MENOS pautas (roteiros completos cabem nos
+    // tokens) e libera mais max_tokens. Sem duração → 4 pautas-ideia como antes.
+    const tMin = targetMinutes && targetMinutes > 0 ? targetMinutes : 0;
+    const isLongVideo = tMin > 0 && fmt.allowed.includes('youtube');
+    const briefCount = isLongVideo ? (tMin >= 8 ? 2 : 3) : 4;
+    const maxTokens = isLongVideo
+      ? Math.min(16000, 1800 + briefCount * tMin * 260)
+      : 4096;
     const trendText = items.length
       ? items
           .slice(0, 15)
@@ -299,7 +315,7 @@ export class TrendsBriefService {
       'PRODUTO DA LOJA (OPCIONAL — só inclua em suggested_products se o produto for do MESMO nicho/assunto da tendência; se não houver encaixe natural, deixe suggested_products = [] e faça conteúdo puro de autoridade que cresce o público):',
       candText,
       '',
-      'Gere EXATAMENTE 4 pautas, TODAS em português do Brasil. JSON:',
+      `Gere EXATAMENTE ${briefCount} pauta(s), TODAS em português do Brasil. JSON:`,
       `{"briefs":[{"title":"<em PT-BR>","category":"...","format":"${fmt.enumHint}","hook":"<gancho em PT-BR, modelado num vencedor>","script":"<roteiro em PT-BR no formato da plataforma de destino>","visual_style":"<estilo visual>","suggested_products":["<só se houver encaixe real de nicho; senão deixe a lista vazia>"],"hashtags":["#..."],"cta":"<em PT-BR>","rationale":"<por que ESTE gancho/formato modela um vencedor e CRESCE a audiência — cite o trend de referência; mencione produto só se houver encaixe real>"}]}`,
     ].join('\n');
 
@@ -312,7 +328,7 @@ export class TrendsBriefService {
         system: BRIEF_SYSTEM,
         user,
         json_mode: true,
-        max_tokens: 4096,
+        max_tokens: maxTokens,
         temperature: 0.7,
       });
       cost = (r as { cost_usd?: number }).cost_usd ?? 0;
@@ -348,6 +364,14 @@ export class TrendsBriefService {
       const format = fmt.allowed.includes(String(b.format))
         ? String(b.format)
         : fmt.allowed[0];
+      // Duração-alvo p/ alimentar Studio/HeyGen: vídeo longo = pedido do user;
+      // Short ≈ 45s; demais formatos não têm duração-alvo.
+      const targetSeconds =
+        format === 'youtube'
+          ? (tMin > 0 ? tMin * 60 : null)
+          : format === 'youtube_short'
+            ? 45
+            : null;
       const suggested = (Array.isArray(b.suggested_products) ? b.suggested_products : [])
         .slice(0, 4)
         .map((name) => {
@@ -369,7 +393,8 @@ export class TrendsBriefService {
         title: String(b.title ?? '').slice(0, 160),
         format,
         hook: String(b.hook ?? '').slice(0, 300) || null,
-        script: String(b.script ?? '').slice(0, 2000) || null,
+        // roteiro de vídeo longo pode ter ~1800+ palavras (12 min) — limite alto
+        script: String(b.script ?? '').slice(0, 12000) || null,
         visual_style: String(b.visual_style ?? '').slice(0, 300) || null,
         suggested_products: suggested,
         hashtags: (Array.isArray(b.hashtags) ? b.hashtags : [])
@@ -377,6 +402,7 @@ export class TrendsBriefService {
           .map((h) => String(h).slice(0, 40)),
         cta: String(b.cta ?? '').slice(0, 200) || null,
         rationale: String(b.rationale ?? '').slice(0, 500) || null,
+        target_seconds: targetSeconds,
         status: 'draft',
         cost_usd: perCost,
       };
@@ -441,7 +467,27 @@ export class TrendsBriefService {
  * DESTINO da categoria. O usuário PRODUZ para onde ele monitora: categoria de
  * YouTube → roteiro de vídeo de YouTube (longo ou Short), não reel/post/carrossel.
  */
-function formatGuidance(networks: TrendNetwork[]): {
+/**
+ * Especificação concreta de um roteiro de vídeo longo dimensionado pela duração
+ * pedida: ~150 palavras de narração/min, blocos com timestamps, roteiro COMPLETO
+ * (não resumo) pra o vídeo render os N minutos.
+ */
+function durationSpec(targetMinutes: number): string {
+  const mins = Math.min(30, Math.max(1, Math.round(targetMinutes)));
+  const words = mins * 150;
+  const blocks = Math.min(8, Math.max(3, Math.round(mins / 2)));
+  return (
+    `vídeo longo de ~${mins} min (format "youtube"): roteiro de ~${words} palavras de narração, ` +
+    `estruturado em ${blocks} blocos com timestamps [MM:SS] — abertura com gancho nos primeiros 15s, ` +
+    `${Math.max(1, blocks - 2)} blocos de desenvolvimento e fechamento com CTA de inscrição. ` +
+    'Escreva o roteiro COMPLETO (fala palavra-a-palavra + indicação de cena/corte), nunca um resumo'
+  );
+}
+
+function formatGuidance(
+  networks: TrendNetwork[],
+  targetMinutes?: number,
+): {
   allowed: string[];
   instruction: string;
   enumHint: string;
@@ -450,13 +496,19 @@ function formatGuidance(networks: TrendNetwork[]): {
   const hasYoutube = set.has('youtube');
   const hasSocial = set.has('instagram') || set.has('tiktok') || set.has('meta_ads');
 
+  // Especificação de roteiro de vídeo longo: ou dimensionada pela duração-alvo
+  // pedida, ou a faixa-padrão 5-12 min quando o user não escolheu.
+  const longSpec =
+    targetMinutes != null
+      ? durationSpec(targetMinutes)
+      : 'vídeo longo de 5-12 min (gancho nos primeiros segundos, desenvolvimento em blocos, CTA de inscrição)';
+
   if (hasYoutube && !hasSocial) {
     return {
       allowed: ['youtube', 'youtube_short'],
       instruction:
         'Estas pautas são para o YOUTUBE. Cada pauta é um ROTEIRO DE VÍDEO de YouTube — ' +
-        'use "youtube" para vídeo longo (5-12 min: gancho nos primeiros segundos, ' +
-        'desenvolvimento em blocos, CTA de inscrição) ou "youtube_short" para Shorts vertical ' +
+        `use "youtube" para ${longSpec} ou "youtube_short" para Shorts vertical ` +
         '(30-60s, gancho imediato, ritmo rápido). O campo script deve ser um roteiro de ' +
         'narração/cena de YouTube (fala + corte), NÃO uma legenda de post.',
       enumHint: 'youtube|youtube_short',
@@ -467,8 +519,8 @@ function formatGuidance(networks: TrendNetwork[]): {
       allowed: ['youtube', 'youtube_short', 'reel', 'post', 'carousel'],
       instruction:
         'Gere pautas no formato NATIVO da plataforma de cada tendência: roteiro de YouTube ' +
-        '(youtube / youtube_short) para tendências de YouTube; reel/post/carousel para ' +
-        'Instagram/TikTok. O campo script deve respeitar o formato escolhido.',
+        `(youtube = ${longSpec}; youtube_short = 30-60s) para tendências de YouTube; ` +
+        'reel/post/carousel para Instagram/TikTok. O campo script deve respeitar o formato escolhido.',
       enumHint: 'youtube|youtube_short|reel|post|carousel',
     };
   }

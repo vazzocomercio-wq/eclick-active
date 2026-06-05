@@ -152,13 +152,16 @@ export class TrendsController {
     return this.trends.listBriefs(user.org_id);
   }
 
-  /** TR-3 — gera sinais + pautas (IA). `category` escopa só aquele nicho. */
+  /**
+   * TR-3 — gera sinais + pautas (IA). `category` escopa só aquele nicho.
+   * `target_minutes` dimensiona o roteiro de vídeo longo de YouTube (3/5/8/12…).
+   */
   @Post('generate')
   generate(
     @CurrentUser() user: AuthUser,
-    @Body() body?: { category?: string },
+    @Body() body?: { category?: string; target_minutes?: number },
   ): Promise<{ signals: number; briefs: number }> {
-    return this.briefs.generate(user.org_id, body?.category);
+    return this.briefs.generate(user.org_id, body?.category, body?.target_minutes);
   }
 
   /** Limpa itens coletados (e sinais) por categoria e/ou mais antigos que N dias. */

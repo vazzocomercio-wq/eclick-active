@@ -49,7 +49,12 @@ function briefHref(b: TrendBrief, prod?: TrendBriefProduct): string {
   if (b.hook) params.set('hook', b.hook);
   if (prod?.product_id) params.set('product_id', prod.product_id);
   if (prod?.name) params.set('product_search', prod.name);
+  if (b.target_seconds) params.set('duration', String(b.target_seconds));
   return `/social/criar?${params.toString()}`;
+}
+/** "~5 min" / "~45s" a partir da duração-alvo em segundos. */
+function durationLabel(seconds: number): string {
+  return seconds >= 90 ? `~${Math.round(seconds / 60)} min` : `~${seconds}s`;
 }
 function NetIcon({ source, className }: { source: TrendNetwork; className?: string }) {
   switch (source) {
@@ -98,6 +103,8 @@ export default function TendenciasPage() {
   const [collectingId, setCollectingId] = useState<string | null>(null);
   const [collectMsg, setCollectMsg] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
+  // duração-alvo do roteiro de vídeo longo de YouTube (0 = Auto, deixa a IA decidir)
+  const [targetMin, setTargetMin] = useState(0);
 
   const load = async () => {
     try {
@@ -191,7 +198,10 @@ export default function TendenciasPage() {
     setGenerating(true);
     setCollectMsg(null);
     try {
-      const r = await socialApi.trends.generate(activeCategory || undefined);
+      const r = await socialApi.trends.generate(
+        activeCategory || undefined,
+        targetMin || undefined,
+      );
       const scope = activeCategory ? ` em "${activeCategory}"` : '';
       setCollectMsg(
         r.briefs > 0
@@ -335,6 +345,14 @@ export default function TendenciasPage() {
     return [...set].sort((a, b) => a.localeCompare(b, 'pt-BR'));
   }, [monitors]);
 
+  // O seletor de duração só faz sentido quando a categoria em foco é de YouTube
+  // (a pauta vira roteiro de vídeo). Sem categoria, basta haver 1 monitor de YT.
+  const youtubeRelevant = useMemo(() => {
+    const yt = monitors.filter((m) => m.network === 'youtube' && m.is_active);
+    if (!yt.length) return false;
+    return activeCategory ? yt.some((m) => m.category === activeCategory) : true;
+  }, [monitors, activeCategory]);
+
   // escopo aplicado às seções de dados
   const fItems = activeCategory ? items.filter((i) => i.category === activeCategory) : items;
   const fSignals = activeCategory ? signals.filter((s) => s.category === activeCategory) : signals;
@@ -374,6 +392,23 @@ export default function TendenciasPage() {
             {collecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <DownloadCloud className="h-3.5 w-3.5" />}
             <span className="ml-1">{collecting ? 'Coletando…' : 'Coletar'}</span>
           </Button>
+          {youtubeRelevant && (
+            <div className="flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1" title="Duração do roteiro de vídeo longo de YouTube (Shorts ficam sempre em 30-60s)">
+              <Play className="h-3 w-3 text-muted-foreground" />
+              <select
+                value={targetMin}
+                onChange={(e) => setTargetMin(Number(e.target.value))}
+                className="bg-transparent text-xs outline-none"
+                disabled={generating}
+              >
+                <option value={0}>Duração: auto</option>
+                <option value={3}>~3 min</option>
+                <option value={5}>~5 min</option>
+                <option value={8}>~8 min</option>
+                <option value={12}>~12 min</option>
+              </select>
+            </div>
+          )}
           <Button size="sm" onClick={() => void generateBriefs()} disabled={generating || loading} title={activeCategory ? `Gera pautas só de "${activeCategory}" (mude no seletor Categoria abaixo)` : 'Gera pautas de TODAS as categorias (selecione uma categoria abaixo p/ focar)'}>
             {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Brain className="h-3.5 w-3.5" />}
             <span className="ml-1">{generating ? 'Gerando…' : activeCategory ? `Gerar pautas · ${activeCategory}` : 'Gerar pautas IA'}</span>
@@ -795,6 +830,11 @@ export default function TendenciasPage() {
                           {b.category && (
                             <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">{b.category}</span>
                           )}
+                          {b.target_seconds ? (
+                            <span className="flex items-center gap-0.5 rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                              <Play className="h-2.5 w-2.5" />{durationLabel(b.target_seconds)}
+                            </span>
+                          ) : null}
                           <button
                             onClick={() => void dismissBrief(b.id)}
                             className="ml-auto text-muted-foreground hover:text-foreground"

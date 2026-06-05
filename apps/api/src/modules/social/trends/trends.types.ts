@@ -137,6 +137,8 @@ export interface TrendBrief {
   hashtags: string[];
   cta: string | null;
   rationale: string | null;
+  /** Duração-alvo do roteiro de vídeo, em segundos (null se não dimensionado). */
+  target_seconds: number | null;
   status: TrendBriefStatus;
   cost_usd: number;
   created_at: string;

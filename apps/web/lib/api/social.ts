@@ -947,6 +947,7 @@ export interface TrendBrief {
   hashtags: string[];
   cta: string | null;
   rationale: string | null;
+  target_seconds: number | null;
   status: 'draft' | 'used' | 'dismissed';
   cost_usd: number;
   created_at: string;
@@ -1323,10 +1324,13 @@ export const socialApi = {
       ),
     collectMonitor: (id: string) =>
       api.post<{ items: number }>(`/social/trends/monitors/${id}/collect`, {}),
-    generate: (category?: string) =>
+    generate: (category?: string, targetMinutes?: number) =>
       api.post<{ signals: number; briefs: number }>(
         '/social/trends/generate',
-        category ? { category } : {},
+        {
+          ...(category ? { category } : {}),
+          ...(targetMinutes ? { target_minutes: targetMinutes } : {}),
+        },
       ),
     clearItems: (body: { category?: string; older_than_days?: number }) =>
       api.post<{ deleted: number }>('/social/trends/items/clear', body),
