@@ -140,30 +140,26 @@ export class HeyGenService {
     let sceneCount = 1;
     try {
       if (useTemplate) {
-        // Modo template: injeta o roteiro na variável do template. Variável de
-        // fala é tipo `voice` (exige voice_id); legenda é `text`.
-        const variable = await this.resolveTemplateVariable(dto.template_id as string);
-        let payload: Record<string, unknown>;
-        if (variable.type === 'voice') {
-          if (!dto.voice_id) {
-            throw new BadRequestException(
-              'Escolha uma voz: o roteiro deste template é falado pelo avatar e o HeyGen exige uma voz.',
-            );
-          }
-          payload = {
-            [variable.name]: {
-              name: variable.name,
-              type: 'voice',
-              properties: { type: 'text', input_text: narration, voice_id: dto.voice_id },
-            },
-          };
-        } else {
-          payload = {
-            [variable.name]: {
-              name: variable.name,
-              type: 'text',
-              properties: { content: narration },
-            },
+        // Modo template: o ROTEIRO entra numa variável `text` (properties.content);
+        // a VOZ, se exposta como variável `voice`, recebe só o voice_id. Pela doc
+        // do HeyGen, variável `voice` SÓ troca a voz — não carrega o texto falado.
+        // Sem variável `text`, o avatar sairia mudo (vídeo de ~1s); por isso exigimos.
+        const { textVar, voiceVar } = await this.resolveTemplateVars(dto.template_id as string);
+        if (!textVar) {
+          throw new BadRequestException(
+            'Esse template não expõe o roteiro como variável de TEXTO. No HeyGen Studio, ' +
+              'selecione o roteiro do avatar e marque-o como "API Variable" do tipo Texto. ' +
+              '(Uma variável só de Voz apenas troca a voz e o avatar sairia mudo.)',
+          );
+        }
+        const payload: Record<string, unknown> = {
+          [textVar]: { name: textVar, type: 'text', properties: { content: narration } },
+        };
+        if (voiceVar && dto.voice_id) {
+          payload[voiceVar] = {
+            name: voiceVar,
+            type: 'voice',
+            properties: { voice_id: dto.voice_id },
           };
         }
         const dim = dto.width && dto.height ? dimension : undefined; // template define o layout
@@ -215,27 +211,23 @@ export class HeyGenService {
   }
 
   /**
-   * Descobre em qual variável do template o roteiro deve entrar e de que tipo
-   * ela é. No HeyGen, a fala marcada como "API Variable" vira tipo `voice`
-   * (exige voice_id no generate); uma legenda/texto na tela é `text`. Preferimos
-   * a variável com nome de fala (script/fala/roteiro/…). Erro acionável se o
-   * template não tiver variável aproveitável.
+   * Resolve as variáveis do template onde injetamos o roteiro:
+   *   - `textVar`: variável tipo `text` que recebe o ROTEIRO (properties.content).
+   *     É a que faz o avatar falar. Sem ela, não dá pra injetar a fala.
+   *   - `voiceVar`: variável tipo `voice` (opcional) que troca só a VOZ (voice_id).
+   * Em ambos os casos preferimos a variável com nome de fala (script/roteiro/…).
    */
-  private async resolveTemplateVariable(
+  private async resolveTemplateVars(
     templateId: string,
-  ): Promise<{ name: string; type: string }> {
+  ): Promise<{ textVar?: string; voiceVar?: string }> {
     const vars = await this.provider.getTemplateVariables(templateId);
-    const usable = vars.filter((v) => ['voice', 'text'].includes((v.type || 'text').toLowerCase()));
-    if (!usable.length) {
-      throw new BadRequestException(
-        'Esse template não tem variável de fala/texto. No HeyGen Studio, selecione o roteiro do avatar e marque como "API Variable".',
-      );
-    }
-    const preferred =
-      usable.find((v) => (v.type || '').toLowerCase() === 'voice') ??
-      usable.find((v) => /script|fala|roteiro|texto|narra|speech|caption/i.test(v.name)) ??
-      usable[0];
-    return { name: preferred.name, type: (preferred.type || 'text').toLowerCase() };
+    const ofType = (t: string) => vars.filter((v) => (v.type || 'text').toLowerCase() === t);
+    const speechName = /script|fala|roteiro|texto|narra|speech|caption|voz|voice/i;
+    const texts = ofType('text');
+    const voices = ofType('voice');
+    const textVar = (texts.find((v) => speechName.test(v.name)) ?? texts[0])?.name;
+    const voiceVar = (voices.find((v) => speechName.test(v.name)) ?? voices[0])?.name;
+    return { textVar, voiceVar };
   }
 
   /** Atualiza 1 job consultando o status no HeyGen. Retorna a row atualizada. */
@@ -254,6 +246,17 @@ export class HeyGenService {
       patch.video_url = st.video_url;
       patch.thumbnail_url = st.thumbnail_url;
       patch.duration_sec = st.duration_sec;
+      // Anti-falso-positivo: roteiro com texto real mas vídeo quase vazio (<3s) =
+      // o avatar não falou (ex.: template sem variável de TEXTO). O HeyGen marca
+      // como "completed" sem erro — então rebaixamos pra failed com motivo claro.
+      const scriptLen = (job.script ?? '').trim().length;
+      if (typeof st.duration_sec === 'number' && st.duration_sec < 3 && scriptLen > 40) {
+        patch.status = 'failed';
+        patch.error =
+          `Vídeo saiu com ${st.duration_sec}s para um roteiro de ${scriptLen} caracteres — ` +
+          `o avatar não falou. Provável template sem variável de TEXTO (roteiro). ` +
+          `Use o modo avulso (avatar+voz) ou exponha o roteiro como variável Texto no Studio.`;
+      }
     }
     if (status === 'failed') {
       patch.error = (st.error ?? 'Falha na geração do HeyGen').slice(0, 500);
