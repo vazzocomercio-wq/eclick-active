@@ -353,17 +353,17 @@ export default function TendenciasPage() {
             {mining ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Users className="h-3.5 w-3.5" />}
             <span className="ml-1">{mining ? 'Minerando…' : 'Minerar perfis'}</span>
           </Button>
-          <Button size="sm" variant="outline" onClick={() => void analyzePatterns()} disabled={analyzing || loading} title="Engenharia reversa dos posts vencedores">
+          <Button size="sm" variant="outline" onClick={() => void analyzePatterns()} disabled={analyzing || loading} title={activeCategory ? `Engenharia reversa só de "${activeCategory}"` : 'Engenharia reversa dos posts vencedores (todas as categorias)'}>
             {analyzing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FlaskConical className="h-3.5 w-3.5" />}
-            <span className="ml-1">{analyzing ? 'Analisando…' : 'Analisar'}</span>
+            <span className="ml-1">{analyzing ? 'Analisando…' : activeCategory ? `Analisar · ${activeCategory}` : 'Analisar'}</span>
           </Button>
           <Button size="sm" variant="outline" onClick={() => void collectAll()} disabled={collecting || loading}>
             {collecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <DownloadCloud className="h-3.5 w-3.5" />}
             <span className="ml-1">{collecting ? 'Coletando…' : 'Coletar'}</span>
           </Button>
-          <Button size="sm" onClick={() => void generateBriefs()} disabled={generating || loading}>
+          <Button size="sm" onClick={() => void generateBriefs()} disabled={generating || loading} title={activeCategory ? `Gera pautas só de "${activeCategory}" (mude no seletor Categoria abaixo)` : 'Gera pautas de TODAS as categorias (selecione uma categoria abaixo p/ focar)'}>
             {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Brain className="h-3.5 w-3.5" />}
-            <span className="ml-1">{generating ? 'Gerando…' : 'Gerar pautas IA'}</span>
+            <span className="ml-1">{generating ? 'Gerando…' : activeCategory ? `Gerar pautas · ${activeCategory}` : 'Gerar pautas IA'}</span>
           </Button>
         </div>
       </header>
