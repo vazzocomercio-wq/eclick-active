@@ -118,6 +118,7 @@ export default function TendenciasPage() {
   const [hgAvatar, setHgAvatar] = useState('');
   const [hgVoice, setHgVoice] = useState('');
   const [hgTemplate, setHgTemplate] = useState(''); // '' = avatar+voz avulsos
+  const [hgBrandScene, setHgBrandScene] = useState(false); // cenário e-Click (recorta avatar + fundo da marca)
   const [hgAutoCortes, setHgAutoCortes] = useState(false); // automação completa → cortes
   const [hgCreating, setHgCreating] = useState(false);
   const [cortesBusyId, setCortesBusyId] = useState<string | null>(null); // job HeyGen gerando corte
@@ -273,6 +274,7 @@ export default function TendenciasPage() {
     setHgAvatar('');
     setHgVoice('');
     setHgTemplate('');
+    setHgBrandScene(false);
     setHgAutoCortes(false);
     setHgLoadingOpts(true);
     try {
@@ -300,10 +302,17 @@ export default function TendenciasPage() {
     setHgCreating(true);
     setCollectMsg(null);
     try {
+      const selAvatar = hgOptions?.avatars.find((a) => a.avatar_id === hgAvatar);
       const job = await socialApi.heygen.createJob({
         brief_id: hgBrief.id,
         voice_id: hgVoice,
-        ...(hgTemplate ? { template_id: hgTemplate } : { avatar_id: hgAvatar }),
+        ...(hgTemplate
+          ? { template_id: hgTemplate }
+          : {
+              avatar_id: hgAvatar,
+              is_talking_photo: !!selAvatar?.is_talking_photo,
+              brand_scene: hgBrandScene,
+            }),
         auto_cortes: hgAutoCortes,
       });
       setHeygenJobs((prev) => [job, ...prev]);
@@ -1175,7 +1184,30 @@ export default function TendenciasPage() {
                         </option>
                       ))}
                     </select>
+                    <p className="text-[10px] text-muted-foreground">
+                      Os avatares marcados “(foto)” são os foto-avatares da marca (ex.: Vazzo) — só eles aceitam o cenário e-Click.
+                    </p>
                   </div>
+                )}
+                {/* Cenário e-Click: recorta o avatar e usa o fundo da marca. */}
+                {!hgTemplate && (
+                  <label className="flex cursor-pointer items-start gap-2 rounded-md border border-border bg-muted/20 p-2.5">
+                    <input
+                      type="checkbox"
+                      checked={hgBrandScene}
+                      onChange={(e) => setHgBrandScene(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 accent-primary"
+                    />
+                    <span className="flex flex-col gap-0.5">
+                      <span className="flex items-center gap-1 text-[12px] font-medium">
+                        <Sparkles className="h-3.5 w-3.5 text-primary" />
+                        Cenário e-Click (fundo da marca)
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">
+                        Recorta o avatar e o coloca na cena da marca (estante e-Click). Funciona com foto-avatares (Vazzo); com avatar comum, usa o foto-avatar padrão da marca.
+                      </span>
+                    </span>
+                  </label>
                 )}
                 <div className="flex flex-col gap-1">
                   <label className="text-[11px] text-muted-foreground">Voz</label>

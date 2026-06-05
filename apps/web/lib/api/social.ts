@@ -965,6 +965,7 @@ export interface HeyGenAvatar {
   gender: string | null;
   preview_image_url: string | null;
   premium: boolean;
+  is_talking_photo: boolean;
 }
 export interface HeyGenVoice {
   voice_id: string;
@@ -1014,6 +1015,10 @@ export interface CreateHeyGenJobPayload {
   voice_id?: string;
   width?: number;
   height?: number;
+  /** O avatar_id escolhido é uma talking photo (foto-avatar). */
+  is_talking_photo?: boolean;
+  /** Cenário e-Click: recorta o avatar e usa o fundo da marca. */
+  brand_scene?: boolean;
   /** Automação completa: ao concluir, gerar cortes verticais (gated no backend). */
   auto_cortes?: boolean;
 }

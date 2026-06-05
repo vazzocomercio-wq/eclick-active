@@ -172,12 +172,31 @@ export class HeyGenService {
       } else {
         const scenes = chunkScript(narration);
         sceneCount = scenes.length;
-        videoId = await this.provider.createVideo(
-          scenes,
-          dto.avatar_id as string,
-          dto.voice_id as string,
+
+        // Cenário e-Click: recorta a talking photo e compõe sobre o fundo da
+        // marca. Só vale com talking photo (avatar comum não troca de fundo).
+        const brandBg = process.env.HEYGEN_BRAND_BG_ASSET_ID?.trim() || undefined;
+        const brandTp = process.env.HEYGEN_BRAND_TALKING_PHOTO_ID?.trim() || undefined;
+        const useBrand = !!dto.brand_scene && !!brandBg;
+
+        let talkingPhotoId: string | undefined;
+        let avatarId: string | undefined;
+        if (dto.is_talking_photo) {
+          talkingPhotoId = dto.avatar_id; // foto escolhida na UI
+        } else if (useBrand && brandTp) {
+          talkingPhotoId = brandTp; // cenário e-Click sem foto escolhida → foto padrão da marca
+        } else {
+          avatarId = dto.avatar_id;
+        }
+
+        videoId = await this.provider.createVideo(scenes, {
+          avatarId,
+          talkingPhotoId,
+          voiceId: dto.voice_id as string,
           dimension,
-        );
+          // fundo só quando há talking photo pra recortar
+          backgroundAssetId: useBrand && talkingPhotoId ? brandBg : undefined,
+        });
       }
     } catch (e) {
       throw new BadRequestException(`HeyGen recusou a geração: ${(e as Error).message}`);

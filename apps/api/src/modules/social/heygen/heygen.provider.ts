@@ -91,20 +91,43 @@ export class HeyGenProvider {
     return json.data as T;
   }
 
-  /** Cria o vídeo a partir das cenas (cada cena = um trecho do roteiro). */
+  /**
+   * Cria o vídeo a partir das cenas (cada cena = um trecho do roteiro).
+   * Suporta avatar comum OU talking photo (foto-avatar). Quando um
+   * `backgroundAssetId` é passado com uma talking photo, recorta o avatar
+   * (`matting`) e o compõe sobre a imagem de fundo — é assim que reproduzimos o
+   * cenário e-Click com roteiro livre (o avatar comum não aceita troca de fundo).
+   */
   async createVideo(
     scenes: string[],
-    avatarId: string,
-    voiceId: string,
-    dimension: HeyGenDimension,
+    opts: {
+      avatarId?: string;
+      talkingPhotoId?: string;
+      voiceId: string;
+      dimension: HeyGenDimension;
+      backgroundAssetId?: string;
+    },
   ): Promise<string> {
+    const useTalkingPhoto = !!opts.talkingPhotoId;
+    const character = useTalkingPhoto
+      ? {
+          type: 'talking_photo',
+          talking_photo_id: opts.talkingPhotoId,
+          // matting só quando vamos compor sobre um fundo (remove o fundo nativo)
+          ...(opts.backgroundAssetId ? { matting: true } : {}),
+        }
+      : { type: 'avatar', avatar_id: opts.avatarId, avatar_style: 'normal' };
+    const background = opts.backgroundAssetId
+      ? { type: 'image', image_asset_id: opts.backgroundAssetId, fit: 'cover' }
+      : undefined;
     const video_inputs = scenes.map((input_text) => ({
-      character: { type: 'avatar', avatar_id: avatarId, avatar_style: 'normal' },
-      voice: { type: 'text', input_text, voice_id: voiceId },
+      character,
+      voice: { type: 'text', input_text, voice_id: opts.voiceId },
+      ...(background ? { background } : {}),
     }));
     const data = await this.call<{ video_id: string }>('/v2/video/generate', {
       method: 'POST',
-      body: { video_inputs, dimension },
+      body: { video_inputs, dimension: opts.dimension },
     });
     if (!data?.video_id) {
       throw new Error('HeyGen não retornou video_id.');
@@ -143,14 +166,32 @@ export class HeyGenProvider {
         preview_image_url?: string;
         premium?: boolean;
       }>;
+      talking_photos?: Array<{
+        talking_photo_id: string;
+        talking_photo_name?: string;
+        preview_image_url?: string;
+      }>;
     }>('/v2/avatars');
-    return (data?.avatars ?? []).map((a) => ({
+    const avatars: HeyGenAvatar[] = (data?.avatars ?? []).map((a) => ({
       avatar_id: a.avatar_id,
       name: a.avatar_name ?? null,
       gender: a.gender ?? null,
       preview_image_url: a.preview_image_url ?? null,
       premium: !!a.premium,
+      is_talking_photo: false,
     }));
+    // Talking photos (foto-avatares) entram como "avatares" com flag — são os
+    // que aceitam recorte + fundo customizado (cenário e-Click).
+    const photos: HeyGenAvatar[] = (data?.talking_photos ?? []).map((t) => ({
+      avatar_id: t.talking_photo_id,
+      name: t.talking_photo_name ? `${t.talking_photo_name} (foto)` : 'Foto-avatar',
+      gender: null,
+      preview_image_url: t.preview_image_url ?? null,
+      premium: false,
+      is_talking_photo: true,
+    }));
+    // Fotos primeiro (são os avatares próprios da marca), depois o catálogo.
+    return [...photos, ...avatars];
   }
 
   async listVoices(): Promise<HeyGenVoice[]> {

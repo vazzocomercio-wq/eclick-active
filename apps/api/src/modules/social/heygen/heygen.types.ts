@@ -41,6 +41,8 @@ export interface HeyGenAvatar {
   gender: string | null;
   preview_image_url: string | null;
   premium: boolean;
+  /** true = talking photo (foto-avatar): aceita recorte + fundo customizado (cenário e-Click). */
+  is_talking_photo: boolean;
 }
 
 /** Voz do catálogo HeyGen (GET /v2/voices). */
@@ -88,6 +90,14 @@ export interface CreateHeyGenJobDto {
   /** Modo avulso: avatar + voz escolhidos na hora (quando não há template_id). */
   avatar_id?: string;
   voice_id?: string;
+  /** O avatar_id escolhido é uma talking photo (foto-avatar)? */
+  is_talking_photo?: boolean;
+  /**
+   * Cenário e-Click: recorta o avatar (talking photo) e o compõe sobre o fundo
+   * da marca (env HEYGEN_BRAND_BG_ASSET_ID). Se ligado sem talking photo
+   * escolhida, cai na foto-avatar padrão da marca (env HEYGEN_BRAND_TALKING_PHOTO_ID).
+   */
+  brand_scene?: boolean;
   /** sobrescreve a dimensão inferida do formato da pauta (ignorado no template). */
   width?: number;
   height?: number;
