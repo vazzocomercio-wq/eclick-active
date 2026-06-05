@@ -4,7 +4,7 @@ import { LlmService } from '../../../common/llm/llm.service';
 import { BridgeService } from '../../bridge/bridge.service';
 import type { CampaignCandidate, OrganicSummary } from '../../bridge/bridge.types';
 import { TrendsService } from './trends.service';
-import type { TrendItem } from './trends.types';
+import type { TrendItem, TrendNetwork } from './trends.types';
 
 const BRIEF_SYSTEM = `Você é o estrategista de CRESCIMENTO ORGÂNICO da marca no e-Click. O método é claro:
 o algoritmo recompensa PERFORMANCE, não originalidade. Não se reinventa — MODELA-SE quem já
@@ -64,18 +64,30 @@ export class TrendsBriefService {
     category?: string,
   ): Promise<{ signals: number; briefs: number }> {
     const cat = category?.trim() || undefined;
-    const [items, organic, candidates] = await Promise.all([
+    const [items, organic, candidates, monitors] = await Promise.all([
       this.trends.listItems(orgId, { category: cat, limit: 40 }),
       this.bridge.getOrganicSummary(orgId).catch(() => null),
       this.bridge.getCampaignCandidates(orgId, 'mixed', 8).catch(() => []),
+      this.trends.listMonitors(orgId).catch(() => []),
     ]);
 
     if (!items.length && !candidates.length) {
       return { signals: 0, briefs: 0 };
     }
 
+    // Rede(s) de DESTINO da pauta: o que o usuário monitora nesta categoria é o
+    // que ele quer PRODUZIR. Categoria de YouTube → pauta é roteiro de YouTube,
+    // não reel/post de Instagram. Fallback: as fontes dos próprios itens.
+    const scoped = monitors.filter(
+      (m) => m.is_active && (!cat || m.category === cat),
+    );
+    let networks = [...new Set(scoped.map((m) => m.network))];
+    if (!networks.length) {
+      networks = [...new Set(items.map((i) => i.source as TrendNetwork))];
+    }
+
     const signals = await this.buildSignals(orgId, items, cat);
-    const briefs = await this.buildBriefs(orgId, items, organic, candidates, cat);
+    const briefs = await this.buildBriefs(orgId, items, organic, candidates, cat, networks);
     return { signals, briefs };
   }
 
@@ -229,7 +241,9 @@ export class TrendsBriefService {
     organic: OrganicSummary | null,
     candidates: CampaignCandidate[],
     scopedCategory?: string,
+    networks: TrendNetwork[] = [],
   ): Promise<number> {
+    const fmt = formatGuidance(networks);
     const trendText = items.length
       ? items
           .slice(0, 15)
@@ -270,6 +284,8 @@ export class TrendsBriefService {
         ? `FOCO: gere TODAS as pautas para a categoria/nicho "${scopedCategory}". Use o campo category="${scopedCategory}".`
         : '',
       '',
+      `PLATAFORMA DE DESTINO: ${fmt.instruction}`,
+      '',
       'CONTEÚDO VENCEDOR DO NICHO (modele o GANCHO, FORMATO e ESTRUTURA destes — NÃO copie literal, adapte ao nosso público em PT-BR):',
       trendText,
       '',
@@ -284,7 +300,7 @@ export class TrendsBriefService {
       candText,
       '',
       'Gere EXATAMENTE 4 pautas, TODAS em português do Brasil. JSON:',
-      '{"briefs":[{"title":"<em PT-BR>","category":"...","format":"reel|post|carousel","hook":"<gancho em PT-BR, modelado num vencedor>","script":"<roteiro 3-5 linhas em PT-BR>","visual_style":"<estilo visual>","suggested_products":["<só se houver encaixe real de nicho; senão deixe a lista vazia>"],"hashtags":["#..."],"cta":"<em PT-BR>","rationale":"<por que ESTE gancho/formato modela um vencedor e CRESCE a audiência — cite o trend de referência; mencione produto só se houver encaixe real>"}]}',
+      `{"briefs":[{"title":"<em PT-BR>","category":"...","format":"${fmt.enumHint}","hook":"<gancho em PT-BR, modelado num vencedor>","script":"<roteiro em PT-BR no formato da plataforma de destino>","visual_style":"<estilo visual>","suggested_products":["<só se houver encaixe real de nicho; senão deixe a lista vazia>"],"hashtags":["#..."],"cta":"<em PT-BR>","rationale":"<por que ESTE gancho/formato modela um vencedor e CRESCE a audiência — cite o trend de referência; mencione produto só se houver encaixe real>"}]}`,
     ].join('\n');
 
     let drafts: BriefDraft[] = [];
@@ -329,9 +345,9 @@ export class TrendsBriefService {
 
     const perCost = cost / drafts.length;
     const rows = drafts.map((b) => {
-      const format = (['reel', 'post', 'carousel'] as const).includes(b.format as never)
-        ? b.format
-        : 'reel';
+      const format = fmt.allowed.includes(String(b.format))
+        ? String(b.format)
+        : fmt.allowed[0];
       const suggested = (Array.isArray(b.suggested_products) ? b.suggested_products : [])
         .slice(0, 4)
         .map((name) => {
@@ -418,6 +434,51 @@ export class TrendsBriefService {
       .eq('id', id)
       .eq('org_id', orgId);
   }
+}
+
+/**
+ * Define os formatos de pauta e a instrução de roteiro conforme a(s) rede(s) de
+ * DESTINO da categoria. O usuário PRODUZ para onde ele monitora: categoria de
+ * YouTube → roteiro de vídeo de YouTube (longo ou Short), não reel/post/carrossel.
+ */
+function formatGuidance(networks: TrendNetwork[]): {
+  allowed: string[];
+  instruction: string;
+  enumHint: string;
+} {
+  const set = new Set(networks);
+  const hasYoutube = set.has('youtube');
+  const hasSocial = set.has('instagram') || set.has('tiktok') || set.has('meta_ads');
+
+  if (hasYoutube && !hasSocial) {
+    return {
+      allowed: ['youtube', 'youtube_short'],
+      instruction:
+        'Estas pautas são para o YOUTUBE. Cada pauta é um ROTEIRO DE VÍDEO de YouTube — ' +
+        'use "youtube" para vídeo longo (5-12 min: gancho nos primeiros segundos, ' +
+        'desenvolvimento em blocos, CTA de inscrição) ou "youtube_short" para Shorts vertical ' +
+        '(30-60s, gancho imediato, ritmo rápido). O campo script deve ser um roteiro de ' +
+        'narração/cena de YouTube (fala + corte), NÃO uma legenda de post.',
+      enumHint: 'youtube|youtube_short',
+    };
+  }
+  if (hasYoutube && hasSocial) {
+    return {
+      allowed: ['youtube', 'youtube_short', 'reel', 'post', 'carousel'],
+      instruction:
+        'Gere pautas no formato NATIVO da plataforma de cada tendência: roteiro de YouTube ' +
+        '(youtube / youtube_short) para tendências de YouTube; reel/post/carousel para ' +
+        'Instagram/TikTok. O campo script deve respeitar o formato escolhido.',
+      enumHint: 'youtube|youtube_short|reel|post|carousel',
+    };
+  }
+  return {
+    allowed: ['reel', 'post', 'carousel'],
+    instruction:
+      'Gere pautas no formato nativo de Reels/Instagram/TikTok (reel/post/carousel). ' +
+      'O campo script deve ser o roteiro/copy do formato escolhido.',
+    enumHint: 'reel|post|carousel',
+  };
 }
 
 /**

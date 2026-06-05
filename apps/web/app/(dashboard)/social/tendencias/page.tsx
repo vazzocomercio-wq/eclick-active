@@ -36,11 +36,16 @@ const NET_LABEL: Record<string, string> = Object.fromEntries(
 );
 const FORMAT_LABEL: Record<string, string> = {
   reel: 'Reel', post: 'Post', carousel: 'Carrossel', story: 'Story', video: 'Vídeo',
+  youtube: 'Vídeo YouTube', youtube_short: 'YouTube Short',
+};
+/** Formato da pauta → formato que o Social AI Studio entende. */
+const STUDIO_FORMAT: Record<string, string> = {
+  youtube: 'video', youtube_short: 'reel',
 };
 
 /** Monta a URL do Social AI Studio pré-preenchida a partir de uma pauta (1-clique). */
 function briefHref(b: TrendBrief, prod?: TrendBriefProduct): string {
-  const params = new URLSearchParams({ format: b.format, theme: b.title });
+  const params = new URLSearchParams({ format: STUDIO_FORMAT[b.format] ?? b.format, theme: b.title });
   if (b.hook) params.set('hook', b.hook);
   if (prod?.product_id) params.set('product_id', prod.product_id);
   if (prod?.name) params.set('product_search', prod.name);
