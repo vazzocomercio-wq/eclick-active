@@ -6,12 +6,22 @@ import type { CampaignCandidate, OrganicSummary } from '../../bridge/bridge.type
 import { TrendsService } from './trends.service';
 import type { TrendItem } from './trends.types';
 
-const BRIEF_SYSTEM = `Você é o estrategista de conteúdo de uma loja de e-commerce no e-Click.
-Sua missão: gerar PAUTAS de conteúdo que aproveitam uma TENDÊNCIA em alta para VENDER
-um produto da loja. Cada pauta deve cruzar três coisas: (1) o que está bombando lá fora
-(tendência), (2) o que engaja com o nosso público (formato/horário), e (3) um produto com
-boa oportunidade comercial (margem alta e/ou estoque parado). Seja concreto e comercial —
-nada genérico. Justifique POR QUE esta tendência + este produto AGORA. Responda só JSON válido.`;
+const BRIEF_SYSTEM = `Você é o estrategista de CRESCIMENTO ORGÂNICO da marca no e-Click. O método é claro:
+o algoritmo recompensa PERFORMANCE, não originalidade. Não se reinventa — MODELA-SE quem já
+performa no nicho (os vencedores coletados) e adapta-se à nossa marca para CRESCER a audiência.
+
+REGRAS INEGOCIÁVEIS:
+1. ESCREVA SEMPRE EM PORTUGUÊS DO BRASIL — título, gancho, roteiro, CTA, hashtags, TUDO.
+   As tendências de referência podem estar em inglês: TRADUZA e ADAPTE a ideia para o público
+   brasileiro. NUNCA devolva qualquer texto em inglês (exceto nomes próprios/marcas/siglas).
+2. O foco é CONTEÚDO DE VALOR E AUTORIDADE que cresce o público. Modele o GANCHO, o FORMATO e a
+   ESTRUTURA dos vencedores. NÃO é enfiar produto em todo post.
+3. PRODUTO É OPCIONAL: só sugira um produto se ele for do MESMO nicho/assunto da tendência. Se a
+   tendência é de um tema (ex.: marketing/IA) e os produtos da loja são de outro (ex.: iluminação),
+   NÃO force o produto — deixe suggested_products vazio e entregue conteúdo puro de autoridade.
+   Forçar produto sem encaixe destrói o crescimento orgânico.
+
+Seja concreto, no tom da marca, nada genérico. Responda só JSON válido.`;
 
 interface BriefDraft {
   title?: string;
@@ -245,29 +255,36 @@ export class TrendsBriefService {
               `${c.is_overstock ? ' (OVERSTOCK)' : ''} | demanda ${c.demand_trend}`,
           )
           .join('\n')
-      : '(sem candidatos comerciais)';
+      : '(sem produtos cadastrados)';
     const fmtHint = organic?.best_format ? `Formato que mais engaja: ${organic.best_format}. ` : '';
     const hourHint = organic?.best_hour != null ? `Melhor horário ~${organic.best_hour}h.` : '';
 
+    // Padrões vencedores (engenharia reversa) — o MOLDE do método. Best-effort:
+    // se ainda não rodaram "Analisar", vem vazio e modelamos direto dos itens.
+    const patternsText = await this.fetchPatternsText(orgId, scopedCategory);
+
     const user = [
-      'Gere PAUTAS de conteúdo que aproveitam uma TENDÊNCIA em alta pra VENDER um produto nosso.',
-      'Cada pauta cruza: o que bomba lá fora + o que engaja com nosso público + um produto com oportunidade comercial.',
+      'Gere PAUTAS de CRESCIMENTO ORGÂNICO: modele os vencedores do nicho e adapte à nossa marca.',
+      'TODAS as pautas DEVEM ser escritas em PORTUGUÊS DO BRASIL — mesmo que as referências estejam em inglês, traduza e adapte a ideia.',
       scopedCategory
         ? `FOCO: gere TODAS as pautas para a categoria/nicho "${scopedCategory}". Use o campo category="${scopedCategory}".`
         : '',
       '',
-      'TENDÊNCIAS EM ALTA (coletadas de YouTube / Google Trends):',
+      'CONTEÚDO VENCEDOR DO NICHO (modele o GANCHO, FORMATO e ESTRUTURA destes — NÃO copie literal, adapte ao nosso público em PT-BR):',
       trendText,
+      '',
+      'PADRÕES VENCEDORES JÁ EXTRAÍDOS (engenharia reversa — use como molde de gancho/estrutura/CTA):',
+      patternsText,
       '',
       `BUSCAS EM ASCENSÃO: ${risingText}`,
       '',
       `NOSSO ENGAJAMENTO: ${fmtHint}${hourHint}`,
       '',
-      'PRODUTOS COM OPORTUNIDADE COMERCIAL (priorize estes; use o nome exato):',
+      'PRODUTO DA LOJA (OPCIONAL — só inclua em suggested_products se o produto for do MESMO nicho/assunto da tendência; se não houver encaixe natural, deixe suggested_products = [] e faça conteúdo puro de autoridade que cresce o público):',
       candText,
       '',
-      'Gere EXATAMENTE 4 pautas. JSON:',
-      '{"briefs":[{"title":"...","category":"...","format":"reel|post|carousel","hook":"<gancho de abertura>","script":"<roteiro em 3-5 linhas>","visual_style":"<estilo visual>","suggested_products":["<nome exato do produto candidato>"],"hashtags":["#..."],"cta":"...","rationale":"<por que ESTA tendência + ESTE produto AGORA — cite o trend e a margem/estoque concretos>"}]}',
+      'Gere EXATAMENTE 4 pautas, TODAS em português do Brasil. JSON:',
+      '{"briefs":[{"title":"<em PT-BR>","category":"...","format":"reel|post|carousel","hook":"<gancho em PT-BR, modelado num vencedor>","script":"<roteiro 3-5 linhas em PT-BR>","visual_style":"<estilo visual>","suggested_products":["<só se houver encaixe real de nicho; senão deixe a lista vazia>"],"hashtags":["#..."],"cta":"<em PT-BR>","rationale":"<por que ESTE gancho/formato modela um vencedor e CRESCE a audiência — cite o trend de referência; mencione produto só se houver encaixe real>"}]}',
     ].join('\n');
 
     let drafts: BriefDraft[] = [];
@@ -355,6 +372,42 @@ export class TrendsBriefService {
       return 0;
     }
     return rows.length;
+  }
+
+  /**
+   * Busca os padrões vencedores (engenharia reversa, trend_patterns) pra usar
+   * como molde na geração das pautas — o coração do método. Best-effort: se
+   * ainda não rodaram "Analisar", devolve placeholder e modelamos pelos itens.
+   */
+  private async fetchPatternsText(orgId: string, scopedCategory?: string): Promise<string> {
+    try {
+      let q = this.supabase.adminClient
+        .from('trend_patterns')
+        .select('hook, hook_type, format, structure, cta, why_it_works, score')
+        .eq('org_id', orgId)
+        .eq('is_active', true)
+        .order('score', { ascending: false })
+        .limit(6);
+      if (scopedCategory) q = q.eq('category', scopedCategory);
+      const { data } = await q;
+      const rows = (data ?? []) as Array<{
+        hook?: string; hook_type?: string; format?: string;
+        structure?: string; cta?: string; why_it_works?: string;
+      }>;
+      if (!rows.length) {
+        return '(sem padrões extraídos ainda — modele diretamente do conteúdo vencedor acima)';
+      }
+      return rows
+        .map(
+          (p, i) =>
+            `${i + 1}. Gancho [${p.hook_type ?? '?'}]: "${(p.hook ?? '').slice(0, 90)}" | ` +
+            `formato ${p.format ?? '?'} | estrutura: ${(p.structure ?? '').slice(0, 90)} | ` +
+            `CTA: ${(p.cta ?? '').slice(0, 60)} | por que funciona: ${(p.why_it_works ?? '').slice(0, 90)}`,
+        )
+        .join('\n');
+    } catch {
+      return '(sem padrões extraídos ainda — modele diretamente do conteúdo vencedor acima)';
+    }
   }
 
   /** Descarta um brief (não some, só sai do feed ativo). */
