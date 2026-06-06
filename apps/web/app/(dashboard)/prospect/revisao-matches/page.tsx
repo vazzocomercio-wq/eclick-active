@@ -54,6 +54,7 @@ export default function MatchReviewPage() {
   }
 
   return (
+    <div className="h-full overflow-y-auto scrollbar-thin">
     <div className="px-4 sm:px-6 py-6 max-w-4xl mx-auto">
       <Link
         href="/prospect"
@@ -134,6 +135,7 @@ export default function MatchReviewPage() {
           ))}
         </ul>
       )}
+    </div>
     </div>
   );
 }

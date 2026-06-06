@@ -161,6 +161,7 @@ export default function ProspectProfilePage({ params }: { params: Promise<{ id: 
   const isPromoted = entity.status === 'promovido';
 
   return (
+    <div className="h-full overflow-y-auto scrollbar-thin">
     <div className="px-4 sm:px-6 py-6 max-w-5xl mx-auto">
       <button
         onClick={() => router.push('/prospect')}
@@ -393,6 +394,7 @@ export default function ProspectProfilePage({ params }: { params: Promise<{ id: 
           )}
         </div>
       </section>
+    </div>
     </div>
   );
 }

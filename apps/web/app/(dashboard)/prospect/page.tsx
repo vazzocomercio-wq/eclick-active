@@ -125,6 +125,7 @@ export default function ProspectListPage() {
   }
 
   return (
+    <div className="h-full overflow-y-auto scrollbar-thin">
     <div className="px-4 sm:px-6 py-6 max-w-7xl mx-auto">
       <header className="mb-6 flex items-start justify-between gap-4 flex-wrap">
         <div>
@@ -327,6 +328,7 @@ export default function ProspectListPage() {
           </div>
         )}
       </section>
+    </div>
     </div>
   );
 }
