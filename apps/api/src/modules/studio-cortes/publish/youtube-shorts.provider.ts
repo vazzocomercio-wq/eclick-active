@@ -9,10 +9,26 @@ export interface YouTubeShortInput {
   description: string;
   tags?: string[];
   privacy?: 'public' | 'private' | 'unlisted';
+  /**
+   * false = VÍDEO LONGO (não Short): usa categoria custom, NÃO força #Shorts e
+   * a URL final é watch?v=. Default true (preserva o comportamento de Shorts
+   * usado pelo Studio de Cortes).
+   */
+  is_short?: boolean;
+  /** Categoria do YouTube (sobrescreve a default). Ex: '27' = Educação. */
+  category_id?: string;
+  /**
+   * Miniatura (capa) — URL de imagem pública. Após o upload, sobe via
+   * thumbnails.set (best-effort: se falhar, o vídeo já está no ar). Só vídeo
+   * longo usa — Short pega frame do próprio vídeo.
+   */
+  thumbnail_url?: string;
 }
 
 const YT_UPLOAD_URL =
   'https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status';
+const YT_THUMBNAIL_SET_URL =
+  'https://www.googleapis.com/upload/youtube/v3/thumbnails/set?uploadType=media&videoId=';
 // Categoria default (22 = People & Blogs; 28 = Ciência e Tecnologia). Override via env.
 const DEFAULT_CATEGORY = process.env.CORTES_YT_CATEGORY ?? '22';
 // Custo de cota do videos.insert (≈100 unidades desde 04/12/2025). Só pra log.
@@ -93,12 +109,13 @@ export class YouTubeShortsProvider {
       }
       const bytes = Buffer.from(await videoRes.arrayBuffer());
 
+      const isShort = input.is_short !== false; // default true
       const metadata = {
         snippet: {
           title: input.title.slice(0, 100),
           description: input.description.slice(0, 5000),
           tags: (input.tags ?? []).slice(0, 15),
-          categoryId: DEFAULT_CATEGORY,
+          categoryId: input.category_id ?? DEFAULT_CATEGORY,
         },
         status: {
           privacyStatus: input.privacy ?? 'public',
@@ -170,11 +187,19 @@ export class YouTubeShortsProvider {
         );
       }
 
+      // 4. Miniatura (só vídeo longo) — best-effort: o vídeo já está publicado.
+      let thumbnailSet = false;
+      if (!isShort && input.thumbnail_url) {
+        thumbnailSet = await this.setThumbnail(token, upBody.id, input.thumbnail_url);
+      }
+
       return {
         success: true,
         external_post_id: upBody.id,
-        external_post_url: `https://youtube.com/shorts/${upBody.id}`,
-        provider_response: { video_id: upBody.id },
+        external_post_url: isShort
+          ? `https://youtube.com/shorts/${upBody.id}`
+          : `https://www.youtube.com/watch?v=${upBody.id}`,
+        provider_response: { video_id: upBody.id, thumbnail_set: thumbnailSet },
       };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -185,6 +210,52 @@ export class YouTubeShortsProvider {
         error_message: msg.slice(0, 400),
         provider_response: {},
       };
+    }
+  }
+
+  /**
+   * Sobe a miniatura do vídeo (thumbnails.set, uploadType=media). Aceita o
+   * escopo youtube.upload (já concedido na conexão do canal). Best-effort:
+   * retorna false sem lançar — a capa pode ser ajustada depois no Studio.
+   */
+  private async setThumbnail(
+    token: string,
+    videoId: string,
+    thumbnailUrl: string,
+  ): Promise<boolean> {
+    try {
+      const imgRes = await fetch(thumbnailUrl, { signal: AbortSignal.timeout(30_000) });
+      if (!imgRes.ok) {
+        this.log.warn(`[youtube] miniatura: download falhou (HTTP ${imgRes.status})`);
+        return false;
+      }
+      const contentType = imgRes.headers.get('content-type') ?? 'image/png';
+      const imgBytes = Buffer.from(await imgRes.arrayBuffer());
+      // YouTube exige ≤2MB. Se passar, pula (não derruba a publicação).
+      if (imgBytes.length > 2 * 1024 * 1024) {
+        this.log.warn(`[youtube] miniatura > 2MB (${imgBytes.length}) — pulando set`);
+        return false;
+      }
+      const res = await fetch(`${YT_THUMBNAIL_SET_URL}${videoId}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': contentType,
+          'Content-Length': String(imgBytes.length),
+        },
+        body: imgBytes,
+        signal: AbortSignal.timeout(60_000),
+      });
+      if (!res.ok) {
+        const t = await res.text().catch(() => '');
+        this.log.warn(`[youtube] thumbnails.set falhou (HTTP ${res.status}): ${t.slice(0, 200)}`);
+        return false;
+      }
+      this.log.log(`[youtube] miniatura aplicada ao vídeo ${videoId}`);
+      return true;
+    } catch (err) {
+      this.log.warn(`[youtube] thumbnails.set erro: ${err instanceof Error ? err.message : String(err)}`);
+      return false;
     }
   }
 }

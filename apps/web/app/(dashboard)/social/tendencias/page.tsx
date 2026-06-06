@@ -6,6 +6,7 @@ import {
   ArrowLeft, Radar, RefreshCw, Loader2, Plus, Trash2, Play, TrendingUp,
   Megaphone, AtSign, Music, Sparkles, CheckCircle2, CircleDashed, Eye, DownloadCloud,
   Wand2, X, Brain, Hash, Users, FlaskConical, Globe2, Clapperboard, ExternalLink, AlertTriangle, Scissors,
+  Youtube, ImageIcon, Send,
 } from 'lucide-react';
 import {
   socialApi,
@@ -24,6 +25,12 @@ import {
   type HeyGenOptions,
 } from '@/lib/api/social';
 import { cortesApi } from '@/lib/api/studio-cortes';
+import {
+  ytLongformApi,
+  type YouTubePublication,
+  type YTChannel,
+  type YTPrivacy,
+} from '@/lib/api/youtube-longform';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -122,6 +129,19 @@ export default function TendenciasPage() {
   const [hgAutoCortes, setHgAutoCortes] = useState(false); // automação completa → cortes
   const [hgCreating, setHgCreating] = useState(false);
   const [cortesBusyId, setCortesBusyId] = useState<string | null>(null); // job HeyGen gerando corte
+
+  // Publicação de vídeo longo no YouTube
+  const [ytBusyJobId, setYtBusyJobId] = useState<string | null>(null); // botão do card gerando rascunho
+  const [ytPub, setYtPub] = useState<YouTubePublication | null>(null); // publicação aberta no modal
+  const [ytChannels, setYtChannels] = useState<YTChannel[]>([]);
+  const [ytBusy, setYtBusy] = useState<'save' | 'thumb' | 'publish' | null>(null);
+  const [ytForm, setYtForm] = useState<{
+    title: string;
+    description: string;
+    tagsText: string;
+    privacy: YTPrivacy;
+    channel: string;
+  }>({ title: '', description: '', tagsText: '', privacy: 'public', channel: '' });
 
   const load = async () => {
     try {
@@ -344,6 +364,102 @@ export default function TendenciasPage() {
       setCollectMsg(`Falha ao gerar cortes: ${(e as Error)?.message ?? 'erro'}`);
     } finally {
       setCortesBusyId(null);
+    }
+  };
+
+  // Abre o fluxo de publicação no YouTube: gera (ou recupera) o rascunho com
+  // metadados+miniatura por IA e os canais conectados. NÃO publica nada aqui.
+  const abrirPublicarYoutube = async (job: HeyGenJob) => {
+    if (job.status !== 'completed' || ytBusyJobId) return;
+    setYtBusyJobId(job.id);
+    setCollectMsg(null);
+    try {
+      const [pub, chs] = await Promise.all([
+        ytLongformApi.draft({ heygen_job_id: job.id }),
+        ytLongformApi.channels().catch(() => [] as YTChannel[]),
+      ]);
+      setYtChannels(chs);
+      abrirModalYoutube(pub, chs);
+    } catch (e) {
+      setCollectMsg(`Falha ao preparar publicação no YouTube: ${(e as Error)?.message ?? 'erro'}`);
+    } finally {
+      setYtBusyJobId(null);
+    }
+  };
+
+  const abrirModalYoutube = (pub: YouTubePublication, chs: YTChannel[]) => {
+    setYtPub(pub);
+    setYtForm({
+      title: pub.title,
+      description: pub.description,
+      tagsText: (pub.tags ?? []).join(', '),
+      privacy: pub.privacy,
+      channel: pub.channel_cred_id ?? chs[0]?.id ?? '',
+    });
+  };
+
+  const ytFormPatch = () => ({
+    title: ytForm.title,
+    description: ytForm.description,
+    tags: ytForm.tagsText.split(',').map((t) => t.trim()).filter(Boolean),
+    privacy: ytForm.privacy,
+    channel_cred_id: ytForm.channel || null,
+  });
+
+  const salvarRascunhoYoutube = async () => {
+    if (!ytPub || ytBusy) return;
+    setYtBusy('save');
+    try {
+      const updated = await ytLongformApi.update(ytPub.id, ytFormPatch());
+      setYtPub(updated);
+      setCollectMsg('Rascunho salvo.');
+    } catch (e) {
+      setCollectMsg(`Falha ao salvar: ${(e as Error)?.message ?? 'erro'}`);
+    } finally {
+      setYtBusy(null);
+    }
+  };
+
+  const regerarCapaYoutube = async () => {
+    if (!ytPub || ytBusy) return;
+    setYtBusy('thumb');
+    try {
+      const updated = await ytLongformApi.regenerateThumbnail(ytPub.id);
+      setYtPub(updated);
+    } catch (e) {
+      setCollectMsg(`Falha ao regerar a capa: ${(e as Error)?.message ?? 'erro'}`);
+    } finally {
+      setYtBusy(null);
+    }
+  };
+
+  const publicarNoYoutube = async () => {
+    if (!ytPub || ytBusy) return;
+    if (!ytForm.channel) {
+      setCollectMsg('Escolha o canal do YouTube antes de publicar.');
+      return;
+    }
+    const aviso =
+      ytForm.privacy === 'public'
+        ? 'Publicar este vídeo no YouTube como PÚBLICO (vai ao ar imediatamente)?'
+        : `Publicar este vídeo no YouTube (${ytForm.privacy})?`;
+    if (!window.confirm(aviso)) return;
+    setYtBusy('publish');
+    setCollectMsg(null);
+    try {
+      // Salva as edições e em seguida publica de fato.
+      await ytLongformApi.update(ytPub.id, ytFormPatch());
+      const result = await ytLongformApi.publish(ytPub.id, ytForm.channel);
+      setYtPub(result);
+      if (result.status === 'published') {
+        setCollectMsg(`Publicado no YouTube! ${result.youtube_url ?? ''}`);
+      } else {
+        setCollectMsg(`A publicação não concluiu: ${result.error ?? 'erro'}`);
+      }
+    } catch (e) {
+      setCollectMsg(`Falha ao publicar: ${(e as Error)?.message ?? 'erro'}`);
+    } finally {
+      setYtBusy(null);
     }
   };
 
@@ -1092,6 +1208,20 @@ export default function TendenciasPage() {
                               </button>
                             )
                           )}
+                          {j.status === 'completed' && j.video_url && (
+                            <button
+                              onClick={() => void abrirPublicarYoutube(j)}
+                              disabled={ytBusyJobId === j.id}
+                              title="Publicar este vídeo no YouTube (título, descrição, capítulos e miniatura otimizados por IA)"
+                              className="mt-1 flex items-center justify-center gap-1 rounded-md border border-red-500/40 bg-red-500/10 px-2 py-1 text-[11px] font-medium text-red-400 hover:bg-red-500/20 disabled:opacity-60"
+                            >
+                              {ytBusyJobId === j.id ? (
+                                <><Loader2 className="h-3 w-3 animate-spin" />Preparando…</>
+                              ) : (
+                                <><Youtube className="h-3 w-3" />Publicar no YouTube</>
+                              )}
+                            </button>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -1107,6 +1237,198 @@ export default function TendenciasPage() {
           </>
         )}
       </div>
+
+      {/* ── MODAL: publicar vídeo longo no YouTube ── */}
+      {ytPub && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => !ytBusy && setYtPub(null)}
+        >
+          <div
+            className="flex max-h-[88vh] w-full max-w-2xl flex-col gap-3 overflow-y-auto rounded-xl border border-border bg-background p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Youtube className="h-5 w-5 text-red-500" />
+                <div>
+                  <h3 className="text-sm font-semibold leading-tight">Publicar no YouTube</h3>
+                  <p className="text-[11px] text-muted-foreground">
+                    Título, descrição, capítulos e miniatura otimizados por IA — revise antes de publicar.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => !ytBusy && setYtPub(null)}
+                className="rounded p-1 text-muted-foreground hover:bg-muted"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {ytPub.status === 'published' ? (
+              <div className="flex flex-col items-center gap-3 py-4 text-center">
+                <CheckCircle2 className="h-10 w-10 text-emerald-500" />
+                <p className="text-sm font-medium">Vídeo publicado no YouTube!</p>
+                {ytPub.thumbnail_url && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={ytPub.thumbnail_url} alt="capa" className="w-64 rounded-lg border border-border" />
+                )}
+                {ytPub.youtube_url && (
+                  <a
+                    href={ytPub.youtube_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1 text-sm text-primary hover:underline"
+                  >
+                    <ExternalLink className="h-4 w-4" />Abrir no YouTube
+                  </a>
+                )}
+              </div>
+            ) : (
+              <>
+                {/* Miniatura */}
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <div className="relative w-full sm:w-72 shrink-0">
+                    {ytPub.thumbnail_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={ytPub.thumbnail_url}
+                        alt="miniatura"
+                        className="aspect-video w-full rounded-lg border border-border object-cover"
+                      />
+                    ) : (
+                      <div className="flex aspect-video w-full items-center justify-center rounded-lg border border-dashed border-border bg-muted/30 text-[11px] text-muted-foreground">
+                        sem miniatura
+                      </div>
+                    )}
+                    <button
+                      onClick={() => void regerarCapaYoutube()}
+                      disabled={!!ytBusy}
+                      className="mt-1 flex w-full items-center justify-center gap-1 rounded-md border border-border bg-muted/40 px-2 py-1 text-[11px] font-medium hover:bg-muted disabled:opacity-60"
+                    >
+                      {ytBusy === 'thumb' ? (
+                        <><Loader2 className="h-3 w-3 animate-spin" />Gerando capa…</>
+                      ) : (
+                        <><ImageIcon className="h-3 w-3" />Regerar capa por IA</>
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="flex flex-1 flex-col gap-2">
+                    {/* Canal */}
+                    <label className="text-[11px] font-medium text-muted-foreground">Canal do YouTube</label>
+                    {ytChannels.length === 0 ? (
+                      <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-[11px] text-amber-400">
+                        Nenhum canal conectado.{' '}
+                        <Link href="/social/cortes" className="underline">Conecte um canal</Link> (aba YouTube) e tente de novo.
+                      </div>
+                    ) : (
+                      <select
+                        value={ytForm.channel}
+                        onChange={(e) => setYtForm((f) => ({ ...f, channel: e.target.value }))}
+                        className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                      >
+                        {ytChannels.map((c) => (
+                          <option key={c.id} value={c.id}>{c.title ?? c.youtube_channel_id}</option>
+                        ))}
+                      </select>
+                    )}
+
+                    {/* Privacidade */}
+                    <label className="text-[11px] font-medium text-muted-foreground">Privacidade</label>
+                    <select
+                      value={ytForm.privacy}
+                      onChange={(e) => setYtForm((f) => ({ ...f, privacy: e.target.value as YTPrivacy }))}
+                      className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                    >
+                      <option value="public">Público</option>
+                      <option value="unlisted">Não listado</option>
+                      <option value="private">Privado</option>
+                    </select>
+
+                    {/* Capítulos (informativo — já vão na descrição) */}
+                    {ytPub.chapters?.length > 0 && (
+                      <div className="rounded-md border border-border bg-muted/20 p-2">
+                        <p className="mb-1 text-[10px] font-medium uppercase text-muted-foreground">Capítulos</p>
+                        <ul className="space-y-0.5">
+                          {ytPub.chapters.map((c, i) => (
+                            <li key={i} className="text-[11px]">
+                              <span className="font-mono text-primary">{c.t}</span> {c.label}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Título */}
+                <div>
+                  <label className="text-[11px] font-medium text-muted-foreground">Título (até 100 caracteres)</label>
+                  <input
+                    value={ytForm.title}
+                    maxLength={100}
+                    onChange={(e) => setYtForm((f) => ({ ...f, title: e.target.value }))}
+                    className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                  />
+                </div>
+
+                {/* Descrição */}
+                <div>
+                  <label className="text-[11px] font-medium text-muted-foreground">
+                    Descrição (capítulos, links e hashtags já incluídos)
+                  </label>
+                  <textarea
+                    value={ytForm.description}
+                    onChange={(e) => setYtForm((f) => ({ ...f, description: e.target.value }))}
+                    rows={9}
+                    className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs font-mono"
+                  />
+                </div>
+
+                {/* Tags */}
+                <div>
+                  <label className="text-[11px] font-medium text-muted-foreground">Tags (separadas por vírgula)</label>
+                  <input
+                    value={ytForm.tagsText}
+                    onChange={(e) => setYtForm((f) => ({ ...f, tagsText: e.target.value }))}
+                    className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                  />
+                </div>
+
+                {ytPub.status === 'failed' && ytPub.error && (
+                  <div className="rounded-md border border-destructive/30 bg-destructive/10 p-2 text-[11px] text-destructive">
+                    Tentativa anterior falhou: {ytPub.error}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <button
+                    onClick={() => void salvarRascunhoYoutube()}
+                    disabled={!!ytBusy}
+                    className="flex items-center gap-1 rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-60"
+                  >
+                    {ytBusy === 'save' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                    Salvar rascunho
+                  </button>
+                  <button
+                    onClick={() => void publicarNoYoutube()}
+                    disabled={!!ytBusy || ytChannels.length === 0}
+                    className="flex items-center gap-1 rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+                  >
+                    {ytBusy === 'publish' ? (
+                      <><Loader2 className="h-3.5 w-3.5 animate-spin" />Publicando…</>
+                    ) : (
+                      <><Send className="h-3.5 w-3.5" />Publicar agora</>
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── MODAL: gerar vídeo no HeyGen a partir da pauta ── */}
       {hgBrief && (

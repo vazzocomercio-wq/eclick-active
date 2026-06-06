@@ -19,6 +19,9 @@ import { StorageJanitorWorker } from './janitor/storage-janitor.worker';
 import { YouTubeShortsProvider } from './publish/youtube-shorts.provider';
 import { CortesYouTubeService } from './publish/cortes-youtube.service';
 import { CortesYouTubeOAuthController } from './publish/cortes-youtube-oauth.controller';
+import { YouTubeThumbnailService } from './publish/youtube-thumbnail.service';
+import { YouTubeLongformService } from './publish/youtube-longform.service';
+import { YouTubeLongformController } from './publish/youtube-longform.controller';
 import { CortesInstagramService } from './publish/cortes-instagram.service';
 import { CortesInstagramOAuthController } from './publish/cortes-instagram-oauth.controller';
 import { PublishRunnerService } from './publish/publish-runner.service';
@@ -48,6 +51,7 @@ import { CLIPPING_PROVIDER } from './studio-cortes.types';
     CortesInstagramOAuthController,
     CortesSourceController,
     ClippingWebhookController,
+    YouTubeLongformController,
   ],
   providers: [
     StudioCortesService,
@@ -62,6 +66,9 @@ import { CLIPPING_PROVIDER } from './studio-cortes.types';
     // Sprint 2 — publicação nativa + métricas
     YouTubeShortsProvider,
     CortesYouTubeService,
+    // Vídeo longo no YouTube (metadados IA + miniatura + publicação)
+    YouTubeThumbnailService,
+    YouTubeLongformService,
     CortesInstagramService,
     PublishRunnerService,
     PublishWorker,
