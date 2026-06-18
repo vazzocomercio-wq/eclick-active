@@ -1477,20 +1477,21 @@ export class AutomationBridgeService {
   }
 
   /** Resolve o membro "dono" de uma org Active: prioriza role 'owner',
-   *  depois 'admin', senão o primeiro membro ativo. Retorna org_members.id
-   *  ou null se a org não tem membros. */
+   *  depois 'admin', senão o primeiro membro ativo. Retorna o `user_id`
+   *  (auth.users.id) — que é o que deals.assigned_to / tasks.assigned_to
+   *  esperam — ou null se a org não tem membros. */
   private async resolveOrgOwnerMember(orgId: string): Promise<string | null> {
     const { data } = await this.supabase.adminClient
       .from('org_members')
-      .select('id, role')
+      .select('user_id, role')
       .eq('org_id', orgId)
       .eq('status', 'active');
-    const members = (data ?? []) as Array<{ id: string; role: string }>;
+    const members = (data ?? []) as Array<{ user_id: string; role: string }>;
     if (members.length === 0) return null;
     const owner = members.find(m => m.role === 'owner')
       ?? members.find(m => m.role === 'admin')
       ?? members[0];
-    return owner?.id ?? null;
+    return owner?.user_id ?? null;
   }
 
   // ────────────────────────────────────────────

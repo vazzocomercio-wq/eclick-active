@@ -18,27 +18,54 @@ export class AuthService {
   /**
    * Retorna o `AuthUser` resolvido ou `null` se o token for inválido / o
    * usuário não tiver membership ativa em nenhuma organização.
+   *
+   * Auto-ativação de convite: apresentar um JWT válido só é possível depois
+   * que o convidado clicou no magic link e definiu a senha (= aceitou o
+   * convite). Por isso, se o usuário ainda só tem membership `invited`,
+   * promovemos pra `active` no 1º acesso autenticado. Sem isso o convidado
+   * ficava preso em `invited` pra sempre (a página /aceitar-convite só seta
+   * a senha, nunca flipava o status) e tomava 403 eternamente.
    */
   async resolveUser(jwt: string): Promise<AuthUser | null> {
     const authUser = await this.supabase.getUserFromJwt(jwt);
     if (!authUser) return null;
 
-    const { data: member, error } = await this.supabase.adminClient
+    const { data: members, error } = await this.supabase.adminClient
       .from('org_members')
-      .select('org_id, role, status')
+      .select('id, org_id, role, status')
       .eq('user_id', authUser.id)
-      .eq('status', 'active')
-      .maybeSingle();
+      .in('status', ['active', 'invited']);
 
     if (error) {
       this.logger.error(`org_members lookup failed: ${error.message}`);
       return null;
     }
-    if (!member) return null;
+    if (!members || members.length === 0) return null;
+
+    type MemberRow = { id: string; org_id: string; role: string; status: string };
+    const rows = members as MemberRow[];
+
+    // Prioriza uma membership já ativa; senão promove a primeira convidada.
+    let member = rows.find((m) => m.status === 'active');
+    if (!member) {
+      const invited = rows[0];
+      const { error: promoteErr } = await this.supabase.adminClient
+        .from('org_members')
+        .update({ status: 'active' })
+        .eq('id', invited.id);
+      if (promoteErr) {
+        this.logger.error(`auto-ativação de convite falhou: ${promoteErr.message}`);
+        return null;
+      }
+      this.logger.log(
+        `[invite] membership ${invited.id} (user ${authUser.id}) ativada no 1º acesso`,
+      );
+      member = { ...invited, status: 'active' };
+    }
 
     return {
       id: authUser.id,
-      org_id: member.org_id as string,
+      org_id: member.org_id,
       role: member.role as OrgMemberRole,
       email: authUser.email,
     };
