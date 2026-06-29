@@ -53,6 +53,12 @@ export interface PublishInput {
   video_url?: string;
   /** Alt text pra acessibilidade. */
   alt_text?: string;
+  /**
+   * TikTok — modo de publicação (Content Posting API):
+   *  - 'direct' (default): Direct Post, publica no perfil (scope video.publish)
+   *  - 'draft': Upload to inbox, vai pros rascunhos do criador (scope video.upload)
+   */
+  tiktok_mode?: 'direct' | 'draft';
 }
 
 export interface PublishResult {

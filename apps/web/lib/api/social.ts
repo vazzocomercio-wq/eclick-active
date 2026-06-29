@@ -1246,12 +1246,16 @@ export const socialApi = {
 
   // Publishing — actions
   publish: {
-    /** Publica. Com `targets`, vai SÓ pras contas escolhidas (multi-rede/multi-conta). */
-    now: (id: string, targets?: PublishTarget[]) =>
-      api.post<PublishContentResult>(
-        `/social/contents/${id}/publish-now`,
-        targets && targets.length ? { targets } : {},
-      ),
+    /**
+     * Publica. Com `targets`, vai SÓ pras contas escolhidas (multi-rede/multi-conta).
+     * `tiktokMode` (TikTok): 'direct' = posta no perfil (video.publish, default);
+     * 'draft' = manda pros rascunhos do TikTok pro criador finalizar (video.upload).
+     */
+    now: (id: string, targets?: PublishTarget[], tiktokMode?: 'direct' | 'draft') =>
+      api.post<PublishContentResult>(`/social/contents/${id}/publish-now`, {
+        ...(targets && targets.length ? { targets } : {}),
+        ...(tiktokMode ? { tiktok_mode: tiktokMode } : {}),
+      }),
     accounts: (signal?: AbortSignal) =>
       api.get<ConnectedAccount[]>('/social/publish/accounts', { signal }),
     attempts: (id: string, signal?: AbortSignal) =>

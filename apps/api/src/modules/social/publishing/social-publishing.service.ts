@@ -62,6 +62,7 @@ export class SocialPublishingService {
     orgId: string,
     contentId: string,
     targets?: PublishTarget[],
+    tiktokMode?: 'direct' | 'draft',
   ): Promise<PublishContentResult> {
     const content = await this.contents.findById(orgId, contentId);
     // Bloqueia re-publicação acidental — MAS permite quando o usuário escolhe
@@ -88,7 +89,7 @@ export class SocialPublishingService {
       throw new BadRequestException('Nenhum canal/conta válido pra publicar');
     }
 
-    const input = this.buildPublishInput(content);
+    const input = this.buildPublishInput(content, tiktokMode);
     const outcomes: ChannelOutcome[] = [];
     const externalIds: Record<string, string> = {
       ...((content.external_post_ids as Record<string, string> | null) ?? {}),
@@ -203,7 +204,10 @@ export class SocialPublishingService {
 
   // ─── helpers ────────────────────────────────────
 
-  private buildPublishInput(content: SocialContent): PublishInput {
+  private buildPublishInput(
+    content: SocialContent,
+    tiktokMode?: 'direct' | 'draft',
+  ): PublishInput {
     const captionParts: string[] = [];
     if (content.caption) captionParts.push(content.caption);
     if (content.hashtags.length > 0) {
@@ -229,6 +233,7 @@ export class SocialPublishingService {
         is_carousel: false,
         video_url: videoUrl,
         alt_text: content.media[0]?.alt_text,
+        tiktok_mode: tiktokMode,
       };
     }
 

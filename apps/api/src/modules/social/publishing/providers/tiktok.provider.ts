@@ -8,7 +8,10 @@ import type {
 } from '../publishing.types';
 
 /**
- * Provider TikTok Business — Content Posting API (Direct Post).
+ * Provider TikTok Business — Content Posting API.
+ * Dois modos (input.tiktok_mode): 'direct' (Direct Post, scope video.publish —
+ * publica no perfil) e 'draft' (Upload to inbox, scope video.upload — vai pros
+ * rascunhos do criador finalizar no app). Default = 'direct'.
  *
  * Publica VÍDEO (reel) via FILE_UPLOAD: baixa o mp4 da nossa URL pública e
  * ENVIA os bytes direto pro TikTok (1 chunk). Não usa PULL_FROM_URL — assim
@@ -98,24 +101,38 @@ export class TikTokBusinessProvider implements PublishingProvider {
       const videoSize = videoBytes.byteLength;
 
       // 2) init FILE_UPLOAD — reel curto cabe em 1 chunk (limite 64MB/chunk).
-      const initRes = await fetch(`${TIKTOK_API}/post/publish/video/init/`, {
+      //    mode 'draft'  → Upload to inbox (scope video.upload): vai pros
+      //                    RASCUNHOS do TikTok pro criador finalizar e postar.
+      //    mode 'direct' → Direct Post (scope video.publish, default): publica
+      //                    direto no perfil do usuário.
+      const isDraft = input.tiktok_mode === 'draft';
+      const initPath = isDraft
+        ? '/post/publish/inbox/video/init/'
+        : '/post/publish/video/init/';
+      const source_info = {
+        source: 'FILE_UPLOAD',
+        video_size: videoSize,
+        chunk_size: videoSize,
+        total_chunk_count: 1,
+      };
+      // Inbox NÃO recebe post_info — título/privacidade ficam pro criador
+      // definir dentro do app do TikTok ao publicar o rascunho.
+      const initBody = isDraft
+        ? { source_info }
+        : {
+            post_info: {
+              title: (input.caption ?? '').slice(0, 2200),
+              privacy_level: privacy,
+              disable_comment: false,
+              disable_duet: false,
+              disable_stitch: false,
+            },
+            source_info,
+          };
+      const initRes = await fetch(`${TIKTOK_API}${initPath}`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({
-          post_info: {
-            title: (input.caption ?? '').slice(0, 2200),
-            privacy_level: privacy,
-            disable_comment: false,
-            disable_duet: false,
-            disable_stitch: false,
-          },
-          source_info: {
-            source: 'FILE_UPLOAD',
-            video_size: videoSize,
-            chunk_size: videoSize,
-            total_chunk_count: 1,
-          },
-        }),
+        body: JSON.stringify(initBody),
         signal: AbortSignal.timeout(30_000),
       });
       const initJson = (await initRes.json()) as {
@@ -186,7 +203,9 @@ export class TikTokBusinessProvider implements PublishingProvider {
           error?: { code?: string; message?: string };
         };
         lastStatus = stJson.data?.status ?? lastStatus;
-        if (lastStatus === 'PUBLISH_COMPLETE') {
+        // direct → PUBLISH_COMPLETE (post no ar) | draft → SEND_TO_USER_INBOX
+        // (vídeo nos rascunhos do criador, sem post público ainda).
+        if (lastStatus === 'PUBLISH_COMPLETE' || lastStatus === 'SEND_TO_USER_INBOX') {
           finalPostId = stJson.data?.publicaly_available_post_id?.[0];
           break;
         }
@@ -209,7 +228,11 @@ export class TikTokBusinessProvider implements PublishingProvider {
           finalPostId && username
             ? `https://www.tiktok.com/@${username}/video/${finalPostId}`
             : undefined,
-        provider_response: { publish_id: publishId, status: lastStatus },
+        provider_response: {
+          publish_id: publishId,
+          status: lastStatus,
+          mode: isDraft ? 'draft' : 'direct',
+        },
       };
     } catch (err) {
       return {

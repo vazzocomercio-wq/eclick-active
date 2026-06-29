@@ -541,6 +541,10 @@ function PublishPanel({
       return next;
     });
 
+  // TikTok — modo de publicação: 'direct' posta no perfil (video.publish),
+  // 'draft' manda pros rascunhos do TikTok pro criador finalizar (video.upload).
+  const [tiktokMode, setTiktokMode] = useState<'direct' | 'draft'>('direct');
+
   const publishSelected = async () => {
     const targets: PublishTarget[] = accounts
       .filter((a) => selected.has(a.credential_id))
@@ -563,7 +567,12 @@ function PublishPanel({
     if (!ok) return;
     setPublishing(true);
     try {
-      const r = await socialApi.publish.now(contentId, targets);
+      const tiktokInTargets = targets.some((t) => t.channel === 'tiktok_business');
+      const r = await socialApi.publish.now(
+        contentId,
+        targets,
+        tiktokInTargets ? tiktokMode : undefined,
+      );
       const ok2 = r.outcomes.filter((o) => o.result.success).length;
       const fail = r.outcomes.filter((o) => !o.result.success);
       if (ok2 > 0 && fail.length === 0) toast.success(`Publicado em ${ok2} conta(s)`);
@@ -669,6 +678,43 @@ function PublishPanel({
                 </div>
               </div>
             ))}
+            {accounts.some(
+              (a) => selected.has(a.credential_id) && a.channel === 'tiktok_business',
+            ) && (
+              <div className="rounded border border-border bg-card p-2">
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  TikTok — como publicar
+                </p>
+                <div className="flex flex-col gap-1.5">
+                  <label className="flex cursor-pointer items-start gap-2">
+                    <input
+                      type="radio"
+                      name="tiktok-mode"
+                      checked={tiktokMode === 'direct'}
+                      onChange={() => setTiktokMode('direct')}
+                      className="mt-0.5 h-3 w-3"
+                    />
+                    <span className="text-[11px] leading-snug">
+                      <b>Postar no perfil agora</b> — publica direto no TikTok
+                      <span className="text-muted-foreground"> (video.publish)</span>
+                    </span>
+                  </label>
+                  <label className="flex cursor-pointer items-start gap-2">
+                    <input
+                      type="radio"
+                      name="tiktok-mode"
+                      checked={tiktokMode === 'draft'}
+                      onChange={() => setTiktokMode('draft')}
+                      className="mt-0.5 h-3 w-3"
+                    />
+                    <span className="text-[11px] leading-snug">
+                      <b>Salvar nos rascunhos do TikTok</b> — você finaliza e posta no app
+                      <span className="text-muted-foreground"> (video.upload)</span>
+                    </span>
+                  </label>
+                </div>
+              </div>
+            )}
             <Button
               size="sm"
               className="mt-1 w-full"

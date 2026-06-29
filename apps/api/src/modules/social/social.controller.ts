@@ -376,9 +376,14 @@ export class SocialController {
   publishNow(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
-    @Body() body?: { targets?: PublishTarget[] },
+    @Body() body?: { targets?: PublishTarget[]; tiktok_mode?: 'direct' | 'draft' },
   ) {
-    return this.publishing.publishContent(user.org_id, id, body?.targets);
+    return this.publishing.publishContent(
+      user.org_id,
+      id,
+      body?.targets,
+      body?.tiktok_mode,
+    );
   }
 
   @Get('contents/:id/publish-attempts')
