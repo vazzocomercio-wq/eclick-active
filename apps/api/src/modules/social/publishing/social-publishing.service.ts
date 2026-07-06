@@ -2,6 +2,7 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { SupabaseService } from '../../../common/supabase/supabase.service';
 import { EventsGateway } from '../../../gateways/events.gateway';
 import { SocialContentsService } from '../social-contents.service';
+import { ImageGenerationService } from '../image-generation/image-generation.service';
 import { SocialChannelCredentialsService } from './social-channel-credentials.service';
 import { InstagramGraphProvider } from './providers/instagram-graph.provider';
 import { TikTokBusinessProvider } from './providers/tiktok.provider';
@@ -48,6 +49,7 @@ export class SocialPublishingService {
     private readonly supabase: SupabaseService,
     private readonly events: EventsGateway,
     private readonly contents: SocialContentsService,
+    private readonly images: ImageGenerationService,
     private readonly creds: SocialChannelCredentialsService,
     instagram: InstagramGraphProvider,
     tiktok: TikTokBusinessProvider,
@@ -88,6 +90,10 @@ export class SocialPublishingService {
     if (jobs.length === 0) {
       throw new BadRequestException('Nenhum canal/conta válido pra publicar');
     }
+
+    // Instagram/TikTok baixam a mídia pela URL — se a signed URL venceu
+    // (ou vence durante o publish), a plataforma falha ao buscar o arquivo.
+    await this.refreshExpiringMediaUrls(content);
 
     const input = this.buildPublishInput(content, tiktokMode);
     const outcomes: ChannelOutcome[] = [];
@@ -203,6 +209,46 @@ export class SocialPublishingService {
   }
 
   // ─── helpers ────────────────────────────────────
+
+  /**
+   * Renova in-memory as signed URLs do bucket social-media que vencem nas
+   * próximas 24h (o publish de vídeo pode levar minutos). A persistência
+   * fica a cargo do MediaRefreshWorkerService diário.
+   */
+  private async refreshExpiringMediaUrls(content: SocialContent): Promise<void> {
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const renewed = new Map<string, string>();
+    const renew = async (
+      url: string | null | undefined,
+      persistedPath?: string | null,
+    ): Promise<string | null> => {
+      if (!url) return null;
+      if (renewed.has(url)) return renewed.get(url) ?? null;
+      try {
+        const fresh = await this.images.refreshUrlIfExpiring(
+          url,
+          DAY_MS,
+          persistedPath,
+        );
+        if (fresh) renewed.set(url, fresh);
+        return fresh;
+      } catch (err) {
+        this.log.warn(`refresh de URL pré-publish falhou: ${String(err)}`);
+        return null;
+      }
+    };
+
+    for (const m of content.media ?? []) {
+      m.url = (await renew(m.url, m.storage_path)) ?? m.url;
+    }
+    for (const s of content.slides ?? []) {
+      if (s.image_url) s.image_url = (await renew(s.image_url)) ?? s.image_url;
+    }
+    if (content.cover_image_url) {
+      content.cover_image_url =
+        (await renew(content.cover_image_url)) ?? content.cover_image_url;
+    }
+  }
 
   private buildPublishInput(
     content: SocialContent,

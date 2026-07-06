@@ -18,7 +18,12 @@ interface UploadResult {
   mime_type: string;
 }
 
-const SIGNED_URL_TTL = 60 * 60 * 24 * 7; // 7 dias
+const SIGNED_URL_TTL = 60 * 60 * 24 * 30; // 30 dias
+
+// Renova quando faltar menos que isso pro vencimento (worker diário + publish)
+export const SIGNED_URL_REFRESH_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000; // 7 dias
+
+const BUCKET = 'social-media';
 
 /**
  * Orquestrador de geração de imagens. Tenta na ordem:
@@ -92,7 +97,7 @@ export class ImageGenerationService {
     const filename = `${randomUUID()}.${img.ext}`;
     const storagePath = `${orgId}/${folder}/${filename}`;
     const { error: upErr } = await this.supabase.adminClient.storage
-      .from('social-media')
+      .from(BUCKET)
       .upload(storagePath, img.buffer, {
         contentType: img.mimeType,
         upsert: false,
@@ -100,11 +105,71 @@ export class ImageGenerationService {
     if (upErr) throw upErr;
 
     const { data: signed, error: signErr } = await this.supabase.adminClient.storage
-      .from('social-media')
+      .from(BUCKET)
       .createSignedUrl(storagePath, SIGNED_URL_TTL);
     if (signErr || !signed) {
       throw signErr ?? new Error('createSignedUrl falhou');
     }
     return { signedUrl: signed.signedUrl, storage_path: storagePath };
+  }
+
+  // ─── Renovação de signed URLs ─────────────────────
+  //
+  // Signed URLs vencem (TTL acima). O caminho do arquivo fica embutido na
+  // própria URL (`/object/sign/social-media/<path>?token=...`), então dá pra
+  // renovar QUALQUER URL antiga do bucket — inclusive rows legadas que nunca
+  // persistiram storage_path — mesmo depois de vencida.
+
+  /** Extrai o storage_path de uma signed URL do bucket social-media (ou null). */
+  pathFromUrl(url: string | null | undefined): string | null {
+    if (!url) return null;
+    const m = url.match(/\/object\/sign\/social-media\/([^?]+)/);
+    if (!m) return null;
+    try {
+      return decodeURIComponent(m[1]);
+    } catch {
+      return m[1];
+    }
+  }
+
+  /** Vencimento (ms epoch) do token da signed URL, ou null se ilegível. */
+  urlExpiresAt(url: string | null | undefined): number | null {
+    if (!url) return null;
+    const token = new RegExp('[?&]token=([^&]+)').exec(url)?.[1];
+    if (!token) return null;
+    try {
+      const payload = token.split('.')[1];
+      const decoded = JSON.parse(
+        Buffer.from(payload, 'base64url').toString('utf8'),
+      ) as { exp?: number };
+      return typeof decoded.exp === 'number' ? decoded.exp * 1000 : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Renova a URL se for do bucket social-media e estiver a menos de
+   * `thresholdMs` do vencimento (ou já vencida/ilegível).
+   * Retorna a URL nova, ou null se não precisa/não dá pra renovar.
+   */
+  async refreshUrlIfExpiring(
+    url: string | null | undefined,
+    thresholdMs: number = SIGNED_URL_REFRESH_THRESHOLD_MS,
+    persistedPath?: string | null,
+  ): Promise<string | null> {
+    const path = persistedPath ?? this.pathFromUrl(url);
+    if (!path) return null;
+    const exp = this.urlExpiresAt(url);
+    if (exp !== null && exp - Date.now() > thresholdMs) return null;
+
+    const { data: signed, error } = await this.supabase.adminClient.storage
+      .from(BUCKET)
+      .createSignedUrl(path, SIGNED_URL_TTL);
+    if (error || !signed) {
+      this.log.warn(`refresh de signed URL falhou (${path}): ${String(error)}`);
+      return null;
+    }
+    return signed.signedUrl;
   }
 }

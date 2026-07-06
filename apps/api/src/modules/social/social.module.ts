@@ -13,6 +13,7 @@ import { SocialAiGeneratorService } from './social-ai/social-ai-generator.servic
 import { SocialExportService } from './social-export.service';
 import { SocialSchedulerService } from './social-scheduler.service';
 import { ImageGenerationService } from './image-generation/image-generation.service';
+import { MediaRefreshWorkerService } from './image-generation/media-refresh.worker';
 import { CanvaImageProvider } from './image-generation/providers/canva.provider';
 import { OpenAIImageProvider } from './image-generation/providers/openai.provider';
 import { PlaceholderImageProvider } from './image-generation/providers/placeholder.provider';
@@ -101,6 +102,7 @@ import { BridgeModule } from '../bridge/bridge.module';
     SocialExportService,
     SocialSchedulerService,
     ImageGenerationService,
+    MediaRefreshWorkerService,
     CanvaImageProvider,
     OpenAIImageProvider,
     PlaceholderImageProvider,

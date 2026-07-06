@@ -89,6 +89,8 @@ export interface SocialContentSlide {
 
 export interface SocialContentMedia {
   url: string;
+  /** Caminho no bucket social-media — permite re-assinar a URL quando vence */
+  storage_path?: string;
   thumbnail_url?: string;
   width?: number;
   height?: number;

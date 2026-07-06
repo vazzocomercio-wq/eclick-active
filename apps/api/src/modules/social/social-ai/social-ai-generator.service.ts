@@ -271,7 +271,11 @@ export class SocialAiGeneratorService {
       width: img.width,
       height: img.height,
       used_in_contents: [contentId],
-      metadata: { content_id: contentId, image_prompt: parsed.image_prompt },
+      metadata: {
+        content_id: contentId,
+        image_prompt: parsed.image_prompt,
+        storage_path: img.storage_path,
+      },
     });
 
     const updated = await this.updateContentAfterGeneration(orgId, contentId, {
@@ -281,6 +285,7 @@ export class SocialAiGeneratorService {
       media: [
         {
           url: img.url,
+          storage_path: img.storage_path,
           width: img.width,
           height: img.height,
           alt_text: parsed.alt_text,
@@ -351,6 +356,7 @@ export class SocialAiGeneratorService {
 
     // Gera imagem pra cada slide (sequencial pra evitar rate limit)
     const enrichedSlides: SocialContentSlide[] = [];
+    const pathByUrl = new Map<string, string>();
     let coverUrl: string | null = null;
     for (const slide of parsed.slides) {
       try {
@@ -367,6 +373,7 @@ export class SocialAiGeneratorService {
           `carousels/${contentId}/slide-${slide.slide_number}`,
         );
         enrichedSlides.push({ ...slide, image_url: img.url });
+        pathByUrl.set(img.url, img.storage_path);
         if (slide.slide_number === 1) coverUrl = img.url;
       } catch (err) {
         this.log.warn(`Slide ${slide.slide_number} falhou: ${String(err)}`);
@@ -378,6 +385,7 @@ export class SocialAiGeneratorService {
       .filter((s) => s.image_url)
       .map((s) => ({
         url: s.image_url as string,
+        storage_path: pathByUrl.get(s.image_url as string),
         width: 1080,
         height: 1080,
         source: 'generated_ai' as const,
