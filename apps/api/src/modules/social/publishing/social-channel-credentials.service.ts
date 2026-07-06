@@ -169,6 +169,14 @@ export class SocialChannelCredentialsService {
         }
       }
 
+      // Auto-refresh do Instagram: long-lived token da Meta dura ~60 dias e é
+      // renovável trocando o token atual (fb_exchange_token) — sem isso o
+      // cliente teria que reconectar a conta a cada 2 meses.
+      if (channel === 'instagram_business') {
+        const fresh = await this.maybeRefreshInstagramToken(cred, accessToken);
+        if (fresh) accessToken = fresh;
+      }
+
       return { cred, access_token: accessToken, refresh_token: refreshToken };
     } catch (err) {
       this.log.warn(`getDecryptedToken falhou: ${String(err)}`);
@@ -218,6 +226,10 @@ export class SocialChannelCredentialsService {
           const fresh = await this.refreshTikTokToken(cred, refreshToken);
           if (fresh) accessToken = fresh;
         }
+      }
+      if (cred.channel === 'instagram_business') {
+        const fresh = await this.maybeRefreshInstagramToken(cred, accessToken);
+        if (fresh) accessToken = fresh;
       }
       return { cred, access_token: accessToken, refresh_token: refreshToken };
     } catch (err) {
@@ -287,6 +299,67 @@ export class SocialChannelCredentialsService {
       return tok.access_token;
     } catch (err) {
       this.log.warn(`[tiktok.refresh] erro: ${String(err)}`);
+      return null;
+    }
+  }
+
+  /** Renova o long-lived token da Meta (grant_type=fb_exchange_token) quando
+   *  expires_at está a <7 dias (ou é desconhecido — nesse caso a resposta
+   *  traz expires_in e o expires_at se auto-corrige). Devolve o novo
+   *  access_token, ou null se não precisou/não conseguiu (mantém o atual). */
+  private async maybeRefreshInstagramToken(
+    cred: SocialChannelCredential,
+    accessToken: string,
+  ): Promise<string | null> {
+    const expMs = cred.expires_at ? new Date(cred.expires_at).getTime() : 0;
+    if (expMs && expMs - Date.now() > 7 * 24 * 60 * 60 * 1000) return null;
+
+    const appId = process.env.META_APP_ID;
+    const appSecret = process.env.META_APP_SECRET;
+    if (!appId || !appSecret) {
+      this.log.warn('[ig.refresh] META_APP_ID/SECRET ausentes — sem refresh');
+      return null;
+    }
+    try {
+      const url = new URL('https://graph.facebook.com/v21.0/oauth/access_token');
+      url.searchParams.set('grant_type', 'fb_exchange_token');
+      url.searchParams.set('client_id', appId);
+      url.searchParams.set('client_secret', appSecret);
+      url.searchParams.set('fb_exchange_token', accessToken);
+
+      const res = await fetch(url.toString(), {
+        signal: AbortSignal.timeout(20_000),
+      });
+      const tok = (await res.json()) as {
+        access_token?: string;
+        expires_in?: number;
+        error?: { message?: string };
+      };
+      if (!res.ok || tok.error || !tok.access_token) {
+        await this.markError(
+          cred.id,
+          `ig refresh falhou: ${tok.error?.message ?? res.status}`,
+        );
+        return null;
+      }
+      await this.supabase.adminClient
+        .from('social_channel_credentials')
+        .update({
+          access_token_ciphertext: encryptSecret(tok.access_token),
+          // Meta às vezes devolve o mesmo token sem expires_in (quando foi
+          // trocado há <24h) — assume os 60 dias padrão nesse caso
+          expires_at: new Date(
+            Date.now() + (tok.expires_in ?? 60 * 24 * 60 * 60) * 1000,
+          ).toISOString(),
+          last_validated_at: new Date().toISOString(),
+          last_error: null,
+        })
+        .eq('id', cred.id)
+        .eq('org_id', cred.org_id);
+      this.log.log(`[ig.refresh] token renovado (cred ${cred.id})`);
+      return tok.access_token;
+    } catch (err) {
+      this.log.warn(`[ig.refresh] erro: ${String(err)}`);
       return null;
     }
   }

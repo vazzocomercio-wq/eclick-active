@@ -32,12 +32,11 @@ export interface InstagramPostInsights {
  * Puxa Instagram Insights via Graph API. Usado pelo
  * SocialMetricsWorkerService (cron 6h).
  *
- * Endpoint: GET /{ig_media_id}/insights?metric=...&access_token=...
+ * Endpoint: GET /{ig_media_id}/insights?metric=... (token via header)
  *
- * Métricas pedidas (depende do tipo de mídia):
- *   - Post estático: reach, impressions, likes, comments, shares, saved
- *   - Carousel: same + carousel_album_engagement
- *   - Reel: video_views, plays, total_interactions
+ * Métricas pedidas: núcleo válido pra todo tipo de mídia (reach, likes,
+ * comments, shares, saved, total_interactions, views) + best-effort de
+ * profile_visits/profile_activity (só existem pra mídia de feed).
  *
  * Engagement rate = (likes + comments + shares + saved) / reach.
  *
@@ -63,34 +62,39 @@ export class InstagramInsightsService {
     );
     if (!decrypted) return null;
 
+    // Só métricas válidas pra TODO tipo de mídia (imagem, carrossel e reel).
+    // A Graph API rejeita o request INTEIRO com 400 se qualquer métrica for
+    // incompatível — a lista antiga misturava métricas de conta
+    // (profile_visits/profile_activity) e usava impressions/video_views,
+    // deprecadas pela Meta em favor de `views`, então NENHUM insight chegava.
     const metrics = [
       'reach',
-      'impressions',
       'likes',
       'comments',
       'shares',
       'saved',
-      'profile_visits',
-      'profile_activity',
-      'video_views',
       'total_interactions',
+      'views',
     ];
 
-    const url = new URL(`${GRAPH_BASE}/${igMediaId}/insights`);
-    url.searchParams.set('metric', metrics.join(','));
-    url.searchParams.set('access_token', decrypted.access_token);
-
     try {
-      const res = await fetch(url.toString());
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        this.log.warn(
-          `IG Insights ${igMediaId} retornou ${res.status}: ${text.slice(0, 200)}`,
-        );
-        return null;
-      }
-      const body = (await res.json()) as { data?: InsightsRow[] };
-      const data = body.data ?? [];
+      const data = await this.fetchInsightRows(
+        igMediaId,
+        metrics,
+        decrypted.access_token,
+      );
+      if (!data) return null;
+
+      // Best-effort: métricas de perfil só existem pra mídia de feed
+      // (imagem/carrossel) — em reel a Meta devolve 400, e tudo bem.
+      const profileRows =
+        (await this.fetchInsightRows(
+          igMediaId,
+          ['profile_visits', 'profile_activity'],
+          decrypted.access_token,
+          true,
+        )) ?? [];
+      data.push(...profileRows);
 
       const get = (name: string): number => {
         const row = data.find((r) => r.name === name);
@@ -104,14 +108,17 @@ export class InstagramInsightsService {
       };
 
       const reach = get('reach');
-      const impressions = get('impressions');
+      // `views` substituiu impressions/video_views/plays na Graph API —
+      // mantém os nomes antigos aqui pq são as colunas de social_metrics_daily
+      const views = get('views');
+      const impressions = views;
       const likes = get('likes');
       const comments = get('comments');
       const shares = get('shares');
       const saved = get('saved');
       const profile_visits = get('profile_visits');
       const profile_follows = get('profile_activity'); // proxy
-      const video_views = get('video_views');
+      const video_views = views;
       const total_interactions = get('total_interactions');
       const engagementSum = likes + comments + shares + saved;
       const engagement_rate = reach > 0 ? engagementSum / reach : 0;
@@ -136,5 +143,35 @@ export class InstagramInsightsService {
       );
       return null;
     }
+  }
+
+  /**
+   * Chama /{id}/insights com o token no header Authorization (não na query
+   * string, onde vazaria em logs de proxy/APM). Retorna null em falha —
+   * silenciosamente quando `quiet` (usado pras métricas opcionais de perfil).
+   */
+  private async fetchInsightRows(
+    igMediaId: string,
+    metrics: string[],
+    accessToken: string,
+    quiet = false,
+  ): Promise<InsightsRow[] | null> {
+    const url = new URL(`${GRAPH_BASE}/${igMediaId}/insights`);
+    url.searchParams.set('metric', metrics.join(','));
+
+    const res = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) {
+      if (!quiet) {
+        const text = await res.text().catch(() => '');
+        this.log.warn(
+          `IG Insights ${igMediaId} retornou ${res.status}: ${text.slice(0, 200)}`,
+        );
+      }
+      return null;
+    }
+    const body = (await res.json()) as { data?: InsightsRow[] };
+    return body.data ?? [];
   }
 }
