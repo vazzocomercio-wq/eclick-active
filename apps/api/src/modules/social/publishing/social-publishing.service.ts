@@ -73,6 +73,26 @@ export class SocialPublishingService {
       throw new BadRequestException('Conteúdo já publicado');
     }
 
+    // Reivindica o conteúdo via compare-and-swap no publish_attempts_count.
+    // Um publish de vídeo leva minutos e o worker roda a cada 60s — sem isso,
+    // tick sobreposto (ou clique manual simultâneo) publicaria em dobro na
+    // conta do cliente. Só um processo vence o CAS; o outro recebe 400.
+    const { data: claimed, error: claimErr } = await this.supabase.adminClient
+      .from('social_contents')
+      .update({
+        publish_attempts_count: content.publish_attempts_count + 1,
+      } as never)
+      .eq('id', contentId)
+      .eq('org_id', orgId)
+      .eq('publish_attempts_count', content.publish_attempts_count)
+      .select('id');
+    if (claimErr) throw claimErr;
+    if (!claimed?.length) {
+      throw new BadRequestException(
+        'Este conteúdo já está sendo publicado por outro processo. Aguarde alguns instantes.',
+      );
+    }
+
     // Jobs = (canal, conta específica?). Com targets, publica SÓ nas contas
     // escolhidas; sem targets, cai no comportamento antigo (1 conta/canal).
     let jobs: Array<{ channel: PublishingChannel; credId?: string }>;
@@ -153,14 +173,13 @@ export class SocialPublishingService {
       .map((o) => `${o.channel}: ${o.result.error_message}`)
       .join(' | ');
 
-    // Atualiza content
+    // Atualiza content (publish_attempts_count já foi incrementado no claim)
     await this.supabase.adminClient
       .from('social_contents')
       .update({
         status: anySuccess ? 'published' : 'failed',
         published_at: anySuccess ? new Date().toISOString() : null,
         external_post_ids: externalIds,
-        publish_attempts_count: content.publish_attempts_count + 1,
         last_publish_error: allSuccess ? null : lastError.slice(0, 500),
       } as never)
       .eq('id', contentId)

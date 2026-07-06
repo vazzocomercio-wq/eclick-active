@@ -26,6 +26,9 @@ export class SocialPublisherWorkerService implements OnModuleInit, OnModuleDestr
   private readonly log = new Logger(SocialPublisherWorkerService.name);
   private timer: NodeJS.Timeout | null = null;
   private startupTimeout: NodeJS.Timeout | null = null;
+  // Um publish de vídeo pode levar minutos; sem essa flag, o tick seguinte
+  // (60s) rodaria em paralelo processando as mesmas rows.
+  private running = false;
 
   constructor(
     private readonly supabase: SupabaseService,
@@ -52,6 +55,8 @@ export class SocialPublisherWorkerService implements OnModuleInit, OnModuleDestr
   }
 
   private async tick(): Promise<void> {
+    if (this.running) return;
+    this.running = true;
     try {
       const now = new Date().toISOString();
       const { data: rows } = await this.supabase.adminClient
@@ -73,11 +78,24 @@ export class SocialPublisherWorkerService implements OnModuleInit, OnModuleDestr
       let published = 0;
       let failed = 0;
       for (const row of queue) {
-        // Backoff: se já tentou 3+ vezes, pausa pra não martelar
+        // Esgotou as tentativas → marca failed de verdade. Antes só "pulava",
+        // e como a fila pega os 10 mais antigos, rows mortas ocupavam todas
+        // as vagas pra sempre e nada mais era publicado (starvation).
         if (row.publish_attempts_count >= 3) {
           this.log.warn(
-            `content ${row.id} já tentou ${row.publish_attempts_count}× — pulando`,
+            `content ${row.id} esgotou ${row.publish_attempts_count} tentativas — marcando failed`,
           );
+          await this.supabase.adminClient
+            .from('social_contents')
+            .update({
+              status: 'failed',
+              last_publish_error:
+                'Máximo de tentativas de publicação atingido',
+            } as never)
+            .eq('id', row.id)
+            .eq('org_id', row.org_id)
+            .eq('status', 'scheduled');
+          failed += 1;
           continue;
         }
         try {
@@ -97,6 +115,8 @@ export class SocialPublisherWorkerService implements OnModuleInit, OnModuleDestr
       }
     } catch (err) {
       this.log.warn(`tick falhou: ${String(err)}`);
+    } finally {
+      this.running = false;
     }
   }
 }
