@@ -198,8 +198,10 @@ export class TikTokConnectController {
         refresh_token: tok.refresh_token,
         expires_at: expiresAt,
         scopes: (tok.scope ?? PUBLISH_SCOPES).split(','),
-        // Até o app passar na auditoria do TikTok, só posta privado.
-        metadata: { privacy_level: 'SELF_ONLY' },
+        // App auditado/aprovado pelo TikTok (2026-07-06) → Direct Post pode
+        // sair público. Trocar pra SELF_ONLY na credencial se algum cliente
+        // preferir revisar no app antes de publicar.
+        metadata: { privacy_level: 'PUBLIC_TO_EVERYONE' },
       });
 
       back(`tiktok=success&user=${encodeURIComponent(username ?? '')}`);

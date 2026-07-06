@@ -23,9 +23,10 @@ import type {
  *      scopes video.publish + video.upload, e Direct Post habilitado.
  *   2. Token de acesso do usuário salvo em social_channel_credentials
  *      (channel='tiktok_business').
- *   3. Enquanto o app não passa pela auditoria do TikTok, só dá pra postar
- *      como privado → privacy_level default = SELF_ONLY. Depois de auditado,
- *      setar metadata.privacy_level = 'PUBLIC_TO_EVERYONE'.
+ *   3. App AUDITADO/APROVADO pelo TikTok (2026-07-06) → Direct Post público
+ *      liberado. privacy_level vem do metadata da credencial (novas conexões
+ *      gravam PUBLIC_TO_EVERYONE; fallback SELF_ONLY só pra credencial antiga
+ *      sem metadata — mais seguro postar privado que público sem intenção).
  *
  * Doc: https://developers.tiktok.com/doc/content-posting-api-reference-direct-post
  */
