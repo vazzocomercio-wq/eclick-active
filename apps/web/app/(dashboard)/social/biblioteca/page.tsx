@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Image as ImageIcon, Filter } from 'lucide-react';
 import { useContents, useBrands } from '@/hooks/use-social';
@@ -42,6 +42,22 @@ export default function BibliotecaPage() {
   const [pillar, setPillar] = useState<ContentPillar | 'all'>('all');
   const [brandId, setBrandId] = useState<string>('all');
   const [search, setSearch] = useState('');
+
+  // Dashboard e central de ação linkam pra cá com ?status=... — aplica como
+  // filtro inicial. Lê via window.location (client-only) pra evitar Suspense
+  // no build, mesmo padrão da página /social/criar.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const p = new URLSearchParams(window.location.search);
+    const s = p.get('status');
+    if (s && STATUS_OPTIONS.some(([v]) => v === s)) {
+      setStatus(s as ContentStatus | 'all');
+    }
+    const t = p.get('type');
+    if (t && TYPE_OPTIONS.some(([v]) => v === t)) {
+      setType(t as ContentType | 'all');
+    }
+  }, []);
 
   const { data, loading } = useContents({
     status: status === 'all' ? undefined : status,

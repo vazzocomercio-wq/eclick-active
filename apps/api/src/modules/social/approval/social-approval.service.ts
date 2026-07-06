@@ -210,6 +210,11 @@ export class SocialApprovalService {
     decision: 'approved' | 'rejected',
     notes?: string,
   ): Promise<{ ok: true }> {
+    // Endpoint público sem ValidationPipe — sem esse guard, qualquer string
+    // do body iria direto pro status do stage ('expired', 'pending'...).
+    if (decision !== 'approved' && decision !== 'rejected') {
+      throw new BadRequestException('Decisão inválida');
+    }
     const stage = await this.findStageByToken(token);
     if (stage.status !== 'pending') {
       throw new BadRequestException('Decisão já foi tomada nesse estágio');
@@ -224,7 +229,47 @@ export class SocialApprovalService {
         decision_at: new Date().toISOString(),
         decision_notes: notes?.slice(0, 1000) ?? null,
       })
-      .eq('id', stage.id);
+      .eq('id', stage.id)
+      .eq('org_id', stage.org_id);
+
+    // Propaga pro conteúdo — sem isso a decisão do cliente externo era
+    // decorativa: o stage mudava mas o conteúdo continuava travado em
+    // pending_approval (aprovado não destravava, rejeitado não saía da fila).
+    const trimmedNotes = notes?.slice(0, 480);
+    if (decision === 'approved') {
+      const { error } = await this.supabase.adminClient
+        .from('social_contents')
+        .update({
+          status: 'approved',
+          approved_at: new Date().toISOString(),
+        })
+        .eq('id', stage.content_id)
+        .eq('org_id', stage.org_id)
+        .in('status', ['draft', 'pending_approval']);
+      if (error) {
+        this.log.warn(
+          `propagar aprovação pro content ${stage.content_id} falhou: ${error.message}`,
+        );
+      }
+    } else {
+      const { error } = await this.supabase.adminClient
+        .from('social_contents')
+        .update({
+          status: 'rejected',
+          rejection_reason: trimmedNotes
+            ? `${stage.reviewer_name} (link de aprovação): ${trimmedNotes}`
+            : `Rejeitado por ${stage.reviewer_name} via link de aprovação`,
+        })
+        .eq('id', stage.content_id)
+        .eq('org_id', stage.org_id)
+        // Rejeição também tira da fila conteúdo já aprovado/agendado
+        .in('status', ['draft', 'pending_approval', 'approved', 'scheduled']);
+      if (error) {
+        this.log.warn(
+          `propagar rejeição pro content ${stage.content_id} falhou: ${error.message}`,
+        );
+      }
+    }
     return { ok: true };
   }
 
