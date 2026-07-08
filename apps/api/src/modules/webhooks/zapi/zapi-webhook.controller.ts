@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Headers,
   HttpCode,
   HttpStatus,
   Logger,
@@ -44,10 +45,24 @@ export class ZapiWebhookController {
   @Post()
   @HttpCode(HttpStatus.OK)
   async handle(
+    @Headers() headers: Record<string, string | undefined>,
     @Body() payload: ZapiWebhookPayloadDto,
   ): Promise<{ ok: boolean; reason?: string }> {
     try {
-      const result = await this.service.handle(payload as unknown as ZapiInboundPayload);
+      // Verificação de assinatura OPCIONAL: a Z-API pode ser configurada pra
+      // enviar um token no header do webhook. Coletamos os nomes de header
+      // mais comuns; o service valida contra channels.webhook_secret se estiver
+      // configurado, senão mantém o comportamento atual (não quebra quem não
+      // configurou).
+      const providedSecret =
+        headers['client-token'] ??
+        headers['x-webhook-secret'] ??
+        headers['x-zapi-token'] ??
+        undefined;
+      const result = await this.service.handle(
+        payload as unknown as ZapiInboundPayload,
+        { providedSecret },
+      );
       return { ok: result.accepted, ...(result.reason ? { reason: result.reason } : {}) };
     } catch (err) {
       this.logger.error(

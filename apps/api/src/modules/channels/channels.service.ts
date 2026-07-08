@@ -8,6 +8,10 @@ import {
 import type { ChannelStatus, ChannelType } from '@eclick-active/shared';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import {
+  encryptToken,
+  isEncryptedToken,
+} from '../calendar-integrations/crypto.helper';
+import {
   CreateChannelDto,
   UpdateChannelDto,
 } from './dto/create-channel.dto';
@@ -54,8 +58,17 @@ export interface WhatsAppFreeDiagnostics {
   hint: string;
 }
 
-const SAFE_COLUMNS =
-  'id, org_id, channel_type, name, status, phone_number, external_id, webhook_url, last_webhook_at, error_message, config, credentials, created_at, updated_at';
+// Colunas seguras pra trafegar — NÃO inclui `credentials` (segredo). Antes
+// esta constante incluía `credentials`, o que arriscava vazar o segredo caso
+// alguma rota retornasse a row crua sem passar por toView().
+const CHANNEL_COLUMNS =
+  'id, org_id, channel_type, name, status, phone_number, external_id, webhook_url, last_webhook_at, error_message, config, created_at, updated_at';
+
+// Usado apenas nos reads internos que precisam computar `has_credentials`.
+// `credentials` NUNCA é devolvido ao cliente (toView() sempre remove) e o
+// campo-segredo (token do Z-API) fica cifrado no banco — este SELECT não
+// trafega segredo em plaintext.
+const CHANNEL_COLUMNS_WITH_CREDS = `${CHANNEL_COLUMNS}, credentials`;
 
 @Injectable()
 export class ChannelsService {
@@ -135,7 +148,7 @@ export class ChannelsService {
   async list(orgId: string): Promise<ChannelView[]> {
     const { data, error } = await this.supabase.adminClient
       .from('channels')
-      .select(SAFE_COLUMNS)
+      .select(CHANNEL_COLUMNS_WITH_CREDS)
       .eq('org_id', orgId)
       .order('created_at', { ascending: true });
 
@@ -149,7 +162,7 @@ export class ChannelsService {
   async findById(orgId: string, id: string): Promise<ChannelView> {
     const { data, error } = await this.supabase.adminClient
       .from('channels')
-      .select(SAFE_COLUMNS)
+      .select(CHANNEL_COLUMNS_WITH_CREDS)
       .eq('org_id', orgId)
       .eq('id', id)
       .maybeSingle();
@@ -188,13 +201,14 @@ export class ChannelsService {
         org_id: orgId,
         channel_type: dto.channel_type,
         name: dto.name,
-        credentials: creds,
+        // Cifra o campo-segredo antes de persistir (ver encryptCredentials).
+        credentials: this.encryptCredentials(dto.channel_type, creds),
         phone_number: dto.phone_number ?? null,
         external_id: dto.external_id ?? null,
         config: dto.config ?? {},
         status: initialStatus,
       })
-      .select(SAFE_COLUMNS)
+      .select(CHANNEL_COLUMNS_WITH_CREDS)
       .single();
 
     if (error || !data) {
@@ -211,11 +225,18 @@ export class ChannelsService {
     id: string,
     dto: UpdateChannelDto,
   ): Promise<ChannelView> {
-    await this.findById(orgId, id);
+    const existing = await this.findById(orgId, id);
 
     const patch: Record<string, unknown> = {};
     if (dto.name !== undefined) patch.name = dto.name;
-    if (dto.credentials !== undefined) patch.credentials = dto.credentials;
+    if (dto.credentials !== undefined) {
+      // Cifra o campo-segredo antes de persistir. Se o cliente reenviar as
+      // credenciais, re-cifra; canais legados em plaintext migram no 1º update.
+      patch.credentials = this.encryptCredentials(
+        existing.channel_type,
+        dto.credentials,
+      );
+    }
     if (dto.phone_number !== undefined) patch.phone_number = dto.phone_number;
     if (dto.config !== undefined) patch.config = dto.config;
     if (dto.status !== undefined) patch.status = dto.status;
@@ -228,7 +249,7 @@ export class ChannelsService {
       .update(patch)
       .eq('org_id', orgId)
       .eq('id', id)
-      .select(SAFE_COLUMNS)
+      .select(CHANNEL_COLUMNS_WITH_CREDS)
       .single();
 
     if (error || !data) {
@@ -253,6 +274,50 @@ export class ChannelsService {
   // ────────────────────────────────────────────
   // helpers
   // ────────────────────────────────────────────
+
+  /**
+   * Cifra o(s) campo(s)-segredo de `credentials` antes de persistir,
+   * preservando o formato jsonb e as chaves de roteamento em plaintext.
+   *
+   * Estratégia field-level (mesma convenção já usada por email/instagram/
+   * tiktok neste repo):
+   *  - Z-API (whatsapp): cifra `token`. `instanceId` fica em CLARO porque o
+   *    dispatcher e o whatsapp-validator resolvem o canal via filtro jsonb
+   *    `credentials->>instanceId` — cifrar quebraria o roteamento de webhook.
+   *  - Outros tipos: instagram/tiktok/email já chegam com seus próprios
+   *    campos-segredo cifrados pelos respectivos OAuth controllers
+   *    (page_access_token / access_token / password_encrypted), então NÃO
+   *    tocamos aqui (evita cifragem dupla / conflito de formato).
+   *
+   * Retrocompatibilidade:
+   *  - Idempotente: se `token` já está no formato cifrado (iv:tag:cipher),
+   *    devolve como está.
+   *  - Fail-open: se a cifragem falhar (ex.: ENCRYPTION_KEY ausente em dev),
+   *    loga e grava em claro em vez de derrubar a criação do canal.
+   *  - Canais legados em plaintext continuam funcionando (o read boundary
+   *    detecta o formato e só descriptografa quando cifrado); migram pra
+   *    cifrado no próximo update que reenviar as credenciais.
+   */
+  private encryptCredentials(
+    channelType: ChannelType,
+    creds: Record<string, unknown>,
+  ): Record<string, unknown> {
+    if (channelType !== 'whatsapp') return creds;
+    const token = creds.token;
+    if (typeof token !== 'string' || token.length === 0) return creds;
+    if (isEncryptedToken(token)) return creds; // já cifrado — idempotente
+    try {
+      const enc = encryptToken(token);
+      if (enc) return { ...creds, token: enc };
+    } catch (err) {
+      this.logger.warn(
+        `encryptCredentials falhou (fail-open, gravando token em claro): ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+    return creds;
+  }
 
   private toView(row: ChannelRow): ChannelView {
     const { credentials, ...rest } = row;

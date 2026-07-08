@@ -14,6 +14,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '../../common/auth/auth.guard';
+import { RolesGuard } from '../../common/auth/roles.guard';
+import { Roles } from '../../common/auth/roles.decorator';
 import { CurrentUser } from '../../common/auth/current-user.decorator';
 import type { AuthUser } from '../../common/auth/auth.types';
 import {
@@ -27,7 +29,7 @@ import {
 } from './dto/create-channel.dto';
 import { EventsGateway } from '../../gateways/events.gateway';
 
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, RolesGuard)
 @Controller('channels')
 export class ChannelsController {
   private readonly logger = new Logger(ChannelsController.name);
@@ -93,7 +95,9 @@ export class ChannelsController {
     return this.service.findById(user.org_id, id);
   }
 
+  // PATCH sobrescreve credentials/status — restrito a gestores+.
   @Patch(':id')
+  @Roles('owner', 'admin', 'manager')
   update(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
@@ -103,6 +107,7 @@ export class ChannelsController {
   }
 
   @Delete(':id')
+  @Roles('owner', 'admin', 'manager')
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(
     @CurrentUser() user: AuthUser,

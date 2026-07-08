@@ -13,6 +13,10 @@ import type {
   ValidationResult,
   WebhookEvent,
 } from '@eclick-active/shared';
+import {
+  decryptToken,
+  isEncryptedToken,
+} from '../../../../modules/calendar-integrations/crypto.helper';
 import type {
   ZapiCredentials,
   ZapiInboundPayload,
@@ -202,9 +206,14 @@ export class ZapiProvider implements ChannelProvider {
     if (!c.instanceId || !c.token) {
       return { valid: false, error: 'instanceId e token são obrigatórios' };
     }
+    // Aceita token cifrado (canal já salvo) ou em claro (validação de setup).
+    const token = isEncryptedToken(c.token) ? decryptToken(c.token) : c.token;
+    if (!token) {
+      return { valid: false, error: 'falha ao descriptografar token' };
+    }
     try {
       const response = await fetch(
-        `${ZAPI_BASE}/${c.instanceId}/token/${c.token}/status`,
+        `${ZAPI_BASE}/${c.instanceId}/token/${token}/status`,
       );
       if (!response.ok) {
         return { valid: false, error: `${response.status} ${response.statusText}` };
@@ -236,7 +245,25 @@ export class ZapiProvider implements ChannelProvider {
     if (!c.instanceId || !c.token) {
       throw new Error('Z-API: credenciais incompletas (instanceId/token ausentes)');
     }
-    return { instanceId: c.instanceId, token: c.token, webhookUrl: c.webhookUrl };
+    // O `token` é persistido cifrado (iv:tag:cipher) pelo ChannelsService.
+    // Canais legados em plaintext (sem o marcador) passam direto — retrocompat.
+    return {
+      instanceId: c.instanceId,
+      token: this.resolveToken(c.token),
+      webhookUrl: c.webhookUrl,
+    };
+  }
+
+  /** Descriptografa o token do Z-API se estiver no formato cifrado. */
+  private resolveToken(token: string): string {
+    if (!isEncryptedToken(token)) return token;
+    const dec = decryptToken(token);
+    if (!dec) {
+      throw new Error(
+        'Z-API: falha ao descriptografar token do canal — reconfigure o canal',
+      );
+    }
+    return dec;
   }
 
   private pickString(content: Json, key: string): string | undefined {

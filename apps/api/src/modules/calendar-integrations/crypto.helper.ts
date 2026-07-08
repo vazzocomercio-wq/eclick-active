@@ -62,6 +62,24 @@ export function decryptToken(encrypted: string | null | undefined): string | nul
 }
 
 /**
+ * Detecta se um valor já está no formato `iv:authTag:cipher` produzido por
+ * `encryptToken` (3 partes separadas por `:`). Usado pelos providers pra
+ * distinguir credenciais cifradas de credenciais legadas em plaintext e
+ * decidir se precisam descriptografar — mesma heurística que o provider do
+ * Instagram já usa inline no `page_access_token`.
+ *
+ * Seguro contra falso-positivo: segredos em plaintext (tokens Z-API,
+ * instanceId, etc.) não contêm dois `:`.
+ */
+export function isEncryptedToken(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 8 &&
+    value.split(':').length === 3
+  );
+}
+
+/**
  * Encripta o `state` do OAuth flow pra carregar org_id + agent_id
  * sem expor em querystring legível. Inclui timestamp pra rejeitar
  * states muito antigos (replay attack mitigation).

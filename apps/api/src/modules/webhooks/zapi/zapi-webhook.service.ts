@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { timingSafeEqual } from 'node:crypto';
 import type {
   Channel,
   Json,
@@ -46,7 +47,10 @@ export class ZapiWebhookService {
     private readonly autoLead: AutoLeadService,
   ) {}
 
-  async handle(payload: ZapiInboundPayload): Promise<WebhookHandleResult> {
+  async handle(
+    payload: ZapiInboundPayload,
+    opts?: { providedSecret?: string },
+  ): Promise<WebhookHandleResult> {
     // ── Filtros cheap antes do DB lookup ──
     if (typeof payload.instanceId !== 'string' || !payload.instanceId) {
       return { accepted: false, reason: 'missing_instance_id' };
@@ -68,6 +72,16 @@ export class ZapiWebhookService {
     if (!channel) {
       this.logger.warn(`No active channel for instanceId=${payload.instanceId}`);
       return { accepted: false, reason: 'unknown_instance' };
+    }
+
+    // ── Verificação de assinatura (opcional, retrocompatível) ──
+    // A Z-API não assina o payload por padrão, mas pode ser configurada pra
+    // enviar um token no header. Se o canal tem `webhook_secret` configurado,
+    // exigimos que o token do header bata (comparação em tempo constante). Se
+    // NÃO tem segredo configurado, mantemos o comportamento atual (aceita) e
+    // logamos um aviso pra incentivar a configuração.
+    if (!this.verifyWebhookSecret(channel, opts?.providedSecret)) {
+      return { accepted: false, reason: 'invalid_signature' };
     }
 
     // ── Parse via provider ──
@@ -193,6 +207,33 @@ export class ZapiWebhookService {
     return { accepted: true };
   }
 
+  /**
+   * Valida o token do webhook contra `channels.webhook_secret`.
+   * - Sem segredo configurado no canal → aceita (retrocompat) + warn.
+   * - Com segredo → exige match exato (constant-time). Divergência → rejeita.
+   */
+  private verifyWebhookSecret(
+    channel: Channel,
+    providedSecret: string | undefined,
+  ): boolean {
+    const secret = (channel as { webhook_secret?: string | null }).webhook_secret;
+    if (!secret) {
+      this.logger.warn(
+        `[zapi-webhook] canal ${channel.id} sem webhook_secret configurado — ` +
+          'assinatura NÃO verificada. Configure channels.webhook_secret e o ' +
+          'header de segurança na Z-API pra habilitar a verificação.',
+      );
+      return true;
+    }
+    if (!providedSecret || !constantTimeEquals(providedSecret, secret)) {
+      this.logger.warn(
+        `[zapi-webhook] assinatura inválida/ausente pro canal ${channel.id} — rejeitado`,
+      );
+      return false;
+    }
+    return true;
+  }
+
   private async persistInbound(input: {
     channel: Channel;
     conversationId: string;
@@ -264,4 +305,15 @@ export class ZapiWebhookService {
     }
     return null;
   }
+}
+
+/** Comparação de strings em tempo constante (timing-safe). */
+function constantTimeEquals(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, 'utf8');
+  const bufB = Buffer.from(b, 'utf8');
+  if (bufA.length !== bufB.length) {
+    timingSafeEqual(bufA, bufA);
+    return false;
+  }
+  return timingSafeEqual(bufA, bufB);
 }

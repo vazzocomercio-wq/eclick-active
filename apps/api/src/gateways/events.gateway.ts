@@ -327,13 +327,71 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     client.emit('auth:ok', { user_id: user.id, org_id: user.org_id });
     this.logger.log(`Socket ${client.id} joined ${room} (user=${user.id})`);
+
+    // O JWT é validado só no handshake e nunca revalidado. Sem isso, um socket
+    // aberto continua recebendo broadcasts da org por tempo indefinido mesmo
+    // depois do token expirar. Agenda a desconexão no `exp` do token.
+    this.scheduleTokenExpiry(client, token);
   }
 
   handleDisconnect(client: Socket): void {
-    const user = (client.data as { user?: AuthUser }).user;
+    const data = client.data as {
+      user?: AuthUser;
+      expiryTimer?: ReturnType<typeof setTimeout>;
+    };
+    if (data.expiryTimer) {
+      clearTimeout(data.expiryTimer);
+      data.expiryTimer = undefined;
+    }
+    const user = data.user;
     this.logger.debug(
       `Socket ${client.id} disconnected${user ? ` (user=${user.id})` : ''}`,
     );
+  }
+
+  /**
+   * Agenda a desconexão do socket quando o JWT expirar (lê o claim `exp`).
+   * Não revalida membership periodicamente — só expira o token, como pedido.
+   */
+  private scheduleTokenExpiry(client: Socket, token: string): void {
+    const exp = this.decodeJwtExp(token);
+    if (exp === null) return; // sem exp legível — não força desconexão
+
+    const msUntilExp = exp * 1000 - Date.now();
+    if (msUntilExp <= 0) {
+      this.logger.debug(`Socket ${client.id} rejeitado: token já expirado`);
+      client.emit('auth:error', { message: 'Token expired' });
+      client.disconnect(true);
+      return;
+    }
+
+    // setTimeout satura acima de ~24.8 dias (INT32) e vira 1ms — cap defensivo.
+    // Tokens do Supabase são curtos (~1h), então na prática nunca atinge o cap.
+    const MAX_DELAY = 2_147_483_647;
+    const delay = Math.min(msUntilExp, MAX_DELAY);
+    const timer = setTimeout(() => {
+      this.logger.log(`Socket ${client.id} desconectado: JWT expirou`);
+      client.emit('auth:error', { message: 'Token expired' });
+      client.disconnect(true);
+    }, delay);
+
+    (client.data as { expiryTimer?: ReturnType<typeof setTimeout> }).expiryTimer =
+      timer;
+  }
+
+  /** Extrai o claim `exp` (segundos) do JWT sem revalidar a assinatura. */
+  private decodeJwtExp(token: string): number | null {
+    try {
+      const parts = token.split('.');
+      if (parts.length !== 3) return null;
+      const payloadJson = Buffer.from(parts[1] as string, 'base64url').toString(
+        'utf8',
+      );
+      const payload = JSON.parse(payloadJson) as { exp?: number };
+      return typeof payload.exp === 'number' ? payload.exp : null;
+    } catch {
+      return null;
+    }
   }
 
   // ──────────────────────────────────────────────────────────

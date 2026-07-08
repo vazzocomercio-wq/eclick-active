@@ -2,6 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import type { WhatsAppCheckResult } from '@eclick-active/shared';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { AutomationsService } from '../automations/automations.service';
+import {
+  decryptToken,
+  isEncryptedToken,
+} from '../calendar-integrations/crypto.helper';
 
 interface ChannelRow {
   id: string;
@@ -242,7 +246,16 @@ export class WhatsappValidatorService {
     };
     if (!creds.instanceId || !creds.token) return null;
 
-    const url = `https://api.z-api.io/instances/${creds.instanceId}/token/${creds.token}/phone-exists/${encodeURIComponent(phone.replace(/\D/g, ''))}`;
+    // token pode vir cifrado (iv:tag:cipher) — descriptografa; legado plaintext passa direto.
+    const token = isEncryptedToken(creds.token)
+      ? decryptToken(creds.token)
+      : creds.token;
+    if (!token) {
+      this.logger.warn('[whatsapp-validator] falha ao descriptografar token Z-API');
+      return null;
+    }
+
+    const url = `https://api.z-api.io/instances/${creds.instanceId}/token/${token}/phone-exists/${encodeURIComponent(phone.replace(/\D/g, ''))}`;
     const res = await fetch(url);
     if (!res.ok) {
       this.logger.warn(`[whatsapp-validator] zapi phone-exists ${res.status}`);

@@ -18,6 +18,8 @@ import type {
   InboxItem,
 } from '@eclick-active/shared';
 import { AuthGuard } from '../../common/auth/auth.guard';
+import { RolesGuard } from '../../common/auth/roles.guard';
+import { Roles } from '../../common/auth/roles.decorator';
 import { CurrentUser } from '../../common/auth/current-user.decorator';
 import type { AuthUser } from '../../common/auth/auth.types';
 import {
@@ -32,7 +34,7 @@ import { InitiateTransferDto } from './dto/transfer.dto';
 import type { PaginatedResult } from '../contacts/contacts.service';
 import { TransferService, type TransferBriefing } from '../ai/transfer.service';
 
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, RolesGuard)
 @Controller('conversations')
 export class ConversationsController {
   constructor(
@@ -134,6 +136,7 @@ export class ConversationsController {
    * e todas as mensagens (FK CASCADE). Não é recuperável.
    */
   @Delete(':id')
+  @Roles('owner', 'admin', 'manager')
   @HttpCode(HttpStatus.NO_CONTENT)
   delete(
     @CurrentUser() user: AuthUser,

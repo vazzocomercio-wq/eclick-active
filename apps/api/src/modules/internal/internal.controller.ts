@@ -9,6 +9,7 @@ import {
   Logger,
   Post,
 } from '@nestjs/common';
+import { timingSafeEqual } from 'node:crypto';
 import {
   EventsGateway,
   type EventName,
@@ -122,7 +123,9 @@ export class InternalController {
       this.logger.error('INTERNAL_API_KEY não configurado');
       throw new ForbiddenException('Internal channel disabled');
     }
-    if (key !== expected) {
+    // Comparação em tempo constante pra mitigar timing attacks (antes usava
+    // `!==`, que vaza informação de prefixo pelo tempo de resposta).
+    if (!key || !constantTimeEquals(key, expected)) {
       this.logger.warn('Internal request rejected: invalid key');
       throw new ForbiddenException('Invalid internal key');
     }
@@ -151,4 +154,20 @@ export class InternalController {
       body.payload as EventPayloadMap[typeof body.event],
     );
   }
+}
+
+/**
+ * Compara duas strings em tempo constante (timing-safe). Faz o hash das duas
+ * pontas pra `timingSafeEqual` não vazar o tamanho e não estourar quando os
+ * comprimentos diferem.
+ */
+function constantTimeEquals(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, 'utf8');
+  const bufB = Buffer.from(b, 'utf8');
+  if (bufA.length !== bufB.length) {
+    // Compara contra si mesmo pra manter tempo ~constante e retorna false.
+    timingSafeEqual(bufA, bufA);
+    return false;
+  }
+  return timingSafeEqual(bufA, bufB);
 }

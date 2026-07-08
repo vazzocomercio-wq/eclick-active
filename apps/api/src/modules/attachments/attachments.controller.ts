@@ -1,4 +1,4 @@
-import { Controller, Get, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, ParseUUIDPipe, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '../../common/auth/auth.guard';
 import { CurrentUser } from '../../common/auth/current-user.decorator';
 import type { AuthUser } from '../../common/auth/auth.types';
@@ -19,7 +19,7 @@ export class AttachmentsController {
    */
   @Get('conversation/:id')
   async listForConversation(
-    @Param('id') conversationId: string,
+    @Param('id', ParseUUIDPipe) conversationId: string,
     @CurrentUser() user: AuthUser,
   ) {
     return this.attachments.listForConversation(user.org_id, conversationId);

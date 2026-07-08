@@ -45,6 +45,12 @@ export class ConversationsService {
   // ──────────────────────────────────────────────────────────
 
   async create(orgId: string, dto: CreateConversationDto): Promise<Conversation> {
+    // Anti-IDOR: garante que contact_id/channel_id/assigned_to pertencem à
+    // org do usuário antes de inserir. Sem isso, um membro podia costurar uma
+    // conversa apontando pra contato/canal de OUTRA org (ou atribuir a alguém
+    // de fora), vazando dados no realtime/inbox.
+    await this.assertRefsBelongToOrg(orgId, dto);
+
     const { data, error } = await this.supabase.adminClient
       .from('conversations')
       .insert({
@@ -60,6 +66,24 @@ export class ConversationsService {
       .single();
 
     if (error || !data) {
+      // 23505 = unique_violation do índice parcial
+      // uq_conversations_active_contact_channel (migration 109). Corrida:
+      // outro request criou a conversa ativa entre o nosso
+      // findByContactAndChannel e este insert. Comportamento upsert-like:
+      // busca a existente e devolve em vez de estourar 500.
+      if ((error as { code?: string } | null)?.code === '23505' && dto.channel_id) {
+        const existing = await this.findByContactAndChannel(
+          orgId,
+          dto.contact_id,
+          dto.channel_id,
+        );
+        if (existing) {
+          this.logger.warn(
+            `create: corrida detectada (23505) — reaproveitando conversa ${existing.id}`,
+          );
+          return existing;
+        }
+      }
       this.logger.error(`create failed: ${error?.message}`);
       throw new InternalServerErrorException(
         error?.message ?? 'Failed to create conversation',
@@ -69,6 +93,54 @@ export class ConversationsService {
     // Emit pra inbox de todos os agentes da org atualizar em tempo real
     this.events.emitToOrg(orgId, 'conversation:updated', { conversation: created });
     return created;
+  }
+
+  /**
+   * Valida que os identificadores referenciados na criação de conversa
+   * pertencem à org. Lança BadRequestException (400) se algum não pertencer.
+   */
+  private async assertRefsBelongToOrg(
+    orgId: string,
+    dto: CreateConversationDto,
+  ): Promise<void> {
+    const { data: contact, error: contactErr } = await this.supabase.adminClient
+      .from('contacts')
+      .select('id')
+      .eq('org_id', orgId)
+      .eq('id', dto.contact_id)
+      .maybeSingle();
+    if (contactErr) throw new InternalServerErrorException(contactErr.message);
+    if (!contact) {
+      throw new BadRequestException('Contato não pertence à sua organização');
+    }
+
+    if (dto.channel_id) {
+      const { data: channel, error: channelErr } = await this.supabase.adminClient
+        .from('channels')
+        .select('id')
+        .eq('org_id', orgId)
+        .eq('id', dto.channel_id)
+        .maybeSingle();
+      if (channelErr) throw new InternalServerErrorException(channelErr.message);
+      if (!channel) {
+        throw new BadRequestException('Canal não pertence à sua organização');
+      }
+    }
+
+    if (dto.assigned_to) {
+      const { data: member, error: memberErr } = await this.supabase.adminClient
+        .from('org_members')
+        .select('id')
+        .eq('org_id', orgId)
+        .eq('user_id', dto.assigned_to)
+        .maybeSingle();
+      if (memberErr) throw new InternalServerErrorException(memberErr.message);
+      if (!member) {
+        throw new BadRequestException(
+          'Responsável atribuído não é membro da sua organização',
+        );
+      }
+    }
   }
 
   // ──────────────────────────────────────────────────────────
@@ -642,22 +714,39 @@ export class ConversationsService {
   async markAsRead(orgId: string, id: string): Promise<Conversation> {
     await this.findByIdRaw(orgId, id);
 
-    const { data, error } = await this.supabase.adminClient
-      .from('conversations')
-      .update({ unread_count: 0 })
-      .eq('org_id', orgId)
-      .eq('id', id)
-      .select('*')
-      .single();
+    // Decremento atômico via RPC (migration 109). O antigo `set unread_count=0`
+    // corria com o trigger de increment: mensagens que chegavam DURANTE a
+    // leitura eram zeradas junto (perda de "não lida"). O RPC subtrai
+    // exatamente o valor observado sob FOR UPDATE, preservando o que chegou
+    // entre a leitura e o update.
+    const { error: rpcErr } = await this.supabase.adminClient.rpc(
+      'conversation_mark_read',
+      { p_org_id: orgId, p_conversation_id: id },
+    );
 
-    if (error || !data) {
-      this.logger.error(`markAsRead failed: ${error?.message}`);
-      throw new InternalServerErrorException(
-        error?.message ?? 'Failed to mark as read',
+    if (rpcErr) {
+      // Fallback retrocompatível: se o RPC ainda não foi aplicado no banco,
+      // cai no set=0 antigo (não-atômico, mas funcional) pra não quebrar a UX.
+      this.logger.warn(
+        `conversation_mark_read RPC falhou, fallback set=0: ${rpcErr.message}`,
       );
+      const { error: updErr } = await this.supabase.adminClient
+        .from('conversations')
+        .update({ unread_count: 0 })
+        .eq('org_id', orgId)
+        .eq('id', id);
+      if (updErr) {
+        this.logger.error(`markAsRead fallback failed: ${updErr.message}`);
+        throw new InternalServerErrorException(
+          updErr.message ?? 'Failed to mark as read',
+        );
+      }
     }
-    const updated = data as Conversation;
-    // Emit pra zerar o contador de não lidas em todas as sessões abertas
+
+    // Re-lê a row pra pegar o unread_count real (pode ser >0 se chegou msg
+    // durante a leitura) e emitir o estado verdadeiro pro frontend.
+    const updated = await this.findByIdRaw(orgId, id);
+    // Emit pra atualizar o contador de não lidas em todas as sessões abertas
     this.events.emitToOrg(orgId, 'conversation:updated', { conversation: updated });
     return updated;
   }

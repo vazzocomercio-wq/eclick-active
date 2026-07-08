@@ -236,10 +236,52 @@ export class MessagesService {
       .single();
 
     if (error || !data) {
-      this.logger.error(`updateStatus failed: ${error?.message}`);
-      // Não derruba o request — devolve o `persisted` com o patch aplicado em memória
-      // Cliente pode re-fetch pra ver estado real.
-      return { ...persisted, ...patch } as Message;
+      // Update não retornou row — provável partition pruning pelo created_at
+      // no WHERE. Antes devolvíamos `{ ...persisted, ...patch }`, o que MENTIA
+      // 'sent' pro cliente mesmo sem ter persistido. Agora reconciliamos:
+      // reconsulta por (org_id, id) SEM created_at, e re-aplica o patch com o
+      // created_at REAL da row. Se ainda não achar, loga e NÃO mente o status.
+      this.logger.warn(
+        `updateStatus: update sem retorno (${error?.message ?? 'no rows'}) — reconciliando por id=${persisted.id}`,
+      );
+      const { data: reconciled } = await this.supabase.adminClient
+        .from('messages')
+        .select('*')
+        .eq('org_id', persisted.org_id)
+        .eq('id', persisted.id)
+        .maybeSingle();
+
+      if (!reconciled) {
+        this.logger.error(
+          `updateStatus: mensagem ${persisted.id} não encontrada — status não reconciliado, devolvendo estado real anterior`,
+        );
+        // Não aplica o patch em memória — devolve o estado persistido de fato.
+        return persisted;
+      }
+
+      const realRow = reconciled as Message;
+      // Re-aplica o patch agora com o created_at verdadeiro da partição.
+      const { data: retried } = await this.supabase.adminClient
+        .from('messages')
+        .update(patch)
+        .eq('org_id', realRow.org_id)
+        .eq('id', realRow.id)
+        .eq('created_at', realRow.created_at)
+        .select('*')
+        .maybeSingle();
+
+      const finalRow = (retried as Message | null) ?? realRow;
+      try {
+        this.events.emitToOrg(persisted.org_id, 'message:updated', {
+          conversation_id: persisted.conversation_id,
+          message: finalRow,
+        });
+      } catch (err) {
+        this.logger.warn(
+          `message:updated emit falhou (não fatal): ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+      return finalRow;
     }
 
     const updated = data as Message;
