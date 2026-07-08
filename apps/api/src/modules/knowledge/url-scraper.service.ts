@@ -1,5 +1,7 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import * as cheerio from 'cheerio';
+import { isIP } from 'node:net';
+import { lookup } from 'node:dns/promises';
 
 export interface ScrapedContent {
   title: string;
@@ -45,21 +47,76 @@ export class UrlScraperService {
     if (!['http:', 'https:'].includes(url.protocol)) {
       throw new BadRequestException('URL precisa ser http:// ou https://');
     }
-    // Bloqueia loopback/privado por segurança (SSRF)
-    const host = url.hostname.toLowerCase();
+    const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    // Nomes internos óbvios
     if (
       host === 'localhost' ||
-      host === '127.0.0.1' ||
-      host === '0.0.0.0' ||
-      host.startsWith('192.168.') ||
-      host.startsWith('10.') ||
-      host.startsWith('172.16.') ||
       host.endsWith('.local') ||
-      host === '[::1]'
+      host.endsWith('.internal') ||
+      host.endsWith('.railway.internal')
     ) {
       throw new BadRequestException('URL aponta pra rede privada/loopback');
     }
+    // IP literal → valida na hora
+    if (isIP(host) && this.isPrivateIp(host)) {
+      throw new BadRequestException('URL aponta pra rede privada/loopback');
+    }
     return url;
+  }
+
+  /** True se o IP está em faixa privada/reservada/loopback (v4 e v6). */
+  private isPrivateIp(ip: string): boolean {
+    const v = isIP(ip);
+    if (v === 4) return this.isPrivateIpv4(ip);
+    if (v === 6) return this.isPrivateIpv6(ip);
+    return true; // não é IP válido → trata como inseguro
+  }
+
+  private isPrivateIpv4(ip: string): boolean {
+    const p = ip.split('.').map((n) => Number(n));
+    if (p.length !== 4 || p.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) {
+      return true; // malformado → inseguro
+    }
+    const [a, b] = p;
+    if (a === 0 || a === 10 || a === 127) return true;
+    if (a === 169 && b === 254) return true; // link-local + metadata de cloud (169.254.169.254)
+    if (a === 172 && b >= 16 && b <= 31) return true; // 172.16/12 completo
+    if (a === 192 && b === 168) return true;
+    if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT 100.64/10
+    if (a >= 224) return true; // multicast/reservado
+    return false;
+  }
+
+  private isPrivateIpv6(ip: string): boolean {
+    const x = ip.toLowerCase();
+    if (x === '::1' || x === '::') return true;
+    if (x.startsWith('fe80')) return true; // link-local
+    if (x.startsWith('fc') || x.startsWith('fd')) return true; // ULA fc00::/7
+    if (x.startsWith('::ffff:')) return this.isPrivateIpv4(x.slice('::ffff:'.length)); // IPv4-mapped
+    return false;
+  }
+
+  /**
+   * Resolve o host via DNS e rejeita se QUALQUER endereço resolvido for
+   * privado — fecha DNS rebinding (hostname público apontando pra IP interno).
+   */
+  private async assertPublicHost(host: string): Promise<void> {
+    const h = host.toLowerCase().replace(/^\[|\]$/g, '');
+    if (isIP(h)) {
+      if (this.isPrivateIp(h)) {
+        throw new BadRequestException('URL aponta pra rede privada/loopback');
+      }
+      return;
+    }
+    let addrs: Array<{ address: string }>;
+    try {
+      addrs = await lookup(h, { all: true });
+    } catch {
+      throw new BadRequestException('Não foi possível resolver o domínio da URL');
+    }
+    if (addrs.length === 0 || addrs.some((a) => this.isPrivateIp(a.address))) {
+      throw new BadRequestException('URL resolve para um endereço de rede privada');
+    }
   }
 
   // ────────────────────────────────────────────
@@ -67,18 +124,43 @@ export class UrlScraperService {
   // ────────────────────────────────────────────
 
   async scrape(rawUrl: string): Promise<ScrapedContent> {
-    const url = this.validateUrl(rawUrl);
+    let current = this.validateUrl(rawUrl);
+    await this.assertPublicHost(current.hostname);
 
-    let res: Response;
-    try {
-      res = await this.fetchWithTimeout(url.toString(), FETCH_TIMEOUT_MS);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      throw new BadRequestException(
-        `Não foi possível acessar a URL: ${this.friendlyError(msg)}`,
-      );
+    // Segue redirects manualmente (máx 4 hops), revalidando cada destino —
+    // com redirect:'follow' um 302 pra 169.254.169.254/localhost passaria batido.
+    let res: Response | null = null;
+    for (let hop = 0; hop < 5; hop++) {
+      try {
+        res = await this.fetchWithTimeout(current.toString(), FETCH_TIMEOUT_MS);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new BadRequestException(
+          `Não foi possível acessar a URL: ${this.friendlyError(msg)}`,
+        );
+      }
+      if (res.status >= 300 && res.status < 400) {
+        const loc = res.headers.get('location');
+        if (!loc) break;
+        let next: URL;
+        try {
+          next = this.validateUrl(new URL(loc, current).toString());
+        } catch {
+          throw new BadRequestException('Redirecionamento para URL inválida/insegura');
+        }
+        await this.assertPublicHost(next.hostname);
+        current = next;
+        continue;
+      }
+      break;
     }
 
+    if (!res) {
+      throw new BadRequestException('Não foi possível acessar a URL');
+    }
+    if (res.status >= 300 && res.status < 400) {
+      throw new BadRequestException('Excesso de redirecionamentos');
+    }
     if (!res.ok) {
       throw new BadRequestException(
         `URL retornou status ${res.status}. Verifique se a página existe e está pública.`,
@@ -93,7 +175,7 @@ export class UrlScraperService {
     }
 
     const html = await this.decodeBody(res, contentType);
-    const extracted = this.extractContent(html, url.toString());
+    const extracted = this.extractContent(html, current.toString());
 
     return extracted;
   }
@@ -114,7 +196,7 @@ export class UrlScraperService {
           'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.5',
         },
         signal: controller.signal,
-        redirect: 'follow',
+        redirect: 'manual', // seguimos redirects à mão em scrape() revalidando cada hop
       });
     } finally {
       clearTimeout(timer);

@@ -279,6 +279,19 @@ Retorne JSON válido com chaves "contact" e "deal", cada uma com os campos detec
   // applyExtractedFields — persiste o que IA extraiu
   // ──────────────────────────────────────────────────────────
 
+  // Colunas reais que a coleta de IA pode escrever — hard whitelist. Nunca
+  // deixa a saída do LLM tocar org_id, score, assigned_to, owner_id, etc.
+  private static readonly CONTACT_WRITABLE = new Set([
+    'name',
+    'email',
+    'phone',
+    'company_name',
+  ]);
+  private static readonly DEAL_WRITABLE = new Set([
+    'value',
+    'expected_close_date',
+  ]);
+
   async applyExtractedFields(
     orgId: string,
     detected: DetectedMissing,
@@ -287,18 +300,43 @@ Retorne JSON válido com chaves "contact" e "deal", cada uma com os campos detec
     const updatedContact: string[] = [];
     const updatedDeal: string[] = [];
 
+    // Só aceita os PATHS que nós mesmos pedimos (detected.missing) — a saída do
+    // LLM é influenciável por texto do cliente (prompt injection); sem isso um
+    // "contact.org_id" injetado viraria UPDATE de coluna via service_role.
+    const allowedContactCustom = new Set<string>();
+    const allowedContactCol = new Set<string>();
+    const allowedDealCustom = new Set<string>();
+    const allowedDealCol = new Set<string>();
+    for (const m of detected.missing) {
+      if (m.path.startsWith('contact.custom.')) {
+        allowedContactCustom.add(m.path.slice('contact.custom.'.length));
+      } else if (m.path.startsWith('contact.')) {
+        const col = m.path.slice('contact.'.length);
+        if (DataCollectionService.CONTACT_WRITABLE.has(col)) allowedContactCol.add(col);
+      } else if (m.path.startsWith('deal.custom.')) {
+        allowedDealCustom.add(m.path.slice('deal.custom.'.length));
+      } else if (m.path.startsWith('deal.')) {
+        const col = m.path.slice('deal.'.length);
+        if (DataCollectionService.DEAL_WRITABLE.has(col)) allowedDealCol.add(col);
+      }
+    }
+
     if (extracted.contact && detected.contact_id) {
       const updates: Record<string, unknown> = {};
       const customUpdates: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(extracted.contact)) {
+      for (const [rawKey, v] of Object.entries(extracted.contact)) {
         if (v === null || v === undefined || v === '') continue;
-        if (k.startsWith('contact.custom.')) {
-          customUpdates[k.replace('contact.custom.', '')] = v;
-        } else if (k.startsWith('contact.')) {
-          updates[k.replace('contact.', '')] = v;
-        } else if (['name', 'email', 'phone', 'company_name'].includes(k)) {
-          updates[k] = v;
+        // Normaliza "contact.x"/"x"/"contact.custom.x"/"custom.x".
+        const key = rawKey.startsWith('contact.')
+          ? rawKey.slice('contact.'.length)
+          : rawKey;
+        if (key.startsWith('custom.')) {
+          const cf = key.slice('custom.'.length);
+          if (allowedContactCustom.has(cf)) customUpdates[cf] = v;
+        } else if (allowedContactCol.has(key)) {
+          updates[key] = v;
         }
+        // Qualquer outra chave (org_id, score, assigned_to, …) é ignorada.
       }
 
       if (Object.keys(customUpdates).length > 0) {
@@ -345,15 +383,16 @@ Retorne JSON válido com chaves "contact" e "deal", cada uma com os campos detec
     if (extracted.deal) {
       const updates: Record<string, unknown> = {};
       const customUpdates: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(extracted.deal)) {
+      for (const [rawKey, v] of Object.entries(extracted.deal)) {
         if (v === null || v === undefined || v === '') continue;
-        if (k.startsWith('deal.custom.')) {
-          customUpdates[k.replace('deal.custom.', '')] = v;
-        } else if (k.startsWith('deal.')) {
-          updates[k.replace('deal.', '')] = v;
-        } else if (['value', 'expected_close_date'].includes(k)) {
-          updates[k] = v;
+        const key = rawKey.startsWith('deal.') ? rawKey.slice('deal.'.length) : rawKey;
+        if (key.startsWith('custom.')) {
+          const cf = key.slice('custom.'.length);
+          if (allowedDealCustom.has(cf)) customUpdates[cf] = v;
+        } else if (allowedDealCol.has(key)) {
+          updates[key] = v;
         }
+        // Qualquer outra chave (org_id, stage_id, owner_id, …) é ignorada.
       }
 
       if (Object.keys(customUpdates).length > 0) {
