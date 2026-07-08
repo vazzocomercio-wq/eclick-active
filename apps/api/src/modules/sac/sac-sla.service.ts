@@ -97,18 +97,63 @@ export class SacSlaService {
     return true;
   }
 
+  // Horário comercial padrão (BRT, UTC-3): seg–sex, 8h–19h.
+  private static readonly BRT_OFFSET_MIN = -3 * 60;
+  private static readonly BIZ_START_HOUR = 8;
+  private static readonly BIZ_END_HOUR = 19;
+
+  /**
+   * Soma `minutes` a `base`. Se `businessHoursOnly`, consome o orçamento de
+   * minutos apenas dentro do horário comercial (seg–sex 8–19h BRT), pulando
+   * noites e fins de semana — em vez da heurística antiga de +12h/+24h fixos
+   * (que gerava breaches falsos no fim de semana).
+   */
   private addMinutes(base: Date, minutes: number, businessHoursOnly: boolean): Date {
-    let total = minutes;
-    // Heurística simples: se exige business hours e estamos fora (antes 8h ou depois 19h),
-    // adiciona 12h pro deadline cair em horário útil.
-    if (businessHoursOnly) {
-      const hour = base.getUTCHours() - 3; // BRT proxy
-      if (hour < 8 || hour >= 19) total += 12 * 60;
-      // Final de semana: empurra 24h
-      const day = base.getUTCDay();
-      if (day === 0 || day === 6) total += 24 * 60;
+    if (!businessHoursOnly) {
+      return new Date(base.getTime() + minutes * 60_000);
     }
-    return new Date(base.getTime() + total * 60 * 1000);
+    const OFF = SacSlaService.BRT_OFFSET_MIN;
+    const START = SacSlaService.BIZ_START_HOUR;
+    const END = SacSlaService.BIZ_END_HOUR;
+
+    let cursorUtc = base.getTime();
+    let remaining = minutes;
+    let guard = 0; // trava de segurança contra loop infinito
+
+    while (remaining > 0 && guard < 5000) {
+      guard += 1;
+      // Instante atual em "relógio BRT" (deslocado pra ler hora/dia local).
+      const brt = new Date(cursorUtc + OFF * 60_000);
+      const day = brt.getUTCDay(); // 0=dom … 6=sáb
+      const hour = brt.getUTCHours();
+      const min = brt.getUTCMinutes();
+
+      const isWeekend = day === 0 || day === 6;
+      const beforeOpen = hour < START;
+      const afterClose = hour >= END;
+
+      if (isWeekend || beforeOpen || afterClose) {
+        // Pula pro próximo início de expediente (8:00 BRT do próximo dia útil).
+        const next = new Date(brt.getTime());
+        if (afterClose || isWeekend) {
+          next.setUTCDate(next.getUTCDate() + 1);
+        }
+        next.setUTCHours(START, 0, 0, 0);
+        // Se caiu em fim de semana, avança até segunda.
+        while (next.getUTCDay() === 0 || next.getUTCDay() === 6) {
+          next.setUTCDate(next.getUTCDate() + 1);
+        }
+        cursorUtc = next.getTime() - OFF * 60_000; // volta pra UTC
+        continue;
+      }
+
+      // Minutos restantes até o fim do expediente de hoje.
+      const minsToClose = (END - hour) * 60 - min;
+      const consume = Math.min(remaining, minsToClose);
+      cursorUtc += consume * 60_000;
+      remaining -= consume;
+    }
+    return new Date(cursorUtc);
   }
 
   /** Detecta breach via RPC (usado pelo worker). */
@@ -155,8 +200,13 @@ export class SacSlaService {
         resolved_at: string | null;
       }>;
 
+      // "Cumprido" = ticket com desfecho definitivo (resolvido) DENTRO do prazo.
+      // Antes contava também tickets abertos e no prazo, inflando o %.
+      const resolved = rows.filter((r) => r.resolved_at);
       const breached = rows.filter((r) => r.sla_breached).length;
-      const fulfilled = rows.length - breached;
+      const fulfilled = resolved.filter((r) => !r.sla_breached).length;
+      // Denominador: tickets com desfecho conhecido (cumpridos + violados).
+      const decided = fulfilled + breached;
 
       const firstResponses = rows
         .filter((r) => r.first_response_at)
@@ -166,14 +216,12 @@ export class SacSlaService {
               new Date(r.created_at).getTime()) /
             60_000,
         );
-      const resolutions = rows
-        .filter((r) => r.resolved_at)
-        .map(
-          (r) =>
-            (new Date(r.resolved_at as string).getTime() -
-              new Date(r.created_at).getTime()) /
-            60_000,
-        );
+      const resolutions = resolved.map(
+        (r) =>
+          (new Date(r.resolved_at as string).getTime() -
+            new Date(r.created_at).getTime()) /
+          60_000,
+      );
 
       const avg = (xs: number[]) =>
         xs.length === 0 ? 0 : Math.round(xs.reduce((a, b) => a + b, 0) / xs.length);
@@ -184,7 +232,7 @@ export class SacSlaService {
         avg_first_response_minutes: avg(firstResponses),
         avg_resolution_minutes: avg(resolutions),
         fulfilled_pct:
-          rows.length === 0 ? 0 : Math.round((fulfilled / rows.length) * 100),
+          decided === 0 ? 0 : Math.round((fulfilled / decided) * 100),
       };
     } catch (err) {
       this.log.warn(`getStats falhou: ${String(err)}`);

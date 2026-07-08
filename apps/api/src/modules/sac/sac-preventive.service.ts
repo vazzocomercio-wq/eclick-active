@@ -134,20 +134,25 @@ export class SacPreventiveService {
     email: string | null,
   ): Promise<ContactRow | null> {
     if (!phone && !email) return null;
-    let q = this.supabase.adminClient
-      .from('contacts')
-      .select('id, org_id, full_name, phone, email')
-      .eq('org_id', orgId)
-      .limit(1);
-    if (phone && email) {
-      q = q.or(`phone.eq.${phone},email.eq.${email}`);
-    } else if (phone) {
-      q = q.eq('phone', phone);
-    } else if (email) {
-      q = q.eq('email', email);
+    // Queries .eq() separadas em vez de .or() interpolado — dados do comprador
+    // (phone/email do marketplace) com vírgula/parênteses quebrariam o parser
+    // do PostgREST ou injetariam condições. Prioriza telefone, cai pra e-mail.
+    const base = () =>
+      this.supabase.adminClient
+        .from('contacts')
+        .select('id, org_id, full_name, phone, email')
+        .eq('org_id', orgId)
+        .limit(1);
+
+    if (phone) {
+      const { data } = await base().eq('phone', phone).maybeSingle();
+      if (data) return data as ContactRow;
     }
-    const { data } = await q.maybeSingle();
-    return (data as ContactRow | null) ?? null;
+    if (email) {
+      const { data } = await base().eq('email', email).maybeSingle();
+      if (data) return data as ContactRow;
+    }
+    return null;
   }
 
   private async createContactFromOrder(

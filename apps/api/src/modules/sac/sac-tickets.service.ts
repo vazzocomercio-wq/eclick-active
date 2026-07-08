@@ -106,6 +106,7 @@ export class SacTicketsService {
       tags: dto.tags ?? [],
       metadata: dto.metadata ?? {},
       sla_deadline_at: deadlines.resolution_at.toISOString(),
+      sla_first_response_deadline_at: deadlines.first_response_at.toISOString(),
       ...orderFields,
     };
 
@@ -161,6 +162,7 @@ export class SacTicketsService {
         reputation_risk_level: classification.reputation_risk,
         source_channel: channelType,
         sla_deadline_at: deadlines.resolution_at.toISOString(),
+        sla_first_response_deadline_at: deadlines.first_response_at.toISOString(),
         ai_category: classification.category,
         ai_priority: classification.priority,
         ai_sentiment: classification.sentiment,
@@ -217,6 +219,7 @@ export class SacTicketsService {
         order_status: orderData.status ?? null,
         order_data: orderData.raw ?? {},
         sla_deadline_at: deadlines.resolution_at.toISOString(),
+        sla_first_response_deadline_at: deadlines.first_response_at.toISOString(),
       })
       .select('*')
       .single();
@@ -230,8 +233,8 @@ export class SacTicketsService {
     orgId: string,
     filters: SacListFilters = {},
   ): Promise<{ rows: SacTicket[]; total: number }> {
-    const page = filters.page ?? 1;
-    const pageSize = Math.min(filters.page_size ?? 25, 100);
+    const page = Math.max(1, filters.page ?? 1);
+    const pageSize = Math.min(Math.max(1, filters.page_size ?? 25), 100);
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
@@ -263,8 +266,11 @@ export class SacTicketsService {
         none: 0, low: 1, medium: 2, high: 3, critical: 4,
       };
       const min = order[filters.reputation_risk_min];
-      const allowed = Object.keys(order).filter((k) => order[k] >= min);
-      q = q.in('reputation_risk_level', allowed);
+      // Valor inválido → ignora o filtro (antes gerava lista vazia silenciosa)
+      if (min !== undefined) {
+        const allowed = Object.keys(order).filter((k) => order[k] >= min);
+        q = q.in('reputation_risk_level', allowed);
+      }
     }
     if (filters.date_from) q = q.gte('created_at', filters.date_from);
     if (filters.date_to) q = q.lte('created_at', filters.date_to);
@@ -326,21 +332,58 @@ export class SacTicketsService {
     return (data as SacTicket | null) ?? null;
   }
 
+  /** Colunas que o PATCH de ticket pode tocar — whitelist explícita (defesa
+   * em profundidade além do ValidationPipe: nunca deixa o body escrever
+   * org_id, sla_breached, customer_satisfaction, created_by_ai, etc.). */
+  private static readonly UPDATABLE_KEYS: readonly (keyof UpdateTicketDto)[] = [
+    'status',
+    'priority',
+    'category',
+    'subcategory',
+    'department',
+    'assigned_to',
+    'reputation_risk_level',
+    'tags',
+  ];
+
   async update(
     orgId: string,
     id: string,
     dto: UpdateTicketDto,
   ): Promise<SacTicket> {
-    // Auto-promover status="new" → "in_progress" quando algum agente toca o ticket
-    const patch: Record<string, unknown> = { ...dto };
-    if (dto.status === undefined && dto.assigned_to !== undefined) {
+    const now = new Date().toISOString();
+    const patch: Record<string, unknown> = {};
+    for (const key of SacTicketsService.UPDATABLE_KEYS) {
+      if (dto[key] !== undefined) patch[key] = dto[key];
+    }
+
+    // Efeitos colaterais de transição de status — mantêm as métricas do
+    // dashboard consistentes mesmo quando o status muda via PATCH direto
+    // (antes só o endpoint /resolve preenchia resolved_at).
+    if (dto.status === 'resolved') {
+      patch.resolved_at = now;
+      patch.sla_resolved_at = now;
+    } else if (dto.status === 'reopened') {
+      patch.reopened_at = now;
+      patch.resolved_at = null;
+      patch.sla_resolved_at = null;
+      // sla_breached NÃO é zerado aqui: o histórico de violação é preservado.
+    }
+
+    // Auto-promover status="new" → "in_progress" quando algum agente assume
+    if (
+      dto.status === undefined &&
+      dto.assigned_to !== undefined &&
+      dto.assigned_to !== null
+    ) {
       const current = await this.findById(orgId, id);
       if (current.status === 'new') patch.status = 'in_progress';
       if (!current.first_response_at) {
-        patch.first_response_at = new Date().toISOString();
-        patch.sla_first_response_at = new Date().toISOString();
+        patch.first_response_at = now;
+        patch.sla_first_response_at = now;
       }
     }
+
     const { data, error } = await this.supabase.adminClient
       .from('sac_tickets')
       .update(patch)
@@ -367,11 +410,29 @@ export class SacTicketsService {
     id: string,
     dto: EscalateTicketDto,
   ): Promise<SacTicket> {
+    const current = await this.findById(orgId, id);
+    if (current.status === 'resolved' || current.status === 'cancelled') {
+      throw new BadRequestException(
+        'Não é possível escalar um ticket já resolvido ou cancelado.',
+      );
+    }
+    // Escalonamento só SOBE a prioridade — nunca rebaixa um ticket
+    // critical/reputation_risk pra high.
+    const rank: Record<SacTicket['priority'], number> = {
+      low: 0,
+      normal: 1,
+      high: 2,
+      critical: 3,
+      reputation_risk: 4,
+    };
+    const escalatedPriority =
+      rank[current.priority] < rank.high ? 'high' : current.priority;
+
     const { data, error } = await this.supabase.adminClient
       .from('sac_tickets')
       .update({
         escalated_to: dto.to_agent_id,
-        priority: 'high',
+        priority: escalatedPriority,
       })
       .eq('id', id)
       .eq('org_id', orgId)
@@ -417,6 +478,13 @@ export class SacTicketsService {
     dto: ReopenTicketDto,
   ): Promise<SacTicket> {
     const ticket = await this.findById(orgId, id);
+    // Só tickets resolvidos/cancelados podem ser reabertos. Impede o abuso de
+    // "renovar" um SLA estourado reabrindo um ticket ainda em andamento.
+    if (ticket.status !== 'resolved' && ticket.status !== 'cancelled') {
+      throw new BadRequestException(
+        'Só é possível reabrir tickets resolvidos ou cancelados.',
+      );
+    }
     const deadlines = await this.sla.calculateDeadline(orgId, {
       priority: ticket.priority,
       category: ticket.category,
@@ -476,25 +544,25 @@ export class SacTicketsService {
     if (!order) {
       throw new NotFoundException('Pedido não encontrado no SaaS');
     }
-    return this.update(orgId, ticketId, {} as UpdateTicketDto).then(async () => {
-      const { data, error } = await this.supabase.adminClient
-        .from('sac_tickets')
-        .update({
-          order_id: order.id,
-          order_marketplace: order.marketplace,
-          order_marketplace_id: order.marketplace_order_id,
-          order_status: order.shipping_status,
-          order_tracking: order.shipping_tracking_number,
-          order_value: order.total_amount,
-          order_data: order as unknown as Record<string, unknown>,
-        })
-        .eq('id', ticketId)
-        .eq('org_id', orgId)
-        .select('*')
-        .single();
-      if (error) throw error;
-      return data as SacTicket;
-    });
+    const { data, error } = await this.supabase.adminClient
+      .from('sac_tickets')
+      .update({
+        order_id: order.id,
+        order_marketplace: order.marketplace,
+        order_marketplace_id: order.marketplace_order_id,
+        order_status: order.shipping_status,
+        order_tracking: order.shipping_tracking_number,
+        order_value: order.total_amount,
+        order_data: order as unknown as Record<string, unknown>,
+      })
+      .eq('id', ticketId)
+      .eq('org_id', orgId)
+      .select('*')
+      .single();
+    if (error) throw error;
+    const ticket = data as SacTicket;
+    this.emit(orgId, 'sac:ticket-updated', { ticket });
+    return ticket;
   }
 
   async rateSatisfaction(

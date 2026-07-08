@@ -4,6 +4,12 @@ import { BridgeService } from '../bridge/bridge.service';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { SacTemplatesService } from './sac-templates.service';
 import type { SacAiClassification, SacTicket } from './sac.types';
+import {
+  SAC_CATEGORIES,
+  SAC_PRIORITIES,
+  SAC_REPUTATION_RISKS,
+  SAC_SENTIMENTS,
+} from './dto/sac-enums';
 
 const CLASSIFY_SYSTEM_PROMPT = `Você é um classificador de atendimentos SAC para CRMs brasileiros. Analise a mensagem do cliente e o contexto.
 
@@ -230,15 +236,30 @@ export class SacAiService {
     if (!parsed || typeof parsed !== 'object') return null;
     const obj = parsed as Record<string, unknown>;
     if (!obj.category || !obj.priority) return null;
+
+    // Coage TODO enum vindo do LLM pra um valor válido. Sem isso, um valor
+    // inventado (ou injetado via mensagem do cliente) estoura o CHECK do banco
+    // e mata a criação do ticket — ou fura a fila com prioridade forjada.
+    const oneOf = <T extends string>(
+      value: unknown,
+      allowed: readonly T[],
+      fallback: T,
+    ): T => (typeof value === 'string' && (allowed as readonly string[]).includes(value)
+      ? (value as T)
+      : fallback);
+    const clamp = (v: unknown, min: number, max: number, dflt: number): number =>
+      typeof v === 'number' && Number.isFinite(v)
+        ? Math.min(max, Math.max(min, v))
+        : dflt;
+
     return {
-      category: obj.category as SacAiClassification['category'],
+      category: oneOf(obj.category, SAC_CATEGORIES, 'general'),
       subcategory:
         typeof obj.subcategory === 'string' ? obj.subcategory : undefined,
-      priority: obj.priority as SacAiClassification['priority'],
-      sentiment: (obj.sentiment ?? 'neutral') as SacAiClassification['sentiment'],
-      reputation_risk:
-        (obj.reputation_risk ?? 'none') as SacAiClassification['reputation_risk'],
-      risk_score: typeof obj.risk_score === 'number' ? obj.risk_score : 0,
+      priority: oneOf(obj.priority, SAC_PRIORITIES, 'normal'),
+      sentiment: oneOf(obj.sentiment, SAC_SENTIMENTS, 'neutral'),
+      reputation_risk: oneOf(obj.reputation_risk, SAC_REPUTATION_RISKS, 'none'),
+      risk_score: clamp(obj.risk_score, 0, 100, 0),
       summary: typeof obj.summary === 'string' ? obj.summary : '',
       resolution_suggestion:
         typeof obj.resolution_suggestion === 'string'
@@ -246,7 +267,7 @@ export class SacAiService {
           : '',
       suggested_response:
         typeof obj.suggested_response === 'string' ? obj.suggested_response : '',
-      confidence: typeof obj.confidence === 'number' ? obj.confidence : 0.5,
+      confidence: clamp(obj.confidence, 0, 1, 0.5),
     };
   }
 

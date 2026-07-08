@@ -9,9 +9,14 @@ import {
   Body,
   UseGuards,
   ParseIntPipe,
+  ParseUUIDPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
 import { AuthGuard } from '../../common/auth/auth.guard';
+import { RolesGuard } from '../../common/auth/roles.guard';
+import { Roles } from '../../common/auth/roles.decorator';
+import { RateLimitGuard } from '../../common/guards/rate-limit.guard';
+import { RateLimit } from '../../common/guards/rate-limit.decorator';
 import { CurrentUser } from '../../common/auth/current-user.decorator';
 import type { AuthUser } from '../../common/auth/auth.types';
 import { SacTicketsService } from './sac-tickets.service';
@@ -26,23 +31,28 @@ import type {
   SacCategory,
   SacReputationRisk,
 } from './sac.types';
-import type { CreateTicketDto } from './dto/create-ticket.dto';
-import type {
+import { CreateTicketDto } from './dto/create-ticket.dto';
+import {
   UpdateTicketDto,
   AssignTicketDto,
   EscalateTicketDto,
 } from './dto/update-ticket.dto';
-import type {
+import {
   ResolveTicketDto,
   ReopenTicketDto,
   RateTicketDto,
   AddNoteDto,
   LinkOrderDto,
 } from './dto/resolve-ticket.dto';
-import type { CreateSlaRuleDto, UpdateSlaRuleDto } from './dto/sla-rule.dto';
-import type { CreateTemplateDto, UpdateTemplateDto } from './dto/template.dto';
+import { CreateSlaRuleDto, UpdateSlaRuleDto } from './dto/sla-rule.dto';
+import { CreateTemplateDto, UpdateTemplateDto } from './dto/template.dto';
+import { ClassifyDto, PerformanceDto } from './dto/ai.dto';
 
-@UseGuards(AuthGuard)
+// Papéis que podem administrar configuração de SAC (regras de SLA, templates)
+// e disparar operações pesadas (scan preventivo). Agentes/viewers ficam de fora.
+const SAC_ADMIN_ROLES = ['owner', 'admin', 'manager'] as const;
+
+@UseGuards(AuthGuard, RolesGuard, RateLimitGuard)
 @Controller('sac')
 export class SacController {
   constructor(
@@ -231,6 +241,7 @@ export class SacController {
   }
 
   @Post('sla/rules')
+  @Roles(...SAC_ADMIN_ROLES)
   createRule(
     @CurrentUser() user: AuthUser,
     @Body() dto: CreateSlaRuleDto,
@@ -239,16 +250,21 @@ export class SacController {
   }
 
   @Patch('sla/rules/:id')
+  @Roles(...SAC_ADMIN_ROLES)
   updateRule(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateSlaRuleDto,
   ) {
     return this.sla.updateRule(user.org_id, id, dto);
   }
 
   @Delete('sla/rules/:id')
-  deleteRule(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+  @Roles(...SAC_ADMIN_ROLES)
+  deleteRule(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.sla.deleteRule(user.org_id, id);
   }
 
@@ -263,6 +279,7 @@ export class SacController {
   }
 
   @Post('templates')
+  @Roles(...SAC_ADMIN_ROLES)
   createTemplate(
     @CurrentUser() user: AuthUser,
     @Body() dto: CreateTemplateDto,
@@ -271,53 +288,63 @@ export class SacController {
   }
 
   @Patch('templates/:id')
+  @Roles(...SAC_ADMIN_ROLES)
   updateTemplate(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateTemplateDto,
   ) {
     return this.templates.update(user.org_id, id, dto);
   }
 
   @Delete('templates/:id')
-  deleteTemplate(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+  @Roles(...SAC_ADMIN_ROLES)
+  deleteTemplate(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.templates.delete(user.org_id, id);
   }
 
   // ─── AI ─────────────────────────────────────────
 
   @Post('ai/classify')
+  @RateLimit(30, 60_000)
   classify(
     @CurrentUser() user: AuthUser,
-    @Body() body: { message: string; history?: string[]; phone?: string; email?: string },
+    @Body() dto: ClassifyDto,
   ) {
     return this.ai.classifyTicket(
       user.org_id,
-      body.message,
-      body.history ?? [],
-      { phone: body.phone, email: body.email },
+      dto.message,
+      dto.history ?? [],
+      { phone: dto.phone, email: dto.email },
     );
   }
 
   @Post('ai/suggest/:ticketId')
+  @RateLimit(30, 60_000)
   suggest(
     @CurrentUser() user: AuthUser,
-    @Param('ticketId') ticketId: string,
+    @Param('ticketId', ParseUUIDPipe) ticketId: string,
   ) {
     return this.ai.suggestResponse(user.org_id, ticketId);
   }
 
   @Post('ai/performance')
+  @RateLimit(10, 5 * 60_000)
   performance(
     @CurrentUser() user: AuthUser,
-    @Body() body: { period?: 'today' | 'week' | 'month' },
+    @Body() dto: PerformanceDto,
   ) {
-    return this.ai.analyzePerformance(user.org_id, body.period ?? 'week');
+    return this.ai.analyzePerformance(user.org_id, dto.period ?? 'week');
   }
 
   // ─── Preventivo (manual trigger) ────────────────
 
   @Post('preventive/run')
+  @Roles(...SAC_ADMIN_ROLES)
+  @RateLimit(3, 10 * 60_000)
   runPreventive(@CurrentUser() user: AuthUser) {
     return this.preventive.runScanForOrg(user.org_id);
   }

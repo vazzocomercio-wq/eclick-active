@@ -8,6 +8,7 @@ import { SacSlaService } from './sac-sla.service';
 import { SacPreventiveService } from './sac-preventive.service';
 import { EventsGateway } from '../../gateways/events.gateway';
 import { SupabaseService } from '../../common/supabase/supabase.service';
+import { LockService } from '../../common/lock/lock.service';
 
 const SLA_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5min
 const PREVENTIVE_SCAN_INTERVAL_MS = 60 * 60 * 1000; // 1h
@@ -36,6 +37,7 @@ export class SacSchedulerService implements OnModuleInit, OnModuleDestroy {
     private readonly preventive: SacPreventiveService,
     private readonly events: EventsGateway,
     private readonly supabase: SupabaseService,
+    private readonly lock: LockService,
   ) {}
 
   onModuleInit(): void {
@@ -73,6 +75,16 @@ export class SacSchedulerService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async runSlaCheck(): Promise<void> {
+    // Lock distribuído: só uma instância roda o check por vez.
+    const ran = await this.lock.withLock('sac:sla_check', 240, async () => {
+      await this.doSlaCheck();
+    });
+    if (ran === null) {
+      this.log.debug('SLA check pulado — outra instância detém o lock');
+    }
+  }
+
+  private async doSlaCheck(): Promise<void> {
     try {
       const breaches = await this.sla.checkBreaches();
       if (breaches.length === 0) return;
@@ -105,10 +117,16 @@ export class SacSchedulerService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async runPreventive(): Promise<void> {
-    try {
-      await this.preventive.runScanForAllOrgs();
-    } catch (err) {
-      this.log.warn(`runPreventive falhou: ${String(err)}`);
+    // Lock distribuído com TTL longo (scan pode demorar). TTL < intervalo (1h).
+    const ran = await this.lock.withLock('sac:preventive', 3000, async () => {
+      try {
+        await this.preventive.runScanForAllOrgs();
+      } catch (err) {
+        this.log.warn(`runPreventive falhou: ${String(err)}`);
+      }
+    });
+    if (ran === null) {
+      this.log.debug('Scan preventivo pulado — outra instância detém o lock');
     }
   }
 }

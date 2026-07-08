@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { SupabaseModule } from './common/supabase/supabase.module';
+import { LockModule } from './common/lock/lock.module';
 import { AuthModule } from './common/auth/auth.module';
 import { ChannelsModule as ChannelDispatcherModule } from './common/channels/channels.module';
 import { PlaceholderModule } from './common/placeholder/placeholder.module';
@@ -55,6 +56,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
   imports: [
     // @Global infra
     SupabaseModule,
+    LockModule,
     AuthModule,
     ChannelDispatcherModule,
     PlaceholderModule,
