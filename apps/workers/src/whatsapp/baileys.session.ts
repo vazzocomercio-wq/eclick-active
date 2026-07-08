@@ -26,6 +26,85 @@ import { loadAuthState, type BaileysAuthHandle } from './baileys-auth-state.js';
 const JID_CACHE_POSITIVE_TTL_MS = 30 * 60 * 1000;
 const JID_CACHE_NEGATIVE_TTL_MS = 5 * 60 * 1000;
 
+/**
+ * Cap de tamanho de mídia inbound (HIGH). downloadMediaMessage carrega TUDO
+ * em memória; sem limite, um vídeo de centenas de MB estoura o heap e derruba
+ * TODAS as sessões do worker. 32MB cobre o teto prático do WhatsApp.
+ */
+const MAX_MEDIA_BYTES = Number(process.env.BAILEYS_MAX_MEDIA_BYTES ?? 32 * 1024 * 1024);
+
+/**
+ * Semáforo GLOBAL (compartilhado por todas as sessões do processo) que limita
+ * downloads de mídia concorrentes. Sem isso, N sessões baixando vídeos ao
+ * mesmo tempo somam picos de memória e derrubam o worker inteiro.
+ */
+class Semaphore {
+  private active = 0;
+  private readonly queue: (() => void)[] = [];
+  constructor(private readonly max: number) {}
+
+  async acquire(): Promise<() => void> {
+    await new Promise<void>((resolve) => {
+      if (this.active < this.max) {
+        this.active += 1;
+        resolve();
+      } else {
+        this.queue.push(() => {
+          this.active += 1;
+          resolve();
+        });
+      }
+    });
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.active -= 1;
+      const next = this.queue.shift();
+      if (next) next();
+    };
+  }
+}
+
+const mediaDownloadSemaphore = new Semaphore(
+  Math.max(1, Number(process.env.BAILEYS_MEDIA_CONCURRENCY ?? 3)),
+);
+
+/**
+ * Coage `number | Long | undefined` (proto do Baileys usa Long pra fileLength
+ * / messageTimestamp) pra number JS. Retorna 0 em valores inválidos.
+ */
+function longToNumber(v: unknown): number {
+  if (v == null) return 0;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+  if (
+    typeof v === 'object' &&
+    typeof (v as { toNumber?: () => number }).toNumber === 'function'
+  ) {
+    try {
+      return (v as { toNumber: () => number }).toNumber();
+    } catch {
+      return 0;
+    }
+  }
+  const n = Number(v as never);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Mascara telefone/JID pra logs de produção (LGPD): mantém DDI/DDD-ish e os 2
+ * últimos dígitos, esconde o miolo. Ex: `5571999998888@s.whatsapp.net` →
+ * `5571***88@s.whatsapp.net`.
+ */
+function maskJid(jid: string | null | undefined): string {
+  if (!jid) return '(none)';
+  const at = jid.indexOf('@');
+  const local = at >= 0 ? jid.slice(0, at) : jid;
+  const suffix = at >= 0 ? jid.slice(at) : '';
+  if (local.length <= 6) return `***${suffix}`;
+  return `${local.slice(0, 4)}***${local.slice(-2)}${suffix}`;
+}
+
 interface SessionContext {
   channelId: string;
   orgId: string;
@@ -48,6 +127,24 @@ export class BaileysSession {
   private currentQr: string | null = null;
   private connecting = false;
   private terminated = false;
+
+  /**
+   * Estado real da conexão (CRÍTICO — antes só tínhamos `!!this.sock`, que é
+   * true ANTES do handshake WhatsApp completar). `open` é o único estado em
+   * que dá pra enviar mensagem. isReady() usa isto.
+   *   - 'connecting': socket criado, handshake em andamento
+   *   - 'qr':         aguardando escaneamento do QR (pareamento)
+   *   - 'open':       conectado e pronto
+   *   - 'closed':     desconectado (transiente ou terminal)
+   */
+  private connState: 'connecting' | 'qr' | 'open' | 'closed' = 'closed';
+
+  /**
+   * Reconexão com backoff exponencial + jitter (CRÍTICO). Contador de
+   * tentativas consecutivas (zera ao abrir) e handle do timer agendado.
+   */
+  private reconnectAttempts = 0;
+  private reconnectTimer: NodeJS.Timeout | null = null;
 
   /**
    * Cache phone-cleaned → JID canônico (com TTL). Resolve cold outbound:
@@ -164,6 +261,7 @@ export class BaileysSession {
   async start(): Promise<void> {
     if (this.connecting || this.terminated) return;
     this.connecting = true;
+    this.connState = 'connecting';
 
     try {
       this.auth = await loadAuthState(this.ctx.channelId);
@@ -191,11 +289,25 @@ export class BaileysSession {
         // ele desiste silenciosamente. Pra inbound puro (msg do peer pra
         // nós), retornar undefined é safe — o conteúdo vem direto do socket
         // após retry bem-sucedido.
-        getMessage: async () => undefined,
+        //
+        // (HIGH) Antes retornava sempre undefined → quando o PEER pedia retry
+        // de uma msg NOSSA que ele falhou em decifrar, o Baileys não tinha o
+        // conteúdo pra reenviar e desistia: a msg ficava 'sent' no DB mas
+        // nunca era entregue. Agora buscamos a msg outbound em active.messages
+        // e reconstruímos o conteúdo (texto) pro reenvio.
+        getMessage: async (key) => this.lookupOutboundMessage(key),
       });
 
       this.sock.ev.on('creds.update', () => {
-        void this.auth?.saveCreds();
+        // saveCreds é debounced e nunca lança (loga internamente), mas
+        // encadeamos um catch defensivo pra jamais virar unhandled rejection.
+        void this.auth?.saveCreds().catch((err) => {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[baileys ${this.ctx.channelId}] saveCreds falhou:`,
+            err instanceof Error ? err.message : err,
+          );
+        });
       });
 
       this.sock.ev.on('connection.update', (update) => {
@@ -241,7 +353,7 @@ export class BaileysSession {
           if (!u.update?.message || u.key.fromMe) continue;
           // eslint-disable-next-line no-console
           console.log(
-            `[baileys ${this.ctx.channelId}] messages.update RECOVERY id=${u.key.id?.slice(0, 16)} from=${u.key.remoteJid} keys=${Object.keys(u.update.message).slice(0, 3).join(',')}`,
+            `[baileys ${this.ctx.channelId}] messages.update RECOVERY id=${u.key.id?.slice(0, 16)} from=${maskJid(u.key.remoteJid)} keys=${Object.keys(u.update.message).slice(0, 3).join(',')}`,
           );
           // Reconstrói shape de WAMessage pra reusar persistInbound
           const recovered: WAMessage = {
@@ -263,7 +375,7 @@ export class BaileysSession {
         for (const u of updates) {
           // eslint-disable-next-line no-console
           console.log(
-            `[baileys ${this.ctx.channelId}] messages.update keyId=${u.key.id} jid=${u.key.remoteJid} status=${u.update?.status}`,
+            `[baileys ${this.ctx.channelId}] messages.update keyId=${u.key.id} jid=${maskJid(u.key.remoteJid)} status=${u.update?.status}`,
           );
         }
       });
@@ -274,8 +386,97 @@ export class BaileysSession {
 
   async stop(): Promise<void> {
     this.terminated = true;
+    this.connState = 'closed';
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     this.sock?.end(undefined);
     this.sock = null;
+  }
+
+  /**
+   * Agenda reconexão com backoff exponencial + jitter (CRÍTICO).
+   *
+   * Backoff: ~2s, 4s, 8s, 16s… com teto de 5min. NUNCA fixamos 1s (reconectar
+   * 1x/s vira risco de ban). O ponto central: o timer chama start() e, SE
+   * start() lançar (ex: fetchLatestBaileysVersion falha por rede), o catch
+   * RE-AGENDA — sem isso o canal ficaria 'active' no DB mas morto, sem receber
+   * msgs, até reiniciar o worker.
+   */
+  private scheduleReconnect(): void {
+    if (this.terminated) return;
+    if (this.reconnectTimer) return; // já há um agendado — evita empilhar
+
+    const attempt = this.reconnectAttempts;
+    this.reconnectAttempts += 1;
+
+    const base = Math.min(2000 * 2 ** attempt, 5 * 60 * 1000); // teto 5min
+    const jitter = Math.floor(Math.random() * 1000);
+    const delay = base + jitter;
+
+    // eslint-disable-next-line no-console
+    console.log(
+      `[baileys ${this.ctx.channelId}] auto-restart em ${Math.round(
+        delay / 1000,
+      )}s (tentativa ${attempt + 1}, transient disconnect)`,
+    );
+
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      if (this.terminated) return;
+      void this.start().catch((err) => {
+        // eslint-disable-next-line no-console
+        console.error(
+          `[baileys ${this.ctx.channelId}] auto-restart start() lançou — reagendando:`,
+          err instanceof Error ? err.message : err,
+        );
+        // CRÍTICO: reagenda mesmo com start() lançando, pra o canal nunca
+        // ficar morto silenciosamente.
+        this.scheduleReconnect();
+      });
+    }, delay);
+  }
+
+  /**
+   * Busca uma mensagem OUTBOUND persistida (active.messages) pelo
+   * channel_message_id e reconstrói o WAMessageContent pro protocolo de retry
+   * do Baileys. Só reconstruímos texto de forma confiável — pra mídia,
+   * retornar undefined é aceitável (Baileys desiste só daquele retry, sem
+   * quebrar nada). NUNCA lança.
+   */
+  private async lookupOutboundMessage(
+    key: { id?: string | null } | null | undefined,
+  ): Promise<WAMessageContent | undefined> {
+    const id = key?.id;
+    if (!id) return undefined;
+    try {
+      const supabase = getSupabase();
+      const { data } = await supabase
+        .from('messages')
+        .select('plain_text, content_type, content')
+        .eq('org_id', this.ctx.orgId)
+        .eq('channel_message_id', id)
+        .maybeSingle();
+      if (!data) return undefined;
+
+      const row = data as {
+        plain_text?: string | null;
+        content_type?: string | null;
+        content?: unknown;
+      };
+      const text =
+        row.plain_text ??
+        (row.content && typeof row.content === 'object'
+          ? ((row.content as { body?: string }).body ?? null)
+          : null);
+      if (typeof text === 'string' && text.length > 0) {
+        return { conversation: text };
+      }
+      return undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   // ──────────────────────────────────────────────────────────
@@ -309,7 +510,7 @@ export class BaileysSession {
     const jid = await this.resolveJid(phone);
     // eslint-disable-next-line no-console
     console.log(
-      `[baileys ${this.ctx.channelId}] sendMessage → input="${phone}" jid="${jid}" kind=${content.kind}`,
+      `[baileys ${this.ctx.channelId}] sendMessage → input="${maskJid(phone)}" jid="${maskJid(jid)}" kind=${content.kind}`,
     );
 
     let payload: Parameters<WASocket['sendMessage']>[1];
@@ -364,11 +565,11 @@ export class BaileysSession {
     try {
       await this.sock.assertSessions([jid], true);
       // eslint-disable-next-line no-console
-      console.log(`[baileys ${this.ctx.channelId}] assertSessions ok jid=${jid}`);
+      console.log(`[baileys ${this.ctx.channelId}] assertSessions ok jid=${maskJid(jid)}`);
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn(
-        `[baileys ${this.ctx.channelId}] assertSessions falhou jid=${jid}:`,
+        `[baileys ${this.ctx.channelId}] assertSessions falhou jid=${maskJid(jid)}:`,
         err instanceof Error ? err.message : err,
       );
     }
@@ -379,7 +580,7 @@ export class BaileysSession {
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error(
-        `[baileys ${this.ctx.channelId}] sendMessage threw jid=${jid}:`,
+        `[baileys ${this.ctx.channelId}] sendMessage threw jid=${maskJid(jid)}:`,
         err instanceof Error ? err.message : err,
       );
       throw err;
@@ -394,9 +595,19 @@ export class BaileysSession {
     return result.key.id;
   }
 
-  /** True se a sessão está pronta pra enviar mensagens. */
+  /**
+   * True se a sessão está pronta pra enviar mensagens. Agora exige
+   * `connState === 'open'` (handshake completo) — antes checava só `!!this.sock`,
+   * que já é true durante o handshake (connecting/qr), fazendo sends falharem
+   * ou ficarem presos antes da conexão realmente abrir.
+   */
   isReady(): boolean {
-    return !!this.sock && !this.terminated;
+    return this.connState === 'open' && !!this.sock && !this.terminated;
+  }
+
+  /** Estado atual da conexão — exposto pra diagnóstico/manager. */
+  get connectionState(): 'connecting' | 'qr' | 'open' | 'closed' {
+    return this.connState;
   }
 
   /**
@@ -421,6 +632,11 @@ export class BaileysSession {
 
     const cleaned = phoneOrJid.replace(/\D/g, '');
     if (!cleaned) throw new Error('invalid_phone: empty after cleaning');
+
+    // Eviction de entradas expiradas (HIGH) — o Map crescia indefinidamente
+    // em canais de alto volume (uma entrada por número consultado), vazando
+    // memória. Limpeza é O(n) mas o cache é pequeno e chamado sob demanda.
+    this.evictExpiredJidCache();
 
     const cached = this.jidCache.get(cleaned);
     if (cached && cached.expiresAt > Date.now()) {
@@ -455,11 +671,19 @@ export class BaileysSession {
     if (jidPhone !== cleaned) {
       // eslint-disable-next-line no-console
       console.log(
-        `[baileys ${this.ctx.channelId}] JID normalize ${cleaned} → ${jidPhone} (legacy WA registration)`,
+        `[baileys ${this.ctx.channelId}] JID normalize ${maskJid(cleaned)} → ${maskJid(jidPhone)} (legacy WA registration)`,
       );
     }
 
     return first.jid;
+  }
+
+  /** Remove entradas expiradas do jidCache pra evitar vazamento de memória. */
+  private evictExpiredJidCache(): void {
+    const now = Date.now();
+    for (const [k, v] of this.jidCache) {
+      if (v.expiresAt <= now) this.jidCache.delete(k);
+    }
   }
 
   /**
@@ -568,6 +792,7 @@ export class BaileysSession {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
+      this.connState = 'qr';
       this.currentQr = qr;
       void broadcastRealtime({
         org_id: this.ctx.orgId,
@@ -576,7 +801,14 @@ export class BaileysSession {
       });
     }
 
+    if (connection === 'connecting') {
+      this.connState = 'connecting';
+    }
+
     if (connection === 'open') {
+      this.connState = 'open';
+      // Conectou — zera o backoff pra que uma próxima queda recomece do 2s.
+      this.reconnectAttempts = 0;
       this.currentQr = null;
       const me = this.sock?.user;
       const phone = me?.id ? extractPhoneFromJid(me.id) : null;
@@ -596,6 +828,7 @@ export class BaileysSession {
     }
 
     if (connection === 'close') {
+      this.connState = 'closed';
       // lastDisconnect.error é um Boom — extraímos output.statusCode sem
       // depender da lib (evita uma dep extra no worker).
       const errOutput = (
@@ -638,21 +871,13 @@ export class BaileysSession {
       // state. Não marcamos erro no DB nem notificamos frontend — pro
       // usuário é reconexão silenciosa, o QR continua válido e/ou avança
       // pra "open" na sequência.
+      //
+      // CRÍTICO: usa backoff exponencial + jitter com RE-AGENDAMENTO mesmo se
+      // start() lançar (ver scheduleReconnect). Antes era um setTimeout(start,
+      // 1s) único — se aquele start() lançasse, nada reagendava e o canal
+      // ficava morto silenciosamente.
       if (this.terminated) return;
-      // eslint-disable-next-line no-console
-      console.log(
-        `[baileys ${this.ctx.channelId}] auto-restart em 1s (transient disconnect)`,
-      );
-      setTimeout(() => {
-        if (this.terminated) return;
-        void this.start().catch((err) => {
-          // eslint-disable-next-line no-console
-          console.error(
-            `[baileys ${this.ctx.channelId}] auto-restart falhou:`,
-            err instanceof Error ? err.message : err,
-          );
-        });
-      }, 1000);
+      this.scheduleReconnect();
     }
   }
 
@@ -665,7 +890,7 @@ export class BaileysSession {
     const remoteJid = msg.key.remoteJid;
     // eslint-disable-next-line no-console
     console.log(
-      `[baileys ${this.ctx.channelId}] inbound from=${remoteJid} fromMe=${msg.key.fromMe} id=${msg.key.id?.slice(0, 16)} hasMessage=${!!msg.message}`,
+      `[baileys ${this.ctx.channelId}] inbound from=${maskJid(remoteJid)} fromMe=${msg.key.fromMe} id=${msg.key.id?.slice(0, 16)} hasMessage=${!!msg.message}`,
     );
 
     if (msg.key.fromMe) return; // ignora eco do próprio device
@@ -676,14 +901,14 @@ export class BaileysSession {
       if (remoteJid && this.sock) {
         // eslint-disable-next-line no-console
         console.warn(
-          `[baileys ${this.ctx.channelId}] msg vazia from=${remoteJid} — provável decryption failure, disparando assertSessions`,
+          `[baileys ${this.ctx.channelId}] msg vazia from=${maskJid(remoteJid)} — provável decryption failure, disparando assertSessions`,
         );
         try {
           await this.sock.assertSessions([remoteJid], true);
         } catch (err) {
           // eslint-disable-next-line no-console
           console.warn(
-            `[baileys ${this.ctx.channelId}] assertSessions ${remoteJid} falhou:`,
+            `[baileys ${this.ctx.channelId}] assertSessions ${maskJid(remoteJid)} falhou:`,
             err instanceof Error ? err.message : err,
           );
         }
@@ -722,7 +947,7 @@ export class BaileysSession {
     if (!hasUserContent) {
       // eslint-disable-next-line no-console
       console.log(
-        `[baileys ${this.ctx.channelId}] msg só protocol blocks (${messageKeys.join(',')}) from=${remoteJid} — skip persist`,
+        `[baileys ${this.ctx.channelId}] msg só protocol blocks (${messageKeys.join(',')}) from=${maskJid(remoteJid)} — skip persist`,
       );
       return;
     }
@@ -748,7 +973,7 @@ export class BaileysSession {
     if (!remoteJid || remoteJid.endsWith('@g.us')) {
       // eslint-disable-next-line no-console
       console.log(
-        `[baileys ${this.ctx.channelId}] persistInbound skip — jid=${remoteJid} (sem JID ou grupo)`,
+        `[baileys ${this.ctx.channelId}] persistInbound skip — jid=${maskJid(remoteJid)} (sem JID ou grupo)`,
       );
       return; // ignora grupos no MVP
     }
@@ -771,8 +996,10 @@ export class BaileysSession {
       return; // tipo não suportado no MVP
     }
     // eslint-disable-next-line no-console
+    // LGPD: sem preview do conteúdo da mensagem nem nome do remetente em prod;
+    // só metadados (kind, tamanho do texto, id truncado).
     console.log(
-      `[baileys ${this.ctx.channelId}] persistInbound persist kind=${parsed.kind} from=${senderName ?? '(sem nome)'} text="${parsed.kind === 'text' ? parsed.body.slice(0, 60) : ''}" id=${messageId.slice(0, 12)}`,
+      `[baileys ${this.ctx.channelId}] persistInbound persist kind=${parsed.kind} textLen=${parsed.kind === 'text' ? parsed.body.length : 0} id=${messageId.slice(0, 12)}`,
     );
 
     const supabase = getSupabase();
@@ -784,6 +1011,15 @@ export class BaileysSession {
     // 2) findOrCreate conversation
     const conversationId = await this.findOrCreateConversation(contactId);
     if (!conversationId) return;
+
+    // created_at REAL da mensagem = messageTimestamp do WhatsApp (segundos),
+    // não now() (HIGH). Usar now() bagunça a ordem quando a msg chega tardia
+    // (recovery/append) ou o worker processa em lote — a UI ordena por
+    // created_at e mostraria a msg fora de ordem. Fallback pra now() se o
+    // timestamp vier ausente/inválido.
+    const tsSec = longToNumber(msg.messageTimestamp);
+    const createdAt =
+      tsSec > 0 ? new Date(tsSec * 1000).toISOString() : new Date().toISOString();
 
     // 3) Persiste mensagem (idempotente: índice único em
     //    (channel_id, channel_message_id) bate dedup)
@@ -802,6 +1038,7 @@ export class BaileysSession {
         status: 'delivered',
         is_internal_note: false,
         metadata: {},
+        created_at: createdAt,
       })
       .select('*')
       .single();
@@ -892,6 +1129,46 @@ export class BaileysSession {
     const fileName = mediaInfo.file ?? `${parsed.kind}-${randomUUID()}.${ext}`;
     const supabase = getSupabase();
 
+    // Cap de tamanho (HIGH): o proto declara fileLength. Se exceder o teto,
+    // NÃO baixamos (evita carregar centenas de MB no heap e derrubar o
+    // worker). Registramos o attachment como 'too_large' pra UI informar.
+    const declaredSize = longToNumber(
+      m.imageMessage?.fileLength ??
+        m.audioMessage?.fileLength ??
+        m.videoMessage?.fileLength ??
+        m.documentMessage?.fileLength,
+    );
+    if (declaredSize > MAX_MEDIA_BYTES) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[baileys ${this.ctx.channelId}] mídia grande demais (${(declaredSize / 1024 / 1024).toFixed(1)}MB > ${(MAX_MEDIA_BYTES / 1024 / 1024).toFixed(0)}MB) — skip download (msg=${messageId.slice(0, 8)} kind=${parsed.kind})`,
+      );
+      await supabase
+        .from('attachments')
+        .insert({
+          org_id: this.ctx.orgId,
+          message_id: messageId,
+          conversation_id: conversationId,
+          contact_id: contactId,
+          media_type: parsed.kind,
+          mime_type: mimeType,
+          file_name: fileName,
+          file_size_bytes: declaredSize,
+          storage_path: 'skipped://too-large',
+          metadata: { status: 'too_large', declared_size_bytes: declaredSize },
+        })
+        .then(
+          () => undefined,
+          () => undefined,
+        );
+      await this.markMessageMediaFailed(
+        messageId,
+        parsed.kind,
+        `media too large: ${declaredSize} bytes`,
+      ).catch(() => {});
+      return;
+    }
+
     // 1) Insert row PENDING (sem storage_path, sem ai_summary). Se a etapa
     //    seguinte (download/upload) falhar, row já existe e UI mostra
     //    "Processando…" em vez de "Indisponível" silenciosamente.
@@ -924,10 +1201,15 @@ export class BaileysSession {
     const attachmentId = (createdRow as { id?: string } | null)?.id ?? null;
 
     // 2) Download com retry (Signal session corruption pode falhar em msgs
-    //    cold; backoff dá janela pro Baileys re-pedir ao peer)
+    //    cold; backoff dá janela pro Baileys re-pedir ao peer).
+    //    Semáforo GLOBAL limita downloads concorrentes entre TODAS as sessões
+    //    (HIGH) — sem isso, N mídias em paralelo somam picos de memória e
+    //    derrubam o worker inteiro.
+    const releaseSlot = await mediaDownloadSemaphore.acquire();
     let buffer: Buffer | null = null;
     let lastErr: unknown = null;
     const maxAttempts = 3;
+    try {
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       try {
         const result = await downloadMediaMessage(
@@ -941,6 +1223,16 @@ export class BaileysSession {
           },
         );
         if (result instanceof Buffer && result.length > 0) {
+          // Guarda pós-download: se o proto mentiu no fileLength, ainda
+          // barramos antes de subir pro Storage.
+          if (result.length > MAX_MEDIA_BYTES) {
+            // eslint-disable-next-line no-console
+            console.warn(
+              `[baileys ${this.ctx.channelId}] mídia baixada excede o teto (${(result.length / 1024 / 1024).toFixed(1)}MB) — descartando (msg=${messageId.slice(0, 8)})`,
+            );
+            lastErr = new Error('media too large after download');
+            break;
+          }
           buffer = result;
           break;
         }
@@ -960,6 +1252,11 @@ export class BaileysSession {
         const delay = attempt === 1 ? 1000 : 3000;
         await new Promise((r) => setTimeout(r, delay));
       }
+    }
+    } finally {
+      // Libera o slot do semáforo assim que o download termina (antes do
+      // upload) — o upload pro Storage não pesa no heap como o download.
+      releaseSlot();
     }
 
     if (!buffer) {

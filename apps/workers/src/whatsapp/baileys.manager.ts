@@ -1,5 +1,30 @@
+import { hostname } from 'node:os';
+import { randomBytes } from 'node:crypto';
 import { getSupabase } from '../supabase.js';
 import { BaileysSession, type OutboundContent } from './baileys.session.js';
+
+/**
+ * TTL da lease distribuída por canal (CRÍTICO — anti split-brain). Com 2+
+ * réplicas do worker, cada uma abriria socket pro mesmo canal → WhatsApp
+ * derruba com stream conflict (440) e as duas corrompem o auth. A lease
+ * garante que só UMA réplica mantém o socket de cada canal.
+ *
+ * TTL 90s, renovado a cada 45s (metade). Se a réplica dona morrer, a lease
+ * expira em ≤90s e outra assume.
+ */
+const LEASE_TTL_SEC = Number(process.env.BAILEYS_LEASE_TTL_SEC ?? 90);
+const LEASE_RENEW_MS = Math.max(5000, (LEASE_TTL_SEC / 2) * 1000);
+
+/** Backoff máximo quando o DB está fora (evita marteladas a cada 3s). */
+const DB_BACKOFF_MAX_MS = 60_000;
+
+/** Cliente minimal só pros RPCs de lock (evita fricção de tipos do rpc). */
+interface LockRpcClient {
+  rpc: (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => Promise<{ data: unknown; error: { message?: string } | null }>;
+}
 
 interface ChannelRow {
   id: string;
@@ -31,15 +56,32 @@ const PENDING_TTL_SECONDS = 10 * 60;
 export class BaileysManager {
   private readonly sessions = new Map<string, BaileysSession>();
   private timer: NodeJS.Timeout | null = null;
+  private renewTimer: NodeJS.Timeout | null = null;
   private syncing = false;
   private stopped = false;
   /** Última assinatura do estado dos canais — usada pra evitar log repetido a cada 3s */
   private lastStateSig = '__init__';
 
+  /**
+   * Identidade única deste processo/réplica pra segurar as leases. Se 2
+   * réplicas rodam, cada uma tem um holderId distinto e disputam o lock.
+   */
+  private readonly holderId = `${hostname()}-${process.pid}-${randomBytes(3).toString('hex')}`;
+
+  /** Canais cuja lease este processo detém no momento. */
+  private readonly leasedChannels = new Set<string>();
+
+  /** Instante (epoch ms) até quando pular sync por backoff de falha de DB. */
+  private dbBackoffUntil = 0;
+  /** Falhas consecutivas de DB — controla o crescimento do backoff. */
+  private dbFailures = 0;
+
   async start(): Promise<void> {
     const intervalSec = Number(process.env.BAILEYS_POLL_INTERVAL_SEC ?? 3);
     // eslint-disable-next-line no-console
-    console.log(`[baileys-manager] iniciando polling a cada ${intervalSec}s`);
+    console.log(
+      `[baileys-manager] iniciando polling a cada ${intervalSec}s (holder=${this.holderId})`,
+    );
 
     // Sync inicial síncrono (aguarda restore das sessões existentes)
     await this.syncOnce();
@@ -47,16 +89,111 @@ export class BaileysManager {
     this.timer = setInterval(() => {
       void this.syncOnce();
     }, intervalSec * 1000);
+
+    // Renovação periódica das leases enquanto as sessões vivem.
+    this.renewTimer = setInterval(() => {
+      void this.renewLeases();
+    }, LEASE_RENEW_MS);
   }
 
   async stop(): Promise<void> {
     this.stopped = true;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    if (this.renewTimer) clearInterval(this.renewTimer);
+    this.renewTimer = null;
     await Promise.allSettled(
       Array.from(this.sessions.values()).map((s) => s.stop()),
     );
+    // Libera todas as leases pra outra réplica assumir imediatamente (sem
+    // esperar o TTL expirar).
+    await Promise.allSettled(
+      Array.from(this.leasedChannels).map((id) => this.releaseLease(id)),
+    );
     this.sessions.clear();
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // Lease distribuída (CRÍTICO)
+  // ──────────────────────────────────────────────────────────
+
+  /**
+   * Adquire OU renova a lease do canal via RPC try_acquire_lock.
+   *   - retorna true  → temos a lease (livre, expirada, ou já era nossa).
+   *   - retorna false → outra réplica detém (não devemos abrir socket).
+   * Fail-open: se o RPC falhar por erro de INFRA (não "lock ocupado"),
+   * assume true — melhor manter o WhatsApp no ar do que travar por causa
+   * de um hiccup no banco. Sempre loga.
+   */
+  private async tryAcquireLease(channelId: string): Promise<boolean> {
+    const client = getSupabase() as unknown as LockRpcClient;
+    try {
+      const { data, error } = await client.rpc('try_acquire_lock', {
+        p_name: `baileys:channel:${channelId}`,
+        p_holder: this.holderId,
+        p_ttl_seconds: LEASE_TTL_SEC,
+      });
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[baileys-manager] lease RPC erro (fail-open) ${channelId}: ${error.message ?? 'unknown'}`,
+        );
+        return true; // fail-open
+      }
+      return data === true;
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[baileys-manager] lease exceção (fail-open) ${channelId}:`,
+        err instanceof Error ? err.message : err,
+      );
+      return true; // fail-open
+    }
+  }
+
+  private async releaseLease(channelId: string): Promise<void> {
+    this.leasedChannels.delete(channelId);
+    const client = getSupabase() as unknown as LockRpcClient;
+    try {
+      await client.rpc('release_lock', {
+        p_name: `baileys:channel:${channelId}`,
+        p_holder: this.holderId,
+      });
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[baileys-manager] release lease ${channelId} falhou:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
+  /**
+   * Renova as leases de todos os canais que seguramos. Se a renovação falhar
+   * (retornou false = outra réplica assumiu), paramos a sessão graciosamente
+   * pra não brigar pelo socket.
+   */
+  private async renewLeases(): Promise<void> {
+    if (this.stopped) return;
+    for (const channelId of Array.from(this.leasedChannels)) {
+      if (!this.sessions.has(channelId)) {
+        this.leasedChannels.delete(channelId);
+        continue;
+      }
+      const ok = await this.tryAcquireLease(channelId);
+      if (!ok) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[baileys-manager] lease de ${channelId} perdida (outra réplica assumiu) — parando sessão`,
+        );
+        const sess = this.sessions.get(channelId);
+        if (sess) {
+          await sess.stop().catch(() => {});
+          this.sessions.delete(channelId);
+        }
+        this.leasedChannels.delete(channelId);
+      }
+    }
   }
 
   // ──────────────────────────────────────────────────────────
@@ -121,6 +258,9 @@ export class BaileysManager {
 
   private async syncOnce(): Promise<void> {
     if (this.syncing || this.stopped) return;
+    // Backoff quando o DB está fora: em vez de martelar a cada 3s, espera
+    // um intervalo crescente (HIGH).
+    if (Date.now() < this.dbBackoffUntil) return;
     this.syncing = true;
     try {
       const supabase = getSupabase();
@@ -131,10 +271,18 @@ export class BaileysManager {
         .in('status', ['active', 'pending', 'error']);
 
       if (error) {
+        this.dbFailures += 1;
+        const backoff = Math.min(2000 * 2 ** (this.dbFailures - 1), DB_BACKOFF_MAX_MS);
+        this.dbBackoffUntil = Date.now() + backoff;
         // eslint-disable-next-line no-console
-        console.warn(`[baileys-manager] sync falhou: ${error.message}`);
+        console.warn(
+          `[baileys-manager] sync falhou (${this.dbFailures}x): ${error.message} — backoff ${Math.round(backoff / 1000)}s`,
+        );
         return;
       }
+      // Sucesso — zera o backoff.
+      this.dbFailures = 0;
+      this.dbBackoffUntil = 0;
 
       const allRows = (data ?? []) as ChannelRow[];
 
@@ -171,6 +319,7 @@ export class BaileysManager {
             await sess.stop().catch(() => {});
             this.sessions.delete(row.id);
           }
+          if (this.leasedChannels.has(row.id)) await this.releaseLease(row.id);
           await supabase.from('channels').delete().eq('id', row.id);
           orphanIds.add(row.id);
         }
@@ -187,12 +336,28 @@ export class BaileysManager {
           console.log(`[baileys-manager] encerrando sessão ${id} (removed/disconnected)`);
           await sess.stop();
           this.sessions.delete(id);
+          if (this.leasedChannels.has(id)) await this.releaseLease(id);
         }
       }
 
       // Inicia sessões novas
       for (const row of rows) {
         if (this.sessions.has(row.id)) continue;
+
+        // CRÍTICO: adquire a lease ANTES de abrir o socket. Se outra réplica
+        // já detém, pula este canal (não abre socket → sem stream conflict).
+        // Com 1 réplica (realidade atual) a lease está sempre livre → sempre
+        // adquirida → comportamento idêntico ao de antes.
+        const gotLease = await this.tryAcquireLease(row.id);
+        if (!gotLease) {
+          // eslint-disable-next-line no-console
+          console.log(
+            `[baileys-manager] canal ${row.id} detido por outra réplica — pulando`,
+          );
+          continue;
+        }
+        this.leasedChannels.add(row.id);
+
         // eslint-disable-next-line no-console
         console.log(
           `[baileys-manager] iniciando sessão ${row.id} (status=${row.status})`,
@@ -212,6 +377,9 @@ export class BaileysManager {
             err instanceof Error ? err.message : err,
           );
           this.sessions.delete(row.id);
+          // Libera a lease pra que outra réplica (ou a próxima iteração)
+          // possa tentar assumir o canal.
+          await this.releaseLease(row.id);
         }
       }
     } finally {
