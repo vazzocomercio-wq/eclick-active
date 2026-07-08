@@ -49,8 +49,19 @@ export function MessageMedia({ message, compact = false }: MessageMediaProps) {
   const meta = (message.metadata as Record<string, unknown> | null) ?? {};
   const explicitType = (meta.type as string | undefined) ?? message.content_type;
 
-  // Auto-detect a partir de URL em texto, pra mensagens antigas
-  const detected = explicitType ?? detectFromText(message.plain_text ?? '');
+  // Segurança: só auto-detecta mídia a partir de URL no texto pra mensagens
+  // NOSSAS (outbound). Texto inbound do cliente NUNCA embeda mídia de host
+  // arbitrário — o URL vira link clicável (evita carregar img/audio/video de
+  // domínio não confiável: tracking, conteúdo malicioso, SSRF de preview).
+  // Mídia legítima (content_type = image/audio/video/…) vem do nosso pipeline
+  // e continua embedando normalmente, inclusive inbound.
+  const isInbound = message.direction === 'inbound';
+  const detected =
+    explicitType && explicitType !== 'text'
+      ? explicitType
+      : isInbound
+        ? 'text'
+        : detectFromText(message.plain_text ?? '');
 
   const url = (c.url as string | undefined) ?? (meta.url as string | undefined) ?? extractUrl(message.plain_text ?? '');
   const caption = (c.caption as string | undefined) ?? (meta.caption as string | undefined);
@@ -101,12 +112,36 @@ export function MessageMedia({ message, compact = false }: MessageMediaProps) {
         </p>
       );
     default:
-      return (
-        <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
-          {(c.body as string) ?? message.plain_text ?? ''}
-        </p>
-      );
+      return <LinkifiedText text={(c.body as string) ?? message.plain_text ?? ''} />;
   }
+}
+
+// ──────────────────────────────────────────────────────────
+// Texto com URLs clicáveis (sem embedar mídia de host arbitrário)
+// ──────────────────────────────────────────────────────────
+
+function LinkifiedText({ text }: { text: string }) {
+  if (!text) return null;
+  const parts = text.split(/(https?:\/\/[^\s]+)/gi);
+  return (
+    <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+      {parts.map((part, i) =>
+        /^https?:\/\//i.test(part) ? (
+          <a
+            key={i}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer nofollow"
+            className="text-primary underline underline-offset-2 break-all hover:opacity-80"
+          >
+            {part}
+          </a>
+        ) : (
+          <span key={i}>{part}</span>
+        ),
+      )}
+    </p>
+  );
 }
 
 // ──────────────────────────────────────────────────────────

@@ -221,9 +221,17 @@ export function StartConversationDialog({
     setSelectedChannelId(first ? first.channel.id : null);
   }, [compatible]);
 
-  async function handleStart(e: React.FormEvent) {
-    e.preventDefault();
-    if (!selectedContact || !selectedChannelId || !message.trim()) return;
+  // Ctrl/Cmd+Enter no textarea envia (Enter sozinho quebra linha).
+  function onMessageKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      void handleStart();
+    }
+  }
+
+  async function handleStart(e?: React.FormEvent) {
+    e?.preventDefault();
+    if (submitting || !selectedContact || !selectedChannelId || !message.trim()) return;
     setSubmitting(true);
     try {
       const res = await conversationsApi.start({
@@ -418,6 +426,7 @@ export function StartConversationDialog({
                     id="start-msg"
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
+                    onKeyDown={onMessageKeyDown}
                     rows={4}
                     placeholder={t('messagePlaceholder')}
                     className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-y"
@@ -429,8 +438,9 @@ export function StartConversationDialog({
                   id="start-msg"
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
+                  onKeyDown={onMessageKeyDown}
                   rows={4}
-                  placeholder="Escreva a mensagem que vai abrir essa conversa…"
+                  placeholder={t('messagePlaceholder')}
                   className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-y"
                   maxLength={4096}
                 />

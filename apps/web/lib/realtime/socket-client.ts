@@ -51,7 +51,10 @@ export async function getSocket(): Promise<Socket | null> {
     },
     transports: ['websocket', 'polling'],
     reconnection: true,
-    reconnectionAttempts: 5,
+    // Nunca desiste de reconectar — o polling REST é rede de segurança, mas o
+    // realtime deve voltar sozinho após quedas longas (server reboot, rede
+    // ruim) sem exigir F5. Backoff exponencial evita martelar o servidor.
+    reconnectionAttempts: Infinity,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 8000,
     autoConnect: true,

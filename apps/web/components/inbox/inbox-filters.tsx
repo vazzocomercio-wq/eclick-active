@@ -1,25 +1,8 @@
 'use client';
 
-import {
-  Calendar,
-  CalendarClock,
-  CreditCard,
-  FileText,
-  HelpCircle,
-  Search,
-  Star,
-  Stethoscope,
-  Syringe,
-  X,
-  type LucideIcon,
-} from 'lucide-react';
+import { Search, Star, X, type LucideIcon } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useMemo } from 'react';
 import { Input } from '@/components/ui/input';
-import {
-  AnimatedPromptSuggestions,
-  type PromptSuggestion,
-} from '@/components/ui/animated-prompt-suggestions';
 import { cn } from '@/lib/utils';
 import type { InboxFilter } from '@/hooks/use-inbox';
 
@@ -38,20 +21,6 @@ export function InboxFilters({
 }: InboxFiltersProps) {
   const t = useTranslations('inbox.filters');
 
-  const SEARCH_SUGGESTIONS = useMemo<PromptSuggestion[]>(
-    () => [
-      { text: t('suggestions.scheduling'), icon: CalendarClock, accent: '#00E5FF' },
-      { text: t('suggestions.appointment'), icon: Stethoscope, accent: '#67e8f9' },
-      { text: t('suggestions.infusion'), icon: Syringe, accent: '#a78bfa' },
-      { text: t('suggestions.private'), icon: CreditCard, accent: '#34d399' },
-      { text: t('suggestions.insurance'), icon: CreditCard, accent: '#fcd34d' },
-      { text: t('suggestions.document'), icon: FileText, accent: '#f472b6' },
-      { text: t('suggestions.urgent'), icon: HelpCircle, accent: '#ef4444' },
-      { text: t('suggestions.today'), icon: Calendar, accent: '#fde68a' },
-    ],
-    [t],
-  );
-
   const FILTERS: Array<{ value: InboxFilter; label: string; icon?: LucideIcon }> = [
     { value: 'all', label: t('all') },
     { value: 'mine', label: t('mine') },
@@ -63,34 +32,16 @@ export function InboxFilters({
 
   return (
     <div className="flex flex-col gap-2 border-b border-border p-3">
-      {/* Search com sugestões animadas embaixo quando vazio */}
-      {!search ? (
-        <AnimatedPromptSuggestions
-          suggestions={SEARCH_SUGGESTIONS}
-          onSuggestionClick={(text) => onSearchChange(text)}
-          rows={1}
-          compact
-          speed={35}
-        >
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => onSearchChange(e.target.value)}
-              placeholder={t('searchPlaceholder')}
-              className="h-9 pl-8 pr-8 text-sm"
-            />
-          </div>
-        </AnimatedPromptSuggestions>
-      ) : (
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder={t('searchPlaceholder')}
-            className="h-9 pl-8 pr-8 text-sm"
-          />
+      {/* Busca por nome / telefone / e-mail do contato. */}
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={search}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder={t('searchPlaceholder')}
+          className="h-9 pl-8 pr-8 text-sm"
+        />
+        {search && (
           <button
             type="button"
             aria-label={t('clearSearchAria')}
@@ -99,8 +50,8 @@ export function InboxFilters({
           >
             <X className="h-3 w-3" />
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Filtros */}
       <div className="flex flex-wrap gap-1">
@@ -125,7 +76,7 @@ export function InboxFilters({
               {Icon && (
                 <Icon
                   className="h-3 w-3"
-                  fill={active && isStar ? '#FFC107' : 'none'}
+                  fill={active && isStar ? 'currentColor' : 'none'}
                   strokeWidth={active && isStar ? 0 : 2}
                 />
               )}

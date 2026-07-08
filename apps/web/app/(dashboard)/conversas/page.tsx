@@ -42,17 +42,25 @@ export default function ConversasPage() {
     setActiveDetail(c);
   }, []);
 
-  // Quando a conversa selecionada deixa de existir na lista atual (foi
-  // arquivada, resolvida, ou o filtro mudou), limpa a seleção pra UI não
-  // ficar mostrando chat + sidebar de uma conversa que sumiu.
+  // Informa ao hook qual conversa está aberta — evita subir unread dela e
+  // permite re-marcar como lida quando chega msg inbound na conversa visível.
+  useEffect(() => {
+    inbox.setActiveConversationId(selectedId);
+  }, [selectedId, inbox.setActiveConversationId]);
+
+  // Quando a conversa selecionada REALMENTE deixa de existir (foi arquivada,
+  // resolvida, excluída, ou o filtro de aba mudou), limpa a seleção. Usa
+  // rawItems (todas as conversas carregadas) — NÃO inbox.items (já filtrado
+  // pela busca client-side) — pra não fechar o chat aberto só porque a busca
+  // escondeu a conversa da view.
   useEffect(() => {
     if (!selectedId || inbox.loading) return;
-    const stillInList = inbox.items.some((i) => i.id === selectedId);
-    if (!stillInList) {
+    const stillExists = inbox.rawItems.some((i) => i.id === selectedId);
+    if (!stillExists) {
       setSelectedId(null);
       setActiveDetail(null);
     }
-  }, [selectedId, inbox.items, inbox.loading]);
+  }, [selectedId, inbox.rawItems, inbox.loading]);
 
   // Abre o ContactDetailSheet completo. Faz fetch primeiro pra garantir
   // shape Contact completo (o ContactPanel só tem subset via join).
@@ -101,6 +109,9 @@ export default function ConversasPage() {
             <InboxList
               items={inbox.items}
               loading={inbox.loading}
+              loadingMore={inbox.loadingMore}
+              hasMore={inbox.hasMore}
+              onLoadMore={inbox.loadMore}
               selectedId={selectedId}
               onSelect={handleSelect}
               filter={inbox.filter}

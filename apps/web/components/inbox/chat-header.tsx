@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowLeft, CheckCheck, MoreVertical, PanelRightClose, PanelRightOpen, UserPlus } from 'lucide-react';
+import { ArrowLeft, CheckCheck, PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import type { ConversationDetail } from '@eclick-active/shared';
 import { Button } from '@/components/ui/button';
@@ -12,7 +12,6 @@ import { formatPhone } from '@/lib/format';
 interface ChatHeaderProps {
   conversation: ConversationDetail | null;
   onResolve?: () => void;
-  onAssign?: () => void;
   panelOpen: boolean;
   onTogglePanel: () => void;
   /** Em mobile, callback pra voltar pra lista. Quando passado, exibe botão. */
@@ -22,7 +21,6 @@ interface ChatHeaderProps {
 export function ChatHeader({
   conversation,
   onResolve,
-  onAssign,
   panelOpen,
   onTogglePanel,
   onBack,
@@ -72,28 +70,18 @@ export function ChatHeader({
       </div>
 
       <div className="flex items-center gap-1">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onAssign}
-          className="hidden gap-1.5 sm:inline-flex"
-        >
-          <UserPlus className="h-3.5 w-3.5" />
-          {t('assign')}
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onResolve}
-          disabled={isResolved}
-          className="hidden gap-1.5 sm:inline-flex"
-        >
-          <CheckCheck className="h-3.5 w-3.5" />
-          {isResolved ? t('resolved') : t('resolve')}
-        </Button>
-        <Button variant="ghost" size="icon" aria-label={t('moreActions')}>
-          <MoreVertical className="h-4 w-4" />
-        </Button>
+        {onResolve && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onResolve}
+            disabled={isResolved}
+            className="hidden gap-1.5 sm:inline-flex"
+          >
+            <CheckCheck className="h-3.5 w-3.5" />
+            {isResolved ? t('resolved') : t('resolve')}
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="icon"

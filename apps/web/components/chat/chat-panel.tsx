@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { MessageSquare, Sparkles } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { toast } from 'sonner';
 import type { ConversationDetail } from '@eclick-active/shared';
 import { conversationsApi } from '@/lib/api/conversations';
 import { useChat } from '@/hooks/use-chat';
@@ -109,6 +110,7 @@ export function ChatPanel({
   className,
 }: ChatPanelProps) {
   const t = useTranslations('chat.panel');
+  const tActions = useTranslations('chat.actions');
   // Default: header em full, sem header em compact (drawer já tem o seu)
   const headerVisible = showHeader ?? !compact;
 
@@ -168,18 +170,50 @@ export function ChatPanel({
     return () => clearTimeout(t);
   }, [conversationId]);
 
-  // Eventos custom (ai:suggestion) via WebSocket
-  useEvents({
-    onAISuggestion: (payload) => {
-      if (payload.conversation_id !== conversationId) return;
-      setAiSuggestion({
-        text: payload.suggestion,
-        confidence: payload.confidence,
-        ...(payload.ai_interaction_id ? { ai_interaction_id: payload.ai_interaction_id } : {}),
-        ...(payload.live_sources_used ? { live_sources_used: payload.live_sources_used } : {}),
-      });
-    },
-  });
+  // Timer de re-marcação de lida (debounce) pra mensagens inbound que chegam
+  // enquanto a conversa está aberta na tela.
+  const markReadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (markReadTimerRef.current) clearTimeout(markReadTimerRef.current);
+    };
+  }, []);
+
+  // Eventos custom via WebSocket. Handlers memoizados por conversationId pra
+  // não re-registrar os listeners a cada render (useEvents depende da
+  // identidade do objeto de handlers).
+  const eventHandlers = useMemo(
+    () => ({
+      onAISuggestion: (payload: {
+        conversation_id: string;
+        suggestion: string;
+        confidence?: number;
+        ai_interaction_id?: string;
+        live_sources_used?: Array<{ id: string; name: string; url: string }>;
+      }) => {
+        if (payload.conversation_id !== conversationId) return;
+        setAiSuggestion({
+          text: payload.suggestion,
+          confidence: payload.confidence,
+          ...(payload.ai_interaction_id ? { ai_interaction_id: payload.ai_interaction_id } : {}),
+          ...(payload.live_sources_used ? { live_sources_used: payload.live_sources_used } : {}),
+        });
+      },
+      // Chegou mensagem inbound na conversa ABERTA → re-marca como lida
+      // (debounced) pra resetar o unread_count no servidor. Sem isso, o
+      // badge de não-lidas sobe mesmo com a conversa visível na tela.
+      onMessageNew: (payload: { conversation_id: string; message: { direction: string } }) => {
+        if (payload.conversation_id !== conversationId) return;
+        if (payload.message.direction !== 'inbound') return;
+        if (markReadTimerRef.current) clearTimeout(markReadTimerRef.current);
+        markReadTimerRef.current = setTimeout(() => {
+          void conversationsApi.markAsRead(conversationId).catch(() => {});
+        }, 800);
+      },
+    }),
+    [conversationId],
+  );
+  useEvents(eventHandlers);
 
   // Indicador "IA está digitando…" — Concierge emite typing:true ao
   // começar processamento e typing:false no final. Reduz percepção de
@@ -267,8 +301,14 @@ export function ChatPanel({
     try {
       const updated = await conversationsApi.update(conversationId, { status: 'resolved' });
       setDetail((d) => (d ? { ...d, ...updated } : d));
+      // Propaga pro pai (inbox) remover da lista / fechar o chat, igual ao
+      // botão Resolver da ChatActions.
+      onAction?.('resolve');
+      toast.success(tActions('resolveSuccess'));
     } catch (err) {
-      console.error('Failed to resolve:', err);
+      toast.error(tActions('resolveFailed'), {
+        description: err instanceof Error ? err.message : undefined,
+      });
     }
   }
 
@@ -301,6 +341,9 @@ export function ChatPanel({
           void chat.loadMore();
         }}
         conversationId={conversationId}
+        onRetry={(id) => {
+          void chat.retry(id);
+        }}
       />
 
       {/* Indicador "IA está digitando…" (Concierge processando) */}

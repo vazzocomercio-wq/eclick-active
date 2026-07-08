@@ -2214,17 +2214,7 @@
       "unassigned": "Não atribuídas",
       "starred": "Favoritas",
       "resolved": "Resolvidas",
-      "archived": "Arquivadas",
-      "suggestions": {
-        "scheduling": "agendamento",
-        "appointment": "consulta",
-        "infusion": "infusão",
-        "private": "particular",
-        "insurance": "convênio",
-        "document": "documento",
-        "urgent": "urgente",
-        "today": "hoje"
-      }
+      "archived": "Arquivadas"
     },
     "item": {
       "noName": "sem nome",
@@ -2248,11 +2238,13 @@
     },
     "messageList": {
       "emptyState": "Nenhuma mensagem ainda. Envie a primeira pra começar a conversa.",
-      "loadMoreHint": "Carregue rolando ↑"
+      "loadMoreHint": "Carregue rolando ↑",
+      "newMessages": "Novas mensagens"
     },
     "messageBubble": {
       "aiLabel": "IA",
-      "internalNote": "Nota interna"
+      "internalNote": "Nota interna",
+      "retry": "Reenviar"
     },
     "messageInput": {
       "placeholderMessage": "Digite sua mensagem...",

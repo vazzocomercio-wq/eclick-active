@@ -11,13 +11,12 @@ import {
   Lock,
   MessageSquare,
   Package,
-  Paperclip,
   PhoneCall,
   Send,
-  Smile,
   Sparkles,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -130,9 +129,11 @@ export function MessageInput({
       setValue('');
       setIsInternalNote(false);
     } catch (err) {
-      // Erros já são logados pelo hook; aqui só não limpa o input pro user
-      // tentar de novo.
+      // O hook (useChat.send) já trata o erro de envio normal com bolha
+      // 'failed' + toast. Aqui é rede de segurança pra throws inesperados:
+      // avisa o usuário e NÃO limpa o input pra ele tentar de novo.
       console.error('Failed to send:', err);
+      toast.error(t('sendFailed'));
     } finally {
       setSending(false);
       // Re-foca após enviar (sucesso ou erro). O useEffect [disabled,sending]
@@ -200,23 +201,13 @@ export function MessageInput({
       )}
 
       <div className="flex items-end gap-2">
-        {!compact && (
-          <>
-            <Button variant="ghost" size="icon" aria-label={t('emojiAria')} disabled>
-              <Smile className="h-4 w-4 text-muted-foreground" />
-            </Button>
-            <Button variant="ghost" size="icon" aria-label={t('attachAria')} disabled>
-              <Paperclip className="h-4 w-4 text-muted-foreground" />
-            </Button>
-            {onOpenProductPicker && (
-              <Button variant="ghost" size="icon" aria-label={t('sendProductAria')}
-                onClick={onOpenProductPicker}
-                disabled={disabled || sending || isInternalNote}
-                title={t('sendProductTitle')}>
-                <Package className="h-4 w-4 text-cyan-400" />
-              </Button>
-            )}
-          </>
+        {!compact && onOpenProductPicker && (
+          <Button variant="ghost" size="icon" aria-label={t('sendProductAria')}
+            onClick={onOpenProductPicker}
+            disabled={disabled || sending || isInternalNote}
+            title={t('sendProductTitle')}>
+            <Package className="h-4 w-4 text-primary" />
+          </Button>
         )}
 
         <Textarea

@@ -2214,17 +2214,7 @@
       "unassigned": "未分配",
       "starred": "收藏",
       "resolved": "已解决",
-      "archived": "已归档",
-      "suggestions": {
-        "scheduling": "预约",
-        "appointment": "咨询",
-        "infusion": "输液",
-        "private": "自费",
-        "insurance": "保险",
-        "document": "文件",
-        "urgent": "紧急",
-        "today": "今天"
-      }
+      "archived": "已归档"
     },
     "item": {
       "noName": "无姓名",
@@ -2248,11 +2238,13 @@
     },
     "messageList": {
       "emptyState": "暂无消息。发送第一条消息开启对话。",
-      "loadMoreHint": "向上滚动加载更多 ↑"
+      "loadMoreHint": "向上滚动加载更多 ↑",
+      "newMessages": "新消息"
     },
     "messageBubble": {
       "aiLabel": "AI",
-      "internalNote": "内部备注"
+      "internalNote": "内部备注",
+      "retry": "重新发送"
     },
     "messageInput": {
       "placeholderMessage": "输入消息...",

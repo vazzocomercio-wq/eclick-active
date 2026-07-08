@@ -2214,17 +2214,7 @@
       "unassigned": "Unassigned",
       "starred": "Starred",
       "resolved": "Resolved",
-      "archived": "Archived",
-      "suggestions": {
-        "scheduling": "scheduling",
-        "appointment": "appointment",
-        "infusion": "infusion",
-        "private": "private",
-        "insurance": "insurance",
-        "document": "document",
-        "urgent": "urgent",
-        "today": "today"
-      }
+      "archived": "Archived"
     },
     "item": {
       "noName": "no name",
@@ -2248,11 +2238,13 @@
     },
     "messageList": {
       "emptyState": "No messages yet. Send the first one to start the conversation.",
-      "loadMoreHint": "Scroll up to load more ↑"
+      "loadMoreHint": "Scroll up to load more ↑",
+      "newMessages": "New messages"
     },
     "messageBubble": {
       "aiLabel": "AI",
-      "internalNote": "Internal note"
+      "internalNote": "Internal note",
+      "retry": "Resend"
     },
     "messageInput": {
       "placeholderMessage": "Type your message...",

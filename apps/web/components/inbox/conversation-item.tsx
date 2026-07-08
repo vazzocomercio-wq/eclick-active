@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Star } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import type { InboxItem } from '@eclick-active/shared';
@@ -16,8 +16,6 @@ interface ConversationItemProps {
   item: InboxItem;
   active: boolean;
   onSelect: () => void;
-  /** Preview da última mensagem — não vem no v_inbox; passar separado se cacheado. */
-  preview?: string | null;
   /** Disparado após toggleStar — pai pode atualizar a lista localmente. */
   onStarChanged?: (id: string, nextStarred: boolean) => void;
 }
@@ -26,13 +24,26 @@ export function ConversationItem({
   item,
   active,
   onSelect,
-  preview,
   onStarChanged,
 }: ConversationItemProps) {
   const t = useTranslations('inbox.item');
   const hasUnread = (item.unread_count ?? 0) > 0;
   const [starred, setStarred] = useState(item.is_starred ?? false);
   const [pulsing, setPulsing] = useState(false);
+  const pulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Re-sincroniza o estado local quando o prop muda (ex: refetch/socket
+  // atualizou is_starred, ou o componente foi reciclado pra outro item).
+  useEffect(() => {
+    setStarred(item.is_starred ?? false);
+  }, [item.is_starred]);
+
+  // Limpa o timer do pulso no unmount pra não vazar setState.
+  useEffect(() => {
+    return () => {
+      if (pulseTimerRef.current) clearTimeout(pulseTimerRef.current);
+    };
+  }, []);
 
   async function handleToggleStar(e: React.MouseEvent) {
     e.stopPropagation();
@@ -41,7 +52,8 @@ export function ConversationItem({
     setStarred(next);
     if (next) {
       setPulsing(true);
-      setTimeout(() => setPulsing(false), 200);
+      if (pulseTimerRef.current) clearTimeout(pulseTimerRef.current);
+      pulseTimerRef.current = setTimeout(() => setPulsing(false), 200);
     }
     onStarChanged?.(item.id, next);
     try {
@@ -89,7 +101,7 @@ export function ConversationItem({
             'h-3.5 w-3.5 transition-transform duration-200',
             pulsing && 'scale-[1.3]',
           )}
-          fill={starred ? '#FFC107' : 'none'}
+          fill={starred ? 'currentColor' : 'none'}
           strokeWidth={starred ? 0 : 2}
         />
       </button>
@@ -125,7 +137,7 @@ export function ConversationItem({
               hasUnread ? 'text-foreground/80' : 'text-muted-foreground',
             )}
           >
-            {preview ?? formatLastMessage(item, t) ?? item.ai_summary ?? t('noMessages')}
+            {formatLastMessage(item, t) ?? item.ai_summary ?? t('noMessages')}
           </span>
           {hasUnread && (
             <span className="inline-flex h-4 min-w-[16px] shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">

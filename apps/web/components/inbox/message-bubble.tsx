@@ -6,6 +6,7 @@ import {
   CheckCheck,
   Clock,
   Lock,
+  RotateCcw,
   Sparkles,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
@@ -19,11 +20,14 @@ interface MessageBubbleProps {
   message: Message;
   /** Attachments dessa mensagem (vindos do Storage com signed URL + summary IA). */
   attachments?: ConversationAttachment[];
+  /** Reenvia uma mensagem outbound que falhou (status 'failed'). */
+  onRetry?: (messageId: string) => void;
 }
 
-export function MessageBubble({ message, attachments }: MessageBubbleProps) {
+export function MessageBubble({ message, attachments, onRetry }: MessageBubbleProps) {
   const t = useTranslations('inbox.messageBubble');
   const isOutbound = message.direction === 'outbound';
+  const isFailed = message.status === 'failed';
   const isBot = message.sender_type === 'bot';
   const isInternalNote = message.is_internal_note;
   const time = new Date(message.created_at).toLocaleTimeString('pt-BR', {
@@ -69,6 +73,17 @@ export function MessageBubble({ message, attachments }: MessageBubbleProps) {
           <time dateTime={message.created_at}>{time}</time>
           {isOutbound && <DeliveryStatus status={message.status} />}
         </div>
+
+        {isOutbound && isFailed && onRetry && (
+          <button
+            type="button"
+            onClick={() => onRetry(message.id)}
+            className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-destructive hover:underline"
+          >
+            <RotateCcw className="h-3 w-3" />
+            {t('retry')}
+          </button>
+        )}
       </div>
     </div>
   );

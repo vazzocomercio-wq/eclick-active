@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { InboxItem, Conversation, Message } from '@eclick-active/shared';
-import { conversationsApi } from '@/lib/api/conversations';
+import { conversationsApi, type InboxParams } from '@/lib/api/conversations';
 import { ApiError } from '@/lib/api/client';
 import { getSocket } from '@/lib/realtime/socket-client';
 
@@ -15,8 +15,14 @@ export type InboxFilter =
   | 'starred';
 
 interface UseInboxResult {
+  /** Itens já filtrados por busca client-side + filtro 'unassigned'. */
   items: InboxItem[];
+  /** Itens carregados sem o filtro de busca client-side (todas as páginas). */
+  rawItems: InboxItem[];
   loading: boolean;
+  loadingMore: boolean;
+  hasMore: boolean;
+  loadMore: () => Promise<void>;
   error: { status: number; message: string } | null;
   filter: InboxFilter;
   setFilter: (f: InboxFilter) => void;
@@ -27,6 +33,8 @@ interface UseInboxResult {
   patchLocal: (conversationId: string, patch: Partial<InboxItem>) => void;
   /** Remove imediatamente da lista (pra arquivar/resolver com feedback instantâneo). */
   removeLocal: (conversationId: string) => void;
+  /** Informa qual conversa está aberta — evita subir unread dela. */
+  setActiveConversationId: (id: string | null) => void;
 }
 
 const PAGE_LIMIT = 50;
@@ -37,49 +45,109 @@ const POLL_INTERVAL_MS = 30_000;
 export function useInbox(): UseInboxResult {
   const [items, setItems] = useState<InboxItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<UseInboxResult['error']>(null);
   const [filter, setFilter] = useState<InboxFilter>('all');
   const [search, setSearch] = useState('');
-  const reqIdRef = useRef(0);
+
+  // Refs de request SEPARADOS pro fetch com loading e pro fetch silencioso —
+  // se compartilhassem, um poll silencioso incrementaria o ref e o finally do
+  // fetch com loading nunca chamaria setLoading(false) (loading travado).
+  const loadReqRef = useRef(0);
+  const silentReqRef = useRef(0);
+  const pageRef = useRef(1);
+  const itemsCountRef = useRef(0);
+  const activeConvRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    itemsCountRef.current = items.length;
+  }, [items]);
+
+  const buildParams = useCallback(
+    (page: number, limit: number): InboxParams => ({
+      page,
+      limit,
+      ...(filter === 'mine' ? { mine: true } : {}),
+      ...(filter === 'resolved' ? { status: 'resolved' as const } : {}),
+      ...(filter === 'archived' ? { status: 'archived' as const } : {}),
+      ...(filter === 'starred' ? { starred: true } : {}),
+    }),
+    [filter],
+  );
 
   /**
-   * Fetch interno — pode ser silencioso (não muda loading) pra polling
-   * de backup que não atrapalha UX.
+   * Fetch da primeira página. Pode ser silencioso (não muda loading) pra
+   * polling de backup. O silencioso re-busca TODAS as páginas já carregadas
+   * (limit = itens carregados) pra não truncar o histórico paginado.
    */
   const fetchInbox = useCallback(
     async (silent = false) => {
-      const reqId = ++reqIdRef.current;
-      if (!silent) {
-        setLoading(true);
-        setError(null);
+      if (silent) {
+        const reqId = ++silentReqRef.current;
+        const limit = Math.max(PAGE_LIMIT, itemsCountRef.current);
+        try {
+          const result = await conversationsApi.getInbox(buildParams(1, limit));
+          if (reqId !== silentReqRef.current) return;
+          setItems(result.data);
+          pageRef.current = Math.max(1, Math.ceil(result.data.length / PAGE_LIMIT));
+          setHasMore(result.total > result.data.length);
+          setError(null);
+        } catch {
+          /* silent — não polui UX se cair offline */
+        }
+        return;
       }
+
+      const reqId = ++loadReqRef.current;
+      setLoading(true);
+      setError(null);
       try {
-        const result = await conversationsApi.getInbox({
-          limit: PAGE_LIMIT,
-          ...(filter === 'mine' ? { mine: true } : {}),
-          ...(filter === 'resolved' ? { status: 'resolved' } : {}),
-          ...(filter === 'archived' ? { status: 'archived' } : {}),
-          ...(filter === 'starred' ? { starred: true } : {}),
-        });
-        if (reqId !== reqIdRef.current) return;
+        const result = await conversationsApi.getInbox(buildParams(1, PAGE_LIMIT));
+        if (reqId !== loadReqRef.current) return;
         setItems(result.data);
-        if (silent) setError(null);
+        pageRef.current = 1;
+        setHasMore(result.total > result.data.length);
       } catch (err) {
-        if (reqId !== reqIdRef.current) return;
+        if (reqId !== loadReqRef.current) return;
         if (err instanceof ApiError) {
           setError({ status: err.status, message: err.message });
         } else {
           setError({ status: 0, message: err instanceof Error ? err.message : 'Erro' });
         }
-        if (!silent) setItems([]);
+        setItems([]);
+        setHasMore(false);
       } finally {
-        if (reqId === reqIdRef.current && !silent) setLoading(false);
+        if (reqId === loadReqRef.current) setLoading(false);
       }
     },
-    [filter],
+    [buildParams],
   );
 
   const refetch = useCallback(() => fetchInbox(false), [fetchInbox]);
+
+  /** Carrega a próxima página e ANEXA (infinite scroll). */
+  const loadMore = useCallback(async () => {
+    if (loading || loadingMore || !hasMore) return;
+    const reqId = loadReqRef.current; // aborta se o filtro trocar no meio
+    const nextPage = pageRef.current + 1;
+    setLoadingMore(true);
+    try {
+      const result = await conversationsApi.getInbox(buildParams(nextPage, PAGE_LIMIT));
+      if (reqId !== loadReqRef.current) return;
+      pageRef.current = nextPage;
+      setItems((prev) => {
+        const seen = new Set(prev.map((i) => i.id));
+        const additions = result.data.filter((i) => !seen.has(i.id));
+        return additions.length === 0 ? prev : [...prev, ...additions];
+      });
+      setHasMore(nextPage * PAGE_LIMIT < result.total);
+    } catch {
+      /* swallow — o sentinel tenta de novo ao reaparecer na viewport */
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [buildParams, hasMore, loading, loadingMore]);
 
   /**
    * Optimistic update: aplica mudanças locais imediatamente sem esperar
@@ -97,6 +165,10 @@ export function useInbox(): UseInboxResult {
 
   const removeLocal = useCallback((conversationId: string) => {
     setItems((prev) => prev.filter((it) => it.id !== conversationId));
+  }, []);
+
+  const setActiveConversationId = useCallback((id: string | null) => {
+    activeConvRef.current = id;
   }, []);
 
   // Fetch inicial + ao mudar filter
@@ -189,12 +261,14 @@ export function useInbox(): UseInboxResult {
             return prev.filter((_, i) => i !== idx);
           }
 
+          // Se a conversa está aberta na tela, mantém unread zerado.
+          const isActive = updated.id === activeConvRef.current;
           const merged: InboxItem = {
             ...prev[idx]!,
             status: updated.status,
             priority: updated.priority,
             assigned_to: updated.assigned_to,
-            unread_count: updated.unread_count,
+            unread_count: isActive ? 0 : updated.unread_count,
             ai_summary: updated.ai_summary,
             ai_sentiment: updated.ai_sentiment,
             ai_intent: updated.ai_intent,
@@ -230,6 +304,8 @@ export function useInbox(): UseInboxResult {
             void refetch();
             return prev;
           }
+          // Conversa aberta na tela → não sobe unread (o agente está vendo).
+          const isActive = payload.conversation_id === activeConvRef.current;
           const next = [...prev];
           next[idx] = {
             ...prev[idx]!,
@@ -239,9 +315,11 @@ export function useInbox(): UseInboxResult {
               new Date().toISOString(),
             last_message_text: payload.message.plain_text ?? null,
             last_message_direction: payload.message.direction,
-            // Bump unread só se for inbound. Outbound (agent/bot) não conta.
-            unread_count:
-              payload.message.direction === 'inbound'
+            // Bump unread só se for inbound E a conversa NÃO estiver aberta.
+            // Conversa aberta permanece com unread 0.
+            unread_count: isActive
+              ? 0
+              : payload.message.direction === 'inbound'
                 ? prev[idx]!.unread_count + 1
                 : prev[idx]!.unread_count,
           };
@@ -284,7 +362,11 @@ export function useInbox(): UseInboxResult {
 
   return {
     items: filtered,
+    rawItems: items,
     loading,
+    loadingMore,
+    hasMore,
+    loadMore,
     error,
     filter,
     setFilter,
@@ -293,5 +375,6 @@ export function useInbox(): UseInboxResult {
     refetch,
     patchLocal,
     removeLocal,
+    setActiveConversationId,
   };
 }

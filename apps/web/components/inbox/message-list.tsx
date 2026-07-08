@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import { Loader2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowDown, Loader2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import type { Message } from '@eclick-active/shared';
 import { useConversationAttachments } from '@/hooks/use-conversation-attachments';
@@ -16,6 +16,8 @@ interface MessageListProps {
   onLoadMore: () => void;
   /** ID da conversa pra buscar attachments (mídia + summary IA). */
   conversationId: string | null;
+  /** Reenvia uma mensagem outbound que falhou. */
+  onRetry?: (messageId: string) => void;
 }
 
 export function MessageList({
@@ -25,6 +27,7 @@ export function MessageList({
   loadingMore,
   onLoadMore,
   conversationId,
+  onRetry,
 }: MessageListProps) {
   const t = useTranslations('inbox.messageList');
   // Detecta msgs inbound de mídia que ainda podem não ter attachment
@@ -46,22 +49,68 @@ export function MessageList({
   );
   const containerRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
-  const lastMessageIdRef = useRef<string | null>(null);
+  // Estado de scroll compartilhado entre efeitos.
+  const atBottomRef = useRef(true);
+  // Ids anterior (primeiro/último) pra distinguir append (msg nova no fim),
+  // prepend (página antiga no topo) e carga inicial (troca de conversa).
+  const prevFirstIdRef = useRef<string | null>(null);
+  const prevLastIdRef = useRef<string | null>(null);
+  // Medida de scroll ANTES do prepend pra restaurar a viewport (não saltar).
+  const prependAnchorRef = useRef<{ height: number; top: number } | null>(null);
+  const [showNewMessages, setShowNewMessages] = useState(false);
 
-  // Auto-scroll pra fundo quando muda conversa OU chega mensagem nova
-  useEffect(() => {
-    const last = messages[messages.length - 1];
-    if (!last) return;
-    if (lastMessageIdRef.current === last.id) return;
-    lastMessageIdRef.current = last.id;
-
+  function scrollToBottom() {
     const c = containerRef.current;
-    if (c) {
-      // Pequeno delay pra DOM settle. requestAnimationFrame seria mais elegante.
-      requestAnimationFrame(() => {
-        c.scrollTop = c.scrollHeight;
-      });
+    if (!c) return;
+    requestAnimationFrame(() => {
+      c.scrollTop = c.scrollHeight;
+    });
+  }
+
+  // Auto-scroll inteligente ao mudar `messages`:
+  //  - carga inicial (troca de conversa) → cola no fim
+  //  - prepend (loadMore) → restaura âncora pra viewport não saltar
+  //  - append (msg nova) → só cola no fim se o user já estava no fim OU se
+  //    a msg é outbound (própria). Caso contrário, mostra o chip "novas ↓".
+  useEffect(() => {
+    const c = containerRef.current;
+    if (!c) return;
+    const first = messages[0];
+    const last = messages[messages.length - 1];
+    if (!last) {
+      prevFirstIdRef.current = null;
+      prevLastIdRef.current = null;
+      return;
     }
+
+    const prevFirst = prevFirstIdRef.current;
+    const prevLast = prevLastIdRef.current;
+    const isInitial = prevLast === null;
+    const isPrepend =
+      !isInitial && prevLast === last.id && prevFirst !== (first?.id ?? null);
+    const isAppend = !isInitial && prevLast !== last.id;
+
+    if (isInitial) {
+      scrollToBottom();
+    } else if (isPrepend) {
+      const anchor = prependAnchorRef.current;
+      if (anchor) {
+        // Mantém o conteúdo que o user estava lendo no mesmo lugar: soma a
+        // altura recém-adicionada acima ao scrollTop anterior.
+        const added = c.scrollHeight - anchor.height;
+        c.scrollTop = anchor.top + added;
+        prependAnchorRef.current = null;
+      }
+    } else if (isAppend) {
+      if (atBottomRef.current || last.direction === 'outbound') {
+        scrollToBottom();
+      } else {
+        setShowNewMessages(true);
+      }
+    }
+
+    prevFirstIdRef.current = first?.id ?? null;
+    prevLastIdRef.current = last.id;
   }, [messages]);
 
   // Mantém última mensagem visível quando o container encolhe (banners
@@ -72,22 +121,26 @@ export function MessageList({
     const c = containerRef.current;
     if (c === null) return;
 
-    let userAtBottom = true;
     const updateAtBottom = () => {
-      userAtBottom = c.scrollHeight - c.scrollTop - c.clientHeight < 80;
+      const atBottom = c.scrollHeight - c.scrollTop - c.clientHeight < 80;
+      atBottomRef.current = atBottom;
+      if (atBottom) setShowNewMessages(false);
     };
+    updateAtBottom();
     c.addEventListener('scroll', updateAtBottom, { passive: true });
 
-    if (typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(() => {
-      if (userAtBottom) {
-        c.scrollTop = c.scrollHeight;
-      }
-    });
-    ro.observe(c);
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => {
+        if (atBottomRef.current) {
+          c.scrollTop = c.scrollHeight;
+        }
+      });
+      ro.observe(c);
+    }
 
     return () => {
-      ro.disconnect();
+      ro?.disconnect();
       c.removeEventListener('scroll', updateAtBottom);
     };
   }, []);
@@ -96,11 +149,16 @@ export function MessageList({
   useEffect(() => {
     if (!hasMore) return;
     const sentinel = sentinelRef.current;
+    const c = containerRef.current;
     if (!sentinel) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting && !loadingMore) {
+          // Captura a medida ANTES do prepend pra restaurar a âncora depois.
+          if (c) {
+            prependAnchorRef.current = { height: c.scrollHeight, top: c.scrollTop };
+          }
           onLoadMore();
         }
       },
@@ -130,24 +188,41 @@ export function MessageList({
   }
 
   return (
-    <div ref={containerRef} className="flex flex-1 flex-col gap-2 overflow-y-auto px-4 py-3">
-      <div ref={sentinelRef} />
-      {hasMore && (
-        <div className="flex justify-center py-2">
-          {loadingMore ? (
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-          ) : (
-            <span className="text-xs text-muted-foreground">{t('loadMoreHint')}</span>
-          )}
-        </div>
+    <div className="relative flex flex-1 flex-col overflow-hidden">
+      <div ref={containerRef} className="flex flex-1 flex-col gap-2 overflow-y-auto px-4 py-3">
+        <div ref={sentinelRef} />
+        {hasMore && (
+          <div className="flex justify-center py-2">
+            {loadingMore ? (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            ) : (
+              <span className="text-xs text-muted-foreground">{t('loadMoreHint')}</span>
+            )}
+          </div>
+        )}
+        {messages.map((m) => (
+          <MessageBubble
+            key={m.id}
+            message={m}
+            attachments={attachmentsByMessage.get(m.id)}
+            {...(onRetry ? { onRetry } : {})}
+          />
+        ))}
+      </div>
+
+      {showNewMessages && (
+        <button
+          type="button"
+          onClick={() => {
+            scrollToBottom();
+            setShowNewMessages(false);
+          }}
+          className="absolute bottom-3 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-border bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-lg transition-transform hover:scale-105"
+        >
+          <ArrowDown className="h-3.5 w-3.5" />
+          {t('newMessages')}
+        </button>
       )}
-      {messages.map((m) => (
-        <MessageBubble
-          key={m.id}
-          message={m}
-          attachments={attachmentsByMessage.get(m.id)}
-        />
-      ))}
     </div>
   );
 }
