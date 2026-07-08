@@ -5,8 +5,10 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { ChannelDispatcherService } from '../../common/channels/channel-dispatcher.service';
+import { LockService } from '../../common/lock/lock.service';
 import { DealsService } from '../deals/deals.service';
 import { TasksService } from '../tasks/tasks.service';
 import { ContactsService } from '../contacts/contacts.service';
@@ -24,6 +26,7 @@ import type {
   CreateLeadResult,
   EnsureServicePipelineInput,
   EnsureServicePipelineResult,
+  ExecutionStatus,
   ExecutionType,
   MoveCardInput,
   MoveCardResult,
@@ -62,6 +65,24 @@ const SEGMENT_THRESHOLDS_HOURS: Record<CartSegment, [number, number]> = {
 
 const DEFAULT_RATE_LIMIT_MS = 3000;
 const MAX_CART_BATCH = 500;
+
+// ── Async broadcast/cart (Onda AI phase 2) ──────────────────────────────
+// Lotes até este tamanho processam INLINE (comportamento atual: retorna
+// contagens reais na resposta). Acima disso, processa em BACKGROUND e retorna
+// imediatamente (queued) — evita o proxy matar o request no meio.
+const BROADCAST_SYNC_MAX = 50;
+const CART_SYNC_MAX = 50;
+// TTL do lock por job — generoso; a correção de duplicação real é o claim
+// atômico por execução (claimForProcessing), não o lock.
+const JOB_LOCK_TTL_SECONDS = 6 * 3600;
+// Idade mínima da execução pra o scheduler de retomada tocá-la — dá folga pro
+// job inline/background começar antes de a retomada "roubar" as linhas.
+const RESUME_MIN_AGE_MS = 10 * 60_000;
+// Após este tempo em 'processing' sem concluir, consideramos o worker morto e
+// a execução órfã — a retomada reivindica de novo.
+const RESUME_STALE_PROCESSING_MS = 15 * 60_000;
+// Máximo de execuções reprocessadas por rodada do scheduler.
+const RESUME_BATCH_LIMIT = 200;
 
 // Broadcast safety knobs
 const BROADCAST_MIN_RATE_MS = 1000;
@@ -107,6 +128,7 @@ export class AutomationBridgeService {
     private readonly contacts: ContactsService,
     private readonly concierge: AiConciergeService,
     private readonly conversations: ConversationsService,
+    private readonly lock: LockService,
   ) {}
 
   // ────────────────────────────────────────────
@@ -231,36 +253,91 @@ export class AutomationBridgeService {
       executionIds.push(exec.id);
     }
 
+    const items = cartIds.map((cartId, i) => ({
+      execId: executionIds[i]!,
+      cartId,
+      templateKey: input.template_key,
+      customMessage: input.custom_message,
+    }));
+
+    // Lote pequeno → processa inline (comportamento atual: contagens reais).
+    if (cartIds.length <= CART_SYNC_MAX) {
+      const counts = await this.dispatchCartBatch(orgId, items, rateLimit, false);
+      return { ok: true, ...counts, execution_ids: executionIds };
+    }
+
+    // Lote grande → background (202-like). As execuções já estão como 'pending'
+    // (audit + retomada), então mesmo que a instância caia, o scheduler
+    // reprocessa. Lock por job evita duas instâncias processarem o mesmo lote.
+    const jobId = randomUUID();
+    void this.lock
+      .withLock(`automation:cart:job:${jobId}`, JOB_LOCK_TTL_SECONDS, async () => {
+        await this.dispatchCartBatch(orgId, items, rateLimit, true);
+      })
+      .catch((err) =>
+        this.log.warn(
+          `cart_recovery background job=${jobId} falhou: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
+
+    this.log.log(
+      `[cart-recovery] org=${orgId} lote=${cartIds.length} → background job=${jobId}`,
+    );
+    return {
+      ok: true,
+      dispatched: 0,
+      skipped: 0,
+      errors: 0,
+      execution_ids: executionIds,
+      queued: true,
+      job_id: jobId,
+    };
+  }
+
+  /**
+   * Processa um lote de cart_recovery sequencialmente respeitando o rate
+   * limit. Quando `claim=true` (background/retomada), reivindica cada execução
+   * atomicamente (pending→processing) antes de enviar — assim duas instâncias
+   * nunca disparam a mesma mensagem. No caminho inline (`claim=false`), mantém
+   * o comportamento atual.
+   */
+  private async dispatchCartBatch(
+    orgId: string,
+    items: Array<{
+      execId: string;
+      cartId: string;
+      templateKey?: string;
+      customMessage?: string;
+    }>,
+    rateLimit: number,
+    claim: boolean,
+  ): Promise<{ dispatched: number; skipped: number; errors: number }> {
     let dispatched = 0;
     let skipped = 0;
     let errors = 0;
 
-    // Dispatch sequencial com rate limit
-    for (let i = 0; i < cartIds.length; i++) {
-      const cartId = cartIds[i]!;
-      const execId = executionIds[i]!;
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i]!;
 
-      const outcome = await this.deliverCartRecovery(orgId, execId, cartId, {
-        templateKey: input.template_key,
-        customMessage: input.custom_message,
+      if (claim && !(await this.claimForProcessing(it.execId))) {
+        // Outra instância/rodada já pegou esta execução — pula sem reenviar.
+        continue;
+      }
+
+      const outcome = await this.deliverCartRecovery(orgId, it.execId, it.cartId, {
+        templateKey: it.templateKey,
+        customMessage: it.customMessage,
       });
       if (outcome === 'sent') dispatched++;
       else if (outcome === 'skipped') skipped++;
       else errors++;
 
-      // Rate limit entre mensagens (skip last iteration)
-      if (rateLimit > 0 && i < cartIds.length - 1) {
+      if (rateLimit > 0 && i < items.length - 1) {
         await sleep(rateLimit);
       }
     }
 
-    return {
-      ok: true,
-      dispatched,
-      skipped,
-      errors,
-      execution_ids: executionIds,
-    };
+    return { dispatched, skipped, errors };
   }
 
   private async deliverCartRecovery(
@@ -579,6 +656,184 @@ export class AutomationBridgeService {
   }
 
   // ────────────────────────────────────────────
+  // Claim atômico + retomada (resume) — AI phase 2
+  // ────────────────────────────────────────────
+
+  /**
+   * Reivindica uma execução pra envio de forma ATÔMICA (single-row conditional
+   * update). Retorna true só se ESTE worker conseguiu a reserva — assim duas
+   * instâncias nunca disparam a mesma mensagem.
+   *
+   * - Caminho normal: pending → processing.
+   * - Retomada (`staleBefore` informado): também reclama 'processing' órfão
+   *   (claimed_at < staleBefore = worker que morreu no meio).
+   *
+   * Fail-closed: erro/None → false (não envia). Seguro porque a linha
+   * continua pending/processing e será reprocessada pela retomada.
+   */
+  private async claimForProcessing(
+    execId: string,
+    staleBefore?: string,
+  ): Promise<boolean> {
+    const patch = {
+      status: 'processing' as const,
+      claimed_by: this.lock.holder,
+      claimed_at: new Date().toISOString(),
+    };
+
+    const { data } = await this.supabase.adminClient
+      .from('automation_executions')
+      .update(patch)
+      .eq('id', execId)
+      .eq('status', 'pending')
+      .select('id')
+      .maybeSingle();
+    if (data) return true;
+
+    if (!staleBefore) return false;
+
+    const { data: reclaimed } = await this.supabase.adminClient
+      .from('automation_executions')
+      .update(patch)
+      .eq('id', execId)
+      .eq('status', 'processing')
+      .lt('claimed_at', staleBefore)
+      .select('id')
+      .maybeSingle();
+    return !!reclaimed;
+  }
+
+  /**
+   * Reprocessa execuções de broadcast/cart_recovery que ficaram
+   * pendentes/órfãs — chamado periodicamente pelo AutomationResumeScheduler
+   * sob lock distribuído. Sobrevive a restart: um job de background que caiu
+   * no meio deixa linhas 'pending'/'processing' que esta varredura retoma.
+   *
+   * Idempotente: cada linha é reivindicada via claimForProcessing (dedup) e o
+   * payload guarda tudo pra reenviar. Mantém o rate limit entre envios.
+   */
+  async resumePendingExecutions(): Promise<{
+    scanned: number;
+    resent: number;
+    skipped: number;
+    errors: number;
+  }> {
+    const now = Date.now();
+    const minAgeIso = new Date(now - RESUME_MIN_AGE_MS).toISOString();
+    const staleIso = new Date(now - RESUME_STALE_PROCESSING_MS).toISOString();
+
+    const { data, error } = await this.supabase.adminClient
+      .from('automation_executions')
+      .select('id, org_id, execution_type, target_ref, payload, status, claimed_at')
+      .in('execution_type', ['whatsapp_broadcast', 'cart_recovery_send'])
+      .in('status', ['pending', 'processing'])
+      .lt('created_at', minAgeIso)
+      .order('created_at', { ascending: true })
+      .limit(RESUME_BATCH_LIMIT);
+
+    if (error) {
+      this.log.warn(`resumePendingExecutions query falhou: ${error.message}`);
+      return { scanned: 0, resent: 0, skipped: 0, errors: 0 };
+    }
+
+    const rows = (data ?? []) as Array<{
+      id: string;
+      org_id: string;
+      execution_type: ExecutionType;
+      target_ref: string | null;
+      payload: Record<string, unknown> | null;
+      status: ExecutionStatus;
+      claimed_at: string | null;
+    }>;
+    if (rows.length === 0) return { scanned: 0, resent: 0, skipped: 0, errors: 0 };
+
+    let resent = 0;
+    let skipped = 0;
+    let errors = 0;
+
+    for (const r of rows) {
+      // 'processing' ainda recente = job em andamento noutra instância → pula.
+      if (
+        r.status === 'processing' &&
+        r.claimed_at &&
+        new Date(r.claimed_at).getTime() > now - RESUME_STALE_PROCESSING_MS
+      ) {
+        skipped++;
+        continue;
+      }
+
+      if (!(await this.claimForProcessing(r.id, staleIso))) {
+        skipped++;
+        continue;
+      }
+
+      const payload = (r.payload ?? {}) as Record<string, unknown>;
+      const rateLimit =
+        Math.max(0, Number(payload.rate_limit_ms) || 0) || DEFAULT_RATE_LIMIT_MS;
+
+      try {
+        let outcome: 'sent' | 'skipped' | 'failed';
+        if (r.execution_type === 'whatsapp_broadcast') {
+          const contactId =
+            typeof payload.contact_id === 'string' ? payload.contact_id : null;
+          const body =
+            typeof payload.full_message === 'string' ? payload.full_message : null;
+          if (!contactId || !body) {
+            await this.markExecution(r.id, {
+              status: 'skipped',
+              error_message: 'payload sem contact_id/full_message pra retomada',
+            });
+            skipped++;
+            continue;
+          }
+          const imageUrl =
+            typeof payload.image_url === 'string' ? payload.image_url : undefined;
+          outcome = await this.deliverBroadcast(
+            r.org_id,
+            r.id,
+            { id: contactId, phone: null, channel_profiles: null },
+            body,
+            payload.has_image === true,
+            imageUrl,
+          );
+        } else {
+          // cart_recovery_send — target_ref é o cart_id.
+          if (!r.target_ref) {
+            await this.markExecution(r.id, {
+              status: 'skipped',
+              error_message: 'sem target_ref (cart_id) pra retomada',
+            });
+            skipped++;
+            continue;
+          }
+          outcome = await this.deliverCartRecovery(r.org_id, r.id, r.target_ref, {
+            templateKey:
+              typeof payload.template_key === 'string'
+                ? payload.template_key
+                : undefined,
+            customMessage:
+              typeof payload.custom_message === 'string'
+                ? payload.custom_message
+                : undefined,
+          });
+        }
+        if (outcome === 'sent') resent++;
+        else if (outcome === 'skipped') skipped++;
+        else errors++;
+      } catch (err) {
+        errors++;
+        this.log.warn(
+          `resume: execução ${r.id} falhou: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+
+      if (rateLimit > 0) await sleep(rateLimit);
+    }
+
+    return { scanned: rows.length, resent, skipped, errors };
+  }
+
+  // ────────────────────────────────────────────
   // 2.5) Send Direct (Storefront notifications da Loja Própria)
   //      Mensagem 1-a-1 transacional. Idempotente via dedup_key.
   // ────────────────────────────────────────────
@@ -841,8 +1096,12 @@ export class AutomationBridgeService {
     const finalMessage = buildBroadcastMessage(input, message);
     const isImage = !!(input.include_image && input.image_url);
 
+    const jobId = randomUUID();
+
     // Insere todas as execuções como pending — audit trail completo mesmo
-    // se crashar no meio do dispatch.
+    // se crashar no meio do dispatch. O payload guarda TUDO que a retomada
+    // precisa pra reenviar (mensagem completa, imagem, contato) — sem isso o
+    // scheduler não conseguiria reprocessar uma execução órfã.
     const executionIds: string[] = [];
     for (const c of audience) {
       const exec = await this.insertExecution({
@@ -857,45 +1116,126 @@ export class AutomationBridgeService {
           message_preview: finalMessage.slice(0, 200),
           has_image: isImage,
           has_link: !!input.include_link,
+          // Dados de retomada (resume): reenvio idempotente pós-restart.
+          job_id: jobId,
+          contact_id: c.id,
+          full_message: finalMessage,
+          image_url: isImage ? input.image_url ?? null : null,
+          rate_limit_ms: rateLimit,
         },
       });
       executionIds.push(exec.id);
     }
 
+    const items = audience.map((contact, i) => ({
+      execId: executionIds[i]!,
+      contact,
+    }));
+
+    // Audiência pequena → inline (contagens reais na resposta, como hoje).
+    if (audience.length <= BROADCAST_SYNC_MAX) {
+      const counts = await this.dispatchBroadcastBatch(
+        orgId,
+        items,
+        finalMessage,
+        isImage,
+        input.image_url,
+        rateLimit,
+        false,
+      );
+      return {
+        ok: true,
+        ...counts,
+        audience_size: audience.length,
+        execution_ids: executionIds,
+      };
+    }
+
+    // Audiência grande → background (202-like). Retorna imediato; o loop
+    // rate-limited roda fora do request (não morre no proxy timeout). As
+    // execuções 'pending' + o scheduler de retomada garantem entrega mesmo
+    // com restart. Lock por job evita dupla execução entre instâncias.
+    void this.lock
+      .withLock(
+        `automation:broadcast:job:${jobId}`,
+        JOB_LOCK_TTL_SECONDS,
+        async () => {
+          await this.dispatchBroadcastBatch(
+            orgId,
+            items,
+            finalMessage,
+            isImage,
+            input.image_url,
+            rateLimit,
+            true,
+          );
+        },
+      )
+      .catch((err) =>
+        this.log.warn(
+          `broadcast background job=${jobId} falhou: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
+
+    this.log.log(
+      `[broadcast] org=${orgId} audiência=${audience.length} → background job=${jobId}`,
+    );
+    return {
+      ok: true,
+      dispatched: 0,
+      skipped: 0,
+      errors: 0,
+      audience_size: audience.length,
+      execution_ids: executionIds,
+      queued: true,
+      job_id: jobId,
+    };
+  }
+
+  /**
+   * Processa um lote de broadcast sequencialmente respeitando o rate limit.
+   * Quando `claim=true` (background/retomada), reivindica cada execução
+   * atomicamente antes de enviar (dedup entre instâncias). Inline mantém o
+   * comportamento atual.
+   */
+  private async dispatchBroadcastBatch(
+    orgId: string,
+    items: Array<{ execId: string; contact: AudienceContact }>,
+    body: string,
+    isImage: boolean,
+    imageUrl: string | undefined,
+    rateLimit: number,
+    claim: boolean,
+  ): Promise<{ dispatched: number; skipped: number; errors: number }> {
     let dispatched = 0;
     let skipped = 0;
     let errors = 0;
 
-    // Dispatch sequencial respeitando rate limit
-    for (let i = 0; i < audience.length; i++) {
-      const contact = audience[i]!;
-      const execId = executionIds[i]!;
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i]!;
+
+      if (claim && !(await this.claimForProcessing(it.execId))) {
+        continue; // outra instância/rodada já pegou — não reenvia
+      }
 
       const outcome = await this.deliverBroadcast(
         orgId,
-        execId,
-        contact,
-        finalMessage,
+        it.execId,
+        it.contact,
+        body,
         isImage,
-        input.image_url,
+        imageUrl,
       );
       if (outcome === 'sent') dispatched++;
       else if (outcome === 'skipped') skipped++;
       else errors++;
 
-      if (rateLimit > 0 && i < audience.length - 1) {
+      if (rateLimit > 0 && i < items.length - 1) {
         await sleep(rateLimit);
       }
     }
 
-    return {
-      ok: true,
-      dispatched,
-      skipped,
-      errors,
-      audience_size: audience.length,
-      execution_ids: executionIds,
-    };
+    return { dispatched, skipped, errors };
   }
 
   private async deliverBroadcast(

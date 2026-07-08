@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AutomationBridgeController } from './automation-bridge.controller';
 import { AutomationBridgeService } from './automation-bridge.service';
+import { AutomationResumeScheduler } from './automation-resume.scheduler';
 import { NotifyDigestWorker } from './notify-digest.worker';
 import { DealsModule } from '../deals/deals.module';
 import { TasksModule } from '../tasks/tasks.module';
@@ -25,7 +26,7 @@ import { ConversationsModule } from '../conversations/conversations.module';
 @Module({
   imports: [DealsModule, TasksModule, ContactsModule, AiModule, ConversationsModule],
   controllers: [AutomationBridgeController],
-  providers: [AutomationBridgeService, NotifyDigestWorker],
+  providers: [AutomationBridgeService, AutomationResumeScheduler, NotifyDigestWorker],
   exports: [AutomationBridgeService],
 })
 export class AutomationBridgeModule {}

@@ -11,6 +11,8 @@ import {
   LlmChatResult,
   LlmProvider,
   LlmProviderName,
+  LlmTier,
+  LLM_CHEAP_MODEL,
   LLM_DEFAULT_MODEL,
 } from './llm-provider.interface';
 import { AnthropicProvider } from './providers/anthropic.provider';
@@ -53,6 +55,37 @@ interface ChatRequest {
    * usar — `qualify` vs `route` — baseado no resultado da IA).
    */
   disable_logging?: boolean;
+  /**
+   * Override explícito do tier de modelo pra esta chamada. Opcional e
+   * retrocompatível: quando ausente, o tier é resolvido pelo mapa
+   * FEATURE_TIER (feature→tier) com default 'smart'. Útil quando duas
+   * features compartilham o mesmo `feature`/interaction_type mas exigem
+   * tiers diferentes (ex: 'diagnose' é usado por detectGaps [cheap] e
+   * analyzeFunnel [smart]).
+   */
+  tier?: LlmTier;
+}
+
+/**
+ * Mapa feature→tier pro roteamento de modelo por custo. Só listamos as
+ * features BARATAS/mecânicas (tier 'cheap' → Haiku). Qualquer feature não
+ * listada cai no default 'smart' (Sonnet / model_default da org) — isso
+ * preserva o comportamento atual pra tudo que exige raciocínio.
+ *
+ * Cheap (Haiku): classificação de intent/sentimento, detecção de intenção de
+ * agendamento e extração de campos (todos usam 'classify_intent') + triagem
+ * de SAC ('sac_classify'). A análise de gaps também é cheap, mas compartilha
+ * 'diagnose' com o funnel analysis (smart) — por isso detectGaps passa
+ * `tier: 'cheap'` explícito em vez de entrar neste mapa.
+ */
+const FEATURE_TIER: Record<string, LlmTier> = {
+  classify_intent: 'cheap',
+  sac_classify: 'cheap',
+};
+
+function resolveTier(feature: string, override?: LlmTier): LlmTier {
+  if (override) return override;
+  return FEATURE_TIER[feature] ?? 'smart';
 }
 
 interface ChatResponse extends LlmChatResult {
@@ -317,7 +350,17 @@ export class LlmService implements OnModuleInit {
   async chat(req: ChatRequest): Promise<ChatResponse> {
     await this.enforceMonthlyBudget(req.orgId, req.feature);
 
-    const { provider, providerName, model } = await this.resolveProvider(req.orgId);
+    const { provider, providerName, model: resolvedModel } = await this.resolveProvider(
+      req.orgId,
+    );
+
+    // Roteamento de modelo por tarefa. Features baratas/mecânicas usam o modelo
+    // barato do provider (Haiku no Anthropic); todo o resto mantém o
+    // model_default resolvido (Sonnet por padrão) — default seguro e
+    // retrocompatível.
+    const tier = resolveTier(req.feature, req.tier);
+    const model =
+      tier === 'cheap' ? LLM_CHEAP_MODEL[providerName] ?? resolvedModel : resolvedModel;
 
     const messages =
       typeof req.user === 'string'

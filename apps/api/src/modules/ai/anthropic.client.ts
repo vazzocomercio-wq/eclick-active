@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { AIInteractionType } from '@eclick-active/shared';
 import { LlmService } from '../../common/llm/llm.service';
+import type { LlmTier } from '../../common/llm/llm-provider.interface';
 
 interface CompleteInput {
   /** Tipo da interação — vai pro `ai_interactions.interaction_type` */
@@ -14,6 +15,13 @@ interface CompleteInput {
   schema?: object;
   /** Default 512 — JSON pequeno cabe folgado */
   max_tokens?: number;
+  /**
+   * Override do tier de modelo (custo). Opcional — quando ausente, o
+   * LlmService resolve pelo mapa feature→tier. Passe 'cheap' pra forçar
+   * Haiku em tarefas mecânicas que compartilham interaction_type com
+   * tarefas de raciocínio (ex: detectGaps usa 'diagnose' igual ao funnel).
+   */
+  tier?: LlmTier;
   /** Vínculos pra audit no ai_interactions */
   context?: {
     conversation_id?: string;
@@ -60,6 +68,7 @@ export class AnthropicClient {
       max_tokens: input.max_tokens ?? 512,
       json_mode: !!input.schema,
       context: input.context,
+      ...(input.tier ? { tier: input.tier } : {}),
     });
 
     let data: T;

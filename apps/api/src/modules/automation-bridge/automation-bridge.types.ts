@@ -29,7 +29,13 @@ export type ExecutionType =
   | 'whatsapp_broadcast'
   | 'whatsapp_send_direct';
 
-export type ExecutionStatus = 'pending' | 'sent' | 'failed' | 'skipped';
+export type ExecutionStatus =
+  | 'pending'
+  /** Reivindicada por um worker (envio em andamento). Migração 110. */
+  | 'processing'
+  | 'sent'
+  | 'failed'
+  | 'skipped';
 
 // ──────────────────────────────────────────────────────────
 // Request DTOs (vêm do SaaS)
@@ -73,6 +79,14 @@ export interface TriggerCartRecoveryResult {
   errors: number;
   /** IDs das rows em automation_executions criadas. */
   execution_ids: string[];
+  /**
+   * True quando o lote foi grande e o envio ficou em BACKGROUND (202-like):
+   * dispatched/skipped/errors voltam 0 e o processamento acontece fora do
+   * request. Ausente/false quando processado inline (lote pequeno).
+   */
+  queued?: boolean;
+  /** Id do job de background (pra correlação/observabilidade). */
+  job_id?: string;
 }
 
 export interface SendBroadcastInput {
@@ -101,6 +115,15 @@ export interface SendBroadcastResult {
   errors: number;
   audience_size: number;
   execution_ids: string[];
+  /**
+   * True quando a audiência foi grande e o envio ficou em BACKGROUND
+   * (202-like): dispatched/skipped/errors voltam 0 e o processamento roda
+   * fora do request HTTP (sobrevive a proxy timeout). Ausente/false quando
+   * processado inline (audiência pequena) — mantém o comportamento atual.
+   */
+  queued?: boolean;
+  /** Id do job de background (pra correlação/observabilidade). */
+  job_id?: string;
 }
 
 // ──────────────────────────────────────────────────────────
@@ -293,6 +316,10 @@ export interface AutomationExecutionRow {
   digest_id: string | null;
   created_at: string;
   executed_at: string | null;
+  /** Worker que reivindicou a execução (LockService.holder). Migração 110. */
+  claimed_by?: string | null;
+  /** Quando foi reivindicada — usado pra reclamar 'processing' órfão. */
+  claimed_at?: string | null;
 }
 
 // ──────────────────────────────────────────────────────────

@@ -22,6 +22,10 @@ const PRICING: Record<LlmProviderName, Record<string, LlmPricing>> = {
     'claude-sonnet-4-6': { input_per_mtok_usd: 3.0, output_per_mtok_usd: 15.0 },
     'claude-opus-4': { input_per_mtok_usd: 15.0, output_per_mtok_usd: 75.0 },
     'claude-haiku-4-5-20251001': { input_per_mtok_usd: 1.0, output_per_mtok_usd: 5.0 },
+    // Alias canônico (não-datado) — mesma tabela do snapshot datado. Mantém o
+    // cálculo de custo correto quando o roteamento de tarefas baratas escolhe
+    // o Haiku pelo id preferido HAIKU_MODEL_ID ('claude-haiku-4-5').
+    'claude-haiku-4-5': { input_per_mtok_usd: 1.0, output_per_mtok_usd: 5.0 },
   },
   openai: {
     'gpt-5': { input_per_mtok_usd: 5.0, output_per_mtok_usd: 20.0 },

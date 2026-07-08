@@ -14,6 +14,7 @@ import { getOrgTimezone } from '../../common/org-settings.helper';
 import { AiPersonaService } from '../ai-persona/ai-persona.service';
 import { TagsService } from '../tags/tags.service';
 import { AppointmentsService } from '../appointments/appointments.service';
+import { BusinessHoursService } from '../business-hours/business-hours.service';
 import { EventsGateway } from '../../gateways/events.gateway';
 import type {
   AvailabilitySlot,
@@ -32,6 +33,12 @@ const MAX_FOLLOW_UP_COUNT = 30;
 
 /** Limite de delay por humanização — evita persona com delay maluco travar request */
 const MAX_DELAY_MS = 30_000;
+
+/**
+ * Throttle do aviso de fora-de-horário: no máximo 1 mensagem a cada 6h por
+ * conversa, pra não spammar o cliente que insiste fora do expediente.
+ */
+const AFTER_HOURS_THROTTLE_MS = 6 * 3600_000;
 
 type ConciergeState =
   | 'idle'
@@ -74,6 +81,12 @@ interface ConciergeSettings {
   auto_reply: boolean;
   send_bridge_message: boolean;
   business_context: string;
+  /**
+   * Quando true, o concierge respeita o horário comercial da org: fora do
+   * horário responde UMA mensagem de fora-de-horário e não roteia/agenda até
+   * abrir. DEFAULT false → comportamento atual (responde 24/7).
+   */
+  respect_business_hours: boolean;
 }
 
 interface PipelineWithStages {
@@ -200,6 +213,7 @@ export class AiConciergeService {
     private readonly llm: LlmService,
     private readonly outboundEvents: OutboundEventsService,
     private readonly lock: LockService,
+    private readonly businessHours: BusinessHoursService,
   ) {}
 
   // ──────────────────────────────────────────────────────────
@@ -277,6 +291,30 @@ export class AiConciergeService {
           `concierge: org ${orgId} sem persona default — nada a fazer`,
         );
         return;
+      }
+
+      // Gate de horário comercial (GATED, default OFF). Só entra quando a org
+      // ligou respect_business_hours E o business_hours dela está enabled+fora
+      // da janela agora. Nesse caso responde UMA mensagem de fora-de-horário
+      // (throttled) e NÃO roteia/agenda — o state fica intacto, então quando
+      // abrir o fluxo normal segue do ponto em que estava.
+      if (settings.respect_business_hours) {
+        const within = await this.businessHours
+          .isWithinBusinessHours(orgId)
+          .catch(() => true); // fail-open: erro nunca bloqueia o atendimento
+        if (!within) {
+          this.logger.log(
+            `concierge: fora do horário comercial (org=${orgId}) — envia aviso e não roteia conv=${conversationId}`,
+          );
+          await this.maybeSendAfterHoursMessage({
+            orgId,
+            conversationId,
+            conversation: conv,
+            settings,
+            persona: personaActive,
+          });
+          return;
+        }
       }
 
       // Anti-greeting-duplicado: se contato JÁ foi roteado em outra conv
@@ -444,6 +482,79 @@ export class AiConciergeService {
     }
 
     await this.setConciergeState(orgId, conversationId, 'awaiting_response');
+  }
+
+  /**
+   * Envia UMA mensagem de fora-de-horário (throttled) quando a org ligou
+   * respect_business_hours e estamos fora da janela. Não muda concierge_state
+   * (o fluxo normal retoma quando abrir). Throttle: no máximo 1 aviso a cada
+   * AFTER_HOURS_THROTTLE_MS por conversa, gravado em
+   * conversation.metadata.after_hours_notified_at — evita spammar o cliente a
+   * cada mensagem que ele mandar de madrugada.
+   */
+  private async maybeSendAfterHoursMessage(args: {
+    orgId: string;
+    conversationId: string;
+    conversation: ConversationRow;
+    settings: ConciergeSettings;
+    persona: AiAgentPersona;
+  }): Promise<void> {
+    const { orgId, conversationId, conversation, settings, persona } = args;
+
+    // Sem auto_reply o concierge nunca envia nada (modo silent) — respeita isso.
+    if (!settings.auto_reply) return;
+
+    const lastNotified = (
+      conversation.metadata as { after_hours_notified_at?: string } | null
+    )?.after_hours_notified_at;
+    if (lastNotified) {
+      const elapsed = Date.now() - new Date(lastNotified).getTime();
+      if (Number.isFinite(elapsed) && elapsed < AFTER_HOURS_THROTTLE_MS) {
+        this.logger.debug(
+          `concierge: aviso de fora-de-horário já enviado há ${Math.round(elapsed / 60000)}min conv=${conversationId} — pula`,
+        );
+        return;
+      }
+    }
+
+    // Monta a mensagem, incluindo o próximo horário de abertura quando dá.
+    let reopenHint = '';
+    try {
+      const cfg = await this.businessHours.get(orgId);
+      const nextOpen = this.businessHours.nextOpenAt(cfg, new Date());
+      if (nextOpen) {
+        const tz = await getOrgTimezone(this.supabase.adminClient, orgId);
+        const fmt = new Intl.DateTimeFormat('pt-BR', {
+          weekday: 'long',
+          day: '2-digit',
+          month: 'long',
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZone: tz,
+        });
+        reopenHint = ` Voltamos ${fmt.format(nextOpen)}.`;
+      }
+    } catch (err) {
+      this.logger.debug(
+        `concierge: nextOpenAt falhou (segue sem horário): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    // Campo opcional da persona (pode não existir no tipo shared) — leitura
+    // defensiva pra permitir mensagem customizada sem depender de migração.
+    const custom = (persona as { after_hours_message?: string }).after_hours_message?.trim();
+    const text =
+      custom && custom.length > 0
+        ? custom
+        : `Olá! No momento estamos fora do horário de atendimento.${reopenHint} Pode deixar sua mensagem aqui que retornamos assim que abrirmos. 🙏`;
+
+    await this.applyResponseDelay(persona);
+    await this.sendOutbound(orgId, conversation, text);
+
+    // Grava o throttle SEM mexer no concierge_state.
+    await this.updateConciergeMetadata(orgId, conversationId, {
+      after_hours_notified_at: new Date().toISOString(),
+    });
   }
 
   /**
@@ -630,6 +741,17 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
       this.logger.warn(
         `concierge: IA não conseguiu decidir rota pra conv ${conversationId}`,
       );
+      // askIaToRoute devolveu null (timeout / rate-limit / JSON inválido /
+      // pipeline inexistente). Antes o lead ia pra 'routed' e ninguém era
+      // avisado — ficava no vácuo. Cria task + notificação pro responsável
+      // (mesmo padrão do maybeEscalate/TransferService). O deal continua na
+      // 1ª etapa (ensureDealAtFirstStage já rodou no topo deste método).
+      void this.notifyRouteFailureToHuman(orgId, conversationId, conversation).catch(
+        (err) =>
+          this.logger.warn(
+            `concierge: notifyRouteFailureToHuman falhou: ${err instanceof Error ? err.message : String(err)}`,
+          ),
+      );
       await this.setConciergeState(orgId, conversationId, 'routed');
       return;
     }
@@ -802,6 +924,136 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
 
     this.logger.log(
       `concierge: roteou conv=${conversationId} → pipeline=${decision.pipeline_id} stage=${decision.stage_id} intent=${decision.intent_label} temp=${decision.temperature} deal_created=${dealCreated} turns=${qualifyingTurns}`,
+    );
+  }
+
+  /**
+   * A IA não conseguiu rotear (askIaToRoute=null). Cria uma task + notificação
+   * pro responsável humano assumir a conversa. Resolve o assignee na ordem
+   * conversation.assigned_to → deal aberto do contato → primeiro membro ativo
+   * (mesma cascata do AiService.maybeEscalate). Best-effort e idempotente por
+   * janela: se já criou uma task de falha de rota aberta pra essa conversa,
+   * não recria (evita enxurrada se o lead insistir).
+   */
+  private async notifyRouteFailureToHuman(
+    orgId: string,
+    conversationId: string,
+    conversation: ConversationRow,
+  ): Promise<void> {
+    const contactId = conversation.contact_id;
+
+    // Idempotência: já existe task de falha de rota pendente pra essa conversa?
+    const { data: existingTask } = await this.supabase.adminClient
+      .from('tasks')
+      .select('id')
+      .eq('org_id', orgId)
+      .eq('conversation_id', conversationId)
+      .eq('status', 'pending')
+      .eq('ai_context', 'concierge_route_failed')
+      .limit(1)
+      .maybeSingle();
+    if (existingTask?.id) {
+      this.logger.debug(
+        `concierge: já há task de falha de rota pendente conv=${conversationId} — não recria`,
+      );
+      return;
+    }
+
+    // Resolve assignee: conversation.assigned_to → deal aberto → 1º membro ativo
+    const { data: convData } = await this.supabase.adminClient
+      .from('conversations')
+      .select('assigned_to')
+      .eq('org_id', orgId)
+      .eq('id', conversationId)
+      .maybeSingle();
+    let assignedTo =
+      (convData as { assigned_to: string | null } | null)?.assigned_to ?? null;
+
+    if (!assignedTo && contactId) {
+      const { data: dealData } = await this.supabase.adminClient
+        .from('deals')
+        .select('assigned_to')
+        .eq('org_id', orgId)
+        .eq('contact_id', contactId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      assignedTo =
+        (dealData as { assigned_to: string | null } | null)?.assigned_to ?? null;
+    }
+
+    if (!assignedTo) {
+      const { data: members } = await this.supabase.adminClient
+        .from('org_members')
+        .select('user_id')
+        .eq('org_id', orgId)
+        .eq('status', 'active')
+        .in('role', ['owner', 'admin', 'agent'])
+        .limit(1);
+      assignedTo =
+        ((members ?? [])[0] as { user_id: string } | undefined)?.user_id ?? null;
+    }
+
+    if (!assignedTo) {
+      this.logger.warn(
+        `concierge: sem responsável pra notificar falha de rota conv=${conversationId}`,
+      );
+      return;
+    }
+
+    const contactName = contactId
+      ? await this.fetchContactName(orgId, contactId)
+      : null;
+    const dueDate = new Date(Date.now() + 30 * 60_000).toISOString();
+
+    await this.supabase.adminClient
+      .from('tasks')
+      .insert({
+        org_id: orgId,
+        title: `IA não conseguiu rotear: ${contactName ?? 'lead'}`,
+        description:
+          'O lead respondeu, mas a IA do Concierge não conseguiu decidir o roteamento (timeout, limite de uso ou resposta inválida). O card está na primeira etapa do funil. Assuma a conversa e classifique manualmente.',
+        task_type: 'follow_up',
+        priority: 'high',
+        status: 'pending',
+        assigned_to: assignedTo,
+        conversation_id: conversationId,
+        contact_id: contactId,
+        created_by_ai: true,
+        ai_context: 'concierge_route_failed',
+        due_date: dueDate,
+      })
+      .then(() => {})
+      .then(undefined, (err: unknown) =>
+        this.logger.warn(
+          `concierge: insert task falha-rota falhou: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
+
+    await this.supabase.adminClient
+      .from('notifications')
+      .insert({
+        org_id: orgId,
+        user_id: assignedTo,
+        type: 'ai_routing_failed',
+        severity: 'warning',
+        title: 'IA precisa de ajuda pra rotear',
+        body: `${contactName ?? 'Um lead'} respondeu mas a IA não conseguiu rotear. Assuma a conversa.`,
+        link: `/conversas?id=${conversationId}`,
+        metadata: {
+          conversation_id: conversationId,
+          reason: 'concierge_route_failed',
+        },
+      })
+      .then(() => {})
+      .then(undefined, (err: unknown) =>
+        this.logger.warn(
+          `concierge: insert notificação falha-rota falhou: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
+
+    this.logger.log(
+      `concierge: notificou humano (task+notif) sobre falha de rota conv=${conversationId} assignee=${assignedTo}`,
     );
   }
 
@@ -1890,6 +2142,9 @@ Decida o roteamento seguindo apenas as regras de sistema.`;
       auto_reply: ai.auto_reply === true,
       send_bridge_message: ai.send_bridge_message !== false, // default true
       business_context: typeof ai.business_context === 'string' ? ai.business_context : '',
+      // default false → responde 24/7 (comportamento atual)
+      respect_business_hours:
+        (ai as { respect_business_hours?: unknown }).respect_business_hours === true,
     };
   }
 
@@ -2147,8 +2402,7 @@ REGRAS IMPORTANTES:
   diga "Vou verificar com nossa equipe e te respondo em breve"
 - Se ele pedir agendamento e ainda não tem, sugira que a equipe
   vai entrar em contato pra confirmar (NÃO proponha slots aqui —
-  isso é responsabilidade do flow inicial, já passamos disso)
-- Não mencione que você é IA. Atue como atendente humana.`;
+  isso é responsabilidade do flow inicial, já passamos disso)`;
 
     const user = `HISTÓRICO RECENTE:
 ${historyText || '(início)'}
@@ -2156,7 +2410,7 @@ ${historyText || '(início)'}
 MENSAGEM ATUAL DO CLIENTE:
 "${messageText}"
 
-Responda como atendente humana de forma curta e direta.`;
+Responda de forma curta e direta, no tom da persona.`;
 
     try {
       const res = await this.llm.chat({

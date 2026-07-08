@@ -907,6 +907,9 @@ export class AiService {
         user: userPrompt,
         schema: GAPS_SCHEMA,
         max_tokens: 768,
+        // Análise de gaps é mecânica → Haiku. O 'diagnose' do analyzeFunnel
+        // (raciocínio) fica sem tier e mantém Sonnet.
+        tier: 'cheap',
         context: { conversation_id: conversationId },
       });
       result = {
@@ -1048,6 +1051,52 @@ export class AiService {
   // ──────────────────────────────────────────────────────────
 
   /**
+   * Cache curto (60s) do flag passive_enabled por org — evita um SELECT
+   * redundante em organizations.settings a cada mensagem inbound.
+   */
+  private readonly passiveFlagCache = new Map<
+    string,
+    { enabled: boolean; expiresAt: number }
+  >();
+  private static readonly PASSIVE_FLAG_TTL_MS = 60_000;
+
+  /**
+   * Lê organizations.settings.ai_features.passive_enabled. Default = true
+   * (comportamento atual): só retorna false quando a org setou EXPLICITAMENTE
+   * `false`. Falha graciosa → true (nunca desliga IA por erro de leitura).
+   */
+  private async isPassiveAiEnabled(orgId: string): Promise<boolean> {
+    const cached = this.passiveFlagCache.get(orgId);
+    if (cached && cached.expiresAt > Date.now()) return cached.enabled;
+
+    let enabled = true;
+    try {
+      const { data } = await this.supabase.adminClient
+        .from('organizations')
+        .select('settings')
+        .eq('id', orgId)
+        .maybeSingle();
+      const settings = (data?.settings as Record<string, unknown> | null) ?? {};
+      const aiFeatures = (settings.ai_features as
+        | { passive_enabled?: unknown }
+        | undefined) ?? {};
+      // Só desliga quando explicitamente === false.
+      enabled = aiFeatures.passive_enabled !== false;
+    } catch (err) {
+      this.logger.warn(
+        `isPassiveAiEnabled falhou (default=true): ${err instanceof Error ? err.message : String(err)}`,
+      );
+      enabled = true;
+    }
+
+    this.passiveFlagCache.set(orgId, {
+      enabled,
+      expiresAt: Date.now() + AiService.PASSIVE_FLAG_TTL_MS,
+    });
+    return enabled;
+  }
+
+  /**
    * Roda classify + suggest em paralelo após a chegada de uma mensagem
    * inbound. Após sucesso, emite `ai:suggestion` via WebSocket pra o
    * frontend exibir a barra de sugestão.
@@ -1060,20 +1109,36 @@ export class AiService {
     messageId: string,
   ): Promise<void> {
     try {
-      const [classification, suggestion] = await Promise.all([
-        this.classifyMessage(orgId, conversationId, messageId).catch((err) => {
-          this.logger.warn(
-            `classify failed: ${err instanceof Error ? err.message : String(err)}`,
-          );
-          return null;
-        }),
-        this.suggestResponse(orgId, conversationId).catch((err) => {
-          this.logger.warn(
-            `suggest failed: ${err instanceof Error ? err.message : String(err)}`,
-          );
-          return null;
-        }),
-      ]);
+      // Gate passivo por org: classify + suggest rodam em TODA mensagem inbound
+      // e geram custo mesmo sem atendente olhando. Uma org pode desligar via
+      // organizations.settings.ai_features.passive_enabled = false. Default =
+      // habilitado (comportamento atual) — só desliga quando explicitamente
+      // false. NÃO afeta concierge (tem o próprio enabled) nem scheduling/
+      // data-collection.
+      const passiveEnabled = await this.isPassiveAiEnabled(orgId);
+
+      const [classification, suggestion] = passiveEnabled
+        ? await Promise.all([
+            this.classifyMessage(orgId, conversationId, messageId).catch((err) => {
+              this.logger.warn(
+                `classify failed: ${err instanceof Error ? err.message : String(err)}`,
+              );
+              return null;
+            }),
+            this.suggestResponse(orgId, conversationId).catch((err) => {
+              this.logger.warn(
+                `suggest failed: ${err instanceof Error ? err.message : String(err)}`,
+              );
+              return null;
+            }),
+          ])
+        : ([null, null] as const);
+
+      if (!passiveEnabled) {
+        this.logger.debug(
+          `processInbound: passive AI desligado pra org=${orgId} — pulando classify+suggest`,
+        );
+      }
 
       if (suggestion) {
         this.events.emitToOrg(orgId, 'ai:suggestion', {

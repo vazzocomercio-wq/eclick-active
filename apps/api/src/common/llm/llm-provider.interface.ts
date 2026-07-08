@@ -107,13 +107,39 @@ export interface LlmProvider {
  * Manter sincronizado com llm-pricing.ts.
  */
 export const LLM_CATALOG: Record<LlmProviderName, readonly string[]> = {
-  anthropic: ['claude-sonnet-4-6', 'claude-opus-4', 'claude-haiku-4-5-20251001'],
+  anthropic: [
+    'claude-sonnet-4-6',
+    'claude-opus-4',
+    'claude-haiku-4-5',
+    'claude-haiku-4-5-20251001',
+  ],
   openai: ['gpt-5', 'gpt-5-mini', 'gpt-4.1'],
   google: ['gemini-2.5-pro', 'gemini-2.5-flash'],
 } as const;
 
 export const LLM_DEFAULT_MODEL: Record<LlmProviderName, string> = {
   anthropic: 'claude-sonnet-4-6',
+  openai: 'gpt-5-mini',
+  google: 'gemini-2.5-flash',
+};
+
+/**
+ * Tier de tarefa pro roteamento de modelo por custo.
+ *   - 'smart': modelo de raciocínio (default seguro = comportamento atual,
+ *      normalmente Sonnet / o model_default configurado pela org).
+ *   - 'cheap': modelo barato/mecânico (Haiku no Anthropic, mini/flash nos
+ *      outros) pra classificação, extração e parse — corta custo por mensagem.
+ */
+export type LlmTier = 'cheap' | 'smart';
+
+/**
+ * Modelo barato por provider, usado quando a feature é de tier 'cheap'.
+ * É sempre um modelo do catálogo do próprio provider — assim trocar o
+ * provider da org nunca escolhe um modelo inexistente. Anthropic usa o alias
+ * não-datado 'claude-haiku-4-5' (tem pricing em llm-pricing.ts).
+ */
+export const LLM_CHEAP_MODEL: Record<LlmProviderName, string> = {
+  anthropic: 'claude-haiku-4-5',
   openai: 'gpt-5-mini',
   google: 'gemini-2.5-flash',
 };
