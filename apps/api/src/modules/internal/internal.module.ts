@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AiModule } from '../ai/ai.module';
 import { AutomationsModule } from '../automations/automations.module';
+import { WhatsAppCommerceModule } from '../whatsapp-commerce/whatsapp-commerce.module';
 import { InternalController } from './internal.controller';
 
 /**
@@ -12,7 +13,7 @@ import { InternalController } from './internal.controller';
  * os módulos pra injeção funcionar.
  */
 @Module({
-  imports: [AiModule, AutomationsModule],
+  imports: [AiModule, AutomationsModule, WhatsAppCommerceModule],
   controllers: [InternalController],
 })
 export class InternalModule {}

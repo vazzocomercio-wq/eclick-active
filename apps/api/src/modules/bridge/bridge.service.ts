@@ -398,6 +398,68 @@ export class BridgeService {
     }
   }
 
+  // ── Ponte de checkout Stripe (proxy HTTP pro backend SaaS) ─────────────
+  //
+  // O Stripe vive SÓ no backend SaaS (fonte única das chaves/webhook). A
+  // vendedora IA (sale flow) cria o whatsapp_order local (fonte da verdade)
+  // e pede ao SaaS pra abrir o Checkout Session. Mesma config (SAAS_API_URL +
+  // SAAS_INTERNAL_KEY) das outras pontes internas.
+
+  /** True se a ponte interna pro SaaS está configurada (SAAS_API_URL +
+   *  SAAS_INTERNAL_KEY/INTERNAL_API_KEY). Usado pelo gate do sale flow pra
+   *  liberar o provider Stripe sem poluir o log (não avisa quando ausente). */
+  hasSaasInternalConfig(): boolean {
+    const baseUrl = (process.env.SAAS_API_URL ?? '').replace(/\/+$/, '');
+    const key = process.env.SAAS_INTERNAL_KEY ?? process.env.INTERNAL_API_KEY;
+    return !!baseUrl && !!key;
+  }
+
+  /**
+   * Cria um Checkout Session Stripe no backend SaaS pra uma venda fechada no
+   * WhatsApp. Resolve a org Active→SaaS e envia itens/preços (da FONTE, nunca
+   * do LLM) + metadata de correlação. Retorna { url, session_id }.
+   * Fail-open: sem config/erro/timeout/resposta inválida → null (o caller faz
+   * handoff educado, sem exception pro cliente).
+   */
+  async createWaCheckout(
+    activeOrgId: string,
+    payload: {
+      items: Array<{ name: string; price: number; qty: number; image_url?: string }>;
+      customer_email?: string;
+      metadata: {
+        active_wa_order_id: string;
+        active_conversation_id: string;
+        active_org_id: string;
+      };
+    },
+  ): Promise<{ url: string; session_id: string } | null> {
+    const cfg = this.saasInternalConfig();
+    if (!cfg) return null;
+    const saasOrgId = await this.resolveSaasOrgId(activeOrgId);
+    if (!saasOrgId) return null;
+    try {
+      const res = await fetch(`${cfg.baseUrl}/internal/wa-checkout`, {
+        method: 'POST',
+        headers: { 'X-Internal-Key': cfg.key, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ saas_org_id: saasOrgId, ...payload }),
+        signal: AbortSignal.timeout(25_000),
+      });
+      if (!res.ok) {
+        this.log.warn(`createWaCheckout SaaS ${res.status}`);
+        return null;
+      }
+      const json = (await res.json()) as { url?: string; session_id?: string };
+      if (!json.url || !json.session_id) {
+        this.log.warn('createWaCheckout: resposta sem url/session_id');
+        return null;
+      }
+      return { url: json.url, session_id: json.session_id };
+    } catch (err) {
+      this.log.warn(`createWaCheckout falhou para ${activeOrgId}: ${String(err)}`);
+      return null;
+    }
+  }
+
   // ── Ponte de vídeo / Reel (proxy HTTP pro pipeline do SaaS) ────────────
   //
   // O motor de vídeo (Kling/Veo/Sora, jobs assíncronos) vive no SaaS. O Active

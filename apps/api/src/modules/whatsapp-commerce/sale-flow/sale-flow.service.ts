@@ -108,6 +108,8 @@ interface ResolvedPricing {
   stock: number | null;
   title: string;
   sku: string | null;
+  /** Thumbnail da FONTE (pro checkout Stripe mostrar a foto do produto). */
+  thumbnail: string | null;
 }
 
 @Injectable()
@@ -326,18 +328,45 @@ export class SaleFlowService {
     if (settings.ai_seller_enabled === false) {
       return { open: false, reason: 'vendedora IA desabilitada (ai_seller_enabled=false)', settings };
     }
+    // Stripe: provider utilizável quando a org o marcou E a ponte interna
+    // pro backend SaaS está configurada (o checkout é criado lá).
+    const stripeOk = this.stripeSelected(settings) && this.bridge.hasSaasInternalConfig();
     const [mpOk, pixOk] = await Promise.all([
       this.mp.isAvailable(orgId).catch(() => false),
       this.pix.isAvailable(orgId).catch(() => false),
     ]);
-    if (!mpOk && !pixOk) {
+    if (!mpOk && !pixOk && !stripeOk) {
       return {
         open: false,
-        reason: 'nenhum provider de pagamento utilizável (Mercado Pago sem credencial e Pix manual não configurado)',
+        reason: 'nenhum provider de pagamento utilizável (Stripe/Mercado Pago sem credencial e Pix manual não configurado)',
         settings,
       };
     }
     return { open: true, reason: '', settings };
+  }
+
+  /**
+   * True quando a org escolheu Stripe como provider de pagamento do WhatsApp:
+   * `default_payment_method === 'stripe'` OU 'stripe' presente em
+   * `payment_providers` (aceita array de strings ou de objetos
+   * {provider, enabled}). O checkout em si é criado no backend SaaS.
+   */
+  private stripeSelected(settings: WhatsAppCommerceSettings | null): boolean {
+    if (!settings) return false;
+    if (settings.default_payment_method === 'stripe') return true;
+    const providers = settings.payment_providers;
+    if (Array.isArray(providers)) {
+      return providers.some((p) => {
+        if (typeof p === 'string') return p === 'stripe';
+        if (p && typeof p === 'object') {
+          const prov = (p as { provider?: unknown }).provider;
+          const enabled = (p as { enabled?: unknown }).enabled;
+          return prov === 'stripe' && enabled !== false;
+        }
+        return false;
+      });
+    }
+    return false;
   }
 
   // ──────────────────────────────────────────────────────────
@@ -786,8 +815,17 @@ export class SaleFlowService {
       return;
     }
 
-    // Provider de pagamento: default da org quando utilizável.
     const settings = await this.settings.find(ctx.orgId);
+
+    // Stripe: o checkout é criado no backend SaaS (as chaves vivem lá). Só
+    // entra aqui quando o gate liberou stripe (ponte SaaS configurada). O
+    // whatsapp_order local continua a fonte da verdade.
+    if (this.stripeSelected(settings) && this.bridge.hasSaasInternalConfig()) {
+      await this.createOrderAndSendStripePayment(ctx, meta, pricing, qty);
+      return;
+    }
+
+    // Provider de pagamento local (MP/Pix): default da org quando utilizável.
     const [mpOk, pixOk] = await Promise.all([
       this.mp.isAvailable(ctx.orgId).catch(() => false),
       this.pix.isAvailable(ctx.orgId).catch(() => false),
@@ -904,6 +942,160 @@ export class SaleFlowService {
 
     this.logger.log(
       `[sale-flow] pedido criado conv=${ctx.conversationId} order=${order.display_number} total=${order.total} provider=${paymentLink.provider}`,
+    );
+  }
+
+  /**
+   * Fecha a venda via Stripe: cria o whatsapp_order local (fonte da verdade
+   * no Active) e pede ao backend SaaS pra abrir o Checkout Session. Envia a
+   * URL ao cliente e guarda o session_id (merge no metadata) pro webhook de
+   * confirmação. Preço SEMPRE da fonte (já re-lido pelo caller).
+   * Fail-open: qualquer falha na ponte → handoff educado com briefing, nunca
+   * exception pro cliente.
+   */
+  private async createOrderAndSendStripePayment(
+    ctx: TurnContext,
+    meta: SaleFlowMeta,
+    pricing: ResolvedPricing,
+    qty: number,
+  ): Promise<void> {
+    if (!meta.shipping) {
+      await this.handoff(
+        ctx,
+        meta,
+        'estado da venda inconsistente (sem entrega) na hora de gerar o checkout Stripe',
+      );
+      return;
+    }
+
+    let order: WhatsAppOrder;
+    try {
+      // Carrinho dedicado desta venda (limpa itens antigos se reusado).
+      const cart = await this.cart.getOrCreateCart(
+        ctx.orgId,
+        ctx.conversation.contact_id,
+        ctx.conversationId,
+      );
+      if (cart.items.length > 0) {
+        await this.cart.clear(ctx.orgId, cart.id);
+      }
+      await this.cart.addItem(ctx.orgId, cart.id, {
+        product_id: meta.product.product_id,
+        name: pricing.title,
+        sku: pricing.sku,
+        quantity: qty,
+        unit_price: pricing.unit_price,
+      });
+      await this.cart.setShipping(ctx.orgId, cart.id, {
+        method: meta.shipping.mode,
+        cost: meta.shipping.cost,
+        ...(meta.shipping.address?.zip ? { zip: meta.shipping.address.zip } : {}),
+      });
+
+      // payment_method 'manual': o link NÃO é gerado por provider local — o
+      // checkout vem do Stripe (SaaS). O order permanece a fonte da verdade.
+      const created = await this.orders.createFromCart(ctx.orgId, {
+        cart_id: cart.id,
+        payment_method: 'manual',
+        shipping_address: meta.shipping.address ?? {},
+        customer_notes: 'Pedido fechado pela vendedora IA no WhatsApp (Stripe).',
+      });
+      order = created.order;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `[sale-flow][stripe] criar pedido falhou conv=${ctx.conversationId}: ${msg}`,
+      );
+      await this.handoff(
+        ctx,
+        meta,
+        `falha ao criar o pedido pro checkout Stripe (${msg.slice(0, 200)}) — finalizar a venda manualmente`,
+      );
+      return;
+    }
+
+    // Itens do checkout (preços da FONTE). Frete > 0 vira item separado.
+    const items: Array<{ name: string; price: number; qty: number; image_url?: string }> = [
+      {
+        name: shortTitle(pricing.title, 120),
+        price: pricing.unit_price,
+        qty,
+        ...(pricing.thumbnail ? { image_url: pricing.thumbnail } : {}),
+      },
+    ];
+    if (meta.shipping.cost > 0) {
+      items.push({ name: 'Frete', price: round2(meta.shipping.cost), qty: 1 });
+    }
+
+    const checkout = await this.bridge.createWaCheckout(ctx.orgId, {
+      items,
+      ...(order.customer_email ? { customer_email: order.customer_email } : {}),
+      metadata: {
+        active_wa_order_id: order.id,
+        active_conversation_id: ctx.conversationId,
+        active_org_id: ctx.orgId,
+      },
+    });
+
+    // Fail-open: ponte indisponível/erro → handoff com o pedido já criado.
+    if (!checkout) {
+      this.logger.warn(
+        `[sale-flow][stripe] checkout falhou conv=${ctx.conversationId} order=${order.display_number} — handoff`,
+      );
+      await this.handoff(
+        ctx,
+        { ...meta, order_id: order.id, order_display: order.display_number },
+        `pedido ${order.display_number} criado (total R$ ${fmtBRL(order.total)}) mas o checkout Stripe não pôde ser gerado — passar o link de pagamento manualmente`,
+        {
+          clientMessage:
+            'Seu pedido foi registrado! 🎉 Só tive um probleminha pra gerar o link de pagamento — vou te passar pra equipe finalizar o pagamento, só um instante! 🙏',
+        },
+      );
+      return;
+    }
+
+    // Guarda session_id no metadata do pedido (merge que não clobra) + marca
+    // a origem sale_flow pro pós-pagamento.
+    try {
+      const fresh = await this.orders.findById(ctx.orgId, order.id);
+      await this.orders.update(ctx.orgId, order.id, {
+        payment_link: checkout.url,
+        metadata: {
+          ...fresh.metadata,
+          sale_flow: true,
+          sale_conversation_id: ctx.conversationId,
+          payment_provider: 'stripe',
+          stripe_session_id: checkout.session_id,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(
+        `[sale-flow][stripe] gravar session_id no pedido ${order.id} falhou: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    const updated: SaleFlowMeta = {
+      ...meta,
+      state: 'awaiting_payment',
+      product: { ...meta.product, unit_price: pricing.unit_price, stock_quantity: pricing.stock },
+      order_id: order.id,
+      order_display: order.display_number,
+      payment_url: checkout.url,
+      pix_copy_paste: null,
+      payment_provider: 'stripe',
+      retries: 0,
+      updated_at: nowIso(),
+    };
+    await this.saveMeta(ctx.orgId, ctx.conversationId, updated);
+
+    await this.send(
+      ctx.orgId,
+      ctx.conversation,
+      `Pedido *${order.display_number}* confirmado! 🎉 Total: *R$ ${fmtBRL(order.total)}*.\n\nAqui está seu link de pagamento seguro:\n${checkout.url}\n\nAssim que o pagamento for aprovado eu te confirmo por aqui!`,
+    );
+
+    this.logger.log(
+      `[sale-flow][stripe] checkout criado conv=${ctx.conversationId} order=${order.display_number} total=${order.total} session=${checkout.session_id}`,
     );
   }
 
@@ -1143,6 +1335,7 @@ Retorne APENAS JSON puro (use null nos campos ausentes — NÃO invente):
       stock: typeof fresh.stock_quantity === 'number' ? fresh.stock_quantity : null,
       title: fresh.title ?? '(produto)',
       sku: fresh.sku ?? null,
+      thumbnail: fresh.thumbnail_url ?? null,
     };
   }
 

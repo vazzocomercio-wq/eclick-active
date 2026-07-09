@@ -17,11 +17,23 @@ import {
 } from '../../gateways/events.gateway';
 import { AiService } from '../ai/ai.service';
 import { AutomationsService } from '../automations/automations.service';
+import { WhatsAppOrderService } from '../whatsapp-commerce/order/order.service';
+import { SaleFlowService } from '../whatsapp-commerce/sale-flow/sale-flow.service';
+import type { WhatsAppOrder } from '../whatsapp-commerce/order/order.types';
 
 interface RealtimeBroadcastDto {
   org_id: string;
   event: EventName;
   payload: unknown;
+}
+
+/** Confirmação de pagamento Stripe vinda do backend SaaS (webhook Stripe →
+ *  SaaS → aqui). Correlaciona pelo whatsapp_order local criado no checkout. */
+interface WaPaymentConfirmedDto {
+  active_wa_order_id: string;
+  session_id: string;
+  amount_brl: number;
+  active_org_id: string;
 }
 
 interface InboundProcessedDto {
@@ -51,6 +63,8 @@ export class InternalController {
     private readonly events: EventsGateway,
     private readonly ai: AiService,
     private readonly automations: AutomationsService,
+    private readonly orders: WhatsAppOrderService,
+    private readonly saleFlow: SaleFlowService,
   ) {}
 
   /**
@@ -153,6 +167,64 @@ export class InternalController {
       body.event,
       body.payload as EventPayloadMap[typeof body.event],
     );
+  }
+
+  /**
+   * Confirmação de pagamento Stripe vinda do backend SaaS (que recebe o
+   * webhook do Stripe). Idempotente — o webhook pode repetir:
+   *   1. Carrega o whatsapp_order garantindo posse pela org (multi-tenant).
+   *   2. Já pago → 200 sem reprocessar.
+   *   3. Senão marca pago (mesmo caminho do webhook MP / mark-paid manual) e
+   *      dispara o pós-venda do sale flow (confirma na conversa + completed).
+   * Sempre 200 quando processa; erro real (ex: falha no markPaid) → 500.
+   */
+  @Post('wa-payment-confirmed')
+  @HttpCode(HttpStatus.OK)
+  async waPaymentConfirmed(
+    @Headers('x-internal-key') key: string | undefined,
+    @Body() body: WaPaymentConfirmedDto,
+  ): Promise<{ ok: true; status: string }> {
+    this.assertInternalKey(key);
+    if (!body?.active_wa_order_id || !body?.session_id || !body?.active_org_id) {
+      throw new BadRequestException(
+        'active_wa_order_id, session_id e active_org_id são obrigatórios',
+      );
+    }
+
+    // Posse pela org: findById filtra por org_id, então cross-org retorna
+    // NotFound. Não existir pra essa org → nada a processar (seguro/idempotente).
+    let order: WhatsAppOrder | null = null;
+    try {
+      order = await this.orders.findById(body.active_org_id, body.active_wa_order_id);
+    } catch {
+      order = null;
+    }
+    if (!order) {
+      this.logger.warn(
+        `[internal] wa-payment-confirmed: order ${body.active_wa_order_id} não encontrado pra org ${body.active_org_id}`,
+      );
+      return { ok: true, status: 'not_found' };
+    }
+
+    // Idempotência: webhook do Stripe pode repetir.
+    if (order.payment_status === 'paid') {
+      this.logger.log(
+        `[internal] wa-payment-confirmed: order ${order.display_number} já pago — idempotente`,
+      );
+      return { ok: true, status: 'already_paid' };
+    }
+
+    const paid = await this.orders.markPaid(body.active_org_id, order.id, {
+      payment_id: body.session_id,
+    });
+    // Pós-venda do sale flow (best-effort, nunca lança): mensagem de
+    // confirmação na conversa + sale_flow → 'completed'.
+    await this.saleFlow.onOrderPaid(paid);
+
+    this.logger.log(
+      `[internal] wa-payment-confirmed: order ${paid.display_number} confirmado via stripe session=${body.session_id} amount=${body.amount_brl}`,
+    );
+    return { ok: true, status: 'confirmed' };
   }
 }
 
