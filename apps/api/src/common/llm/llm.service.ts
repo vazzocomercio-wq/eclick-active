@@ -83,6 +83,9 @@ const FEATURE_TIER: Record<string, LlmTier> = {
   classify_intent: 'cheap',
   sac_classify: 'cheap',
   product_match: 'cheap',
+  // Fase C da vendedora IA (SaleFlowService): parsing de quantidade,
+  // confirmação sim/não e endereço — mecânico, no máx 1 call por turno.
+  sale_flow: 'cheap',
 };
 
 function resolveTier(feature: string, override?: LlmTier): LlmTier {

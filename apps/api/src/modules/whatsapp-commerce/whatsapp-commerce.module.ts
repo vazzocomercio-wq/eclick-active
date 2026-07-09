@@ -3,6 +3,8 @@ import { SupabaseModule } from '../../common/supabase/supabase.module';
 import { AuthModule } from '../../common/auth/auth.module';
 import { EventsModule } from '../../gateways/events.module';
 import { AutomationsModule } from '../automations/automations.module';
+import { AiModule } from '../ai/ai.module';
+import { BridgeModule } from '../bridge/bridge.module';
 import { CatalogService } from './catalog/catalog.service';
 import {
   CatalogController,
@@ -17,9 +19,21 @@ import { OrderController } from './order/order.controller';
 import { MercadoPagoProvider } from './order/providers/mercado-pago.provider';
 import { PixManualProvider } from './order/providers/pix-manual.provider';
 import { PaymentWebhooksController } from './webhooks/payment-webhooks.controller';
+import { SaleFlowService } from './sale-flow/sale-flow.service';
 
 @Module({
-  imports: [SupabaseModule, AuthModule, EventsModule, AutomationsModule],
+  // AiModule (TransferService) e BridgeModule (BridgeService) entram por
+  // causa do SaleFlowService (Fase C da vendedora IA). Sem ciclo: AiModule
+  // não importa WhatsAppCommerceModule (o concierge resolve o SaleFlow via
+  // ModuleRef lazy).
+  imports: [
+    SupabaseModule,
+    AuthModule,
+    EventsModule,
+    AutomationsModule,
+    AiModule,
+    BridgeModule,
+  ],
   controllers: [
     CatalogController,
     CommerceSettingsController,
@@ -35,12 +49,14 @@ import { PaymentWebhooksController } from './webhooks/payment-webhooks.controlle
     WhatsAppOrderService,
     MercadoPagoProvider,
     PixManualProvider,
+    SaleFlowService,
   ],
   exports: [
     CatalogService,
     CommerceSettingsService,
     WhatsAppCartService,
     WhatsAppOrderService,
+    SaleFlowService,
   ],
 })
 export class WhatsAppCommerceModule {}

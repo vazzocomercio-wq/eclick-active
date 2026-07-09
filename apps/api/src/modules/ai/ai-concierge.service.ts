@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { performance } from 'node:perf_hooks';
 import type {
   AiAgentPersona,
@@ -13,6 +14,8 @@ import { OutboundEventsService } from '../../common/messaging-realtime/outbound-
 import { getOrgTimezone } from '../../common/org-settings.helper';
 import { AiPersonaService } from '../ai-persona/ai-persona.service';
 import { ProductInterestService } from './product-interest.service';
+import type { ProductInterestMeta } from './product-interest.service';
+import { SaleFlowService } from '../whatsapp-commerce/sale-flow/sale-flow.service';
 import { TagsService } from '../tags/tags.service';
 import { AppointmentsService } from '../appointments/appointments.service';
 import { BusinessHoursService } from '../business-hours/business-hours.service';
@@ -216,7 +219,26 @@ export class AiConciergeService {
     private readonly lock: LockService,
     private readonly businessHours: BusinessHoursService,
     private readonly productInterest: ProductInterestService,
+    private readonly moduleRef: ModuleRef,
   ) {}
+
+  /**
+   * SaleFlowService vive no WhatsAppCommerceModule, que importa o AiModule
+   * (TransferService) — importar de volta criaria ciclo de módulos. Resolve
+   * lazy via ModuleRef (strict:false, app-wide). Fail-open: se o provider
+   * não existir por qualquer razão, a Fase C simplesmente não atua.
+   */
+  private saleFlowRef: SaleFlowService | null | undefined;
+
+  private resolveSaleFlow(): SaleFlowService | null {
+    if (this.saleFlowRef !== undefined) return this.saleFlowRef;
+    try {
+      this.saleFlowRef = this.moduleRef.get(SaleFlowService, { strict: false });
+    } catch {
+      this.saleFlowRef = null;
+    }
+    return this.saleFlowRef ?? null;
+  }
 
   // ──────────────────────────────────────────────────────────
   // Entry point — chamado pelo processInbound
@@ -346,17 +368,48 @@ export class AiConciergeService {
       // gasta Haiku (tier cheap) quando a msg parece citar produto novo.
       // FAIL-OPEN: erro aqui NUNCA quebra o fluxo — loga e segue sem produto.
       let productContext = '';
+      let productInterest: ProductInterestMeta | null = null;
       try {
-        const interest = await this.productInterest.detect({
+        productInterest = await this.productInterest.detect({
           orgId,
           conversationId,
           latestText: message.plain_text,
           metadata: conv.metadata,
         });
-        productContext = this.productInterest.buildPromptBlock(interest);
+        productContext = this.productInterest.buildPromptBlock(productInterest);
       } catch (err) {
         this.logger.warn(
           `concierge: product-interest falhou (segue sem produto): ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+
+      // Vendedora IA (Fase C): o fluxo de FECHAMENTO DE VENDA tem
+      // prioridade sobre a máquina de estados do concierge. Quando o turno
+      // pertence à venda (sale_flow ativo, intenção de compra com gate
+      // aberto, ou handoff da venda já feito → silêncio), o SaleFlowService
+      // consome o turno e o concierge não faz mais nada.
+      // FAIL-OPEN: qualquer erro aqui loga e segue o fluxo normal.
+      try {
+        const saleFlow = this.resolveSaleFlow();
+        if (saleFlow) {
+          const consumed = await saleFlow.maybeHandleTurn({
+            orgId,
+            conversationId,
+            conversation: conv,
+            messageText: message.plain_text,
+            autoReply: settings.auto_reply,
+            interest: productInterest,
+          });
+          if (consumed) {
+            this.logger.debug(
+              `concierge: turno consumido pelo sale-flow conv=${conversationId}`,
+            );
+            return;
+          }
+        }
+      } catch (err) {
+        this.logger.warn(
+          `concierge: sale-flow falhou (segue fluxo normal): ${err instanceof Error ? err.message : String(err)}`,
         );
       }
 

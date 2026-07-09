@@ -1,6 +1,7 @@
 import { Controller, Post, Body, Logger, Query } from '@nestjs/common';
 import { WhatsAppOrderService } from '../order/order.service';
 import { MercadoPagoProvider } from '../order/providers/mercado-pago.provider';
+import { SaleFlowService } from '../sale-flow/sale-flow.service';
 
 interface MpWebhookPayload {
   type?: string;
@@ -20,6 +21,7 @@ export class PaymentWebhooksController {
   constructor(
     private readonly orders: WhatsAppOrderService,
     private readonly mp: MercadoPagoProvider,
+    private readonly saleFlow: SaleFlowService,
   ) {}
 
   /**
@@ -79,11 +81,19 @@ export class PaymentWebhooksController {
       }
 
       if (payment.status === 'approved' && order.payment_status !== 'paid') {
-        await this.orders.markPaid(order.org_id, order.id, {
+        const paid = await this.orders.markPaid(order.org_id, order.id, {
           payment_id: paymentId,
         });
         this.log.log(
           `MP webhook: order ${order.display_number} marcado como pago`,
+        );
+        // Fase C (vendedora IA): se o pedido nasceu do sale flow, avisa o
+        // cliente na conversa de origem e fecha o sale_flow ('completed').
+        // Fire-and-forget: falha aqui nunca quebra o ACK do webhook.
+        void this.saleFlow.onOrderPaid(paid).catch((err: unknown) =>
+          this.log.warn(
+            `[sale-flow] pós-pagamento falhou (não fatal): ${String(err)}`,
+          ),
         );
       }
     } catch (err) {

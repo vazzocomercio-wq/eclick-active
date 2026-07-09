@@ -457,12 +457,27 @@ export class WhatsAppOrderService {
     orgId: string,
     contactId: string,
   ): Promise<ContactSnapshot | null> {
+    // active.contacts tem coluna `name` (não `full_name`) — o select antigo
+    // com full_name errava no PostgREST e derrubava TODA criação de pedido
+    // com "Contato sem telefone". Mapeamos name → full_name do snapshot.
     const { data } = await this.supabase.adminClient
       .from('contacts')
-      .select('id, full_name, phone, email')
+      .select('id, name, phone, email')
       .eq('org_id', orgId)
       .eq('id', contactId)
       .maybeSingle();
-    return (data as ContactSnapshot | null) ?? null;
+    const row = data as {
+      id: string;
+      name: string | null;
+      phone: string | null;
+      email: string | null;
+    } | null;
+    if (!row) return null;
+    return {
+      id: row.id,
+      full_name: row.name,
+      phone: row.phone,
+      email: row.email,
+    };
   }
 }

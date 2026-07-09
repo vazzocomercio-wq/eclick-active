@@ -12,6 +12,7 @@ import { AuthGuard } from '../../../common/auth/auth.guard';
 import { CurrentUser } from '../../../common/auth/current-user.decorator';
 import type { AuthUser } from '../../../common/auth/auth.types';
 import { WhatsAppOrderService } from './order.service';
+import { SaleFlowService } from '../sale-flow/sale-flow.service';
 import type {
   CreateOrderFromCartInput,
   OrderStatus,
@@ -22,7 +23,10 @@ import type {
 @UseGuards(AuthGuard)
 @Controller('whatsapp-commerce/orders')
 export class OrderController {
-  constructor(private readonly orders: WhatsAppOrderService) {}
+  constructor(
+    private readonly orders: WhatsAppOrderService,
+    private readonly saleFlow: SaleFlowService,
+  ) {}
 
   @Get()
   list(
@@ -66,14 +70,18 @@ export class OrderController {
   }
 
   @Post(':id/mark-paid')
-  markPaid(
+  async markPaid(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
     @Body() body: { payment_id?: string },
   ) {
-    return this.orders.markPaid(user.org_id, id, {
+    const order = await this.orders.markPaid(user.org_id, id, {
       payment_id: body?.payment_id,
     });
+    // Fase C (vendedora IA): Pix manual não tem webhook — quando o agente
+    // confere o extrato e marca pago aqui, o sale flow confirma na conversa.
+    void this.saleFlow.onOrderPaid(order).catch(() => undefined);
+    return order;
   }
 
   @Post(':id/ship')
