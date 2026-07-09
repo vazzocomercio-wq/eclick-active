@@ -212,6 +212,83 @@ export class BridgeService {
     }
   }
 
+  /**
+   * Busca produtos por termos (ilike em title/sku) na `v_saas_products` —
+   * usado pela vendedora IA (ProductInterestService) pra achar candidatos
+   * ao produto que o cliente mencionou no WhatsApp.
+   *
+   * Sem filtro de thumbnail (diferente do listProducts): interesse de
+   * conversa não exige foto. A view é do SaaS (ilike não indexável) —
+   * aceita scan com limit baixo. Fail-open: erro/sem bridge → [].
+   */
+  async searchProductsByTerms(
+    activeOrgId: string,
+    terms: string[],
+    limit = 24,
+  ): Promise<SaasProduct[]> {
+    // Sanitiza: ilike + .or() do PostgREST quebram com %,() e vírgula.
+    const safe = terms
+      .map((t) =>
+        t
+          .toLowerCase()
+          .replace(/[%_(),.\\]/g, ' ')
+          .trim(),
+      )
+      .filter((t) => t.length >= 2)
+      .slice(0, 4);
+    if (safe.length === 0) return [];
+
+    const saasOrgId = await this.resolveSaasOrgId(activeOrgId);
+    if (!saasOrgId) return [];
+    if (!(await this.hasSaasIntegration(saasOrgId))) return [];
+    try {
+      const orClause = safe
+        .flatMap((t) => [`title.ilike.%${t}%`, `sku.ilike.%${t}%`])
+        .join(',');
+      const { data, error } = await this.supabase.adminClient
+        .from('v_saas_products')
+        .select(
+          'id,organization_id,ml_listing_id,title,sku,price,cost,stock_quantity,category,thumbnail_url,status,marketplace,margin_percent,metadata,created_at,updated_at,description',
+        )
+        .eq('organization_id', saasOrgId)
+        .or(orClause)
+        .limit(Math.min(limit, 50));
+      if (error) throw error;
+      return (data ?? []) as SaasProduct[];
+    } catch (err) {
+      this.log.warn(
+        `searchProductsByTerms falhou para ${activeOrgId}: ${String(err)}`,
+      );
+      return [];
+    }
+  }
+
+  /** Produto único por id na `v_saas_products` (refresh de estoque/preço
+   *  da vendedora IA). Fail-open: erro/sem bridge → null. */
+  async getProductById(
+    activeOrgId: string,
+    productId: string,
+  ): Promise<SaasProduct | null> {
+    const saasOrgId = await this.resolveSaasOrgId(activeOrgId);
+    if (!saasOrgId) return null;
+    if (!(await this.hasSaasIntegration(saasOrgId))) return null;
+    try {
+      const { data, error } = await this.supabase.adminClient
+        .from('v_saas_products')
+        .select(
+          'id,organization_id,ml_listing_id,title,sku,price,cost,stock_quantity,category,thumbnail_url,status,marketplace,margin_percent,metadata,created_at,updated_at,description',
+        )
+        .eq('organization_id', saasOrgId)
+        .eq('id', productId)
+        .maybeSingle();
+      if (error) throw error;
+      return (data as SaasProduct | null) ?? null;
+    } catch (err) {
+      this.log.warn(`getProductById falhou para ${activeOrgId}: ${String(err)}`);
+      return null;
+    }
+  }
+
   /** Lista produtos do TikTok Shop (2ª fonte do seletor do Social AI Studio).
    *  Mesma forma de SaasProduct (view active.v_saas_tiktok_products), só muda
    *  a origem — marketplace='tiktok_shop'. Filtra por thumbnail presente. */

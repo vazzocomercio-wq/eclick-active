@@ -15,6 +15,7 @@ import { AppointmentsService } from '../appointments/appointments.service';
 import { AnthropicClient } from './anthropic.client';
 import { AiConciergeService } from './ai-concierge.service';
 import { DataCollectionService } from './data-collection.service';
+import { ProductInterestService } from './product-interest.service';
 import { SacAiService } from '../sac/sac-ai.service';
 import { SacTicketsService } from '../sac/sac-tickets.service';
 import type { AiSkill } from '@eclick-active/shared';
@@ -57,6 +58,7 @@ export class AiService {
     private readonly concierge: AiConciergeService,
     private readonly sacAi: SacAiService,
     private readonly sacTickets: SacTicketsService,
+    private readonly productInterest: ProductInterestService,
   ) {}
 
   // ──────────────────────────────────────────────────────────
@@ -268,7 +270,37 @@ export class AiService {
       }
     }
 
-    const userPrompt = this.buildSuggestPrompt(contact, recent, skillKnowledgeHits, liveContent);
+    // Vendedora IA (Fase B) — produto de interesse do anúncio (bridge
+    // v_saas_products). Gate heurístico + single-flight ficam dentro do
+    // detect (Haiku tier cheap só quando a msg cita produto). FAIL-OPEN:
+    // erro nunca quebra a sugestão — segue sem o bloco.
+    let productBlock = '';
+    try {
+      const interest = await this.productInterest.detect({
+        orgId,
+        conversationId,
+        latestText: lastInbound?.plain_text ?? '',
+        recentMessages: recent
+          .slice(-4)
+          .map((m) => ({
+            direction: m.direction === 'inbound' ? ('inbound' as const) : ('outbound' as const),
+            text: (m.plain_text ?? '').slice(0, 200),
+          })),
+      });
+      productBlock = this.productInterest.buildPromptBlock(interest);
+    } catch (err) {
+      this.logger.warn(
+        `suggestResponse: product-interest falhou (segue sem produto): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    const userPrompt = this.buildSuggestPrompt(
+      contact,
+      recent,
+      skillKnowledgeHits,
+      liveContent,
+      productBlock,
+    );
 
     // System prompt: persona + skill (se houver) + SUGGEST_SYSTEM_PROMPT
     const parts: string[] = [];
@@ -1789,8 +1821,13 @@ export class AiService {
     recent: Message[],
     knowledgeHits: Array<{ title: string; category: string; content: string }> = [],
     liveContent: string | null = null,
+    productBlock = '',
   ): string {
     const lines: string[] = [];
+    if (productBlock) {
+      lines.push(productBlock);
+      lines.push('');
+    }
     if (contact) {
       lines.push('Perfil do contato:');
       if (contact.name) lines.push(`- Nome: ${contact.name}`);

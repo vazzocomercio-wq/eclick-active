@@ -12,6 +12,7 @@ import { LockService } from '../../common/lock/lock.service';
 import { OutboundEventsService } from '../../common/messaging-realtime/outbound-events.service';
 import { getOrgTimezone } from '../../common/org-settings.helper';
 import { AiPersonaService } from '../ai-persona/ai-persona.service';
+import { ProductInterestService } from './product-interest.service';
 import { TagsService } from '../tags/tags.service';
 import { AppointmentsService } from '../appointments/appointments.service';
 import { BusinessHoursService } from '../business-hours/business-hours.service';
@@ -214,6 +215,7 @@ export class AiConciergeService {
     private readonly outboundEvents: OutboundEventsService,
     private readonly lock: LockService,
     private readonly businessHours: BusinessHoursService,
+    private readonly productInterest: ProductInterestService,
   ) {}
 
   // ──────────────────────────────────────────────────────────
@@ -338,6 +340,26 @@ export class AiConciergeService {
         }
       }
 
+      // Vendedora IA (Fase B): detecta/reusa o produto de interesse da
+      // conversa e monta o bloco de contexto do anúncio pros prompts.
+      // Gate heurístico barato dentro do detect (regex de termos) — só
+      // gasta Haiku (tier cheap) quando a msg parece citar produto novo.
+      // FAIL-OPEN: erro aqui NUNCA quebra o fluxo — loga e segue sem produto.
+      let productContext = '';
+      try {
+        const interest = await this.productInterest.detect({
+          orgId,
+          conversationId,
+          latestText: message.plain_text,
+          metadata: conv.metadata,
+        });
+        productContext = this.productInterest.buildPromptBlock(interest);
+      } catch (err) {
+        this.logger.warn(
+          `concierge: product-interest falhou (segue sem produto): ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+
       if (state === 'idle') {
         await this.handleGreeting({
           orgId,
@@ -345,6 +367,7 @@ export class AiConciergeService {
           conversation: conv,
           settings,
           persona: personaActive,
+          productContext,
         });
       } else if (state === 'awaiting_response') {
         await this.handleRoute({
@@ -354,6 +377,7 @@ export class AiConciergeService {
           messageText: message.plain_text,
           settings,
           persona: personaActive,
+          productContext,
         });
       } else if (state === 'awaiting_slot_choice') {
         await this.handleSlotChoice({
@@ -375,6 +399,7 @@ export class AiConciergeService {
           messageText: message.plain_text,
           settings,
           persona: personaActive,
+          productContext,
         });
       }
 
@@ -445,6 +470,8 @@ export class AiConciergeService {
     conversation: ConversationRow;
     settings: ConciergeSettings;
     persona: AiAgentPersona;
+    /** Bloco "PRODUTO DE INTERESSE" ('' quando não há). */
+    productContext?: string;
   }): Promise<void> {
     const { orgId, conversationId, conversation, settings, persona } = args;
 
@@ -470,6 +497,7 @@ export class AiConciergeService {
         persona,
         settings.business_context,
         await this.fetchContactName(orgId, conversation.contact_id),
+        args.productContext ?? '',
       );
       greeting = generated.text;
     }
@@ -613,6 +641,7 @@ export class AiConciergeService {
     persona: AiAgentPersona,
     businessContext: string,
     contactName: string | null,
+    productContext = '',
   ): Promise<{ text: string; aiGenerated: boolean }> {
     const tonePt = this.tonePt(persona.tone);
     const role = persona.role ?? 'assistant';
@@ -626,7 +655,7 @@ ${personality ? `Personalidade: ${personality}` : ''}
 ${businessContext ? `Sobre a empresa: ${businessContext}` : ''}
 ${guidelines ? `Diretrizes:\n- ${guidelines}` : ''}
 ${forbidden ? `Tópicos a evitar: ${forbidden}` : ''}
-
+${productContext ? `\n${productContext}\nSe o cliente já mencionou esse produto na primeira mensagem, a saudação pode reconhecer o interesse (ex: citar o produto pelo nome curto) antes da pergunta.\n` : ''}
 Tarefa: gerar UMA mensagem curta (2-3 linhas, máx 280 caracteres) de saudação INICIAL para um cliente que acabou de iniciar contato. A mensagem DEVE terminar com UMA pergunta direta e amigável que ajude a entender o que o cliente busca (ex: "Como posso te ajudar hoje?", "Está procurando algo específico?").
 
 NÃO use emojis em excesso (máximo 1).
@@ -679,6 +708,8 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
     messageText: string;
     settings: ConciergeSettings;
     persona: AiAgentPersona;
+    /** Bloco "PRODUTO DE INTERESSE" ('' quando não há). */
+    productContext?: string;
   }): Promise<void> {
     const { orgId, conversationId, conversation, messageText, settings, persona } = args;
 
@@ -735,6 +766,7 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
       forceRoute,
       tagCatalog,
       contactName,
+      productContext: args.productContext ?? '',
     });
 
     if (!decision) {
@@ -1068,8 +1100,11 @@ Retorne APENAS o texto da mensagem, sem aspas, sem explicações.`;
     forceRoute: boolean;
     tagCatalog: TagDefinition[];
     contactName: string | null;
+    /** Bloco "PRODUTO DE INTERESSE" ('' quando não há). */
+    productContext?: string;
   }): Promise<RouteDecision | null> {
     const { pipelines, history, latestMessage, persona, businessContext, qualifyingTurns, forceRoute, tagCatalog, contactName } = args;
+    const productContext = args.productContext ?? '';
 
     // Pega só o primeiro nome pra IA usar de forma natural
     // ("Maria Silva" → "Maria"), sem soar formal demais.
@@ -1138,7 +1173,7 @@ CLIENTE: ${contactName ? `${contactName} (use o primeiro nome com naturalidade �
 
 CONTEXTO DA EMPRESA:
 ${businessContext || '(sem contexto detalhado)'}
-
+${productContext ? `\n${productContext}\nUse esses dados do anúncio pra responder dúvidas do cliente sobre o produto (preço, medidas, material, estoque) durante a qualificação — em next_question e bridge_message. Se o bloco lista CANDIDATOS ambíguos, sua next_question DEVE perguntar qual deles o cliente quer.\n` : ''}
 ═══════════════════════════════════════════
 PIPELINES DISPONÍVEIS NESTA ORG (use SÓ se for rotear):
 ${pipelinesText}
@@ -2258,6 +2293,8 @@ Decida o roteamento seguindo apenas as regras de sistema.`;
     messageText: string;
     settings: ConciergeSettings;
     persona: AiAgentPersona;
+    /** Bloco "PRODUTO DE INTERESSE" ('' quando não há). */
+    productContext?: string;
   }): Promise<void> {
     const { orgId, conversationId, conversation, messageText, settings, persona } = args;
 
@@ -2289,6 +2326,7 @@ Decida o roteamento seguindo apenas as regras de sistema.`;
       conversation,
       messageText,
       persona,
+      productContext: args.productContext ?? '',
     });
     if (!reply) return;
 
@@ -2370,8 +2408,11 @@ Decida o roteamento seguindo apenas as regras de sistema.`;
     conversation: ConversationRow;
     messageText: string;
     persona: AiAgentPersona;
+    /** Bloco "PRODUTO DE INTERESSE" ('' quando não há). */
+    productContext?: string;
   }): Promise<string | null> {
     const { orgId, conversationId, conversation, messageText, persona } = args;
+    const productContext = args.productContext ?? '';
 
     const history = await this.loadHistory(orgId, conversationId);
     const historyText = history
@@ -2389,7 +2430,7 @@ Tom de voz: ${tonePt}.
 ${persona.personality ? `Personalidade: ${persona.personality}` : ''}
 ${guidelines ? `Diretrizes:\n- ${guidelines}` : ''}
 ${forbidden ? `Tópicos a evitar: ${forbidden}` : ''}
-
+${productContext ? `\n${productContext}\nResponda dúvidas sobre esse produto usando SOMENTE os dados do bloco acima.\n` : ''}
 Esta conversa JÁ FOI ROTEADA — você está atuando como atendente em
 follow-up. Tarefa: responder a mensagem do cliente de forma direta e
 útil, com base no histórico.

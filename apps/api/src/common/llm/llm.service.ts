@@ -74,13 +74,15 @@ interface ChatRequest {
  *
  * Cheap (Haiku): classificação de intent/sentimento, detecção de intenção de
  * agendamento e extração de campos (todos usam 'classify_intent') + triagem
- * de SAC ('sac_classify'). A análise de gaps também é cheap, mas compartilha
- * 'diagnose' com o funnel analysis (smart) — por isso detectGaps passa
- * `tier: 'cheap'` explícito em vez de entrar neste mapa.
+ * de SAC ('sac_classify') + match de produto de interesse da vendedora IA
+ * ('product_match' — ProductInterestService). A análise de gaps também é
+ * cheap, mas compartilha 'diagnose' com o funnel analysis (smart) — por isso
+ * detectGaps passa `tier: 'cheap'` explícito em vez de entrar neste mapa.
  */
 const FEATURE_TIER: Record<string, LlmTier> = {
   classify_intent: 'cheap',
   sac_classify: 'cheap',
+  product_match: 'cheap',
 };
 
 function resolveTier(feature: string, override?: LlmTier): LlmTier {
