@@ -71,6 +71,12 @@ export interface ParsedShippingConfig {
   label: string;
   requires_address: boolean;
   pickup_address: string | null;
+  /**
+   * Limiar de frete grátis em BRL: se o subtotal do pedido (qtd × preço) for
+   * >= este valor, o frete é zerado mesmo no modo 'flat'. null = sem regra de
+   * frete grátis por valor. Ex: 200 = grátis acima de R$200, senão cobra `cost`.
+   */
+  free_above: number | null;
 }
 
 /** Flags universais detectáveis em qualquer turno do flow. */

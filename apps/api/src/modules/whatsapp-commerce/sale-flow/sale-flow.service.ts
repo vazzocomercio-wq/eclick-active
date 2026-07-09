@@ -571,13 +571,27 @@ export class SaleFlowService {
       return;
     }
 
-    const shipping: SaleFlowShipping = {
-      mode: ship.mode,
-      cost: ship.cost,
-      label: ship.label,
-      requires_address: ship.requires_address,
-      address: null,
-    };
+    // Frete grátis por valor: se o subtotal (qtd × preço) atinge o limiar,
+    // zera o frete mesmo no modo 'flat'. Preço sempre da fonte (pricing).
+    const subtotal = round2(qty * pricing.unit_price);
+    const freeByThreshold =
+      ship.free_above !== null && subtotal >= ship.free_above;
+    const shipping: SaleFlowShipping = freeByThreshold
+      ? {
+          mode: 'free',
+          cost: 0,
+          label: `Frete grátis (acima de R$ ${fmtBRL(ship.free_above ?? 0)})`,
+          // frete grátis por valor ainda pode precisar de endereço pra entregar
+          requires_address: ship.requires_address,
+          address: null,
+        }
+      : {
+          mode: ship.mode,
+          cost: ship.cost,
+          label: ship.label,
+          requires_address: ship.requires_address,
+          address: null,
+        };
 
     const updated: SaleFlowMeta = {
       ...meta,
@@ -1724,11 +1738,22 @@ export function parseShippingConfig(
   const requireAddressRaw = cfg['require_address'] ?? cfg['requires_address'];
   const requiresAddress = mode === 'pickup' ? false : requireAddressRaw !== false;
 
+  // Limiar de frete grátis por valor (grátis acima de X, senão cobra `cost`).
+  const freeAbove = firstNumber([
+    'free_above',
+    'free_shipping_above',
+    'free_shipping_threshold',
+    'frete_gratis_acima',
+    'gratis_acima',
+    'limite_frete_gratis',
+  ]);
+
   return {
     mode,
     cost: mode === 'flat' ? round2(cost ?? 0) : 0,
     label: mode === 'pickup' ? 'Retirada' : mode === 'free' ? 'Frete grátis' : 'Entrega',
     requires_address: requiresAddress,
     pickup_address: pickupAddress,
+    free_above: freeAbove !== null && freeAbove > 0 ? round2(freeAbove) : null,
   };
 }
