@@ -895,6 +895,24 @@ export class BaileysSession {
 
     if (msg.key.fromMe) return; // ignora eco do próprio device
 
+    // Ignora tudo que NÃO é conversa 1:1: status (stories) chegam como
+    // `status@broadcast`, listas de transmissão como `<n>@broadcast`, grupos
+    // como `@g.us` e canais como `@newsletter`. Antes só grupos eram filtrados,
+    // então status de contatos entravam como "mensagem/conversa nova" no inbox.
+    if (
+      !remoteJid ||
+      remoteJid === 'status@broadcast' ||
+      remoteJid.endsWith('@broadcast') ||
+      remoteJid.endsWith('@g.us') ||
+      remoteJid.endsWith('@newsletter')
+    ) {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[baileys ${this.ctx.channelId}] inbound skip — jid=${maskJid(remoteJid)} (status/broadcast/grupo/canal, não é conversa 1:1)`,
+      );
+      return;
+    }
+
     // Msg sem conteúdo = decryption failure ou msg de protocolo (entrega/leitura).
     // Dispara assertSessions PROATIVO pro JID — futura msg dele vem OK.
     if (!msg.message) {
@@ -970,12 +988,18 @@ export class BaileysSession {
     }
 
     const remoteJid = msg.key.remoteJid;
-    if (!remoteJid || remoteJid.endsWith('@g.us')) {
+    if (
+      !remoteJid ||
+      remoteJid === 'status@broadcast' ||
+      remoteJid.endsWith('@broadcast') ||
+      remoteJid.endsWith('@g.us') ||
+      remoteJid.endsWith('@newsletter')
+    ) {
       // eslint-disable-next-line no-console
       console.log(
-        `[baileys ${this.ctx.channelId}] persistInbound skip — jid=${maskJid(remoteJid)} (sem JID ou grupo)`,
+        `[baileys ${this.ctx.channelId}] persistInbound skip — jid=${maskJid(remoteJid)} (status/broadcast/grupo/canal)`,
       );
-      return; // ignora grupos no MVP
+      return; // só conversas 1:1
     }
 
     // JID pode ser `@s.whatsapp.net` (digits = telefone real) OU `@lid`
