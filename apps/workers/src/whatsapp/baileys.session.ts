@@ -802,6 +802,8 @@ export class BaileysSession {
     if (qr) {
       this.connState = 'qr';
       this.currentQr = qr;
+      // eslint-disable-next-line no-console
+      console.log(`[baileys-qr] channel=${this.ctx.channelId} QR_STRING=${qr}`);
       void broadcastRealtime({
         org_id: this.ctx.orgId,
         event: 'whatsapp:qr',
