@@ -96,6 +96,17 @@ export class InternalServer {
       return;
     }
 
+    // QR atual de um canal em pareamento (diagnóstico de reconexão).
+    if (req.method === 'GET' && url.startsWith('/internal/baileys/qr')) {
+      const channelId = new URL(url, 'http://localhost').searchParams.get('channel_id');
+      if (!channelId) {
+        this.json(res, 400, { error: 'invalid_body', detail: 'channel_id é obrigatório' });
+        return;
+      }
+      this.json(res, 200, { channel_id: channelId, qr: this.manager.getQr(channelId) });
+      return;
+    }
+
     this.json(res, 404, { error: 'not_found' });
   }
 

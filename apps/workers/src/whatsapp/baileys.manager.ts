@@ -32,6 +32,7 @@ interface ChannelRow {
   status: 'active' | 'paused' | 'error' | 'pending' | 'disconnected';
   credentials: { baileys_auth?: unknown } | null;
   created_at: string;
+  updated_at: string;
 }
 
 /**
@@ -254,6 +255,14 @@ export class BaileysManager {
     return session.checkNumber(phone);
   }
 
+  /**
+   * QR atual de um canal em pareamento (null se não houver sessão/QR).
+   * Usado pelo endpoint interno de diagnóstico de reconexão.
+   */
+  getQr(channelId: string): string | null {
+    return this.sessions.get(channelId)?.qr ?? null;
+  }
+
   // ──────────────────────────────────────────────────────────
 
   private async syncOnce(): Promise<void> {
@@ -266,7 +275,7 @@ export class BaileysManager {
       const supabase = getSupabase();
       const { data, error } = await supabase
         .from('channels')
-        .select('id, org_id, status, credentials, created_at')
+        .select('id, org_id, status, credentials, created_at, updated_at')
         .eq('channel_type', 'whatsapp_free')
         .in('status', ['active', 'pending', 'error']);
 
@@ -307,7 +316,13 @@ export class BaileysManager {
       for (const row of allRows) {
         if (row.status !== 'pending') continue;
         if (row.credentials?.baileys_auth) continue;
-        const ageSec = (now - new Date(row.created_at).getTime()) / 1000;
+        // BUGFIX: mede a idade desde a ENTRADA em pending (updated_at), não
+        // desde a criação do canal (created_at). Antes, reconectar um canal
+        // antigo (setar status=pending) fazia o cleanup deletá-lo na hora,
+        // porque created_at tinha dias/semanas. Fallback pra created_at se
+        // updated_at faltar.
+        const pendingSince = new Date(row.updated_at ?? row.created_at).getTime();
+        const ageSec = (now - pendingSince) / 1000;
         if (ageSec > PENDING_TTL_SECONDS) {
           // eslint-disable-next-line no-console
           console.log(
