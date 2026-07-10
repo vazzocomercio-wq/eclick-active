@@ -110,6 +110,8 @@ interface SessionContext {
   orgId: string;
   /** True quando a sessão NÃO tem auth state ainda (precisa pareamento via QR) */
   needsPairing: boolean;
+  /** Telefone do canal (só dígitos, ex 557193722478) pra pedir código de pareamento. */
+  phone: string | null;
 }
 
 /**
@@ -125,6 +127,8 @@ export class BaileysSession {
   private sock: WASocket | null = null;
   private auth: BaileysAuthHandle | null = null;
   private currentQr: string | null = null;
+  private pairingCode: string | null = null;
+  private pairingCodeRequested = false;
   private connecting = false;
   private terminated = false;
 
@@ -256,6 +260,10 @@ export class BaileysSession {
 
   get qr(): string | null {
     return this.currentQr;
+  }
+
+  get pairing(): string | null {
+    return this.pairingCode;
   }
 
   async start(): Promise<void> {
@@ -799,6 +807,36 @@ export class BaileysSession {
         event: 'whatsapp:qr',
         payload: { channel_id: this.ctx.channelId, qr },
       });
+
+      // Código de pareamento (alternativa ao QR — texto de 8 chars, mais fácil
+      // de relayar e com validade maior). Pede UMA vez, quando o socket já está
+      // no estágio de pareamento (evento qr = pronto pra requestPairingCode).
+      const phoneDigits = this.ctx.phone?.replace(/\D/g, '') ?? '';
+      if (
+        this.ctx.needsPairing &&
+        phoneDigits.length >= 12 &&
+        !this.pairingCodeRequested &&
+        this.sock
+      ) {
+        this.pairingCodeRequested = true;
+        void this.sock
+          .requestPairingCode(phoneDigits)
+          .then((code) => {
+            this.pairingCode = code;
+            // eslint-disable-next-line no-console
+            console.log(
+              `[baileys-pair] channel=${this.ctx.channelId} PAIRING_CODE=${code}`,
+            );
+          })
+          .catch((err) => {
+            this.pairingCodeRequested = false; // permite nova tentativa no próximo qr
+            // eslint-disable-next-line no-console
+            console.warn(
+              `[baileys-pair] requestPairingCode(${this.ctx.channelId}) falhou:`,
+              err instanceof Error ? err.message : err,
+            );
+          });
+      }
     }
 
     if (connection === 'connecting') {

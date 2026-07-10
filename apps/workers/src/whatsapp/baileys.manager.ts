@@ -33,6 +33,7 @@ interface ChannelRow {
   credentials: { baileys_auth?: unknown } | null;
   created_at: string;
   updated_at: string;
+  phone_number: string | null;
 }
 
 /**
@@ -275,7 +276,7 @@ export class BaileysManager {
       const supabase = getSupabase();
       const { data, error } = await supabase
         .from('channels')
-        .select('id, org_id, status, credentials, created_at, updated_at')
+        .select('id, org_id, status, credentials, created_at, updated_at, phone_number')
         .eq('channel_type', 'whatsapp_free')
         .in('status', ['active', 'pending', 'error']);
 
@@ -381,6 +382,7 @@ export class BaileysManager {
           channelId: row.id,
           orgId: row.org_id,
           needsPairing: !row.credentials?.baileys_auth,
+          phone: row.phone_number ?? null,
         });
         this.sessions.set(row.id, sess);
         try {
