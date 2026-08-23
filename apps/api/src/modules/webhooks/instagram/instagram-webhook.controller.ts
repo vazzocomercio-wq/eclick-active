@@ -46,7 +46,18 @@ export class InstagramWebhookController {
     @Query('hub.verify_token') token: string | undefined,
     @Query('hub.challenge') challenge: string | undefined,
   ): number {
-    const expected = process.env.INSTAGRAM_WEBHOOK_VERIFY_TOKEN ?? 'eclick-active-ig-verify';
+    // Sem default hardcoded: o valor antigo ('eclick-active-ig-verify')
+    // estava no código-fonte e a env nunca foi configurada, então
+    // qualquer um que lesse o repo conseguia completar a verificação
+    // apontando a própria assinatura de webhook pra este endpoint.
+    const expected = process.env.INSTAGRAM_WEBHOOK_VERIFY_TOKEN;
+    if (!expected) {
+      this.logger.error(
+        'INSTAGRAM_WEBHOOK_VERIFY_TOKEN ausente — rejeitando verificação. ' +
+        'Configure a env no Railway (service api) com o mesmo valor do painel da Meta.',
+      );
+      throw new ForbiddenException('Webhook verify token not configured');
+    }
     if (mode === 'subscribe' && token === expected && challenge) {
       const n = Number(challenge);
       if (Number.isFinite(n)) return n;
@@ -57,9 +68,14 @@ export class InstagramWebhookController {
 
   /**
    * POST — eventos. Validamos signature antes de processar. Sempre 200.
-   * O raw body é necessário pra HMAC; lemos via req[rawBody] (configurado
-   * no main.ts pra esta rota via middleware) ou via JSON.stringify do body
-   * como fallback (válido pra v1; em produção rigorosa, usar raw bytes).
+   *
+   * O HMAC tem que ser calculado sobre os BYTES originais. O `main.ts` sobe
+   * o Nest com `rawBody: true`, que expõe `req.rawBody` como **Buffer** —
+   * o tipo antigo dizia `string`, e o fallback `JSON.stringify(body)`
+   * reserializava o objeto já parseado: qualquer diferença de espaçamento,
+   * escape unicode ou ordem de chaves produz um hash diferente e a
+   * assinatura legítima da Meta seria rejeitada. Sem raw body não dá pra
+   * verificar nada, então rejeitamos em vez de fingir que validamos.
    */
   @Post()
   @HttpCode(HttpStatus.OK)
@@ -68,8 +84,11 @@ export class InstagramWebhookController {
     @Headers('x-hub-signature-256') signature: string | undefined,
     @Req() req: Request,
   ): Promise<{ ok: boolean; reason?: string }> {
-    // Reconstrói raw body — em produção configurar express.raw() pra rota
-    const rawBody = (req as Request & { rawBody?: string }).rawBody ?? JSON.stringify(body);
+    const rawBody = (req as Request & { rawBody?: Buffer }).rawBody;
+    if (!rawBody) {
+      this.logger.error('rawBody ausente — impossível validar HMAC. Confira rawBody:true no main.ts');
+      return { ok: true, reason: 'no_raw_body' };
+    }
 
     const valid = this.service.verifySignature(rawBody, signature);
     if (!valid) {

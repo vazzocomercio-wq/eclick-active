@@ -50,12 +50,28 @@ export class InstagramWebhookService {
 
   /**
    * Verifica X-Hub-Signature-256 (HMAC-SHA256 do raw body com app secret).
-   * Retorna true se válido OU se META_APP_SECRET não configurado (modo dev).
+   *
+   * FALHA FECHADA em produção. Antes, sem `META_APP_SECRET` esta função
+   * devolvia `true` — e a env nunca foi configurada no Railway (auditoria
+   * 23/08/2026), então o endpoint público aceitava qualquer payload não
+   * assinado. Quem soubesse a URL conseguiria injetar DM falsa no CRM:
+   * contato, conversa e mensagem criados, mais o pipeline de IA e as
+   * automações disparando em cima de conteúdo forjado.
+   *
+   * Fora de produção o bypass continua, pra não travar teste local — mas
+   * loga como erro, não como aviso.
    */
-  verifySignature(rawBody: string, signatureHeader: string | undefined): boolean {
+  verifySignature(rawBody: Buffer | string, signatureHeader: string | undefined): boolean {
     const secret = process.env.META_APP_SECRET;
     if (!secret) {
-      this.logger.warn('META_APP_SECRET ausente — pulando validação de assinatura (DEV ONLY)');
+      if (process.env.NODE_ENV === 'production') {
+        this.logger.error(
+          'META_APP_SECRET ausente em produção — REJEITANDO webhook do Instagram. ' +
+          'Configure a env no Railway (service api) pra receber DMs.',
+        );
+        return false;
+      }
+      this.logger.error('META_APP_SECRET ausente — pulando validação de assinatura (SÓ FORA DE PRODUÇÃO)');
       return true;
     }
     if (!signatureHeader || !signatureHeader.startsWith('sha256=')) {
