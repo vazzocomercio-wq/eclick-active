@@ -71,6 +71,23 @@ export class InstagramGraphProvider implements PublishingProvider {
       ? await this.creds.getDecryptedTokenByCredId(orgId, credId)
       : await this.creds.getDecryptedToken(orgId, this.channel, brandId);
     if (!decrypted) {
+      // Duas causas bem diferentes: nenhuma conta conectada, ou várias
+      // conectadas sem nenhuma marcada como padrão (o findActive recusa
+      // escolher — publicar na conta errada é pior que não publicar).
+      // Dizer qual das duas poupa o lojista de caçar o motivo.
+      if (!credId) {
+        const contas = await this.creds.listActiveUsernames(orgId, this.channel);
+        if (contas.length > 1) {
+          return {
+            success: false,
+            error_code: 'ambiguous_account',
+            error_message:
+              `Há ${contas.length} contas de Instagram conectadas (${contas.join(', ')}) e nenhuma marcada como padrão. ` +
+              'Escolha a conta padrão nas configurações, ou selecione a conta na hora de publicar.',
+            provider_response: {},
+          };
+        }
+      }
       return {
         success: false,
         error_code: 'no_credential',

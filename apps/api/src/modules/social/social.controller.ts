@@ -364,6 +364,18 @@ export class SocialController {
     return this.creds.deactivate(user.org_id, id);
   }
 
+  /**
+   * Define a conta que recebe as publicações agendadas deste canal.
+   *
+   * Necessário quando a org tem mais de uma conta no mesmo canal: sem uma
+   * padrão marcada, o publisher recusa publicar em vez de adivinhar (ver
+   * findActive). Marcar uma limpa a anterior do mesmo canal.
+   */
+  @Post('credentials/:id/default')
+  setDefaultCred(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.creds.setDefault(user.org_id, id);
+  }
+
   // ─── Publishing — publish actions ────────────────
 
   /** Lista as contas conectadas (pro seletor multi-rede/multi-conta). */

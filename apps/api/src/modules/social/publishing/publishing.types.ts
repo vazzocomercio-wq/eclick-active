@@ -19,6 +19,8 @@ export interface SocialChannelCredential {
   scopes: string[];
   metadata: Record<string, unknown>;
   is_active: boolean;
+  /** Conta usada quando a publicação não escolhe alvo. Máx. 1 por canal. */
+  is_default: boolean;
   last_validated_at: string | null;
   last_error: string | null;
   created_at: string;
@@ -90,6 +92,8 @@ export interface ConnectedAccount {
   external_account_id: string;
   username: string | null;
   name: string | null;
+  /** Conta que recebe as publicações agendadas deste canal. */
+  is_default: boolean;
 }
 
 /** Alvo explícito de publicação: uma conta de um canal. */

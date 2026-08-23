@@ -55,6 +55,22 @@ export class TikTokBusinessProvider implements PublishingProvider {
       ? await this.creds.getDecryptedTokenByCredId(orgId, credId)
       : await this.creds.getDecryptedToken(orgId, this.channel, brandId);
     if (!tok) {
+      // Mesmo caso do Instagram: o findActive recusa escolher quando há
+      // várias contas ativas e nenhuma padrão. Sem essa distinção, "sem
+      // credencial ativa" mentiria — há credencial, falta decidir qual.
+      if (!credId) {
+        const contas = await this.creds.listActiveUsernames(orgId, this.channel);
+        if (contas.length > 1) {
+          return {
+            success: false,
+            error_code: 'ambiguous_account',
+            error_message:
+              `Há ${contas.length} contas de TikTok conectadas (${contas.join(', ')}) e nenhuma marcada como padrão. ` +
+              'Escolha a conta padrão nas configurações, ou selecione a conta na hora de publicar.',
+            provider_response: {},
+          };
+        }
+      }
       return {
         success: false,
         error_code: 'no_credential',

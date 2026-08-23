@@ -86,7 +86,7 @@ export class SocialChannelCredentialsService {
   async listAccounts(orgId: string): Promise<ConnectedAccount[]> {
     const { data, error } = await this.supabase.adminClient
       .from('social_channel_credentials')
-      .select('id, channel, external_account_id, external_username, external_account_name')
+      .select('id, channel, external_account_id, external_username, external_account_name, is_default')
       .eq('org_id', orgId)
       .eq('is_active', true)
       .order('channel', { ascending: true })
@@ -98,38 +98,111 @@ export class SocialChannelCredentialsService {
       external_account_id: r.external_account_id as string,
       username: (r.external_username as string | null) ?? null,
       name: (r.external_account_name as string | null) ?? null,
+      is_default: Boolean(r.is_default),
     }));
   }
 
+  /**
+   * Marca UMA conta como a padrão do canal dela. Limpa a anterior antes de
+   * gravar a nova — o índice parcial do banco só permite uma padrão por
+   * (org, canal) entre as ativas, então gravar sem limpar daria erro.
+   */
+  async setDefault(orgId: string, credId: string): Promise<SocialChannelCredential> {
+    const { data: target } = await this.supabase.adminClient
+      .from('social_channel_credentials')
+      .select('*')
+      .eq('id', credId)
+      .eq('org_id', orgId)
+      .maybeSingle();
+    const cred = target as SocialChannelCredential | null;
+    if (!cred) throw new Error('Conta não encontrada nesta organização');
+    if (!cred.is_active) throw new Error('Conta desativada — reative antes de torná-la padrão');
+
+    await this.supabase.adminClient
+      .from('social_channel_credentials')
+      .update({ is_default: false })
+      .eq('org_id', orgId)
+      .eq('channel', cred.channel)
+      .neq('id', credId);
+
+    const { data, error } = await this.supabase.adminClient
+      .from('social_channel_credentials')
+      .update({ is_default: true })
+      .eq('id', credId)
+      .eq('org_id', orgId)
+      .select('*')
+      .single();
+    if (error) throw error;
+    this.log.log(`[creds] conta padrão de ${cred.channel} agora é @${cred.external_username ?? credId}`);
+    return data as SocialChannelCredential;
+  }
+
+  /** Usernames das contas ativas de um canal — pra montar mensagem de erro. */
+  async listActiveUsernames(orgId: string, channel: PublishingChannel): Promise<string[]> {
+    const { data } = await this.supabase.adminClient
+      .from('social_channel_credentials')
+      .select('external_username, external_account_id')
+      .eq('org_id', orgId)
+      .eq('channel', channel)
+      .eq('is_active', true);
+    return ((data ?? []) as Array<{ external_username: string | null; external_account_id: string }>)
+      .map((r) => (r.external_username ? `@${r.external_username}` : r.external_account_id));
+  }
+
+  /**
+   * Resolve a conta a usar quando a publicação NÃO escolheu alvo explícito.
+   *
+   * Ordem: conta da marca → conta marcada como padrão → única conta ativa.
+   * Se há MAIS DE UMA conta ativa e nenhuma é padrão, devolve null de
+   * propósito: antes isso caía em `ORDER BY created_at DESC LIMIT 1` e
+   * publicava na última conta conectada. Na org da Vazzo, isso fazia a
+   * padrão do Instagram ser a @s2trader (auditoria 23/08/2026) e a do
+   * TikTok ser a @eclick_oficial. Publicar na conta errada de um cliente é
+   * pior do que não publicar — então aqui a gente recusa e deixa o caller
+   * explicar o que fazer.
+   */
   async findActive(
     orgId: string,
     channel: PublishingChannel,
     brandId?: string | null,
   ): Promise<SocialChannelCredential | null> {
-    let q = this.supabase.adminClient
-      .from('social_channel_credentials')
-      .select('*')
-      .eq('org_id', orgId)
-      .eq('channel', channel)
-      .eq('is_active', true)
-      .order('created_at', { ascending: false })
-      .limit(1);
     if (brandId) {
-      // Prioriza cred vinculada à marca; se não tem, tenta a default (sem brand)
-      const { data: branded } = await q.eq('brand_id', brandId).maybeSingle();
+      // Conta vinculada à marca ganha de tudo — é escolha explícita.
+      const { data: branded } = await this.supabase.adminClient
+        .from('social_channel_credentials')
+        .select('*')
+        .eq('org_id', orgId)
+        .eq('channel', channel)
+        .eq('is_active', true)
+        .eq('brand_id', brandId)
+        .order('is_default', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
       if (branded) return branded as SocialChannelCredential;
     }
+
     const { data } = await this.supabase.adminClient
       .from('social_channel_credentials')
       .select('*')
       .eq('org_id', orgId)
       .eq('channel', channel)
       .eq('is_active', true)
-      .is('brand_id', null)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    return (data as SocialChannelCredential | null) ?? null;
+      .is('brand_id', null);
+
+    const rows = (data ?? []) as SocialChannelCredential[];
+    if (rows.length === 0) return null;
+
+    const marcada = rows.find((r) => r.is_default);
+    if (marcada) return marcada;
+
+    // Sem padrão marcada: só é seguro seguir quando não há o que escolher.
+    if (rows.length === 1) return rows[0] ?? null;
+
+    this.log.warn(
+      `[creds] ${rows.length} contas ativas de ${channel} na org ${orgId.slice(0, 8)} e nenhuma marcada como padrão — recusando escolher`,
+    );
+    return null;
   }
 
   async getDecryptedToken(
