@@ -174,14 +174,26 @@ export class SocialPublishingService {
       .join(' | ');
 
     // Atualiza content (publish_attempts_count já foi incrementado no claim)
+    //
+    // published_at NUNCA volta pra null: publicar numa conta ADICIONAL é um
+    // caso previsto (`targets`), e se essa segunda tentativa falha o `null`
+    // apagava a data da publicação que DEU CERTO antes — o post continua no
+    // ar no Instagram e o sistema passa a jurar que nunca publicou. Só
+    // grava quando há sucesso novo; nos outros casos, deixa como está.
+    // Mesma lógica pro status: conteúdo que JÁ estava publicado não vira
+    // 'failed' porque a tentativa numa conta extra deu errado. O post está
+    // no ar — o que falhou foi a cópia, e isso vive em last_publish_error.
+    const jaPublicado = content.status === 'published';
+    const patch: Record<string, unknown> = {
+      status: anySuccess || jaPublicado ? 'published' : 'failed',
+      external_post_ids: externalIds,
+      last_publish_error: allSuccess ? null : lastError.slice(0, 500),
+    };
+    if (anySuccess) patch.published_at = new Date().toISOString();
+
     await this.supabase.adminClient
       .from('social_contents')
-      .update({
-        status: anySuccess ? 'published' : 'failed',
-        published_at: anySuccess ? new Date().toISOString() : null,
-        external_post_ids: externalIds,
-        last_publish_error: allSuccess ? null : lastError.slice(0, 500),
-      } as never)
+      .update(patch as never)
       .eq('id', contentId)
       .eq('org_id', orgId);
 

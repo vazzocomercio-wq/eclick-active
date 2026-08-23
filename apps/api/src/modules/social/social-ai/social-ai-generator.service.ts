@@ -8,6 +8,7 @@ import { BridgeService } from '../../bridge/bridge.service';
 import { SocialPromptsService } from '../prompts/social-prompts.service';
 import { ReverseEngineerService } from '../trends/reverse-engineer.service';
 import { asUuidOrNull } from '../../../common/uuid.util';
+import { assertTextoLimpo } from '../../../common/texto-limpo.util';
 import {
   CALENDAR_SYSTEM_PROMPT,
   POST_SYSTEM_PROMPT,
@@ -418,6 +419,7 @@ export class SocialAiGeneratorService {
     orgId: string,
     dto: GenerateReelDto,
   ): Promise<SocialContent> {
+    this.validarTextosDeEntrada(dto);
     const t0 = Date.now();
     const { data, error } = await this.supabase.adminClient
       .from('social_contents')
@@ -765,10 +767,31 @@ export class SocialAiGeneratorService {
 
   // ─── Geração ad-hoc (sem calendário) ─────────────
 
+  /**
+   * Barra texto que chegou com a acentuação já destruída (U+FFFD).
+   *
+   * `theme`, `hook` e `cta` vêm do corpo da requisição e vão DIRETO pro
+   * `title`/`metadata` e daí pro post publicado — diferente do caption,
+   * que a IA escreve no servidor. Em 03/06/2026 dois conteúdos foram
+   * gravados como "a import�ncia de aparecer nas respostas das IAs":
+   * cliente mandou bytes fora de UTF-8, e a gente guardou sem reclamar.
+   * O U+FFFD não tem volta, então a hora de recusar é na entrada.
+   */
+  private validarTextosDeEntrada(dto: {
+    theme?: string;
+    hook?: string;
+    cta?: string;
+  }): void {
+    assertTextoLimpo(dto.theme, 'tema');
+    assertTextoLimpo(dto.hook, 'gancho');
+    assertTextoLimpo(dto.cta, 'chamada para ação');
+  }
+
   async createAndGeneratePost(
     orgId: string,
     dto: GeneratePostDto,
   ): Promise<SocialContent> {
+    this.validarTextosDeEntrada(dto);
     const { data, error } = await this.supabase.adminClient
       .from('social_contents')
       .insert({
@@ -798,6 +821,7 @@ export class SocialAiGeneratorService {
     orgId: string,
     dto: GenerateCarouselDto,
   ): Promise<SocialContent> {
+    this.validarTextosDeEntrada(dto);
     const { data, error } = await this.supabase.adminClient
       .from('social_contents')
       .insert({
