@@ -70,6 +70,15 @@ export function ChannelsSection() {
       toast.success('Instagram conectado!', {
         description: count ? `${count} conta(s) ativa(s)` : undefined,
       });
+    } else if (result === 'partial' && provider === 'instagram') {
+      // Conta criada, mas a inscrição no webhook falhou — o canal existe e
+      // fica MUDO. Não pode virar toast de sucesso: o lojista esperaria
+      // mensagens que nunca chegam. Fica aberto até ele fechar.
+      toast.warning('Instagram conectado, mas sem receber mensagens', {
+        description: search.get('reason') ?? 'não foi possível ativar o webhook',
+        duration: Infinity,
+        closeButton: true,
+      });
     } else if (result === 'success' && provider === 'tiktok') {
       toast.success('TikTok conectado!');
     } else if (result === 'error') {

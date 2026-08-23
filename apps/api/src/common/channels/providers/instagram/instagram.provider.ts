@@ -429,14 +429,49 @@ export class InstagramProvider implements ChannelProvider {
     return out;
   }
 
-  /** Inscreve a page no webhook do messaging. */
-  async subscribePageToWebhook(pageId: string, pageAccessToken: string): Promise<void> {
-    const res = await fetch(
-      `${GRAPH_API}/${pageId}/subscribed_apps?subscribed_fields=messages,messaging_postbacks,message_reactions,messaging_reactions&access_token=${encodeURIComponent(pageAccessToken)}`,
-      { method: 'POST' },
-    );
-    if (!res.ok) {
-      this.logger.warn(`subscribed_apps falhou: ${await res.text()}`);
+  /**
+   * Inscreve a page no webhook do messaging — é ISTO que faz as DMs
+   * chegarem. Sem a inscrição, o canal fica "conectado" e mudo.
+   *
+   * Devolve o erro em vez de só logar: antes isto era um `logger.warn`
+   * silencioso, e a causa mais comum de falha é permissão que falta
+   * (`pages_manage_metadata`). O lojista via "Instagram conectado com
+   * sucesso" e ficava esperando mensagens que nunca chegariam — sem
+   * nenhuma pista do motivo. Quem chama junta os erros e mostra.
+   */
+  async subscribePageToWebhook(
+    pageId: string,
+    pageAccessToken: string,
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
+    try {
+      const res = await fetch(
+        `${GRAPH_API}/${pageId}/subscribed_apps?subscribed_fields=messages,messaging_postbacks,message_reactions,messaging_reactions&access_token=${encodeURIComponent(pageAccessToken)}`,
+        { method: 'POST' },
+      );
+      if (!res.ok) {
+        const raw = await res.text();
+        let msg = raw;
+        try {
+          const j = JSON.parse(raw) as { error?: { message?: string; code?: number } };
+          if (j.error?.message) {
+            msg = j.error.message;
+            // #200 = falta permissão. Traduz pra algo acionável em vez de
+            // repassar o texto cru da Meta.
+            if (j.error.code === 200) {
+              msg = 'faltou a permissão pages_manage_metadata — reconecte autorizando o acesso às Páginas';
+            }
+          }
+        } catch {
+          /* resposta não-JSON: usa o texto cru */
+        }
+        this.logger.warn(`subscribed_apps falhou pra page ${pageId}: ${msg}`);
+        return { ok: false, error: msg };
+      }
+      return { ok: true };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`subscribed_apps falhou pra page ${pageId}: ${msg}`);
+      return { ok: false, error: msg };
     }
   }
 

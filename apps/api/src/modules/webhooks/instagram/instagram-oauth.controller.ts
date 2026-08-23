@@ -134,6 +134,7 @@ export class InstagramOAuthController {
 
       // 4. Pra cada IG page, cria/atualiza channel + assina webhook
       let createdCount = 0;
+      const semWebhook: string[] = [];
       for (const p of igPages) {
         if (!p.ig_user_id) continue;
         await this.upsertInstagramChannel(decoded.org_id, {
@@ -145,8 +146,25 @@ export class InstagramOAuthController {
           app_id: clientId,
           token_long_lived_expires_in: long.expires_in,
         });
-        await this.instagram.subscribePageToWebhook(p.page_id, p.page_access_token);
+        const sub = await this.instagram.subscribePageToWebhook(p.page_id, p.page_access_token);
+        if (!sub.ok) {
+          semWebhook.push(`${p.ig_username ?? p.page_name}: ${sub.error}`);
+        }
         createdCount++;
+      }
+
+      // A inscrição no webhook é o que faz a DM chegar. Se ela falhou, o
+      // canal existe mas nunca vai receber mensagem — dizer "sucesso" aqui
+      // seria mentira, e o lojista ficaria esperando DMs que não chegam.
+      if (semWebhook.length > 0) {
+        this.logger.warn(`Canais criados sem webhook: ${semWebhook.join(' | ')}`);
+        res.redirect(
+          `${webBase}/configuracoes?channel=partial&provider=instagram&count=${createdCount}` +
+            `&reason=${encodeURIComponent(
+              `Conta(s) conectada(s), mas o recebimento de mensagens não pôde ser ativado — ${semWebhook.join('; ')}`,
+            )}`,
+        );
+        return;
       }
 
       res.redirect(
